@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "user_plan": "finish and merge all 60 candidates on dedicated integration branch; freeze ONE commit; run ONE full compile campaign; retry only compiler failures requiring source fixes; collect available IDENTICAL GPU witnesses; keep all new experiments default off and pending; merge main after compile success",
+  "user_plan": "all 60 supported candidates implemented; one full frozen compile campaign; retry only actual compiler failures; verify on local M4 and rented NVIDIA; mark NEVER RUN \u2014 PENDING VALIDATION next to experiment toggles, new defaults off; merge main after compilation and verification",
   "compile_repetition_policy": "one full campaign after all source merges; retry only failures with relevant fixes",
   "performance_timing_required_before_merge": false,
   "new_experiment_defaults": "off; existing main behavior preserved",
@@ -9,9 +9,9 @@
   "unsupported_policy": "record missing Modular support or numerical contract explicitly; do not manufacture unsupported toolchain workarounds",
   "hardware": {
     "nvidia": "guarded rented NVIDIA RTX 4090 builder",
-    "apple": "retained M3 Ultra",
-    "m2_instance": "termination_accepted; internal_SSD_backup_verified; EBS_archive_preserved",
-    "m2_dedicated_host": "scrubbing_pending; billing_paused; release_watcher_active"
+    "apple": "M3 Ultra compilation; local Apple M4 correctness verification",
+    "m2_instance": "terminated; internal SSD backup verified locally; retained EBS backup in progress",
+    "m2_dedicated_host": "released"
   },
   "cards": [
     {
@@ -496,5 +496,34 @@
     }
   ],
   "source_freeze": "all_sixty_supported_sources_merged; ready_for_single_frozen_compile_campaign",
-  "preliminary_campaigns": "stopped at owner request; retained evidence is not final all-60 compile proof"
+  "preliminary_campaigns": "stopped at owner request; retained evidence is not final all-60 compile proof",
+  "source_toggle_comment": "NEVER RUN \u2014 PENDING VALIDATION",
+  "compile_campaign": {
+    "original_source": "c58945cd08380400c7b0276945c480efa0fc5398",
+    "failed_only_source": "b3d5730e4",
+    "original_unique_jobs": {
+      "nvidia_amd": 253,
+      "apple_fast": 87
+    },
+    "actual_compiler_fixes": [
+      "F05 explicit scoped output stride",
+      "F06 mutable device workspace views"
+    ],
+    "known_retry_jobs": [
+      "job017",
+      "job018",
+      "job019",
+      "job021",
+      "job022",
+      "job023",
+      "job024",
+      "job026",
+      "job028"
+    ],
+    "successful_build_policy": "reuse; comments do not trigger rebuilding",
+    "infrastructure_recovery": "Apple job001 through job004: existing successful artifacts recovered with supplemental receipts, no rebuild",
+    "unsupported_targets": [
+      "N03/amd"
+    ]
+  }
 }
