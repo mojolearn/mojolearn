@@ -1,0 +1,26 @@
+{
+  "campaign": "six-lane-full-ab-20261006",
+  "identity_policy": "NVIDIA/AMD same-arm IDENTICAL comparison pending AMD/PTX artifacts and complete typed fitted-state evidence. Apple FAST is evaluated by task quality; bits may differ.",
+  "evidence_policy": "Complete full-workload executions are retained separately from quality and identity admission. Failed attempts preserved at controller-qualified paths; no default promotion.",
+  "candidates": [
+    {
+      "id": "AF.X.complete-proposed",
+      "title": "Apple FAST complete proposed configuration",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "I.X.complete-proposed",
+      "title": "IDENTICAL complete proposed configuration",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple",
+        "host"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "status": "FAILED",
+  "source_sha": "e645de0181cf935fd2ece229c3ec64845ab8ed45",
+  "owner_pid": 77855,
+  "total": 1,
+  "completed": 0,
+  "failed": 1,
+  "budget_limited": 0,
+  "cells": [
+    {
+      "race": "algos/lars-direct/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "status": "FAILED",
+      "returncode": 3,
+      "elapsed_seconds": 38.20127487182617
+    }
+  ],
+  "active_race": null,
+  "worker_pid": null,
+  "allocation_seconds": 300.0,
+  "retry_of": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-04/result.json",
+  "retry_of_status": "FAILED_INCOMPLETE_COVERAGE",
+  "retry_of_sha256": "8e16833d857983da83a5d6a5689a22c3f8584ddf33df43e8243dbe5bff3af145",
+  "started_at": 1791303353.929962,
+  "deadline_at": 1791303653.929962,
+  "retry_requested_at": 1791303353.963862,
+  "inherited_budget_status": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/lars-direct-01/new-budget.json",
+  "inherited_budget_snapshot_sha256": "96e1261c2e2889ca66aad47b6d8c7dbe894d6ca6814a2a7a6138551dfe44d54b",
+  "budget_seconds": 300,
+  "evidence": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/lars-direct-01/attempt",
+  "heartbeat_at": 1791303392.171486,
+  "phase": "selected-opponent-retry",
+  "cell_started_at": 1791303353.967087,
+  "cell_deadline_at": 1791303653.929962,
+  "finished_at": 1791303392.171444
+}

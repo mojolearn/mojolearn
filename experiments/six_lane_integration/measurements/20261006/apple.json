@@ -1,0 +1,632 @@
+{
+  "schema": "mojolearn.performance-measurement-board/1",
+  "campaign": "six-lane-full-ab-20261006",
+  "identity_policy": "NVIDIA/AMD same-arm IDENTICAL comparison pending AMD/PTX artifacts and complete typed fitted-state evidence. Apple FAST is evaluated by task quality; bits may differ.",
+  "evidence_policy": "Complete full-workload executions are retained separately from quality and identity admission. Failed attempts preserved at controller-qualified paths; no default promotion.",
+  "promotion": false,
+  "machines": [],
+  "cards": [
+    {
+      "id": "AF.X.complete-proposed",
+      "title": "Apple FAST complete proposed configuration",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical/ols@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/440956ba5f3a721465b8/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "init": [
+              8,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "b6486763826b2d276b28dbd616fd6cde9024d5bbe9e7e39b02be455abe54a384",
+          "source_coverage_pending": [],
+          "resource_limitations": [
+            "Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.9087746820210518,
+                  "rmse": 4.698070243856422
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.9087746820210518,
+                  "rmse": 4.698070243856422
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING",
+          "quality_reason": "Current full taxi has 5,250,086 fit rows. Historical board opponents used4,000,000; incomparable dataset size, so no opponent quality admission."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical/ols@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/4a650353219f94bd483f/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "init": [
+              8,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PASS_TASK_METRICS",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "21f799c74a8dcc731671a85a91b70bf08878fe8bd51541c99a3fb54efa74c550",
+          "source_coverage_pending": [],
+          "resource_limitations": [
+            "Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.3319434511617213,
+                  "rmse": 0.682027419998501
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.3319434511617213,
+                  "rmse": 0.682027419998501
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "TASK_METRIC_GATE_PASSED",
+          "quality_reason": "Candidate matches/improves baseline and retained same-data independent opponents within existing board tolerances; scope is recorded task metrics only."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical/kmeans@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "FAILED_OR_INCOMPLETE",
+          "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/69a08c873718b0d710ad/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "init": [
+              8,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "warmups": 1,
+          "scored_samples": 0,
+          "quality": "NOT_ASSESSED",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "43e3a39d9ca16203800858cb856e1fb1d401b77b8db5bc4eac6257d2be1bd3ed",
+          "source_coverage_pending": [],
+          "resource_limitations": [
+            "Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
+          ]
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical/kmeans@dataset=istella/attempt-0002",
+          "scope": "full_workload",
+          "status": "FAILED_OR_INCOMPLETE",
+          "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/69a08c873718b0d710ad/attempt-0002/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "init": [
+              8,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "warmups": 1,
+          "scored_samples": 0,
+          "quality": "NOT_ASSESSED",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "c4092bd2f776eb4fe36e72cb8871ebb5caeb7003a5bce482193fc94be9f30548",
+          "source_coverage_pending": [],
+          "resource_limitations": [
+            "Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
+          ]
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical/pca@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/75455971e66712016083/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "init": [
+              8,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "c154a3442d013c90e7d734b5302ceb53585bb6c78cd8b0f37bbf4d8cd3ad3132",
+          "source_coverage_pending": [],
+          "resource_limitations": [
+            "Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "explained_variance_ratio_sum": 0.9999965982735889
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "explained_variance_ratio_sum": 0.9999966062452422
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING",
+          "quality_reason": "Current full taxi has 5,250,086 fit rows. Historical board opponents used4,000,000; incomparable dataset size, so no opponent quality admission."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical/pca@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/918eace39f801d37fc21/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "init": [
+              8,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PASS_TASK_METRICS",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "c78a5bd03f7b5efe2d106ddf7839e93a4f66b70e25db51cf62f691fba17fe242",
+          "source_coverage_pending": [],
+          "resource_limitations": [
+            "Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "explained_variance_ratio_sum": 1.0000000601776293
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "explained_variance_ratio_sum": 1.0000000568180731
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "TASK_METRIC_GATE_PASSED",
+          "quality_reason": "Candidate matches/improves baseline and retained same-data independent opponents within existing board tolerances; scope is recorded task metrics only."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical/kmeans@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "51a3eb11bd99b921e775fa5fc6f6dbedca125382",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/449522fb6bd97f700c04/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "init": [
+              8,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "b2c6d03ae74c71ae5da6741702eb585b2c581e362543eb7ff3de1ff0b6d6fb7c",
+          "source_coverage_pending": [],
+          "resource_limitations": [
+            "Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "inertia": 401987663.1286732,
+                  "n_iter": 84
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "inertia": 401987663.1286732,
+                  "n_iter": 84
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING",
+          "quality_reason": "Current full taxi has 5,250,086 fit rows. Historical board opponents used4,000,000; incomparable dataset size, so no opponent quality admission."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical/kmeans@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "QUALITY_FAILED",
+          "source_sha": "51a3eb11bd99b921e775fa5fc6f6dbedca125382",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "init": [
+              8,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "FAIL",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "ecd197b29067ef2f062c62625b4809b6a139874ed73738dd991ace5a5a426136",
+          "source_coverage_pending": [],
+          "resource_limitations": [
+            "Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "inertia": 6.050717116872483e+17,
+                  "n_iter": 33
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
+              "metrics": {
+                "ours-fast": {
+                  "inertia": 6.050717116872483e+17,
+                  "n_iter": 33
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "FAILED_FAST_OPPONENT_GATE",
+          "quality_reason": "Candidate and baseline both have worse inertia than retained same-data sklearn; deficit is inherited, not introduced by candidate."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/resample@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "090cbfba29a11e0fa362b66ebb421022caa47d87aa365b5a349f121dbbfa5060",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "7526baa0cad3655b0ebb5e7e8b34bfdd387287e33c12fccc5ec06dfe9da36188",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality/resample; independent existing task quality gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "max_mean_shift_over_std": 0.001946923534707672
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality/resample; independent existing task quality gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "max_mean_shift_over_std": 0.001946923534707672
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/resample@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/661a766183dd2fb07d65/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "d0434339bed6f38495de319097654bbafff56579343eb69db183c96b4c949037",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "55240fda290de6eb4c74dad86ef94de7c019d9214247ff63f2229d3a60523758",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality/resample; independent existing task quality gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "max_mean_shift_over_std": 0.0008182939412305245
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality/resample; independent existing task quality gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "max_mean_shift_over_std": 0.0008182939412305245
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          }
+        }
+      ],
+      "status": "FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED"
+    },
+    {
+      "id": "I.X.complete-proposed",
+      "title": "IDENTICAL complete proposed configuration",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple",
+        "host"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    }
+  ],
+  "notes": [
+    "A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.",
+    "These are combined-configuration full workloads, not completed individual constituent experiments.",
+    "Saved independent quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit.",
+    "One excluded warmup and one scored sample per arm. Original failed attempts are retained.",
+    "NVIDIA PTX and AMD have no compatible retained artifacts; missing-only build question remains pending.",
+    "IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.",
+    "Scored output and partial/public-save model hashes are retained separately; partial hashes do not prove complete state identity.",
+    "Apple first four PCA/OLS pairs overlapped shared external-storage data transfer; KMeans overlap unestablished. No quiet-storage or promotion claim.",
+    "No compilation or separate numerical verification rerun. Full provider and worker logs remain under /Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006"
+  ],
+  "decisions": []
+}
