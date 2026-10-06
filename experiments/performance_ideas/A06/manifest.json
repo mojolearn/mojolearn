@@ -9,7 +9,7 @@
     "apple",
     "host"
   ],
-  "status": "source_ready",
+  "status": "build_passed",
   "implementation_paths": [
     "experiments/performance_ideas/A06/check.mojo",
     "neighbors/checks/fused_slot_merge_check.mojo",
