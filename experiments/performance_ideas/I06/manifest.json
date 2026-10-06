@@ -11,10 +11,12 @@
   ],
   "status": "source_ready",
   "implementation_paths": [
-    "experiments/performance_ideas/I06/check.mojo"
+    "experiments/performance_ideas/I06/check.mojo",
+    "transformer/impl/llama/fused_attention.mojo"
   ],
   "candidate_defines": [
-    "MOJOLEARN_ATTN_ARM_TRIAL=1"
+    "MOJOLEARN_ATTN_ARM_TRIAL=1",
+    "MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE=1"
   ],
   "baseline_defines": [
     "MOJOLEARN_ATTN_ARM_TRIAL=1"
@@ -22,6 +24,8 @@
   "build_argv": [
     "mojo",
     "build",
+    "-D",
+    "MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE=1",
     "-j1",
     "-I",
     "{repo}",
