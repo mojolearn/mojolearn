@@ -43,8 +43,23 @@
     "exact intermediate outputs and poison control",
     "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
     "Full graph/DBSCAN fit timing and labels required; integer decisions+scan planes are counted",
-    "No distance recomputation in fill; threshold neighbors and signed-zero fixtures"
+    "No distance recomputation in fill; threshold neighbors and signed-zero fixtures",
+    "Native harness instantiates explicit control and candidate; all compared cells and poison/failure gates required"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
-  "blocker": null
+  "blocker": null,
+  "baseline_build_argv": [
+    "pixi",
+    "run",
+    "mojo",
+    "build",
+    "-j1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-I",
+    "{repo}",
+    "{repo}/experiments/performance_ideas/N08/check.mojo",
+    "-o",
+    "{output}"
+  ]
 }
