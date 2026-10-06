@@ -18,7 +18,9 @@ print(json.dumps(dict(groups=groups,claims=claims)))
 """
   state=json.loads(run([*CPU,'python3 -c '+shlex.quote(code)]).stdout);meta=json.loads((E/'repair-build-observations.json').read_text())['builds'];summary={}
   for route in ['specific','default']:
-   cfg=json.loads((E/(route+'-owner/config.json')).read_text());ssh=['ssh',*cfg['ssh']];q=json.loads((E/(route+'-repair-queue.json')).read_text());p=E/(route+'-capture/artifacts/repairs/results.json');results=json.loads(p.read_text()) if p.exists() else {};missing=[x['key'] for x in q if x['key'] not in results];failed=[k for k,v in results.items() if v['status']!='MEASURED']
+   cfg=json.loads((E/(route+'-owner/config.json')).read_text());ssh=['ssh',*cfg['ssh']];q=json.loads((E/(route+'-repair-queue.json')).read_text());p=E/(route+'-capture/artifacts/repairs/results.json');results=json.loads(p.read_text()) if p.exists() else {};missing=[x['key'] for x in q if x['key'] not in results];unsupported_shapes=[k for k,v in results.items() if v['candidate_id']=='I19' and v['arm'] in ['baseline','incumbent'] and v['source_sha'].startswith('5b467815') and int(v['environment'].get('AB_ROWS','1000000'))>131072];failed=[k for k,v in results.items() if v['status']!='MEASURED' and k not in unsupported_shapes]
+   recovery=json.loads(run([*ssh,'python3 /root/overnight-nvidia/recover-repair-worker.py']).stdout)
+   if recovery['status'] in ['RESTARTED','ORPHAN_CHILD_ACTIVE']:alert('worker-'+route+'-'+str(recovery),'NVIDIA '+route+' owned worker liveness: '+json.dumps(recovery)+'. Inspect captured repair-controller.log; completed cells and pending queue preserved.')
    groups=state['groups'];claims=state['claims']
    if route=='specific':
     build_ready=groups['nvidia-priority'].get('phase')=='BUILDS_FINISHED' and groups['nvidia-priority'].get('failed')==0 and any(x.get('name')=='paired' and x['returncode']==0 for x in meta)
@@ -44,7 +46,7 @@ print(json.dumps(dict(groups=groups,claims=claims)))
    tail=actual['tail']
    if tail.get('phase')=='FAILED':alert('tail-'+route,'NVIDIA '+route+' GPU-opponent tail failed; inspect captured gpu-opponents/board.log and status.json under '+str(E/(route+'-capture/artifacts')))
    if actual['ready'].get('failed',0):alert('deps-'+route,'NVIDIA '+route+' opponent dependency setup failed; inspect captured opponent-setup logs. Tail is blocked, candidate measurements remain authorized.')
-   summary[route]=dict(sealed=eligible,build_ready=build_ready,failed_builds=bad_builds,pending_claims=blockers,missing_measurements=missing,failed_measurements=failed,missing_ids=sorted(expected-seen),remote=actual)
+   summary[route]=dict(worker_liveness=recovery,sealed=eligible,build_ready=build_ready,failed_builds=bad_builds,pending_claims=blockers,missing_measurements=missing,failed_measurements=failed,unsupported_baseline_shapes=unsupported_shapes,missing_ids=sorted(expected-seen),remote=actual)
   atom(E/'tail-monitor-status.json',dict(pid=os.getpid(),time=time.time(),routes=summary))
  except Exception as e:
   (E/'tail-monitor-error.log').write_text(traceback.format_exc());alert('monitor-'+type(e).__name__,'NVIDIA tail monitor infrastructure problem: '+str(E/'tail-monitor-error.log')+'; check cloud idle deadlines.')
