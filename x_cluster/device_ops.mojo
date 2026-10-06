@@ -1862,17 +1862,17 @@ struct DeviceOps(ClusterOps):
         self._ph1("zeros_i")
         return len(self.i) - 1
 
-    def _enq_get(mut self, slot: Int, n: Int, mut out: List[Float32]) raises:
-        out = List[Float32](length=n, fill=Float32(0))
+    def _enq_get(mut self, slot: Int, n: Int, mut output: List[Float32]) raises:
+        output = List[Float32](length=n, fill=Float32(0))
         if n > 0:
             var view = self.f[slot].create_sub_buffer[DType.float32](0, n)
-            self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+            self.ctx.enqueue_copy(dst_ptr=output.unsafe_ptr(), src_buf=view)
 
-    def _enq_get_i(mut self, slot: Int, n: Int, mut out: List[Int32]) raises:
-        out = List[Int32](length=n, fill=Int32(0))
+    def _enq_get_i(mut self, slot: Int, n: Int, mut output: List[Int32]) raises:
+        output = List[Int32](length=n, fill=Int32(0))
         if n > 0:
             var view = self.i[slot].create_sub_buffer[DType.int32](0, n)
-            self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+            self.ctx.enqueue_copy(dst_ptr=output.unsafe_ptr(), src_buf=view)
 
     def get(mut self, slot: Int, n: Int) raises -> List[Float32]:
         self._ph0()
@@ -3403,9 +3403,9 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("kpp_search")
 
-    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, out: Int) raises:
-        self.ctx.enqueue_function[_c38_distinct_kernel[False]](self._fp(centers),self._ip(ids),Int32(nt),self._fp(x),Int32(n),Int32(d),self._fp(out),grid_dim=_grid(nt*n),block_dim=TPB)
-        self.ctx.enqueue_function[_c38_distinct_kernel[True]](self._fp(centers),self._ip(ids),Int32(nt),self._fp(x),Int32(n),Int32(d),self._fp(out),grid_dim=_grid(nt*n),block_dim=TPB)
+    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, output: Int) raises:
+        self.ctx.enqueue_function[_c38_distinct_kernel[False]](self._fp(centers),self._ip(ids),Int32(nt),self._fp(x),Int32(n),Int32(d),self._fp(output),grid_dim=_grid(nt*n),block_dim=TPB)
+        self.ctx.enqueue_function[_c38_distinct_kernel[True]](self._fp(centers),self._ip(ids),Int32(nt),self._fp(x),Int32(n),Int32(d),self._fp(output),grid_dim=_grid(nt*n),block_dim=TPB)
 
     def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:
         self._ph0()
@@ -3618,7 +3618,7 @@ def _mb_assign_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, c: FPtr, k: Int3
         dist[t] = best
 
 
-def _c38_distinct_kernel[COPY: Bool](c: FPtr,ids: IPtr,nt: Int32,x: FPtr,n: Int32,d: Int32,out: FPtr):
+def _c38_distinct_kernel[COPY: Bool](c: FPtr,ids: IPtr,nt: Int32,x: FPtr,n: Int32,d: Int32,output: FPtr):
     var cell=_tid()
     if cell>=Int(nt)*Int(n):
         return
@@ -3631,10 +3631,10 @@ def _c38_distinct_kernel[COPY: Bool](c: FPtr,ids: IPtr,nt: Int32,x: FPtr,n: Int3
             break
     comptime if COPY:
         if first!=trial:
-            out[cell]=out[first*Int(n)+row]
+            output[cell]=output[first*Int(n)+row]
     else:
         if first==trial:
-            out[cell]=sq_dist_rows(c,trial,x,row,Int(d))
+            output[cell]=sq_dist_rows(c,trial,x,row,Int(d))
 
 
 def _c36_nearest_group(a: FPtr,na: Int32,c: FPtr,k: Int32,d: Int32,labels: IPtr,dist: FPtr):

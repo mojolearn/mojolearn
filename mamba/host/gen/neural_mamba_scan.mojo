@@ -51,7 +51,7 @@ def nn34_prepare_kernel(gid_: Int, u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34F
 
 
 def nn34_emit_kernel(gid_: Int, hidden: NN34FP, c: NN34FP, u: NN34FP, skip: NN34FP,
-    y: NN34FP, out: NN34FP, batch: Int32, length: Int32, width: Int32):
+    y: NN34FP, output: NN34FP, batch: Int32, length: Int32, width: Int32):
     var i = gid_
     var di = Int(width)
     var L = Int(length)
@@ -67,11 +67,11 @@ def nn34_emit_kernel(gid_: Int, hidden: NN34FP, c: NN34FP, u: NN34FP, skip: NN34
         acc = ftz(identical_mul_add(ftz(c.unsafe_load(t * NS + n)), ftz(hidden.unsafe_load(base + n)), acc))
     y.unsafe_store(i, acc)
     # The existing S11 is a separately rounded product followed by add.
-    out.unsafe_store(i, ftz(acc + ftz(identical_mul(ftz(u.unsafe_load(i)), ftz(skip.unsafe_load(d))))))
+    output.unsafe_store(i, ftz(acc + ftz(identical_mul(ftz(u.unsafe_load(i)), ftz(skip.unsafe_load(d))))))
 
 
 def nn34_mamba_forward(ctx: DeviceContext, u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP,
-    c: NN34FP, skip: NN34FP, y: NN34FP, out: NN34FP,
+    c: NN34FP, skip: NN34FP, y: NN34FP, output: NN34FP,
     boundary: NN34FP, last: NN34FP, slots_a: NN34FP, slots_b: NN34FP,
     batch: Int, length: Int, dim: Int, absolute_start: Int) raises:
     """Own all temporary storage through completion; commit state only after
@@ -111,7 +111,7 @@ def nn34_mamba_forward(ctx: DeviceContext, u: NN34FP, delta: NN34FP, a: NN34FP, 
     var _l2_a2 = u
     var _l2_a3 = skip
     var _l2_a4 = y
-    var _l2_a5 = out
+    var _l2_a5 = output
     var _l2_a6 = Int32(batch)
     var _l2_a7 = Int32(length)
     var _l2_a8 = Int32(dim)

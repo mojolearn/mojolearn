@@ -9,7 +9,7 @@ from x_decomp.cells import F32Ptr, I32Ptr
 
 trait Exec:
     @staticmethod
-    def classical_centered_gram(x: F32Ptr, means: F32Ptr, out: F32Ptr, n: Int, d: Int) raises:
+    def classical_centered_gram(x: F32Ptr, means: F32Ptr, output: F32Ptr, n: Int, d: Int) raises:
         ...
 
     @staticmethod

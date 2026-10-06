@@ -279,7 +279,7 @@ def mamba_reduction_needs_preproduct(which: Int) -> Bool:
 
 def mamba_backward_reduce_into(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut src: DeviceBuffer[DType.float32],
     mut ones: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],
@@ -287,9 +287,9 @@ def mamba_backward_reduce_into(
     dims: MambaDims,
     m: Int,
 ) raises:
-    """`out[w] = sum over the M rows of src[M, W]`, as a v1 `OP_NN` at `(1, W, M)`. For a `RED_CONV_W_*` id the caller writes into `out[d * D_CONV + mamba_reduction_tap(which)]` for each `d`, since the conv weight is `[d_inner, D_CONV]` row-major, and this launcher writes a CONTIGUOUS `[W]` vector."""
+    """`output[w] = sum over the M rows of src[M, W]`, as a v1 `OP_NN` at `(1, W, M)`. For a `RED_CONV_W_*` id the caller writes into `output[d * D_CONV + mamba_reduction_tap(which)]` for each `d`, since the conv weight is `[d_inner, D_CONV]` row-major, and this launcher writes a CONTIGUOUS `[W]` vector."""
     identical_gemm_backward_bias_into(
-        ctx, out, src, ones, ws, m, mamba_reduction_width(which, dims)
+        ctx, output, src, ones, ws, m, mamba_reduction_width(which, dims)
     )
 
 

@@ -131,7 +131,7 @@ def neural_projection_triplet(
 
 
 def _bias_tiled_kernel[apply: BiasFn](
-    out: FP, a: FP, b: FP, bias: FP, m_in: Int32, n_in: Int32, k_in: Int32,
+    output: FP, a: FP, b: FP, bias: FP, m_in: Int32, n_in: Int32, k_in: Int32,
     leaf_in: Int32, leaves_in: Int32, asi: Int32, asp: Int32, bsp: Int32, bsj: Int32,
 ):
     var m = Int(m_in); var n = Int(n_in)
@@ -146,7 +146,7 @@ def _bias_tiled_kernel[apply: BiasFn](
         # product is already the GEMM's rounded, FTZ output. The callback
         # is the caller's existing post-store bias arithmetic, not an FMA
         # seed, so its canonical NaN/zero behavior remains caller-specific.
-        out.unsafe_store(row * n + col, apply(product, bias.unsafe_load(col)))
+        output.unsafe_store(row * n + col, apply(product, bias.unsafe_load(col)))
 
 
 @always_inline
@@ -155,7 +155,7 @@ def _overlap(a: Int, words_a: Int, b: Int, words_b: Int) -> Bool:
 
 
 def neural_bias_gemm[apply: BiasFn](
-    ctx: DeviceContext, mut out: DeviceBuffer[DType.float32],
+    ctx: DeviceContext, mut output: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32], mut b: DeviceBuffer[DType.float32],
     mut bias: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int,
 ) raises -> Bool:
@@ -167,7 +167,7 @@ def neural_bias_gemm[apply: BiasFn](
     """
     if m <= 0 or n <= 0 or k <= 0:
         return False
-    var dst = Int(out.unsafe_ptr())
+    var dst = Int(output.unsafe_ptr())
     if (_overlap(dst, m * n, Int(a.unsafe_ptr()), m * k)
         or _overlap(dst, m * n, Int(b.unsafe_ptr()), n * k)
         or _overlap(dst, m * n, Int(bias.unsafe_ptr()), n)):
@@ -175,7 +175,7 @@ def neural_bias_gemm[apply: BiasFn](
     var lp = contract_partition(k)
     var st = gemm_operand_strides(op, m, n, k)
     ctx.enqueue_function[_bias_tiled_kernel[apply]](
-        out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(), bias.unsafe_ptr(),
+        output.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(), bias.unsafe_ptr(),
         Int32(m), Int32(n), Int32(k), Int32(lp[0]), Int32(lp[1]),
         Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]),
         grid_dim=(((m + TILE - 1) // TILE) * ((n + TILE - 1) // TILE), 1, 1),

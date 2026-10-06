@@ -848,7 +848,7 @@ def rope_backward_into(
     l: Int,
     pos0: Int,
     rope: RopeTable,
-    mut out: List[Float32],
+    mut output: List[Float32],
 ) raises:
     """The backward of seams S9 and S10, the TRANSPOSED rotation.
     DEVIATION 1412.
@@ -904,7 +904,7 @@ def rope_backward_into(
     # The position refusal first, over every token, so the rows below cannot
     # raise; then TOKENS OVER HOST TASKS (lane neural-pass6): a token's cells
     # read its own `dout` row and the table at its own absolute position.
-    # `out` is sized once and written by index in the order the appends made.
+    # `output` is sized once and written by index in the order the appends made.
     for t in range(m):
         var p = pos0 + t % l
         if p < 0 or p >= rope.positions:
@@ -917,10 +917,10 @@ def rope_backward_into(
                 + " quantity, so a call that overruns it is a"
                 + " misconfiguration and not something to grow into)"
             )
-    out = host_f32_uninit(m * width)
+    output = host_f32_uninit(m * width)
     var tasks = host_row_tasks(m, 8 * width)
     var chunk = (m + tasks - 1) // tasks
-    def _tokens(task: Int) {imm dout, imm rope, mut out, imm m, imm l, imm pos0, imm n_head, imm head_dim, imm half, imm width, imm chunk}:
+    def _tokens(task: Int) {imm dout, imm rope, mut output, imm m, imm l, imm pos0, imm n_head, imm head_dim, imm half, imm width, imm chunk}:
         for t in range(task * chunk, min((task + 1) * chunk, m)):
             var li = t % l
             var p = pos0 + li
@@ -942,7 +942,7 @@ def rope_backward_into(
                     var s = ftz(rope.sin[p * half + ci])
                     var pa = ftz(identical_mul(ftz(dout[base + j]), c))
                     var pb = ftz(identical_mul(rot, s))
-                    out[base + j] = ftz(ftz(pa) + ftz(pb))
+                    output[base + j] = ftz(ftz(pa) + ftz(pb))
     if tasks <= 1:
         _tokens(0)
     else:

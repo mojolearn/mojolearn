@@ -1138,11 +1138,11 @@ struct HostOps(ClusterOps):
         _ = th^
         _ = tl^
 
-    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, out: Int) raises:
+    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, output: Int) raises:
         var pc=self._fp(centers)
         var pi=self._ip(ids)
         var px=self._fp(x)
-        var po=self._fp(out)
+        var po=self._fp(output)
         for trial in range(nt):
             var first=trial
             for t in range(trial):

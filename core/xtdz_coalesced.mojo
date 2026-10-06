@@ -422,9 +422,9 @@ def column_mean_launch[force_coalesced: Bool = False](
 # constants. A future parallel schedule must retain these exact leaves.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 def classical_column_mean_kernel(
-    out: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
     rows: Int32, cols: Int32,
 ):
     var column = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if column < Int(cols):
-        out.unsafe_store(column, classical_column_mean(x, Int(rows), Int(cols), column))
+        output.unsafe_store(column, classical_column_mean(x, Int(rows), Int(cols), column))

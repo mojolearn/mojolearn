@@ -29,7 +29,7 @@ from transformer.experiments.attention_summary_contract import (
 def summary_attention_forward_kernel(
     q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
     v: MutPointer[Float32, MutAnyOrigin], lo: MutPointer[Int32, MutAnyOrigin],
-    hi: MutPointer[Int32, MutAnyOrigin], out: MutPointer[Float32, MutAnyOrigin],
+    hi: MutPointer[Int32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
     maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
     scratch: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
     rows: Int32, keys: Int32, head_dim: Int32, width: Int32,
@@ -38,7 +38,7 @@ def summary_attention_forward_kernel(
     var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if row < Int(rows):
         summary_attention_forward_row[NN20_BALANCED_SUMMARY_TREE](q, k, v, lo, hi,
-            out, maxes, denoms, scratch, status, row, Int(keys), Int(head_dim),
+            output, maxes, denoms, scratch, status, row, Int(keys), Int(head_dim),
             Int(width), Int(queries_per_group), scale)
 
 
@@ -89,7 +89,7 @@ def enqueue_summary_attention_forward(
     ctx: DeviceContext,
     mut q: DeviceBuffer[DType.float32], mut k: DeviceBuffer[DType.float32],
     mut v: DeviceBuffer[DType.float32], mut lo: DeviceBuffer[DType.int32],
-    mut hi: DeviceBuffer[DType.int32], mut out: DeviceBuffer[DType.float32],
+    mut hi: DeviceBuffer[DType.int32], mut output: DeviceBuffer[DType.float32],
     mut maxes: DeviceBuffer[DType.float32], mut denoms: DeviceBuffer[DType.float32],
     mut scratch: DeviceBuffer[DType.float32], mut status: DeviceBuffer[DType.int32],
     rows: Int, keys: Int, head_dim: Int, width: Int, queries_per_group: Int,
@@ -99,13 +99,13 @@ def enqueue_summary_attention_forward(
     var groups = (rows + queries_per_group - 1) // queries_per_group
     if len(q) < rows * head_dim or len(k) < groups * keys * head_dim or len(v) < groups * keys * width:
         raise Error("NN20: short Q/K/V operand")
-    if len(out) < rows * width or len(maxes) < rows or len(denoms) < rows or len(status) < rows or len(lo) < rows or len(hi) < rows:
+    if len(output) < rows * width or len(maxes) < rows or len(denoms) < rows or len(status) < rows or len(lo) < rows or len(hi) < rows:
         raise Error("NN20: short output/row state")
     if len(scratch) < summary_scratch_elements(rows, keys, width):
         raise Error("NN20: bounded summary-stack scratch is too small")
     ctx.enqueue_function[summary_attention_forward_kernel](
         q.unsafe_ptr(), k.unsafe_ptr(), v.unsafe_ptr(), lo.unsafe_ptr(), hi.unsafe_ptr(),
-        out.unsafe_ptr(), maxes.unsafe_ptr(), denoms.unsafe_ptr(), scratch.unsafe_ptr(), status.unsafe_ptr(),
+        output.unsafe_ptr(), maxes.unsafe_ptr(), denoms.unsafe_ptr(), scratch.unsafe_ptr(), status.unsafe_ptr(),
         Int32(rows), Int32(keys), Int32(head_dim), Int32(width), Int32(queries_per_group), scale,
         grid_dim=((rows + 63) // 64, 1, 1), block_dim=(64, 1, 1),
     )

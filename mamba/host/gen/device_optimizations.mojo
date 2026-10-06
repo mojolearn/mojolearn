@@ -47,7 +47,7 @@ def afn_selective_scan_chunked[
     DSTATE: Int
 ](
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut y: DeviceBuffer[DType.float32],
     mut h_state: DeviceBuffer[DType.float32],
     mut u: DeviceBuffer[DType.float32],
@@ -65,7 +65,7 @@ def afn_selective_scan_chunked[
 
 def identical_selective_scan_window[DSTATE: Int](
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32], mut y: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32], mut y: DeviceBuffer[DType.float32],
     mut h: DeviceBuffer[DType.float32], mut u: DeviceBuffer[DType.float32],
     mut delta: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
     mut bmat: DeviceBuffer[DType.float32], mut cmat: DeviceBuffer[DType.float32],

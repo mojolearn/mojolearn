@@ -287,7 +287,7 @@ def ssd_core_oracle(
     t_work: Int,
     dims: Mamba2Dims,
     mut h_boundary: List[Float32],  # [B, H, P, N] in: chunk -1 / last boundary;
-    #                                 out: the last COMPLETED boundary
+    #                                 output: the last COMPLETED boundary
     mut st: Mamba2Stages,
 ) raises:
     """Fills the SSD stages of `st` (xd through scan.y, h_last) and advances
@@ -449,7 +449,7 @@ def ssd_core_oracle(
             for hh in range(nh):
                 var lbase = (((bb * nc + c) * nh + hh) * q) * q
                 # M's rows at i >= real reach NOTHING: they produce only
-                # Y_diag rows at i >= real, and the loop below copies out
+                # Y_diag rows at i >= real, and the loop below copies output
                 # i < real. The row stride stays k = Q, which is what the
                 # S14 cell reads.
                 var m_mat = _zeros(real * q)

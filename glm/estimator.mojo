@@ -37,7 +37,7 @@ from experiments.classical_identical_ideas.shared_controls import C05_OLS_PHASE
 
 
 from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
 from core.gemm import gemv_n

@@ -43,7 +43,7 @@ def rms_sumsq_kernel(
 
 
 def rms_parallel_scale_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin],
     sumsq: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     weight: MutPointer[Float32, MutAnyOrigin],
@@ -62,7 +62,7 @@ def rms_parallel_scale_kernel(
     var mean = ftz(identical_div(sumsq.unsafe_load(i // dm), Float32(dm)))
     var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
     var inner = ftz(identical_mul(ftz(x.unsafe_load(i)), rstd))
-    out.unsafe_store(i, ftz(identical_mul(ftz(weight.unsafe_load(i % dm)), inner)))
+    output.unsafe_store(i, ftz(identical_mul(ftz(weight.unsafe_load(i % dm)), inner)))
 
 
 def training_swiglu_kernel(

@@ -262,12 +262,12 @@ struct HostExec(Exec):
         return r^
 
     @staticmethod
-    def classical_centered_gram(x: F32Ptr, means: F32Ptr, out: F32Ptr, n: Int, d: Int) raises:
-        def row(i: Int) {imm x, imm means, imm out, imm n, imm d}:
+    def classical_centered_gram(x: F32Ptr, means: F32Ptr, output: F32Ptr, n: Int, d: Int) raises:
+        def row(i: Int) {imm x, imm means, imm output, imm n, imm d}:
             for j in range(i, d):
                 var v = centered_gram_cell(x, means, n, d, i, j)
-                out.unsafe_store(i * d + j, v)
-                out.unsafe_store(j * d + i, v)
+                output.unsafe_store(i * d + j, v)
+                output.unsafe_store(j * d + i, v)
         xd_parallel(row, d)
 
     @staticmethod

@@ -1128,7 +1128,7 @@ def rms_norm_into(
     m: Int,
     dm: Int,
     mut sumsq: List[Float32],
-    mut out: List[Float32],
+    mut output: List[Float32],
 ):
     """Seams S1 through S4, `LlamaRMSNorm.forward` (modeling_llama.py:62-67).
 
@@ -1143,7 +1143,7 @@ def rms_norm_into(
         S2  mean = ftz(identical_div(acc, d_model))
             rstd = ftz(identical_rsqrt(ftz(mean + eps)))
         S3  inner = identical_mul(x_j, rstd)
-        S4  out   = identical_mul(w_j, inner)
+        S4  output   = identical_mul(w_j, inner)
 
     Four things about this that are decisions rather than transcription.
 
@@ -1151,7 +1151,7 @@ def rms_norm_into(
     DEPARTURE from `archive/plans/IDENTICAL_GEMM_PLAN.md`'s sketch, which asked for a
     pinned TREE.** The serial chain is the mamba contract's S1 unchanged, it
     gives this block ONE fold shape instead of two (the same shape as S17's
-    denominator), and it keeps the norm out of every launch-geometry
+    denominator), and it keeps the norm output of every launch-geometry
     argument. `core/pinned_reduce.mojo::pinned_block_sum` is the tree and
     this lane does not use it anywhere. Sabotage `S1_FOLD_DESCENDING` must
     move `norm1.sumsq` and nothing earlier.
@@ -1183,9 +1183,9 @@ def rms_norm_into(
     # folds and its scalings are the statements above, unchanged; the lists
     # are sized once and written by index.
     sumsq = host_f32_uninit(m)
-    out = host_f32_uninit(m * dm)
+    output = host_f32_uninit(m * dm)
     var sp = _hp(sumsq)
-    var op = _hp(out)
+    var op = _hp(output)
     var split = _row_split(m, 4 * dm)
     var ntasks = split[0]
     var chunk = split[1]
@@ -1220,7 +1220,7 @@ def norm_into(
     kind: Int,
     has_bias: Bool,
     mut sumsq: List[Float32],
-    mut out: List[Float32],
+    mut output: List[Float32],
 ) raises:
     """The block's normalization under the options (lane/block-options,
     2026-09-17). `rms_norm_into` above is UNTOUCHED and is the frozen
@@ -1264,9 +1264,9 @@ def norm_into(
     # serial folds and scalings are the statements above, unchanged; the
     # lists are sized once and written by index.
     sumsq = host_f32_uninit(m)
-    out = host_f32_uninit(m * dm)
+    output = host_f32_uninit(m * dm)
     var sp = _hp(sumsq)
-    var op = _hp(out)
+    var op = _hp(output)
     var split = _row_split(m, 6 * dm)
     var ntasks = split[0]
     var chunk = split[1]
@@ -1369,7 +1369,7 @@ def apply_rope_into(
     l: Int,
     pos0: Int,
     rope: RopeTable,
-    mut out: List[Float32],
+    mut output: List[Float32],
 ) raises:
     """Seams S9 and S10, `apply_rotary_pos_emb` (modeling_llama.py:137-160)
     with `rotate_half` (:130-134).
@@ -1390,7 +1390,7 @@ def apply_rope_into(
     once per product and once for the add. An `fma` here rounds ONCE, and an
     fma is the natural thing for a kernel author to write when they see
     `a*c + b*s`. The two answers differ in the last bit on ordinary inputs.
-    Sabotage `S10_ROPE_FUSED` must move `q_rope.out` and nothing earlier.
+    Sabotage `S10_ROPE_FUSED` must move `q_rope.output` and nothing earlier.
 
     **The pairing is `j` with `j + head_dim/2`, the HALVES, not adjacent
     even/odd elements.** This is the single most commonly mistransribed
@@ -1400,7 +1400,7 @@ def apply_rope_into(
     MAX makes the same choice and names it
     (`max/kernels/src/nn/rope.mojo::get_safetensors_idx`, :51-53, "the
     rotate-half pairing"). Sabotage `S09_ROPE_HALVES_SWAPPED` must move
-    `q_rope.out`.
+    `q_rope.output`.
 
     **The negation is exact and is NOT a seam.** `-x` flips a sign bit; it
     rounds nothing. It is applied BEFORE the product, as the reference does
@@ -1453,8 +1453,8 @@ def apply_rope_into(
     # TOKENS OVER HOST TASKS (lane neural-pass21): each token's cells are
     # the statements above, unchanged; the list is sized once and written
     # by index (the refusal above ran first, so no task raises).
-    out = host_f32_uninit(m * width)
-    var op = _hp(out)
+    output = host_f32_uninit(m * width)
+    var op = _hp(output)
     var split = _row_split(m, 6 * width)
     var ntasks = split[0]
     var chunk = split[1]
@@ -1534,19 +1534,19 @@ def attn_value_sum_lanes(
     wbase: Int,
     values: List[Float32],
     vbase: Int,
-    mut out: List[Float32],
+    mut output: List[Float32],
     obase: Int,
     s: Int,
     hd: Int,
 ):
-    """S19 for one query row: `out[obase + d]` is the chain
+    """S19 for one query row: `output[obase + d]` is the chain
     `acc = ftz(identical_mul_add(ftz(w[wbase + j]), ftz(v[vbase + j*hd + d]), acc))`
     over j ascending from `+0.0`, for every d. The `hd` chains advance
     together, one SIMD lane per d (lane neural-cpu, 2026-09-28); every lane is
     its own output's chain, so the bits are the scalar walk's."""
     var wp = weights.unsafe_ptr()
     var vp = values.unsafe_ptr()
-    var op = out.unsafe_ptr()
+    var op = output.unsafe_ptr()
     comptime G = 4 * GHR_FW
     var d = 0
     # head_dim 64 (the byte LM's, the board's): every lane of the head in

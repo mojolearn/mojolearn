@@ -750,7 +750,9 @@ def rbc_eps_pass_count(
                 r_radius, vd, adj_ia, n_queries, n_cols, n_landmarks, eps, False,
             )
     comptime if C32_COUNT_FUSION:
-        ctx.enqueue_function[_c32_radius_stream[False]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),adj_ia.unsafe_ptr(),vd.unsafe_ptr(),adj_ia.unsafe_ptr(),Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
+        # Offsets/output are unused in COUNT; one raw view avoids duplicate mutable borrows.
+        var offsets_ptr = adj_ia.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        ctx.enqueue_function[_c32_radius_stream[False]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),offsets_ptr,vd.unsafe_ptr(),offsets_ptr,Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
         fast_done=True
     if not fast_done:
       ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](
@@ -823,7 +825,9 @@ def rbc_eps_pass_fill(
                 True,
             )
     comptime if C32_EMIT_FUSION:
-        ctx.enqueue_function[_c32_radius_stream[True]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),adj_ia.unsafe_ptr(),adj_ia.unsafe_ptr(),adj_ja.unsafe_ptr(),Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
+        # Counts is unused in EMIT; offsets are read only during this launch.
+        var offsets_ptr = adj_ia.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        ctx.enqueue_function[_c32_radius_stream[True]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),offsets_ptr,offsets_ptr,adj_ja.unsafe_ptr(),Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
         fast_done=True
     if not fast_done:
       ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](

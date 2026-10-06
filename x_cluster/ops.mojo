@@ -471,7 +471,7 @@ trait ClusterOps(Movable):
         table of closest (times w when w >= 0)."""
         ...
 
-    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, out: Int) raises:
+    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, output: Int) raises:
         ...
 
     def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:

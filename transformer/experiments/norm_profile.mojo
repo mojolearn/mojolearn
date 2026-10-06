@@ -22,7 +22,7 @@ from transformer.experiments.norm_profile_contract import (
 )
 
 def norm_profile_forward_kernel[LAYER: Bool](
-    out: MutPointer[Float32, MutAnyOrigin], sums: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], sums: MutPointer[Float32, MutAnyOrigin],
     means: MutPointer[Float32, MutAnyOrigin], rstds: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin], weight: MutPointer[Float32, MutAnyOrigin],
     bias: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, width_in: Int32,
@@ -30,7 +30,7 @@ def norm_profile_forward_kernel[LAYER: Bool](
 ):
     var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if row < Int(rows_in):
-        norm_profile_forward_row[NN24_LANES, LAYER](out, sums, means, rstds, x, weight, bias, row, Int(width_in), eps, has_bias)
+        norm_profile_forward_row[NN24_LANES, LAYER](output, sums, means, rstds, x, weight, bias, row, Int(width_in), eps, has_bias)
 
 
 def norm_profile_backward_kernel[LAYER: Bool](
@@ -57,7 +57,7 @@ def norm_profile_parameter_kernel(
 
 def enqueue_norm_profile_forward[LAYER: Bool](
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32], mut sums: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32], mut sums: DeviceBuffer[DType.float32],
     mut means: DeviceBuffer[DType.float32], mut rstds: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32], mut weight: DeviceBuffer[DType.float32],
     mut bias: DeviceBuffer[DType.float32], rows: Int, width: Int,
@@ -65,14 +65,14 @@ def enqueue_norm_profile_forward[LAYER: Bool](
 ) raises:
     if rows <= 0 or width <= 0:
         raise Error("NN24: positive row count and width required")
-    if len(out) < rows * width or len(x) < rows * width or len(weight) < width:
+    if len(output) < rows * width or len(x) < rows * width or len(weight) < width:
         raise Error("NN24: short forward operand")
     if len(sums) < rows or len(means) < rows or len(rstds) < rows:
         raise Error("NN24: short row state")
     if has_bias and len(bias) < width:
         raise Error("NN24: short bias")
     ctx.enqueue_function[norm_profile_forward_kernel[LAYER]](
-        out.unsafe_ptr(), sums.unsafe_ptr(), means.unsafe_ptr(), rstds.unsafe_ptr(),
+        output.unsafe_ptr(), sums.unsafe_ptr(), means.unsafe_ptr(), rstds.unsafe_ptr(),
         x.unsafe_ptr(), weight.unsafe_ptr(), bias.unsafe_ptr(),
         Int32(rows), Int32(width), eps, has_bias,
         grid_dim=((rows + 63) // 64, 1, 1), block_dim=(64, 1, 1),

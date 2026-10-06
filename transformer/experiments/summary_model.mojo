@@ -45,13 +45,13 @@ def summary_masks_kernel(lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int
 def summary_model_forward_kernel(q: MutPointer[Float32, MutAnyOrigin],
     k: MutPointer[Float32, MutAnyOrigin], v: MutPointer[Float32, MutAnyOrigin],
     lo: MutPointer[Int32, MutAnyOrigin], hi: MutPointer[Int32, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin], maxes: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], maxes: MutPointer[Float32, MutAnyOrigin],
     denoms: MutPointer[Float32, MutAnyOrigin], scratch: MutPointer[Float32, MutAnyOrigin],
     status: MutPointer[Int32, MutAnyOrigin], rows: Int32, s: Int32, hd: Int32,
     qpg: Int32, key_lo: Int32, scale: Float32):
     var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if row < Int(rows):
-        summary_attention_forward_row[True](q,k,v,lo,hi,out,maxes,denoms,scratch,status,
+        summary_attention_forward_row[True](q,k,v,lo,hi,output,maxes,denoms,scratch,status,
             row,Int(s),Int(hd),Int(hd),Int(qpg),scale,Int(key_lo))
 
 

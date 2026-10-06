@@ -405,7 +405,7 @@ def _score_leaf(
     bf_feature: List[Int],
     bf_bin: List[Int],
     layout: CompressedIndexLayout,
-    mut out: _NsLeaf,
+    mut output: _NsLeaf,
 ):
     """The score kernel's records for one leaf, then the host reduce.
 
@@ -421,7 +421,7 @@ def _score_leaf(
     poison skipped, `TBestSplitProperties(feature, clamp(bin), -gain, -gain)`
     folded through `best_split_properties_less` from the default record; the
     fold REPLACES the leaf's record, defined or not."""
-    out.reset_best()
+    output.reset_best()
     for bx in range(argmax_blocks):
         var blk_gain = -GBDT_FLOAT32_MAX
         var blk_bin = -1
@@ -454,12 +454,12 @@ def _score_leaf(
         # its fields: gain Float32.MAX, feature (ui32)-1, bin 0)
         if _best_split_less(
             cand_gain, Int32(feature), Int32(bin),
-            out.best_gain, out.best_feature, out.best_bin,
+            output.best_gain, output.best_feature, output.best_bin,
         ):
-            out.best_feature = Int32(feature)
-            out.best_bin = Int32(bin)
-            out.best_gain = cand_gain
-            out.best_defined = True
+            output.best_feature = Int32(feature)
+            output.best_bin = Int32(bin)
+            output.best_gain = cand_gain
+            output.best_defined = True
 
 
 # ===========================================================================

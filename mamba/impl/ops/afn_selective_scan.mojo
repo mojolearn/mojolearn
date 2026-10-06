@@ -177,7 +177,7 @@ def afn_selective_scan_chunked[
     DSTATE: Int
 ](
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut y: DeviceBuffer[DType.float32],
     mut h_state: DeviceBuffer[DType.float32],
     mut u: DeviceBuffer[DType.float32],
@@ -202,7 +202,7 @@ def afn_selective_scan_chunked[
         chunk = 1
     comptime kern = afn_scan_chunked_kernel[DSTATE]
     ctx.enqueue_function[kern](
-        out.unsafe_ptr(),
+        output.unsafe_ptr(),
         y.unsafe_ptr(),
         h_state.unsafe_ptr(),
         u.unsafe_ptr(),

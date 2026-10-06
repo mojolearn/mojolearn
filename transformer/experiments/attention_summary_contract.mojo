@@ -104,7 +104,7 @@ def leaf_summary(dst: MutPointer[Float32, MutAnyOrigin],
 def summary_attention_forward_row[TREE: Bool](
     q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
     v: MutPointer[Float32, MutAnyOrigin], lo: MutPointer[Int32, MutAnyOrigin],
-    hi: MutPointer[Int32, MutAnyOrigin], out: MutPointer[Float32, MutAnyOrigin],
+    hi: MutPointer[Int32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
     maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
     scratch: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
     row: Int, keys: Int, head_dim: Int, width: Int, queries_per_group: Int,
@@ -174,7 +174,7 @@ def summary_attention_forward_row[TREE: Bool](
         var value = Float32(0.0)
         if z != Float32(0.0):
             value = ftz(identical_div(current.unsafe_load(2 + d), z))
-        out.unsafe_store(row * width + d, value)
+        output.unsafe_store(row * width + d, value)
 
 
 def _probability(q: MutPointer[Float32, MutAnyOrigin],
@@ -277,14 +277,14 @@ def summary_attention_dkdv_cell(
 def summary_attention_host_forward(
     q: MutPointer[Float32, MutAnyOrigin], k: MutPointer[Float32, MutAnyOrigin],
     v: MutPointer[Float32, MutAnyOrigin], lo: MutPointer[Int32, MutAnyOrigin],
-    hi: MutPointer[Int32, MutAnyOrigin], out: MutPointer[Float32, MutAnyOrigin],
+    hi: MutPointer[Int32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
     maxes: MutPointer[Float32, MutAnyOrigin], denoms: MutPointer[Float32, MutAnyOrigin],
     scratch: MutPointer[Float32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
     rows: Int, keys: Int, head_dim: Int, width: Int, queries_per_group: Int, scale: Float32,
 ):
     for row in range(rows):
         summary_attention_forward_row[NN20_BALANCED_SUMMARY_TREE](q, k, v, lo, hi,
-            out, maxes, denoms, scratch, status, row, keys, head_dim, width,
+            output, maxes, denoms, scratch, status, row, keys, head_dim, width,
             queries_per_group, scale)
 
 

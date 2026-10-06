@@ -48,7 +48,7 @@ def _square[LANES: Int](
 
 
 def norm_profile_forward_row[LANES: Int, LAYER: Bool](
-    out: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin],
     sums: MutPointer[Float32, MutAnyOrigin],
     means: MutPointer[Float32, MutAnyOrigin],
     rstds: MutPointer[Float32, MutAnyOrigin],
@@ -73,7 +73,7 @@ def norm_profile_forward_row[LANES: Int, LAYER: Bool](
         var y = ftz(identical_mul(ftz(weight.unsafe_load(j)), ftz(identical_mul(dev, rstd))))
         if has_bias:
             y = ftz(ftz(y) + ftz(bias.unsafe_load(j)))
-        out.unsafe_store(base + j, y)
+        output.unsafe_store(base + j, y)
 
 
 def norm_profile_backward_row[LANES: Int, LAYER: Bool](
@@ -142,14 +142,14 @@ def norm_profile_parameter_column(
 
 
 def norm_profile_host_forward[LAYER: Bool](
-    out: MutPointer[Float32, MutAnyOrigin], sums: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], sums: MutPointer[Float32, MutAnyOrigin],
     means: MutPointer[Float32, MutAnyOrigin], rstds: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin], weight: MutPointer[Float32, MutAnyOrigin],
     bias: MutPointer[Float32, MutAnyOrigin], rows: Int, width: Int,
     eps: Float32, has_bias: Bool,
 ):
     for row in range(rows):
-        norm_profile_forward_row[NN24_LANES, LAYER](out, sums, means, rstds, x, weight, bias, row, width, eps, has_bias)
+        norm_profile_forward_row[NN24_LANES, LAYER](output, sums, means, rstds, x, weight, bias, row, width, eps, has_bias)
 
 
 def norm_profile_host_backward[LAYER: Bool](

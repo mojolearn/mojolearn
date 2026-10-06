@@ -1022,7 +1022,7 @@ trait PlattSums:
     def value(mut self, a: Float64, b: Float64) raises -> Float64:
         ...
 
-    def grad(mut self, a: Float64, b: Float64, mut out: List[Float64]) raises:
+    def grad(mut self, a: Float64, b: Float64, mut output: List[Float64]) raises:
         ...
 
 
@@ -1055,7 +1055,7 @@ struct PlattHost(PlattSums):
         fold_tree_host(p, m, 1)
         return p[0]
 
-    def grad(mut self, a: Float64, b: Float64, mut out: List[Float64]) raises:
+    def grad(mut self, a: Float64, b: Float64, mut output: List[Float64]) raises:
         var m = fold_chunks(self.n)
         var p = List[Float64](length=5 * m, fill=0.0)
         for c in range(m):
@@ -1091,7 +1091,7 @@ struct PlattHost(PlattSums):
             p[5 * c + 4] = s4
         fold_tree_host(p, m, 5)
         for q in range(5):
-            out[q] = p[q]
+            output[q] = p[q]
 
 
 def platt_drive[S: PlattSums](mut sums: S, prior1: Float64, n: Int) raises -> Tuple[Float64, Float64]:

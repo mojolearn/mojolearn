@@ -58,7 +58,7 @@ def scan_window_state_kernel[DSTATE: Int](
 
 
 def scan_window_output_kernel[DSTATE: Int](
-    out: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin],
     y: MutPointer[Float32, MutAnyOrigin],
     window: MutPointer[Float32, MutAnyOrigin],
     u: MutPointer[Float32, MutAnyOrigin],
@@ -87,12 +87,12 @@ def scan_window_output_kernel[DSTATE: Int](
     var uv = ftz(u.unsafe_load(token * dim + d))
     var dv = ftz(dskip.unsafe_load(d))
     var skip = ftz(identical_mul(uv, dv))
-    out.unsafe_store(token * dim + d, ftz(acc + skip))
+    output.unsafe_store(token * dim + d, ftz(acc + skip))
 
 
 def identical_selective_scan_window[DSTATE: Int](
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32], mut y: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32], mut y: DeviceBuffer[DType.float32],
     mut h: DeviceBuffer[DType.float32], mut u: DeviceBuffer[DType.float32],
     mut delta: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
     mut bmat: DeviceBuffer[DType.float32], mut cmat: DeviceBuffer[DType.float32],
@@ -116,7 +116,7 @@ def identical_selective_scan_window[DSTATE: Int](
             )
             var outputs = batch * count * dim
             ctx.enqueue_function[scan_window_output_kernel[DSTATE]](
-                out.unsafe_ptr(), y.unsafe_ptr(), window.unsafe_ptr(), u.unsafe_ptr(),
+                output.unsafe_ptr(), y.unsafe_ptr(), window.unsafe_ptr(), u.unsafe_ptr(),
                 cmat.unsafe_ptr(), dskip.unsafe_ptr(), Int32(batch), Int32(length),
                 Int32(dim), Int32(first), Int32(count),
                 grid_dim=((outputs + SCAN_WINDOW_TPB - 1) // SCAN_WINDOW_TPB, 1, 1),

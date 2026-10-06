@@ -49,7 +49,7 @@ def nn34_prepare_kernel(u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP,
 
 
 def nn34_emit_kernel(hidden: NN34FP, c: NN34FP, u: NN34FP, skip: NN34FP,
-    y: NN34FP, out: NN34FP, batch: Int32, length: Int32, width: Int32):
+    y: NN34FP, output: NN34FP, batch: Int32, length: Int32, width: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var di = Int(width)
     var L = Int(length)
@@ -65,11 +65,11 @@ def nn34_emit_kernel(hidden: NN34FP, c: NN34FP, u: NN34FP, skip: NN34FP,
         acc = ftz(identical_mul_add(ftz(c.unsafe_load(t * NS + n)), ftz(hidden.unsafe_load(base + n)), acc))
     y.unsafe_store(i, acc)
     # The existing S11 is a separately rounded product followed by add.
-    out.unsafe_store(i, ftz(acc + ftz(identical_mul(ftz(u.unsafe_load(i)), ftz(skip.unsafe_load(d))))))
+    output.unsafe_store(i, ftz(acc + ftz(identical_mul(ftz(u.unsafe_load(i)), ftz(skip.unsafe_load(d))))))
 
 
 def nn34_mamba_forward(ctx: DeviceContext, u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP,
-    c: NN34FP, skip: NN34FP, y: NN34FP, out: NN34FP,
+    c: NN34FP, skip: NN34FP, y: NN34FP, output: NN34FP,
     boundary: NN34FP, last: NN34FP, slots_a: NN34FP, slots_b: NN34FP,
     batch: Int, length: Int, dim: Int, absolute_start: Int) raises:
     """Own all temporary storage through completion; commit state only after
@@ -93,7 +93,7 @@ def nn34_mamba_forward(ctx: DeviceContext, u: NN34FP, delta: NN34FP, a: NN34FP, 
         fa.unsafe_ptr(), fb.unsafe_ptr(), boundary, last, slots_a, slots_b,
         hs.unsafe_ptr(), next_boundary.unsafe_ptr(), next_last.unsafe_ptr(), next_sa.unsafe_ptr(), next_sb.unsafe_ptr(),
         pa.unsafe_ptr(), pb.unsafe_ptr(), bounds.unsafe_ptr())
-    ctx.enqueue_function[nn34_emit_kernel](hs.unsafe_ptr(), c, u, skip, y, out, Int32(batch), Int32(length), Int32(dim), grid_dim=((batch * length * dim + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))
+    ctx.enqueue_function[nn34_emit_kernel](hs.unsafe_ptr(), c, u, skip, y, output, Int32(batch), Int32(length), Int32(dim), grid_dim=((batch * length * dim + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))
     ctx.synchronize()
     # Queue-owned copies avoid depending on any temporary's last-use lifetime.
     ctx.enqueue_function[nn34_copy_kernel](next_boundary.unsafe_ptr(), boundary, Int32(chains), grid_dim=((chains + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))

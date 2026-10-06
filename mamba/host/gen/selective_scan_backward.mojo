@@ -1457,7 +1457,7 @@ def mamba_bwd_da_into(
 
 def mamba_bwd_param_fold_into(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut partial: DeviceBuffer[DType.float32],
     batch: Int,
     width: Int,
@@ -1469,11 +1469,11 @@ def mamba_bwd_param_fold_into(
     so that a future unrouted parameter gradient has one fold to use rather
     than a second one to declare.
     """
-    _require(len(out), width, "out", "[W]")
+    _require(len(output), width, "output", "[W]")
     _require(len(partial), batch * width, "partial", "[B, W]")
     if width < 1:
         return
-    var _l9_a0 = out.unsafe_ptr()
+    var _l9_a0 = output.unsafe_ptr()
     var _l9_a1 = partial.unsafe_ptr()
     var _l9_a2 = Int32(batch)
     var _l9_a3 = Int32(width)

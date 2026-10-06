@@ -50,7 +50,11 @@ comptime AFN26_EMB_GATHER8 = EMB_ATOMIC_BWD and is_defined["MOJOLEARN_AFN26_EMB_
 # occupancy; both variants keep the same cells and relaxed atomic semantics.
 comptime AFN26_EMB_THREADS64 = EMB_ATOMIC_BWD and is_defined["MOJOLEARN_AFN26_EMB_THREADS64"]()
 comptime AFN26_EMB_THREADS128 = EMB_ATOMIC_BWD and is_defined["MOJOLEARN_AFN26_EMB_THREADS128"]()
-comptime assert not (AFN26_EMB_THREADS64 and AFN26_EMB_THREADS128), "select one Apple FAST embedding thread experiment"
+def _integration_require_1() -> Bool:
+    comptime assert not (AFN26_EMB_THREADS64 and AFN26_EMB_THREADS128), "select one Apple FAST embedding thread experiment"
+    return True
+
+comptime _INTEGRATION_REQUIRE_1 = _integration_require_1()
 comptime AFN26_EMB_TPB = 64 if AFN26_EMB_THREADS64 else (128 if AFN26_EMB_THREADS128 else EMB_TPB)
 # E09-E10: not tested. Reuse the existing token-owned table and size-owned
 # scratch implementation on FAST Apple only. Scratch explicitly depends on

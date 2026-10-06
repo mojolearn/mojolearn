@@ -799,7 +799,7 @@ def pca_transform(
     mut x: DeviceBuffer[DType.float32],
     mut mu: DeviceBuffer[DType.float32],
     mut components: DeviceBuffer[DType.float32],
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     n_rows: Int,
     n_cols: Int,
     n_components: Int,
@@ -817,7 +817,7 @@ def pca_transform(
     )
     gemm_nt(
         ctx,
-        out,
+        output,
         x,
         components,
         n_rows,
@@ -907,9 +907,9 @@ def whiten_components(
 
 # C04 preserves the same-version GEMM v1 leaves and adjacent-pair fold.
 def classical_centered_gram_kernel(
-    out: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
     means: MutPointer[Float32, MutAnyOrigin], rows: Int32, cols: Int32,
 ):
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if t < Int(cols)*Int(cols):
-        out.unsafe_store(t, centered_gram_v1_cell(x, means, Int(rows), Int(cols), t//Int(cols), t%Int(cols)))
+        output.unsafe_store(t, centered_gram_v1_cell(x, means, Int(rows), Int(cols), t//Int(cols), t%Int(cols)))

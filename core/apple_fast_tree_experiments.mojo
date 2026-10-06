@@ -46,7 +46,11 @@ comptime AFT_P06 = AFT_APPLE_FAST and is_defined["MOJOLEARN_AFT_P06"]()
 # P07: four rows per tree worker extends (does not rename) the existing
 # two-row candidate. The two alternatives must not be selected together.
 comptime AFT_P07 = AFT_APPLE_FAST and is_defined["MOJOLEARN_AFT_P07"]()
-comptime assert not (AFT_P07 and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()), "P07 and SHAP_FAST_ROW_PAIR are alternative row tiles"
+def _integration_require_1() -> Bool:
+    comptime assert not (AFT_P07 and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()), "P07 and SHAP_FAST_ROW_PAIR are alternative row tiles"
+    return True
+
+comptime _INTEGRATION_REQUIRE_1 = _integration_require_1()
 
 # P08: fewer SHAP workers per block may reduce register pressure from path
 # stacks; P09 halves contribution scratch to 64 MiB at the cost of launches.

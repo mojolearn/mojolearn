@@ -1230,7 +1230,7 @@ def gp_kernel_stack_floats(m: Int, n: Int) -> Int:
 
 def gp_kernel_matrix(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     x_input: DeviceBuffer[DType.float32],
     y_input: DeviceBuffer[DType.float32],
     mut dls: DeviceBuffer[DType.float32],
@@ -1247,7 +1247,7 @@ def gp_kernel_matrix(
     distribute: Bool = True,
     global_row_start: Int = 0,
 ) raises:
-    """`out[m x n] = k(x[m x d], y[n x d])`, row-major, on the device.
+    """`output[m x n] = k(x[m x d], y[n x d])`, row-major, on the device.
 
     `is_self` is sklearn's `Y is None` and reaches exactly one kernel
     (`gp_white_kernel`); it is a caller's structural statement about whether
@@ -1288,10 +1288,10 @@ def gp_kernel_matrix(
     if elem_tpb <= 0:
         raise Error("gp_kernel_matrix: elem_tpb must be positive")
     gp_validate_kernel(spec, d)
-    if len(out) < m * n:
+    if len(output) < m * n:
         raise Error(
             "gp_kernel_matrix: the output buffer holds "
-            + String(len(out))
+            + String(len(output))
             + " floats, an "
             + String(m)
             + " x "
@@ -1306,7 +1306,7 @@ def gp_kernel_matrix(
             + " floats and this shape needs "
             + String(gp_kernel_stack_floats(m, n))
             + ". Sizing it for one expression and evaluating another is an"
-            " out-of-bounds write a small shape will not show you; use"
+            " output-of-bounds write a small shape will not show you; use"
             " gp_kernel_stack_floats"
         )
 
@@ -1318,8 +1318,8 @@ def gp_kernel_matrix(
                 raise Error("parallel GP requires IDENTICAL and 1..64 devices")
             if sabotage != GP_SAB_NONE:
                 raise Error("parallel GP does not execute sabotage probes")
-            _gp_rows(ctx, out, x, y, dls, m, n, d, spec, is_self, elem_tpb, count)
-            trace.record_device(ctx, tag, out, m * n)
+            _gp_rows(ctx, output, x, y, dls, m, n, d, spec, is_self, elem_tpb, count)
+            trace.record_device(ctx, tag, output, m * n)
             return
 
     var cells = m * n
@@ -1494,7 +1494,7 @@ def gp_kernel_matrix(
 
     var root = stack.create_sub_buffer[DType.float32](0, cells)
     ctx.enqueue_function[gp_copy_kernel](
-        out.unsafe_ptr(),
+        output.unsafe_ptr(),
         root.unsafe_ptr(),
         Int32(cells),
         grid_dim=(grid, 1, 1),
@@ -1506,7 +1506,7 @@ def gp_kernel_matrix(
         ctx.synchronize()
     _ = xs^
     _ = ys^
-    trace.record_device(ctx, tag, out, cells)
+    trace.record_device(ctx, tag, output, cells)
 
 
 def gp_predictive_variance(

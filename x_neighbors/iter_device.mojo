@@ -125,15 +125,15 @@ def _c33_product(state: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, deg
             matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
 
 
-def _c33_clamp(state: IP, nxt: FP, ys: FP, unl: IP, out: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
+def _c33_clamp(state: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if state[0] != 0:
         return
     if variant == 0:
         if t < Int(n):
-            lp_clamp_item(t,nxt,ys,unl,out,Int(n),Int(c))
+            lp_clamp_item(t,nxt,ys,unl,output,Int(n),Int(c))
     elif t < Int(n)*Int(c):
-        ls_clamp_item(t,nxt,ys,out,Int(n)*Int(c),alpha)
+        ls_clamp_item(t,nxt,ys,output,Int(n)*Int(c),alpha)
 
 
 def _c43_graph_degree(a: FP,degree: FP,n: Int32,variant: Int32):

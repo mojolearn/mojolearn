@@ -731,12 +731,12 @@ def gbdt_host_predict(
     n_splits: Int,
     n_leaf_values: Int,
     bias: Float64,
-    mut out: List[Float32],
+    mut output: List[Float32],
     workers: Int = 0,
     row_major: Bool = False,
 ) raises:
     """`predict_floats` / `predict_multi_floats` on the host: RAW approxes,
-    `out[r * dim + d]`, ROW-major, `n_rows * dim` values.
+    `output[r * dim + d]`, ROW-major, `n_rows * dim` values.
 
     `x_colmajor` is COLUMN-major, `n_rows * n_features`, the layout the GPU
     binding takes (`gbdt_predict`, `bindings/_mojolearn_gbdt.mojo:410`).
@@ -751,8 +751,8 @@ def gbdt_host_predict(
         raise Error("gbdt host: n_rows, n_features and dim must be positive")
     if len(x_colmajor) < n_rows * n_features:
         raise Error("gbdt host: x holds fewer than n_rows * n_features values")
-    if len(out) < n_rows * dim:
-        raise Error("gbdt host: out holds fewer than n_rows * dim values")
+    if len(output) < n_rows * dim:
+        raise Error("gbdt host: output holds fewer than n_rows * dim values")
     if Int(tree_offsets_p[0]) != 0 or Int(tree_offsets_p[n_trees]) != n_splits:
         raise Error("gbdt host: tree_offsets must start at 0 and end at n_splits")
     if Int(leaf_offsets_p[0]) != 0 or Int(leaf_offsets_p[n_trees]) != n_leaf_values:
@@ -783,7 +783,7 @@ def gbdt_host_predict(
     var failed = List[Int](length=tasks * GBDT_HOST_FAIL_WORDS, fill=0)
     var pp = Pointer(to=plan)
     var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](x_colmajor.unsafe_ptr())
-    var op = rebind[MutPointer[Float32, MutUntrackedOrigin]](out.unsafe_ptr())
+    var op = rebind[MutPointer[Float32, MutUntrackedOrigin]](output.unsafe_ptr())
     var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failed.unsafe_ptr())
 
     def _rows_task(c: Int) {imm pp, imm xp, imm borders_p, imm leaves_p, imm op, imm fp,
@@ -804,7 +804,7 @@ def gbdt_host_predict(
     else:
         host_parallelize(_rows_task, tasks)
     _raise_first_failure(failed, tasks)
-    # the tasks read `plan`, `x_colmajor` and wrote `out` through pointers;
+    # the tasks read `plan`, `x_colmajor` and wrote `output` through pointers;
     # a use after the join keeps every owner alive past it
     _ = plan^
     _ = failed^

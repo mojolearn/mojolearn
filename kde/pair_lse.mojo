@@ -62,20 +62,20 @@ def pair_row(row: P, n: Int, leaf_rows: Int = C52_ROWS) -> Tuple[Float32, Float3
             elif v != ni:
                 s = ftz(s + ftz(identical_exp(ftz(v-m))))
         var level = 0
-        while (occupied & (UInt64(1) << level)) != 0:
+        while (occupied & (UInt64(1) << UInt64(level))) != 0:
             var p = pair_join(ms[level], ss[level], m, s)
             m = p[0]
             s = p[1]
-            occupied &= ~(UInt64(1) << level)
+            occupied &= ~(UInt64(1) << UInt64(level))
             level += 1
         ms[level] = m
         ss[level] = s
-        occupied |= UInt64(1) << level
+        occupied |= UInt64(1) << UInt64(level)
     # Ascending levels join the shorter right tail first, then its left sibling.
     var m = ni
     var s = Float32(0)
     for level in range(64):
-        if (occupied & (UInt64(1) << level)) != 0:
+        if (occupied & (UInt64(1) << UInt64(level))) != 0:
             var p = pair_join(ms[level], ss[level], m, s)
             m = p[0]
             s = p[1]

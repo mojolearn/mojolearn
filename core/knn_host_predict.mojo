@@ -1038,10 +1038,10 @@ def host_class_probs(
 
 def host_class_vote(
     proba: List[Float32], uniq: List[Int32], n_uniq: Int, n_queries: Int,
-    mut out: List[Int32], n_outputs: Int, output_offset: Int,
+    mut output: List[Int32], n_outputs: Int, output_offset: Int,
 ):
     """`class_vote_kernel` (`knn.mojo:151-180`): `cur_max = -1.0`, strict
-    `>`, the first maximal class wins, `out[row * n_outputs +
+    `>`, the first maximal class wins, `output[row * n_outputs +
     output_offset] = uniq[cur_label]`. The sabotage arm compares with
     `>=`, so a tied vote goes to the LAST maximal class: the vote's tie
     rule, wrong on purpose."""
@@ -1059,12 +1059,12 @@ def host_class_vote(
                 if cur_proba > cur_max:
                     cur_max = cur_proba
                     cur_label = j
-        out[row * n_outputs + output_offset] = uniq[cur_label]
+        output[row * n_outputs + output_offset] = uniq[cur_label]
 
 
 def host_regress_avg(
     idx: List[UInt32], y: List[Float32], n_queries: Int, k: Int,
-    mut out: List[Float32], n_outputs: Int, output_offset: Int,
+    mut output: List[Float32], n_outputs: Int, output_offset: Int,
 ):
     """`regress_avg_kernel` (`knn.mojo:183-211`): `pred = ftz(pred +
     ftz(y[idx]))` over the k slots in slot order, then
@@ -1083,7 +1083,7 @@ def host_regress_avg(
         else:
             for j in range(k):
                 pred = ftz(pred + ftz(y[Int(idx[i + j])]))
-        out[row * n_outputs + output_offset] = ftz(pred / Float32(k))
+        output[row * n_outputs + output_offset] = ftz(pred / Float32(k))
 
 
 def host_distance_weights(
@@ -1177,7 +1177,7 @@ def host_weighted_class_probs(
 def host_weighted_regress_avg(
     idx: List[UInt32], y: List[Float32], w: List[Float32],
     n_queries: Int, k: Int,
-    mut out: List[Float32], n_outputs: Int, output_offset: Int,
+    mut output: List[Float32], n_outputs: Int, output_offset: Int,
 ):
     """`weighted_regress_avg_kernel` (`distance_weights.mojo:309-348`):
     `num = ftz(num + ftz(yv * wv))`, `den = ftz(den + wv)` in slot order
@@ -1192,7 +1192,7 @@ def host_weighted_regress_avg(
             var yv = ftz(y[Int(idx[i + j])])
             num = ftz(num + ftz(yv * wv))
             den = ftz(den + wv)
-        out[row * n_outputs + output_offset] = ftz(identical_div(num, den))
+        output[row * n_outputs + output_offset] = ftz(identical_div(num, den))
 
 
 # ===========================================================================

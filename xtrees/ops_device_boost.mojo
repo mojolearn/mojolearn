@@ -821,7 +821,7 @@ struct PlattDevice(PlattSums):
         fold_tree_device(self.ctx, self.d_p, self.m, 1)
         return _f(_head_u64(self.ctx, self.d_p, 1)[0])
 
-    def grad(mut self, a: Float64, b: Float64, mut out: List[Float64]) raises:
+    def grad(mut self, a: Float64, b: Float64, mut output: List[Float64]) raises:
         self.ctx.enqueue_function[platt_grad_kernel](
             self.d_f.unsafe_ptr(), self.d_y.unsafe_ptr(), Int64(self.n), Int64(self.m), self.hi, self.lo, _w(a), _w(b),
             self.d_p.unsafe_ptr(), grid_dim=_blocks(self.m), block_dim=OPS_TPB,
@@ -829,7 +829,7 @@ struct PlattDevice(PlattSums):
         fold_tree_device(self.ctx, self.d_p, self.m, 5)
         var r = _head_u64(self.ctx, self.d_p, 5)
         for q in range(5):
-            out[q] = _f(r[q])
+            output[q] = _f(r[q])
 
 
 def platt_fit_device(

@@ -1082,11 +1082,11 @@ struct DMcd:
         return DEst(loc^, cov^, det, sel^, final^)
 
     def select_random(
-        mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, mut out: DCands
+        mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, mut output: DCands
     ) raises:
         """`select_candidates` from random subsets: every trial's location
         and covariance packed into one trial arena, then the `keep` best (in
-        `_order_by_det`'s order) appended to `out`. The later stages read
+        `_order_by_det`'s order) appended to `output`. The later stages read
         only a kept candidate's location and covariance."""
         var tr = DCands(trials, X.c)
         var none = DMat(0, 0)
@@ -1096,13 +1096,13 @@ struct DMcd:
         var top = _top_of(tr.det, keep)
         for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
             var j = top[a]
-            out.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
+            output.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
 
     def select_init(
-        mut self, X: DMat, h: Int, inits: DCands, keep: Int, n_iter: Int, mut out: DCands
+        mut self, X: DMat, h: Int, inits: DCands, keep: Int, n_iter: Int, mut output: DCands
     ) raises:
         """`select_candidates` from initial estimates, the `keep` best
-        locations and covariances appended to `out` (packed, as above)."""
+        locations and covariances appended to `output` (packed, as above)."""
         var tr = DCands(inits.count(), X.c)
         for t in range(inits.count()):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
             var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t), False)
@@ -1110,7 +1110,7 @@ struct DMcd:
         var top = _top_of(tr.det, keep)
         for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
             var j = top[a]
-            out.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
+            output.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
 
     def select_init_best(
         mut self, X: DMat, h: Int, inits: DCands, n_iter: Int, want_dist: Bool

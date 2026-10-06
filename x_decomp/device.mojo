@@ -280,9 +280,9 @@ def xd_first_where2_kernel(v: F32Ptr, count: Int32, stride: Int32, first: I32Ptr
 
 def xd_first_where2_enq(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], count: Int, stride: Int,
-    mut out: HostBuffer[DType.int32],
+    mut output: HostBuffer[DType.int32],
 ) raises:
-    """`xd_first_where` modes 0 and 1 together, ENQUEUED: out[0], out[1] are
+    """`xd_first_where` modes 0 and 1 together, ENQUEUED: output[0], output[1] are
     the first t (XD_NO_FLAG for none) after the caller's next sync. One
     launch and no wait of its own."""
     var dfirst = ctx.enqueue_create_buffer[DType.int32](2)
@@ -292,7 +292,7 @@ def xd_first_where2_enq(
             _p(buf), Int32(count), Int32(stride), dfirst.unsafe_ptr(),
             grid_dim=_blocks(count), block_dim=TPB,
         )
-    ctx.enqueue_copy(dst_buf=out, src_buf=dfirst)
+    ctx.enqueue_copy(dst_buf=output, src_buf=dfirst)
     _ = dfirst^
 
 
@@ -2617,7 +2617,7 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
-    def classical_centered_gram(x: F32Ptr, means: F32Ptr, out: F32Ptr, n: Int, d: Int) raises:
+    def classical_centered_gram(x: F32Ptr, means: F32Ptr, output: F32Ptr, n: Int, d: Int) raises:
         var ctx = xd_ctx()
         var dx = _up(ctx, x, n * d)
         var dm = _up(ctx, means, d)
@@ -2625,7 +2625,7 @@ struct DevExec(Exec):
         if d > 0:
             ctx.enqueue_function[centered_gram_kernel](_p(dx), _p(dm), _p(dg), Int32(n), Int32(d),
                                                       grid_dim=_blocks(d * d), block_dim=TPB)
-        _down(ctx, dg, out, d * d)
+        _down(ctx, dg, output, d * d)
         ctx.synchronize()
         _ = dx^
         _ = dm^
