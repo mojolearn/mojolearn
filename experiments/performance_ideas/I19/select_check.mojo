@@ -67,7 +67,7 @@ def check_select(ctx: DeviceContext,categories: Bool,bootstrap: Bool) raises:
                     raise Error("I19 valid bootstrap index refused")
     var refused=False
     try:
-        var bad_ranks=ranks
+        var bad_ranks=ranks.copy()
         bad_ranks[0]=Int32(-1)
         enqueue_ragged_select(ctx,src,offsets,segments,bad_ranks,categories,values,positions,descriptors)
     except:
