@@ -680,9 +680,10 @@ def mamba3_owned_close_binding(session: PythonObject) raises -> PythonObject:
     return PythonObject(0)
 
 
-def mamba3_owned_install_binding(session: PythonObject, addrs: PythonObject, d_model: Int) raises -> PythonObject:
+def mamba3_owned_install_binding(session: PythonObject, addrs: PythonObject, d_model_obj: PythonObject) raises -> PythonObject:
     comptime if not NN40_OWNED_WEIGHTS:
         raise Error("mamba3 owned host: NN40 arm disabled")
+    var d_model = Int(py=d_model_obj)
     var owner = session.downcast_value_ptr[M3OwnedHostSession]()
     if owner[].busy or not owner[].usable:
         raise Error("mamba3 owned host: session busy or unusable")
@@ -774,7 +775,8 @@ def mamba3_owned_backward_binding(session: PythonObject, addrs: PythonObject, pa
     return PythonObject(0)
 
 
-def mamba3_owned_export_binding(session: PythonObject, addrs: PythonObject, generation: Int) raises -> PythonObject:
+def mamba3_owned_export_binding(session: PythonObject, addrs: PythonObject, generation_obj: PythonObject) raises -> PythonObject:
+    var generation = Int(py=generation_obj)
     var owner = session.downcast_value_ptr[M3OwnedHostSession]()
     if not owner[].weights:
         raise Error("mamba3 owned export: no snapshot")

@@ -103,9 +103,9 @@ def nn34_mamba_forward(ctx: DeviceContext, u: NN34FP, delta: NN34FP, a: NN34FP, 
         nn34_prepare_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8)
     host_launch(_launch_1, launch_count(((cells + NT - 1) // NT, 1, 1), (NT, 1, 1)))
     nn34_component_device_prefill(ctx, NN34_COMPONENT_PROFILE, chains, length, absolute_start,
-        fa.unsafe_ptr(), fb.unsafe_ptr(), boundary, last, slots_a, slots_b,
-        hs.unsafe_ptr(), next_boundary.unsafe_ptr(), next_last.unsafe_ptr(), next_sa.unsafe_ptr(), next_sb.unsafe_ptr(),
-        pa.unsafe_ptr(), pb.unsafe_ptr(), bounds.unsafe_ptr())
+        fa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), fb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), boundary, last, slots_a, slots_b,
+        hs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_boundary.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_last.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_sa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_sb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        pa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), pb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), bounds.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
     var _l2_a0 = hs.unsafe_ptr()
     var _l2_a1 = c
     var _l2_a2 = u

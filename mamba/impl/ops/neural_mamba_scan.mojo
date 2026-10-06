@@ -90,9 +90,9 @@ def nn34_mamba_forward(ctx: DeviceContext, u: NN34FP, delta: NN34FP, a: NN34FP, 
     var next_sb = ctx.enqueue_create_buffer[DType.float32](chains * NN34_LEVELS)
     ctx.enqueue_function[nn34_prepare_kernel](u, delta, a, b, fa.unsafe_ptr(), fb.unsafe_ptr(), Int32(batch), Int32(length), Int32(dim), grid_dim=((cells + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))
     nn34_component_device_prefill(ctx, NN34_COMPONENT_PROFILE, chains, length, absolute_start,
-        fa.unsafe_ptr(), fb.unsafe_ptr(), boundary, last, slots_a, slots_b,
-        hs.unsafe_ptr(), next_boundary.unsafe_ptr(), next_last.unsafe_ptr(), next_sa.unsafe_ptr(), next_sb.unsafe_ptr(),
-        pa.unsafe_ptr(), pb.unsafe_ptr(), bounds.unsafe_ptr())
+        fa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), fb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), boundary, last, slots_a, slots_b,
+        hs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_boundary.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_last.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_sa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), next_sb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        pa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), pb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), bounds.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
     ctx.enqueue_function[nn34_emit_kernel](hs.unsafe_ptr(), c, u, skip, y, output, Int32(batch), Int32(length), Int32(dim), grid_dim=((batch * length * dim + NT - 1) // NT, 1, 1), block_dim=(NT, 1, 1))
     ctx.synchronize()
     # Queue-owned copies avoid depending on any temporary's last-use lifetime.

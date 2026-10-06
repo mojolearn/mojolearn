@@ -24,16 +24,16 @@ def model_summary_host_forward(q:List[Float32],k:List[Float32],v:List[Float32],
     output=host_f32_uninit(rows*hd)
     for i in range(rows*hd):
         packed[i]=q[_token_cell(i,l,nh,hd)]
-    var qp=rebind[MutPointer[Float32,MutAnyOrigin]](packed.unsafe_ptr())
-    var kp=rebind[MutPointer[Float32,MutAnyOrigin]](k.unsafe_ptr())
-    var vp=rebind[MutPointer[Float32,MutAnyOrigin]](v.unsafe_ptr())
+    var qp=rebind[MutPointer[Float32,MutAnyOrigin]](packed.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+    var kp=rebind[MutPointer[Float32,MutAnyOrigin]](k.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+    var vp=rebind[MutPointer[Float32,MutAnyOrigin]](v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
     for row in range(rows):
-        _mask_row(lo.unsafe_ptr(),hi.unsafe_ptr(),status.unsafe_ptr(),row,l,s,pos0,key_lo,window)
-        summary_attention_forward_row[True](qp,kp,vp,lo.unsafe_ptr(),hi.unsafe_ptr(),result.unsafe_ptr(),maxes.unsafe_ptr(),denoms.unsafe_ptr(),scratch.unsafe_ptr(),status.unsafe_ptr(),row,s,hd,hd,qpg,scale,key_lo)
+        _mask_row(lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),row,l,s,pos0,key_lo,window)
+        summary_attention_forward_row[True](qp,kp,vp,lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),result.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),maxes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),denoms.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),row,s,hd,hd,qpg,scale,key_lo)
     for i in range(rows*hd):
         output[_token_cell(i,l,nh,hd)]=result[i]
     for cell in range(rows*s):
-        _materialize_cell[False](qp,kp,vp,qp,lo.unsafe_ptr(),hi.unsafe_ptr(),maxes.unsafe_ptr(),denoms.unsafe_ptr(),maxes.unsafe_ptr(),scores.unsafe_ptr(),masked.unsafe_ptr(),exps.unsafe_ptr(),probs.unsafe_ptr(),cell,s,hd,qpg,scale)
+        _materialize_cell[False](qp,kp,vp,qp,lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),maxes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),denoms.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),maxes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),scores.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),masked.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),exps.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),probs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),cell,s,hd,qpg,scale)
 
 
 def model_summary_host_backward(q:List[Float32],dy:List[Float32],k:List[Float32],v:List[Float32],
@@ -61,18 +61,18 @@ def model_summary_host_backward(q:List[Float32],dy:List[Float32],k:List[Float32]
     for i in range(rows*hd):
         packed[i]=q[_token_cell(i,l,nh,hd)]
         pdy[i]=dy[_token_cell(i,l,nh,hd)]
-    var qp=rebind[MutPointer[Float32,MutAnyOrigin]](packed.unsafe_ptr())
-    var kp=rebind[MutPointer[Float32,MutAnyOrigin]](k.unsafe_ptr())
-    var vp=rebind[MutPointer[Float32,MutAnyOrigin]](v.unsafe_ptr())
-    var mp=rebind[MutPointer[Float32,MutAnyOrigin]](maxes.unsafe_ptr())
-    var zp=rebind[MutPointer[Float32,MutAnyOrigin]](denoms.unsafe_ptr())
+    var qp=rebind[MutPointer[Float32,MutAnyOrigin]](packed.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+    var kp=rebind[MutPointer[Float32,MutAnyOrigin]](k.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+    var vp=rebind[MutPointer[Float32,MutAnyOrigin]](v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+    var mp=rebind[MutPointer[Float32,MutAnyOrigin]](maxes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+    var zp=rebind[MutPointer[Float32,MutAnyOrigin]](denoms.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
     for row in range(rows):
-        _mask_row(lo.unsafe_ptr(),hi.unsafe_ptr(),status.unsafe_ptr(),row,l,s,pos0,key_lo,window)
-        summary_attention_rowdot(qp,kp,vp,pdy.unsafe_ptr(),lo.unsafe_ptr(),hi.unsafe_ptr(),mp,zp,zdot.unsafe_ptr(),status.unsafe_ptr(),row,s,hd,hd,qpg,scale)
+        _mask_row(lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),row,l,s,pos0,key_lo,window)
+        summary_attention_rowdot(qp,kp,vp,pdy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),mp,zp,zdot.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),row,s,hd,hd,qpg,scale)
     for i in range(rows*hd):
-        summary_attention_dq_cell(qp,kp,vp,pdy.unsafe_ptr(),lo.unsafe_ptr(),hi.unsafe_ptr(),mp,zp,zdot.unsafe_ptr(),status.unsafe_ptr(),pdq.unsafe_ptr(),i,s,hd,hd,qpg,scale)
+        summary_attention_dq_cell(qp,kp,vp,pdy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),mp,zp,zdot.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),pdq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),i,s,hd,hd,qpg,scale)
         dq[_token_cell(i,l,nh,hd)]=pdq[i]
     for i in range(b*nkv*s*hd):
-        summary_attention_dkdv_cell(qp,kp,vp,pdy.unsafe_ptr(),lo.unsafe_ptr(),hi.unsafe_ptr(),mp,zp,zdot.unsafe_ptr(),status.unsafe_ptr(),dk.unsafe_ptr(),dv.unsafe_ptr(),i,rows,s,hd,hd,qpg,scale)
+        summary_attention_dkdv_cell(qp,kp,vp,pdy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),mp,zp,zdot.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dk.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),i,rows,s,hd,hd,qpg,scale)
     for cell in range(rows*s):
-        _materialize_cell[True](qp,kp,vp,pdy.unsafe_ptr(),lo.unsafe_ptr(),hi.unsafe_ptr(),mp,zp,zdot.unsafe_ptr(),dweights.unsafe_ptr(),dmasked.unsafe_ptr(),dscores.unsafe_ptr(),dqk.unsafe_ptr(),cell,s,hd,qpg,scale)
+        _materialize_cell[True](qp,kp,vp,pdy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),lo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),mp,zp,zdot.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dweights.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dmasked.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dscores.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),dqk.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),cell,s,hd,qpg,scale)

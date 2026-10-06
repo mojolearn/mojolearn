@@ -57,6 +57,8 @@ struct ByteOwnedLayer(Movable):
         self.input = _zeros(ctx, shape.batch*shape.length*shape.d_model)
         self.cotangent = _zeros(ctx, shape.batch*shape.length*shape.d_model)
         self.gradient = _zeros(ctx, self.offsets[9])
+        self.total = _zeros(ctx, self.offsets[9])
+        self.scan = DeviceScanScratch(ctx)
         comptime if IDN_LM_PARAM_VIEWS:
             # NI27: this layer owns an immutable gradient arena handle for
             # its lifetime; every backward writer overwrites its full span.
@@ -81,8 +83,6 @@ struct ByteOwnedLayer(Movable):
             self.backward.dw_gate = view_dw_gate^
             self.backward.dw_up = view_dw_up^
             self.backward.dw_down = view_dw_down^
-        self.total = _zeros(ctx, self.offsets[9])
-        self.scan = DeviceScanScratch(ctx)
         ctx.synchronize()
 
     def pack(mut self, ctx: DeviceContext) raises:

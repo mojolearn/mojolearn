@@ -1616,11 +1616,11 @@ def mamba_selective_scan(
     comptime if NN34_AFFINE_PREFIX:
         if state.nn34_position == 0:
             ctx.enqueue_copy(dst_buf=state.nn34_boundary.value(), src_buf=state.h)
-        nn34_mamba_forward(ctx, stages.silu_out.unsafe_ptr(), stages.softplus_out.unsafe_ptr(),
-            stages.a_out.unsafe_ptr(), stages.b_mat.unsafe_ptr(), stages.c_mat.unsafe_ptr(),
-            w.d_skip.unsafe_ptr(), stages.scan_y.unsafe_ptr(), stages.skip_out.unsafe_ptr(),
-            state.nn34_boundary.value().unsafe_ptr(), state.h.unsafe_ptr(),
-            state.nn34_sa.value().unsafe_ptr(), state.nn34_sb.value().unsafe_ptr(), b, l, di, state.nn34_position)
+        nn34_mamba_forward(ctx, stages.silu_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.softplus_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            stages.a_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.b_mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.c_mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            w.d_skip.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.scan_y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), stages.skip_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            state.nn34_boundary.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), state.h.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            state.nn34_sa.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), state.nn34_sb.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b, l, di, state.nn34_position)
         state.nn34_position += l
         trace.record_device[DType.float32](ctx, prefix + ".scan.y", stages.scan_y, m * di)
         trace.record_device[DType.float32](ctx, prefix + ".skip.out", stages.skip_out, m * di)
