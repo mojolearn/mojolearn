@@ -41,6 +41,7 @@ from std.math import inf, isinf
 from std.sys.compile import is_defined
 
 from arima.impl.batched_kalman import (
+    KALMAN_TPB,
     KALMAN_FAST_EVAL_WS,
     KalmanWorkspace,
     fast_kalman_into,
@@ -489,7 +490,7 @@ struct FastEvalWS(Movable):
         if self.css:
             self.css_into(ctx, order)
         else:
-            fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, 32,
+            fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, KALMAN_TPB,
                              1 if self.n_exog > 0 else 0, Bool(self.compensated))
             comptime if PRODUCT_DF_ON:
                 if self.compensated:

@@ -40,6 +40,7 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from gbdt.apple_fast_classical import AFCL_T03
 
 
 #: `binarize.cu:26`.
@@ -75,7 +76,7 @@ def write_compressed_index_kernel(
 
 
 #: `BinarizeFloatFeature`'s launch shape (`binarize.cu:245-246`).
-comptime BINARIZE_BLOCK_SIZE = 1024
+comptime BINARIZE_BLOCK_SIZE = 512 if AFCL_T03 else 1024
 comptime BINARIZE_DOCS_PER_THREAD = 8
 
 

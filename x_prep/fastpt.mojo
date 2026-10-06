@@ -49,6 +49,12 @@ from x_prep.transform import PT_STATE, pt_finish, power_log, power_from_log
 from x_prep.pt_score import SCORE_WORDS, score_tile, score_finish
 from x_prep.pt_center import PT_SCORE_STABLE
 
+# AFCL-P01: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Separate even/odd Welford chains hide their division dependencies; Chan
+# combines their centered moments. All observations and NaN handling remain.
+# This covers the current SI_ONEPASS path as well as fused-transform callers.
+comptime AFCL_P01 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P01"]()
+
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 # HOLD-quality, 2026-10-04, gap26-pt-score-quality, source bc112b172:
 # stress worst per-column regressions: lambda .01330737 (gate 1e-5),
@@ -376,6 +382,9 @@ def cs_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, LAM: Int32, meth
     var cnt = Float32(0)
     var mean = Float32(0)
     var m2 = Float32(0)
+    var cnt_odd = Float32(0)
+    var mean_odd = Float32(0)
+    var m2_odd = Float32(0)
     var lo = inf
     var hi = -inf
     var ma = Float32(0)
@@ -389,13 +398,27 @@ def cs_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, LAM: Int32, meth
             v = power_from_log(power_log(x, meth), x >= Float32(0), lam, meth)
             if is_nan(v):
                 continue
-        cnt += Float32(1)
-        var delta = v - mean
-        mean += delta / cnt
-        m2 += delta * (v - mean)
+        comptime if AFCL_P01:
+            if (i - row0) % 2 == 0:
+                cnt += Float32(1)
+                var delta = v - mean
+                mean += delta / cnt
+                m2 += delta * (v - mean)
+            else:
+                cnt_odd += Float32(1)
+                var delta = v - mean_odd
+                mean_odd += delta / cnt_odd
+                m2_odd += delta * (v - mean_odd)
+        else:
+            cnt += Float32(1)
+            var delta = v - mean
+            mean += delta / cnt
+            m2 += delta * (v - mean)
         lo = min(lo, v)
         hi = max(hi, v)
         ma = max(ma, abs(v))
+    comptime if AFCL_P01:
+        _chan(cnt, mean, m2, cnt_odd, mean_odd, m2_odd)
     var o = (chunk * dd + c) * 6
     pp[o] = cnt
     pp[o + 1] = mean

@@ -750,7 +750,16 @@ def fl_clamp_normalize_kernel(
 #: the per-row thread.
 comptime SPMV_WARP = LANCZOS_FAST and not is_defined["MOJOLEARN_SPMV_WARP_OFF"]()
 comptime FL_SPMV_WARP_MIN = 64
-comptime FL_SPMV_ROWS_PER_TG = 8
+# AFCL-G11: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Four complete SIMD groups schedule CSR rows independently in smaller
+# blocks, limiting skew-induced block lifetime while preserving each row's
+# lane partition and sum. This reaches SpectralEmbedding/Clustering's
+# Lanczos product; LLE's separate dense solve is outside this candidate.
+comptime AFCL_G11 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G11"]()
+)
+comptime FL_SPMV_ROWS_PER_TG = 4 if AFCL_G11 else 8
 
 
 def fl_spmv_warp_kernel(

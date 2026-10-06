@@ -191,7 +191,15 @@ Int32, carved into three disjoint slices. IT IS ONE KERNEL ARGUMENT, not
 three, ON PURPOSE: Metal caps a kernel at 31 arguments and this one already
 stands at 25. A new output here REUSES A SLICE."""
 
-comptime IF_PATH_TPB = 256
+# AFCL-T10: four SIMD groups per path/score block reduce live traversal
+# state per workgroup. All trees and correction terms remain unchanged.
+# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
+comptime AFCL_T10 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_T10"]()
+)
+comptime IF_PATH_TPB = 128 if AFCL_T10 else 256
 """`compute_path_lengths`' `threads = 256` (`isolation_forest.cuh:146`)."""
 
 

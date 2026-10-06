@@ -31,8 +31,14 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_decomp.cells import F32Ptr, FOLD_BLOCK
 
 #: output tile side, k slab depth, threads per block (16 x 16, each 2 x 2)
+# AFCL-L08: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# The deeper slab amortizes barriers; the two FP32 shared pages grow from
+# 4 KiB to 8 KiB. All shapes/tails retain the same output tile and K coverage.
+# Requires MOJOLEARN_DECOMP_FAST_GEMM_TILED in BOTH A and B.
+comptime AFCL_L08 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L08"]())
 comptime FG_T = 32
-comptime FG_K = 16
+comptime FG_K = 32 if AFCL_L08 else 16
 comptime FG_TPB = 256
 
 

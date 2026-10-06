@@ -84,7 +84,13 @@ comptime HUBER_DEVICE_LBFGS = (
 comptime HUBER_FAST_BLOCK512 = HUBER_DEVICE_LBFGS and not is_defined["MOJOLEARN_HUBER_FAST_BLOCK512_OFF"]()
 #: Rows per partial of the fast fit: FOLD_BLOCK (the grid fit's order) or
 #: 512 under HUBER_FAST_BLOCK512.
-comptime HF_FOLD = 512 if HUBER_FAST_BLOCK512 else FOLD_BLOCK
+# AFCL-L04: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# 256 rows shorten each partial chain and expose twice the row parallelism
+# of the existing 512-row schedule; scratch and final folds grow accordingly.
+# Solver tolerance, line-search budget and stopping observations are unchanged.
+comptime AFCL_L04 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L04"]())
+comptime HF_FOLD = 256 if AFCL_L04 else (512 if HUBER_FAST_BLOCK512 else FOLD_BLOCK)
 #: Evaluation units enqueued between two reads of the stop word.
 comptime HF_BATCH = 16
 #: x_linear/lbfgs.mojo's line search: the step halved up to 40 times.

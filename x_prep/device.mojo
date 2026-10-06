@@ -24,7 +24,7 @@ from x_prep.fastred import (
     ii_gram_fast_kernel,
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
-from x_prep.fastnb import NB_CAT_ATOMIC, cat_hist_atomic_kernel, cat_hist_convert_kernel
+from x_prep.fastnb import NB_CAT_ATOMIC, AFCL_P03, cat_hist_atomic_kernel, cat_hist_convert_kernel
 from x_prep.label_fast import LABEL_SCATTER, label_scatter_kernel
 from x_prep.select_fast import (
     SELECT_FREG, SELECT_FCLS, OP_F_CLASSIF, OP_F_REGRESSION, program_has_op, select_scratch_words,
@@ -713,9 +713,10 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 var words = Int(hq[2]) * Int(hq[4]) * Int(hq[6])
                 if cells > 0 and cells <= 2147483647 and words > 0:
                     ctx.enqueue_memset(df.create_sub_buffer[DType.float32](Int(hq[8]), words), Float32(0))
+                    var cat_block = BLOCK // 2 if AFCL_P03 else BLOCK
                     ctx.enqueue_function[cat_hist_atomic_kernel](
                         df.unsafe_ptr(), qp, Int32(cells),
-                        grid_dim=(cells + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                        grid_dim=(cells + cat_block - 1) // cat_block, block_dim=cat_block,
                     )
                     continue
             if op == OP_CAT_HFOLD and host_q.unsafe_load(s * STAGE_INTS + 2 + 6) < 0:

@@ -100,6 +100,7 @@ from core.identity_trace import IdentityTrace
 from std.memory import bitcast
 
 from arima.impl.arima_ic import ARIMA_IC_TPB, arima_ic_kernel
+from arima.impl.batched_kalman import KALMAN_TPB
 from arima.impl.batched_arima import LoglikeResult, batched_diff, batched_loglike_x, predict_x
 from arima.impl.batched_fit import batched_fit_x
 from bindings.arima_exog_layout import exog_filter_layout
@@ -298,7 +299,7 @@ def _loglike_at(
         ctx.synchronize()
         var lld = batched_loglike_x(
             ctx, y_kf, x_kf, fut, batch_size, n_kf, order.without_diff(), params,
-            False, 0, 32, False, True,
+            False, 0, KALMAN_TPB, False, True,
         )
         if ic_address != 0:
             _ic_into(ctx, lld, batch_size, ic_address, pen_aic, pen_bic)
@@ -309,7 +310,7 @@ def _loglike_at(
         _ = fut^
         return got^
     var ll = batched_loglike_x(
-        ctx, y, exog, fut, batch_size, n_obs, order, params, False, 0, 32, False, True
+        ctx, y, exog, fut, batch_size, n_obs, order, params, False, 0, KALMAN_TPB, False, True
     )
     if ic_address != 0:
         _ic_into(ctx, ll, batch_size, ic_address, pen_aic, pen_bic)

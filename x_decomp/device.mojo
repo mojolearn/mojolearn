@@ -102,6 +102,7 @@ from x_decomp.cells import (
     OP_EXP,
     OP_LOGS,
     OP_MAX,
+    OP_MUZ,
     lu_diag,
     lu_l_elem,
     lu_swap_elem,
@@ -507,6 +508,30 @@ def absmax_kernel(a: F32Ptr, dst: F32Ptr, n: Int32, d: Int32, by_col: Int32):
     var cnt = Int(d) if by_col != 0 else Int(n)
     if t < cnt:
         dst.unsafe_store(t, absmax_sign_cell(a, t, Int(n), Int(d), by_col != 0))
+
+
+# AFCL-L10: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# NMF's OP_MUZ already fuses multiply/divide and the zero-denominator guard.
+# This candidate specializes that operation and groups four independent
+# coalesced output stripes per thread; it does not claim a new fusion.
+# Runtime cost selection is by operation, never by a benchmark shape.
+comptime AFCL_L10 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L10"]())
+
+
+def nmf_muz_striped_kernel(
+    a: F32Ptr, b: F32Ptr, bm: Int32, c: F32Ptr, cm: Int32, dst: F32Ptr,
+    count: Int32, d: Int32, s: Float32,
+):
+    var base = Int(block_idx.x) * 4 * Int(block_dim.x) + Int(thread_idx.x)
+    comptime for stripe in range(4):
+        var i = base + stripe * Int(block_dim.x)
+        if i < Int(count):
+            dst.unsafe_store(
+                i, ew_cell(OP_MUZ, a.unsafe_load(i),
+                           b.unsafe_load(bidx(Int(bm), i, Int(d))),
+                           c.unsafe_load(bidx(Int(cm), i, Int(d))), s),
+            )
 
 
 def ew_kernel(
@@ -1890,6 +1915,13 @@ def launch_ew(
     ctx: DeviceContext, op: Int, a: F32Ptr, b: F32Ptr, bm: Int, c: F32Ptr, cm: Int, dst: F32Ptr,
     count: Int, d: Int, s: Float32,
 ) raises:
+    comptime if AFCL_L10:
+        if op == OP_MUZ:
+            ctx.enqueue_function[nmf_muz_striped_kernel](
+                a, b, Int32(bm), c, Int32(cm), dst, Int32(count), Int32(d), s,
+                grid_dim=max((count + 4 * TPB - 1) // (4 * TPB), 1), block_dim=TPB,
+            )
+            return
     ctx.enqueue_function[ew_kernel](
         Int32(op), a, b, Int32(bm), c, Int32(cm), dst, Int32(count), Int32(d), s,
         grid_dim=_blocks(count), block_dim=TPB,

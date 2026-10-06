@@ -74,6 +74,7 @@ from std.math import inf, isfinite, isinf
 from std.memory import bitcast
 
 from arima.impl.batched_kalman import (
+    KALMAN_TPB,
     KalmanWorkspace,
     _read_info,
     batched_kalman_filter_x,
@@ -146,7 +147,7 @@ def batched_loglike(
     mut params: ARIMAParams,
     trans: Bool,
     fc_steps: Int = 0,
-    kalman_tpb: Int = 32,
+    kalman_tpb: Int = KALMAN_TPB,
     check_finite: Bool = True,
 ) raises -> LoglikeResult:
     """The `n_exog = 0` door (see the module docstring)."""
@@ -173,7 +174,7 @@ def batched_loglike_x(
     mut params: ARIMAParams,
     trans: Bool,
     fc_steps: Int = 0,
-    kalman_tpb: Int = 32,
+    kalman_tpb: Int = KALMAN_TPB,
     check_finite: Bool = True,
     infeasible_inf: Bool = False,
 ) raises -> LoglikeResult:
@@ -314,7 +315,7 @@ def batched_loglike_packed_x(
     unpack(ctx, params, order, batch_size, d_params)
     var fut = _placeholder(ctx)
     var r = batched_loglike_x(
-        ctx, d_y, d_exog, fut, batch_size, n_obs, order, params, trans, 0, 32, check_finite,
+        ctx, d_y, d_exog, fut, batch_size, n_obs, order, params, trans, 0, KALMAN_TPB, check_finite,
         infeasible_inf,
     )
     _ = fut^
@@ -348,7 +349,7 @@ def loglike_ws_packed(
     # `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` (FAST on Apple); every other build
     # ignores it. This entry is the optimizer's only, no exog, no forecast.
     var ws = batched_kalman_filter_x(
-        ctx, d_y, d_exog, d_fut, n_obs, t_params, order, batch_size, 0, 32, True, True
+        ctx, d_y, d_exog, d_fut, n_obs, t_params, order, batch_size, 0, KALMAN_TPB, True, True
     )
     return LoglikeResult(ws=ws^, t_params=t_params^, loglike=List[Float32]())
 
@@ -444,7 +445,7 @@ def predict(
     order: ARIMAOrder,
     mut params: ARIMAParams,
     pre_diff: Bool,
-    kalman_tpb: Int = 32,
+    kalman_tpb: Int = KALMAN_TPB,
 ) raises -> PredictResult:
     """The `n_exog = 0` door."""
     _refuse_exog_order(order, "predict")
@@ -470,7 +471,7 @@ def predict_x(
     order: ARIMAOrder,
     mut params: ARIMAParams,
     pre_diff: Bool,
-    kalman_tpb: Int = 32,
+    kalman_tpb: Int = KALMAN_TPB,
 ) raises -> PredictResult:
     """`:86-267` with `level = 0`. `params` are the FITTED (already
     transformed) parameters, so `batched_loglike` is called with `trans =

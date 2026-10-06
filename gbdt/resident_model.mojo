@@ -121,6 +121,7 @@ from gbdt.gpu_data.kernel.binarize import (
 )
 from gbdt.methods.doc_parallel_boosting import model_approx_dim, predict
 from gbdt.models.ctr_value_table import expand_raw_columns
+from gbdt.apple_fast_classical import AFCL_PREDICT_BLOCK
 from gbdt.models.kernel.add_bin_values import (
     IDN_APPLY_WIDE,
     PRED_ALL_CHUNK_LEVELS,
@@ -653,7 +654,7 @@ struct ResidentGbdtModel(Movable):
         for lvl in range(self.total_levels):
             ho.unsafe_store(lvl, self.off_base[lvl] * UInt32(n_rows))
         ctx.enqueue_copy(dst_buf=self.d_off, src_ptr=ho)
-        var wide = (n_rows + 255) // 256
+        var wide = (n_rows + AFCL_PREDICT_BLOCK - 1) // AFCL_PREDICT_BLOCK
         if wide > 1024:
             wide = 1024
         var lvl = 0
@@ -674,7 +675,7 @@ struct ResidentGbdtModel(Movable):
                     Int32(n_rows), self.d_cursor.value().unsafe_ptr(),
                     Int32(self.approx_dim), Int32(n_rows),
                     grid_dim=(wide, self.approx_dim, 1),
-                    block_dim=(256, 1, 1),
+                    block_dim=(AFCL_PREDICT_BLOCK, 1, 1),
                 )
                 lvl += depth
                 leaf += (1 << depth) * self.approx_dim
@@ -722,7 +723,7 @@ struct ResidentGbdtModel(Movable):
                 Int32(self.approx_dim),
                 Int32(n_rows),
                 grid_dim=(wide, self.approx_dim, 1),
-                block_dim=(256, 1, 1),
+                block_dim=(AFCL_PREDICT_BLOCK, 1, 1),
             )
             lvl += d0 + d1 + d2 + d3
             leaf += (
@@ -753,7 +754,7 @@ struct ResidentGbdtModel(Movable):
         for lvl in range(self.total_levels):
             ho.unsafe_store(lvl, self.off_base[lvl] * UInt32(n_rows))
         ctx.enqueue_copy(dst_buf=self.d_off, src_ptr=ho)
-        var wide = (n_rows + 255) // 256
+        var wide = (n_rows + AFCL_PREDICT_BLOCK - 1) // AFCL_PREDICT_BLOCK
         if wide > 1024:
             wide = 1024
         ctx.enqueue_function[compute_bins_and_add_all_kernel](
@@ -774,7 +775,7 @@ struct ResidentGbdtModel(Movable):
             Int32(self.approx_dim),
             Int32(n_rows),
             grid_dim=(wide, self.approx_dim, 1),
-            block_dim=(256, 1, 1),
+            block_dim=(AFCL_PREDICT_BLOCK, 1, 1),
         )
 
     def _predict_device(

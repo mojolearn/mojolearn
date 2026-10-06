@@ -38,7 +38,16 @@ from std.os import getenv
 from std.time import perf_counter_ns
 
 comptime FKT_QB = 256
-comptime FKT_T = 64
+# AFCL-G02: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Double the staged candidate chunk to amortize its two barriers. At the
+# existing 32-feature register limit the tile uses 16 KiB plus norms;
+# candidate coverage, per-slice top-k and the final merge remain complete.
+# Keep MOJOLEARN_KNN_FAST_MMA_OFF in BOTH arms to reach this scalar caller.
+comptime AFCL_G02 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G02"]()
+)
+comptime FKT_T = 128 if AFCL_G02 else 64
 comptime FKT_MAX_D = 32
 comptime FKT_MAX_K = 16
 

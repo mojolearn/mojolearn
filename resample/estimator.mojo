@@ -34,7 +34,7 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32, f32_ptr, i32_ptr
-from resample.gather_fast import gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
+from resample.gather_fast import GATHER_COLS, GATHER_ROWS, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
 from resample.fast_apple import (
     RESAMPLE_FAST_APPLE,
     bootstrap_mean_fast,
@@ -2338,7 +2338,7 @@ def resample_gather_grouped(
         comptime if RESAMPLE_FAST_TILED_GATHER:
             ctx.enqueue_function[gather_rows_tiled_f32_kernel](
                 output.unsafe_ptr(), source.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
-                grid_dim=(ceildiv(d, 32), ceildiv(count, 8), 1), block_dim=(256, 1, 1),
+                grid_dim=(ceildiv(d, GATHER_COLS), ceildiv(count, GATHER_ROWS), 1), block_dim=(256, 1, 1),
             )
         else:
             ctx.enqueue_function[gather_rows_f32_kernel](

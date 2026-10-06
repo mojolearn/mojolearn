@@ -1,0 +1,586 @@
+{
+  "lane": "geometry",
+  "branch": "lane/apple-fast-classical-ideas-20261006",
+  "base_commit": "fd6cf8045",
+  "status": "source_written_uncompiled_unverified_unmeasured",
+  "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+  "scope": "Apple FAST classical ML only",
+  "selection_semantics": "Bare compiler define names; omission selects A. is_defined treats NAME=0 as enabled. Keep all other flags/settings equal.",
+  "compile_test_verify_measure_executed": false,
+  "evidence_paths": [
+    "experiments/apple_fast_classical_20261006/lanes/geometry.md"
+  ],
+  "entries": [
+    {
+      "id": "AFCL-G01",
+      "title": "Exact kNN MMA query block geometry",
+      "control": "MOJOLEARN_AFCL_G01",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G01"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [
+        "MOJOLEARN_KNN_FAST_MMA_OFF"
+      ],
+      "implementation_paths": [
+        "neighbors/impl/detail/fast_mma_knn.mojo"
+      ],
+      "production_callers": [
+        "fast_mma_knn -> fast_mma_partial_kernel / fast_mma_bigd_kernel",
+        "NearestNeighbors / KNeighborsClassifier / KNeighborsRegressor and classical exact-neighbor consumers"
+      ],
+      "mechanism": "MQ_SG changes 8 to 4; complete 32-lane groups halve per-block query ownership while retaining matrix tile, all index slices and top-k state. Launch and query-grid geometry share MQ_TPB/MQ_SG.",
+      "quality_scope": [
+        "Tie-aware exact recall and distance error",
+        "No duplicate or missing neighbor IDs",
+        "Classifier/regressor task quality",
+        "Affected graph/clustering/manifold consumer quality"
+      ],
+      "limitations": [
+        "Existing eligible feature and k register limits remain unchanged.",
+        "Smaller query blocks can increase staged operand traffic; no gain claimed.",
+        "Downstream consumer quality is pending, including nonfinite/duplicate/tied inputs."
+      ],
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G02",
+      "title": "Scalar streaming top-k candidate chunk",
+      "control": "MOJOLEARN_AFCL_G02",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [
+        "MOJOLEARN_KNN_FAST_MMA_OFF"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_KNN_FAST_MMA_OFF",
+        "MOJOLEARN_AFCL_G02"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [
+        "MOJOLEARN_KNN_FAST_TOPK_OFF"
+      ],
+      "implementation_paths": [
+        "neighbors/impl/detail/fast_topk_knn.mojo"
+      ],
+      "production_callers": [
+        "fast_topk_knn -> fast_topk_partial_kernel -> fast_topk_merge_kernel",
+        "NearestNeighbors / KNeighborsClassifier / KNeighborsRegressor on the scalar fused route"
+      ],
+      "mechanism": "FKT_T changes 64 to 128 candidate rows per shared tile, amortizing staging barriers at a 16 KiB feature tile plus norms for the widest existing admitted row. Every candidate is still inserted into the per-slice top-k and all slices merge.",
+      "quality_scope": [
+        "Exhaustive candidate coverage",
+        "Tie ordering and k tails",
+        "No duplicate IDs",
+        "Exact recall and downstream classification/regression quality"
+      ],
+      "limitations": [
+        "The existing MMA path must be disabled in BOTH arms or preempts this route.",
+        "This changes staged candidate chunking, not merge fan-in or slice count.",
+        "The route retains existing feature/k limits and is not the default MMA-route comparison."
+      ],
+      "dependencies": [
+        "MOJOLEARN_KNN_FAST_MMA_OFF"
+      ],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G03",
+      "title": "DBSCAN epsilon query block geometry",
+      "control": "MOJOLEARN_AFCL_G03",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G03"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [
+        "MOJOLEARN_DBSCAN_FAST_MMA_OFF"
+      ],
+      "implementation_paths": [
+        "dbscan/impl/neighbors/fast_mma_eps.mojo"
+      ],
+      "production_callers": [
+        "fast_mma_eps_neighborhood -> _launch_eps -> fast_mma_eps_kernel",
+        "DBSCAN"
+      ],
+      "mechanism": "ME_SG changes 8 to 4 complete SIMD groups per threadgroup, halving query ownership and exposing more blocks. Staged index tile, candidate coverage and exact epsilon-boundary fallback remain.",
+      "quality_scope": [
+        "Core/noise membership",
+        "Cluster-pair agreement",
+        "Epsilon-boundary points and dense connected components",
+        "All eligible epsilon edges retained"
+      ],
+      "limitations": [
+        "Only the existing MMA epsilon route is affected; its feature eligibility remains.",
+        "This alters scheduling and operand reuse, not epsilon or min_samples."
+      ],
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G04",
+      "title": "HDBSCAN core-distance staging tile",
+      "control": "MOJOLEARN_AFCL_G04",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [
+        "MOJOLEARN_HDB_CORE_TILE"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_HDB_CORE_TILE",
+        "MOJOLEARN_AFCL_G04"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [],
+      "implementation_paths": [
+        "hdbscan/impl/detail/fast_apple.mojo",
+        "hdbscan/impl/detail/core_tile.mojo"
+      ],
+      "production_callers": [
+        "core_tile_applies -> core_tile_kernel",
+        "HDBSCAN core-distance construction with MOJOLEARN_HDB_CORE_TILE"
+      ],
+      "mechanism": "CT_TILE changes 64 to 32 reference rows per shared tile, reducing its widest threadgroup storage from 16 KiB to 8 KiB while visiting every reference and retaining the same register top-k.",
+      "quality_scope": [
+        "Core distances and ties",
+        "MST/linkage validity",
+        "Cluster/noise quality and membership probabilities",
+        "Nonfinite refusal behavior"
+      ],
+      "limitations": [
+        "The older core-tile experiment is a prerequisite in BOTH arms; this does not promote it.",
+        "Existing CT_DMAX and CT_KMAX eligibility remains.",
+        "More barriers may outweigh occupancy savings."
+      ],
+      "dependencies": [
+        "MOJOLEARN_HDB_CORE_TILE"
+      ],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G05",
+      "title": "Exhaustive centroid assignment row geometry",
+      "control": "MOJOLEARN_AFCL_G05",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G05"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [],
+      "implementation_paths": [
+        "cluster/impl/distance/fused_distance_nn/simt_kernel.mojo"
+      ],
+      "production_callers": [
+        "cluster/impl/detail/min_cluster_distance_compute.mojo::_launch_fused and gated counterpart",
+        "KMeans",
+        "KMeans initialization/quantizer consumers including GaussianMixture, IVF and spectral clustering where that caller is used"
+      ],
+      "mechanism": "FUSED_NORMAL_TR changes 16 to 8 and FUSED_SKINNY_TR changes 8 to 4. Existing policy launch constants and footprint computations use the new row count; centroid column threads, feature tiles, alignment selection and exhaustive traversal stay fixed.",
+      "quality_scope": [
+        "Full-data inertia and heldout assignment",
+        "Empty-cluster behavior and finite centers",
+        "Fixed starts, seeds and iteration/convergence policy",
+        "Initialization/quantizer downstream task quality"
+      ],
+      "limitations": [
+        "Existing normal/skinny feature policies remain, with smaller row ownership in both.",
+        "New scheduling has no qualification evidence on any device.",
+        "A full caller inventory is required before later measurement; do not limit admission to standalone assignment timing."
+      ],
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G06",
+      "title": "Blocked centroid partial row granularity",
+      "control": "MOJOLEARN_AFCL_G06",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [
+        "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC",
+        "MOJOLEARN_AFCL_G06"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [
+        "MOJOLEARN_KMEANS_BLOCK_ACC_OFF",
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF",
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096",
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "cluster/checks/reduce_by_key.mojo"
+      ],
+      "production_callers": [
+        "launch_accumulate_centroid_sums_blocked / launch_accumulate_weight_per_cluster_blocked and gated twins",
+        "KMeans and consumers using its blocked accumulation route"
+      ],
+      "mechanism": "BLOCK_ACC_ROWS selects 128 with the new control; A retains the existing setting (256 with the listed overrides absent). This increases independent per-feature accumulation work and partial-table size while retaining Int32 sums and scale policy.",
+      "quality_scope": [
+        "Center sums/counts and weighted inputs",
+        "Finite centers and inertia",
+        "High cluster imbalance and empty clusters",
+        "Quantization overflow policy and downstream consumers"
+      ],
+      "limitations": [
+        "Requires the existing blocked accumulator opt-in in BOTH arms on Apple.",
+        "This is a new 128-row schedule, not a relabeled earlier 256/1024/4096 experiment.",
+        "Scratch-table memory grows and must remain part of later whole-operation evaluation."
+      ],
+      "dependencies": [
+        "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"
+      ],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G07",
+      "title": "MiniBatchKMeans resident block and chunk schedule",
+      "control": "MOJOLEARN_AFCL_G07",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G07"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [
+        "MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF"
+      ],
+      "implementation_paths": [
+        "x_cluster/minibatch_fast.mojo"
+      ],
+      "production_callers": [
+        "MiniBatchKMeans resident mini-batch path",
+        "_mbf_assign_kernel / row-group assignment, compacted center sum, finish and reassignment kernels"
+      ],
+      "mechanism": "MBF_TPB changes 256 to 128 and MBF_CH follows it. Four SIMD groups per block reduce resource footprint and increase independent groups; equality of chunk and block width preserves the existing compacted sum one-thread-per-row contract.",
+      "quality_scope": [
+        "Inertia, labels, centers and counts",
+        "Reassignment and fixed random draws",
+        "Stopping observations and completed-iteration semantics",
+        "Batch/chunk tails, weighted/general route and cluster imbalance"
+      ],
+      "limitations": [
+        "Only the existing eligible resident path is affected.",
+        "Partial sum association can move FAST bits and stopping trajectory; full task quality remains pending.",
+        "MBF_GROUP, batch size, iteration budget, tolerances and random streams are unchanged."
+      ],
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G08",
+      "title": "GaussianMixture expectation row schedule",
+      "control": "MOJOLEARN_AFCL_G08",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G08"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [],
+      "implementation_paths": [
+        "mixture/checks/estep.mojo"
+      ],
+      "production_callers": [
+        "gmm_e_step / fast_estep_kernel",
+        "mixture/estimator.mojo fit, predict, predict_proba, score and score_samples callers through GMM_ROW_TPB defaults"
+      ],
+      "mechanism": "FE_TPB changes 256 to 128 on the fused path; GMM_ROW_TPB changes 128 to 64 for ordinary row kernels. Per-row component/feature traversal, stable logsumexp, refusal behavior and likelihood reduction policy remain.",
+      "quality_scope": [
+        "Heldout likelihood and responsibility normalization",
+        "Covariance positivity and collapse/refusal behavior",
+        "Converged status and iteration policy",
+        "Extreme log probabilities and ill-conditioned components"
+      ],
+      "limitations": [
+        "Fused eligibility and workspace limits are unchanged.",
+        "An explicit row_tpb argument overrides the ordinary default and must be recorded in future workload mapping.",
+        "This does not change M-step or shared GEMM implementations."
+      ],
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G09",
+      "title": "IVF batched query group partition",
+      "control": "MOJOLEARN_AFCL_G09",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G09"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [
+        "MOJOLEARN_IVF_FAST_SCAN_OFF",
+        "MOJOLEARN_IVF_FAST_BALANCED_TASKS",
+        "MOJOLEARN_IVF_BALANCED_TASKS"
+      ],
+      "implementation_paths": [
+        "ivf/impl/neighbors/ivf_flat/fast_ivf_scan.mojo"
+      ],
+      "production_callers": [
+        "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo -> fast_ivf_scan_kernel",
+        "IVFIndex and ANN callers using batched IVF-Flat scan"
+      ],
+      "mechanism": "FIVF_QPB changes 4 to 2 SIMD-owned queries per block. Narrow/wide shared query tiles shrink from 4/32 KiB to 2/16 KiB; the feature cap explicitly stays at its baseline 2048 instead of expanding with the smaller block.",
+      "quality_scope": [
+        "Recall at fixed nprobe and full-probe control",
+        "Filtered candidate coverage",
+        "No duplicate IDs and total-order ties",
+        "Fixed trained index identity and query outputs"
+      ],
+      "limitations": [
+        "Existing batched FAST eligibility and candidate k limits remain.",
+        "The balanced-task experiment is a separate route; keep it off for this A/B.",
+        "This reduces query grouping rather than splitting individual lists into new tasks."
+      ],
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G10",
+      "title": "UMAP CSR optimizer head block schedule",
+      "control": "MOJOLEARN_AFCL_G10",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G10"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [],
+      "implementation_paths": [
+        "umap/optimizer_fast.mojo"
+      ],
+      "production_callers": [
+        "optimize_layout_fast",
+        "umap/sparse_optimizer.mojo FAST epoch launcher including umap_jacobi_epoch_fused_kernel",
+        "UMAP"
+      ],
+      "mechanism": "FAST_OPT_TPB changes 128 to 64 head rows per block. Each head still owns all its ordered edges, unchanged epoch snapshot and counter-derived negatives; dense and sparse FAST launchers import the same width.",
+      "quality_scope": [
+        "Trustworthiness and downstream task quality",
+        "Seed reproducibility",
+        "Fixed epochs and negative-sample count",
+        "Finite embeddings and disconnected/degree-skewed graphs"
+      ],
+      "limitations": [
+        "This groups CSR heads, not individual edges, preserving current seeded edge traversal.",
+        "No graph construction, learning rate, epoch or optimizer-objective change.",
+        "Smaller blocks may lose where degree skew is small."
+      ],
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G11",
+      "title": "Spectral Lanczos sparse product row grouping",
+      "control": "MOJOLEARN_AFCL_G11",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G11"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [
+        "MOJOLEARN_LANCZOS_FAST_OFF",
+        "MOJOLEARN_SPMV_WARP_OFF"
+      ],
+      "implementation_paths": [
+        "spectral/impl/sparse/solver/detail/lanczos.mojo"
+      ],
+      "production_callers": [
+        "_spmv_fast -> fl_spmv_warp_kernel",
+        "SpectralEmbedding / SpectralClustering Lanczos and restart callers"
+      ],
+      "mechanism": "FL_SPMV_ROWS_PER_TG changes 8 to 4 complete SIMD-owned CSR rows. Existing 32-lane partition and row fold stay fixed, while shorter block lifetime can reduce scheduling effects of degree skew.",
+      "quality_scope": [
+        "Embedding neighborhood quality",
+        "Eigensystem residual and orthogonality",
+        "Clustering quality",
+        "Disconnected graphs and fixed solver convergence settings"
+      ],
+      "limitations": [
+        "Implemented scope is spectral long-row Lanczos SpMV; LLE separate dense solves are outside this candidate.",
+        "Existing SpMV long-row route eligibility remains; short rows keep their existing schedule.",
+        "No change to graph, eigensolver tolerance, restart or iteration budget."
+      ],
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "id": "AFCL-G12",
+      "title": "MeanShift full-neighborhood partial chunks",
+      "control": "MOJOLEARN_AFCL_G12",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G12"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "defines_absent_in_both_arms": [
+        "MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF"
+      ],
+      "implementation_paths": [
+        "x_cluster/meanshift_fast.mojo"
+      ],
+      "production_callers": [
+        "_msg_part_kernel -> _msg_finish_kernel",
+        "x_cluster/device_ops.mojo::DeviceOps.meanshift grid route / MeanShift"
+      ],
+      "mechanism": "MSG_T changes 256 to 512 while MSG_TPB stays 256. Two strided input-row passes amortize center staging and halve partial-table/final-fold work; the existing loop visits every row and handles ragged tails.",
+      "quality_scope": [
+        "Cluster centers and cluster-pair agreement",
+        "Bandwidth-boundary membership",
+        "Convergence status and unchanged iteration budget",
+        "Finite results, tails and high neighborhood density"
+      ],
+      "limitations": [
+        "Existing grid-route eligibility remains.",
+        "The larger chunk can increase serial feature-fold work and change partial-sum association.",
+        "No seed subsampling, bandwidth approximation, tolerance or iteration reduction."
+      ],
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed."
+    },
+    {
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "baseline_env": {},
+      "candidate_env": {},
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed.",
+      "id": "AFCL-G13",
+      "title": "KDE stable score query work grouping",
+      "control": "MOJOLEARN_AFCL_G13",
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G13"
+      ],
+      "defines_absent_in_both_arms": [
+        "MOJOLEARN_KDE_DIMTILE_OFF",
+        "MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE"
+      ],
+      "implementation_paths": [
+        "kde/impl/neighbors/kernel_density.mojo"
+      ],
+      "production_callers": [
+        "kde2_dimtile_kernel -> kde2_score_samples_fast_apple / kde2_score_samples_fast_apple_to_host",
+        "KernelDensity score_samples and score, including resident scoring callers"
+      ],
+      "mechanism": "KDE2_QM changes 4 to 2 queries per thread. The query tile changes 64 to 32 rows; per-thread distance accumulators and shared query/reduction pages shrink. The existing query-grid-based chunk planner follows the new tile, retains every train contribution and uses the same stable max-rescaled logsumexp.",
+      "quality_scope": [
+        "Independent density/log-likelihood error",
+        "Heldout likelihood",
+        "All supported kernels and metrics",
+        "Sample weights, support boundaries, extreme bandwidths and far queries",
+        "Constant/duplicate inputs and ragged query/train/feature tails"
+      ],
+      "limitations": [
+        "Only the existing Apple FAST dimension-tiled scoring route is affected; legacy/fallback paths remain.",
+        "Fewer queries reuse each training tile, so lower resource pressure can be outweighed by additional training reads.",
+        "The chunk planner can change reduction association; FAST bits may move and task quality remains pending.",
+        "Keep optional KDE2 sibling flags equal in both arms; the new define does not enable any sibling mechanism."
+      ]
+    },
+    {
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "default_enabled": false,
+      "guard": "Apple GPU and GLOBAL_NUMERIC_MODE == NUMERIC_FAST",
+      "baseline_defines": [],
+      "baseline_env": {},
+      "candidate_env": {},
+      "dependencies": [],
+      "future_measurement": "Map all affected estimators to their full saved workload recipes; retain dataset/version/hash, actual uncapped dimensions, settings, preparation+fit+synchronization+consumed-output boundary, inference/cold/repeated use, and task quality. No measurement performed.",
+      "id": "AFCL-G14",
+      "title": "Agglomerative and shared MST reference tile grouping",
+      "control": "MOJOLEARN_AFCL_G14",
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_G14"
+      ],
+      "defines_absent_in_both_arms": [
+        "MOJOLEARN_BORUVKA_FAST_MMA_OFF",
+        "MOJOLEARN_SL_FAST_BORUVKA_OFF",
+        "MOJOLEARN_LEGACY_NARROW_SL_BORUVKA"
+      ],
+      "implementation_paths": [
+        "hierarchy/impl/cluster/detail/fast_mma_boruvka.mojo"
+      ],
+      "production_callers": [
+        "MmaBoruvka.enqueue -> fb_mma_nearest_kernel",
+        "hierarchy/impl/cluster/detail/fast_boruvka.mojo::fast_euclidean_mst",
+        "AgglomerativeClustering supported single-linkage Euclidean pairwise route",
+        "HDBSCAN mutual-reachability callers using MmaBoruvka, including optional device-round route when enabled equally in both arms"
+      ],
+      "mechanism": "MB_T changes 128 to 64 reference rows per shared/prefetched tile, retaining complete 32-row MMA admission groups. Operand/metadata shared pages and prefetch registers halve; full candidate traversal, scalar exact recomputation, lower-bound filter and value/index tie ordering remain.",
+      "quality_scope": [
+        "Linkage/MST validity and connected-component behavior",
+        "Cluster-pair task quality",
+        "Ties, duplicate/degenerate points and disconnected inputs",
+        "HDBSCAN membership/noise/probabilities and core-distance interactions",
+        "Existing nonfinite/refusal and metric/linkage semantics"
+      ],
+      "limitations": [
+        "Only the existing eligible MMA Boruvka path changes; wider features, unsafe centered norms and other existing fallbacks retain their current schedule.",
+        "No new linkage or metric support is implemented.",
+        "Tile barriers increase and slice rounding follows MB_T; full operation time may regress.",
+        "The same production kernel serves hierarchy and HDBSCAN, so both full-workload families are required for future qualification.",
+        "Do not enable HDBSCAN optional device rounds in only one arm; their qualification is separate from this tile change."
+      ]
+    }
+  ]
+}
