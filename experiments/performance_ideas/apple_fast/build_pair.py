@@ -39,7 +39,9 @@ def main():
     dependencies={}
     def build(name,defines,destination,numeric_mode="fast"):
         script='bindings/build.sh' if name=='core' else 'bindings/build_'+name+'.sh'
-        local=dict(env,MOJOLEARN_NUMERIC_MODE=numeric_mode,MOJOLEARN_MOJO_BUILD_FLAGS=flags(defines),MOJOLEARN_BUILD_EXTRA_DEFINES=flags(defines))
+        # Public builders support MODFLAGS; several also read EXTRA. Sending
+        # the same define through both makes Mojo reject duplicate defines.
+        local=dict(env,MOJOLEARN_NUMERIC_MODE=numeric_mode,MOJOLEARN_MOJO_BUILD_FLAGS=flags(defines),MOJOLEARN_BUILD_EXTRA_DEFINES='')
         if name=='byte_lm':local['MOJOLEARN_BYTE_LM_OUTDIR']=str(a.output/(destination.stem+'-native'))
         binary=ROOT/'python/mojolearn'
         if numeric_mode=='identical':binary=binary/'identical'
