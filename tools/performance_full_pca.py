@@ -13,6 +13,20 @@ from pathlib import Path
 import time
 
 
+def counter_snapshot(binding, counter):
+    """Read mechanism counters outside all measured operation boundaries."""
+    if counter == 'compensated-cov':
+        return [int(binding.pca_compensated_cov_count())]
+    return [int(binding.scoped_gemm_count(route, arm))
+            for route in range(3) for arm in range(3)]
+
+
+def candidate_reached(reached, counter):
+    if counter == 'compensated-cov':
+        return reached[0] > 0
+    return any(reached[i] for i in (1, 2, 4, 5, 7, 8))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data', type=Path, required=True, help='Full big-DATASET.npz cache')
@@ -21,7 +35,18 @@ def main():
     parser.add_argument('--phase', choices=['warmup', 'scored'], required=True)
     parser.add_argument('--source-sha', required=True)
     parser.add_argument('--dataset-sha256', required=True)
+    parser.add_argument('--idea', choices=['F01', 'F11'], default='F01')
+    parser.add_argument('--variant', choices=['default', 'compensated-pca'])
+    parser.add_argument('--counter', choices=['scoped-gemm', 'compensated-cov'])
     args = parser.parse_args()
+    expected_variant, expected_counter = {
+        'F01': ('default', 'scoped-gemm'),
+        'F11': ('compensated-pca', 'compensated-cov'),
+    }[args.idea]
+    args.variant = args.variant or expected_variant
+    args.counter = args.counter or expected_counter
+    if (args.variant, args.counter) != (expected_variant, expected_counter):
+        parser.error('idea, variant and counter must identify the same PCA experiment')
     import numpy as np
     from mojolearn import PCA, _mojolearn_estimators
     from bench_board_state import canonical_hash, model_receipt
@@ -39,8 +64,7 @@ def main():
         raise ValueError('Full contiguous train split is required')
     rank = meta['pca']['n_components']
     binding_path = Path(_mojolearn_estimators.__file__)
-    before = [_mojolearn_estimators.scoped_gemm_count(route, arm)
-              for route in range(3) for arm in range(3)]
+    before = counter_snapshot(_mojolearn_estimators, args.counter)
     start = time.perf_counter_ns()
     x = np.ascontiguousarray(x, dtype=np.float32)
     query = np.ascontiguousarray(query, dtype=np.float32)
@@ -62,8 +86,7 @@ def main():
     repeat_end = time.perf_counter_ns()
     repeated_inverse = np.array(model.inverse_transform(repeated), copy=True)
     repeat_inverse_end = time.perf_counter_ns()
-    after = [_mojolearn_estimators.scoped_gemm_count(route, arm)
-             for route in range(3) for arm in range(3)]
+    after = counter_snapshot(_mojolearn_estimators, args.counter)
     reached = [int(right - left) for left, right in zip(before, after)]
     state = dict(components=components, mean=mean, singular_values=singular,
                  explained_variance=np.asarray(model.explained_variance_),
@@ -73,7 +96,8 @@ def main():
     # Public fitted-array hash remains explicit even if a model has no save API.
     public_state_hash = canonical_hash(state)
     boundary = 'host input preparation + public fit + full query transform + inverse + host copies; disk load and hashes excluded'
-    packet = dict(schema='mojolearn.full-ab-result/1', status='PASS', idea='F01', arm=args.arm, phase=args.phase,
+    packet = dict(schema='mojolearn.full-ab-result/1', status='PASS', idea=args.idea,
+                  variant=args.variant, counter=args.counter, arm=args.arm, phase=args.phase,
                   dataset_sha256=args.dataset_sha256, mode='fast',
                   dimensions=dict(train=list(x.shape), query=list(query.shape)),
                   full_dataset_coverage=True,
@@ -101,7 +125,9 @@ def main():
                                  repeated_transform=(repeat_end-repeat_start)/1e6,
                                  repeated_inverse=(repeat_inverse_end-repeat_end)/1e6),
                   timed_boundary=boundary,
-                  reach=reached, candidate_reached=any(reached[i] for i in (1, 2, 4, 5, 7, 8)),
+                  reach=reached, candidate_reached=candidate_reached(reached, args.counter),
+                  experiment_scope="PCA fit, transform and inverse only; downstream LLE pending"
+                  if args.idea == "F11" else "PCA fit, transform and inverse",
                   quality=dict(fitted_state_finite=bool(all(np.isfinite(v).all() for v in (components,mean,singular))),
                                output_finite=bool(np.isfinite(restored).all()),
                                reconstruction_squared_error=float(np.sum((restored.astype(np.float64)-query)**2)),
