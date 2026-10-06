@@ -2665,6 +2665,8 @@ def render_board(result):
         L.append("> SMOKE RUN: %s. These numbers are plumbing checks, not results."
                  % ("; ".join(why) or "a reduced shape"))
         L.append("")
+    for note in result.get("opponent_resource_notes", []):
+        L.extend(["> " + note, ""])
     L.append("## Box")
     L.append("")
     L.append("| field | value |")
