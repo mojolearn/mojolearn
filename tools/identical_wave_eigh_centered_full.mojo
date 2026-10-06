@@ -1,9 +1,14 @@
 """Untimed host full block-solver regression. No convergence relaxation."""
 from std.memory import bitcast
+from std.sys import argv
 from x_decomp.rr_solve import host_eigh_rb_sorted
 
 def main() raises:
     var sizes: List[Int] = [64, 65, 96]
+    if len(argv()) > 1:
+        sizes.clear()
+        sizes.append(512)
+        sizes.append(513)
     for n in sizes:
         var a = List[Float32](length=n * n, fill=Float32(0.0))
         for i in range(n):
