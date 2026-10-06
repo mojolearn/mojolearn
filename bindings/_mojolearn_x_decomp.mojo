@@ -100,8 +100,8 @@ from x_decomp.s_linalg_fast import (
 def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
-        comptime if MCD_G1_AUDIT:
-            m.def_function[x_decomp_shared_sub_count_py]("x_decomp_shared_sub_count")
+        # F02 audit belongs to the independent LU route as well as MCD.
+        m.def_function[x_decomp_shared_sub_count_py]("x_decomp_shared_sub_count")
         m.def_function[mcd_g1_gram_on_py]("mcd_g1_gram_on")
         m.def_function[mcd_g1_gram_count_py]("mcd_g1_gram_count")
         m.def_function[mcd_g1_gram_last_py]("mcd_g1_gram_last")
