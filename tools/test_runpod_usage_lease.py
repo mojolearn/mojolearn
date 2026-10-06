@@ -154,6 +154,29 @@ class Lifecycle(unittest.TestCase):
             with patch.object(u,'run',side_effect=[subprocess.CalledProcessError(1,[]),None]) as run,patch.object(u.time,'time',side_effect=[0,0,61,61,61,122,122]):
                 u.notify(c,p,'FAILED','detail');u.notify(c,p,'FAILED','detail');u.notify(c,p,'FAILED','detail')
                 self.assertEqual(run.call_count,2)
+    def test_capture_churn_retains_exact_safe_reason_without_acknowledging(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c=config(tmp);calls=[]
+            def rc(c,action,value=None):
+                calls.append((action,value))
+                if action=='probe':
+                    return dict(guardian_alive=True,done=True,progress='before' if len(calls)==1 else 'after')
+                if action=='inventory':return dict(rows=[])
+                return dict(status='GUARDED')
+            with patch.object(u,'remote_call',side_effect=rc),patch.object(u,'run'),patch.object(u,'local_gone',return_value=False),patch.object(u,'verify_capture',side_effect=ValueError('capture hash mismatch: repairs/results.json')):
+                u.manage(c,once=True)
+            saved=json.loads((Path(c['local_out'])/'last-error-retained.json').read_text())
+            self.assertEqual(saved['error_stage'],'local_capture_verify')
+            self.assertEqual(saved['error_detail'],'capture hash mismatch: repairs/results.json')
+            self.assertTrue(saved['progress_changed_during_capture'])
+            self.assertEqual(saved['failed_polls'],1)
+            self.assertFalse(saved['heartbeat_suspended'])
+            self.assertEqual(calls,[('probe',None),('heartbeat',None),('inventory',None),('probe',None)])
+    def test_error_diagnostic_omits_command_and_arbitrary_exception_contents(self):
+        secret='private-token-must-not-appear'
+        for exc in [subprocess.CalledProcessError(23,['curl',secret],stderr=secret),ValueError(secret)]:
+            self.assertNotIn(secret,json.dumps(u.error_diagnostic(exc,'artifact_sync')))
+
     def test_missing_guardian_never_renews(self):
         with tempfile.TemporaryDirectory() as tmp:
             c=config(tmp);calls=[]
