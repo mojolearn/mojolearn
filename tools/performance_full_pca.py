@@ -109,6 +109,9 @@ def main():
                   promotion=False, acceptance='pending complete A/B quality and full affected-workload coverage')
     if packet['numeric_mode'] != 'fast' or packet['vendor'] != 'apple':
         raise RuntimeError('Unexpected measured route: ' + str((packet['numeric_mode'],packet['vendor'])))
+    if not packet['quality']['fitted_state_finite'] or not packet['quality']['output_finite'] or (args.arm == 'B' and not packet['candidate_reached']):
+        packet['status'] = 'FAIL'
+        packet['quality_status'] = 'FAIL'
     args.output.write_text(json.dumps(packet, indent=2, allow_nan=False)+'\n')
     print('FULL_PCA arm='+args.arm+' phase='+args.phase+' rows='+str(len(x))+' output='+str(args.output), flush=True)
 
