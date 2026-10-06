@@ -43,7 +43,9 @@ from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, McdCompactWorkspac
 # fitted-state/support/rank gates, positive caller reach, then M3 A/B timing.
 # Existing ordered-covariance HOLD is not waived by this separate candidate.
 # See docs/apple-fast/ab/mcd-g1-gram.md and EXPERIMENTS.md (MCD_FAST_G1_GRAM).
+# NEVER RUN — PENDING VALIDATION: opt-in MCD self-Gram route.
 comptime MCD_G1_GRAM = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM"]()
+# NEVER RUN — PENDING VALIDATION: opt-in MCD self-Gram reach audit.
 comptime MCD_G1_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"]()
 # LEGACY, default OFF: the old window admitted only d 129..256 features and
 # K 128..1023 selected rows, which brackets the board (istella 220 features).
