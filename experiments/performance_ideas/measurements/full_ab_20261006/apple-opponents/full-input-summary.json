@@ -1,0 +1,39 @@
+[
+  {
+    "dataset": "istella",
+    "train": [
+      2043304,
+      220
+    ],
+    "query": [
+      500000,
+      220
+    ],
+    "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data/rows-full/reg-istella.npz"
+  },
+  {
+    "dataset": "taxi",
+    "train": [
+      5250086,
+      11
+    ],
+    "query": [
+      500000,
+      11
+    ],
+    "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data/rows-full/reg-taxi.npz"
+  },
+  {
+    "dataset": "text",
+    "train": [
+      86626,
+      4096
+    ],
+    "query": [
+      9626,
+      4096
+    ],
+    "source": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full/text.npz",
+    "method": "symlink existing complete corpus block"
+  }
+]

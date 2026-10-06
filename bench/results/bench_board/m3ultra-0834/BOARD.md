@@ -6,7 +6,7 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 > Stored historical opponent cells keep their original resource provenance. Fresh measurements use one excluded warmup and one scored sample; failures remain failures.
 
-> User-directed suspension for candidate A/B measurements: bench_board: [35/402] algos/gamma/istella/rows=full arms=sklearn-cpu. No interrupted timing admitted; completed cells preserved. Missing GPU opponents follow candidates.
+> At the user-directed transition to missing-only opponents, the active LinearSVR/Istella attempt was interrupted without admitting a timing. Completed measurements were preserved; subsequent captures are recorded under opponent_imports.
 
 ## Box
 
@@ -42,9 +42,9 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 1 planned, 422 done, 29 failed, 0 unsupported, 0 pending. Cells: 1540 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 28, ok 1506).
+Races: 1 planned, 426 done, 29 failed, 0 unsupported, 0 pending. Cells: 1544 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 28, ok 1510).
 
-Inference cells: 920 (REFUSED 48, ok 872).
+Inference cells: 923 (REFUSED 48, ok 875).
 
 ## Quality at a glance
 
@@ -75,6 +75,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | affinity-prop | taxi | ari_vs_ours (1 is our partition exactly) | 1.000000 | - | sklearn-cpu 1.000000 |
 | algos | als | taxi-zones | recall_at_10 (higher is better) | 0.053995 | 0.053995 | implicit-cpu 0.056786 |
 | algos | als | text | recall_at_10 (higher is better) | 0.548738 | 0.548738 | implicit-cpu 0.548200 |
+| algos | als | text | recall_at_10 (higher is better) | - | - | implicit-cpu 0.548196 |
 | algos | ard | istella | r2 (higher is better) | 0.327004 | -0.124856 | sklearn-cpu 0.327436 |
 | algos | ard | istella | rmse (lower is better) | 0.685278 | 0.885949 | sklearn-cpu 0.685058 |
 | algos | ard | taxi | r2 (higher is better) | 0.909190 | 0.909193 | sklearn-cpu 0.909190 |
@@ -210,6 +211,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | gamma | istella | r2 (higher is better) | 0.218164 | 0.218164 | sklearn-cpu - |
 | algos | gamma | istella | rmse (lower is better) | 0.738615 | 0.738615 | sklearn-cpu - |
 | algos | gamma | istella | finite | - | 1.000000 | sklearn-cpu - |
+| algos | gamma | istella | r2 (higher is better) | - | - | sklearn-cpu 0.310339 |
+| algos | gamma | istella | rmse (lower is better) | - | - | sklearn-cpu 0.692968 |
 | algos | gamma | taxi | r2 (higher is better) | -231.912000 | -231.912000 | sklearn-cpu - |
 | algos | gamma | taxi | rmse (lower is better) | 243.071000 | 243.071000 | sklearn-cpu - |
 | algos | gamma | taxi | finite | - | 1.000000 | sklearn-cpu - |
@@ -572,9 +575,13 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | tweedie | istella | r2 (higher is better) | -24.412400 | -24.412500 | sklearn-cpu - |
 | algos | tweedie | istella | rmse (lower is better) | 4.210980 | 4.210990 | sklearn-cpu - |
 | algos | tweedie | istella | finite | - | 1.000000 | sklearn-cpu - |
+| algos | tweedie | istella | r2 (higher is better) | - | - | sklearn-cpu -45804.275829 |
+| algos | tweedie | istella | rmse (lower is better) | - | - | sklearn-cpu 178.588288 |
 | algos | tweedie | taxi | r2 (higher is better) | -10.074400 | -10.074400 | sklearn-cpu - |
 | algos | tweedie | taxi | rmse (lower is better) | 53.002600 | 53.002600 | sklearn-cpu - |
 | algos | tweedie | taxi | finite | - | 1.000000 | sklearn-cpu - |
+| algos | tweedie | taxi | r2 (higher is better) | - | - | sklearn-cpu -25.819594 |
+| algos | tweedie | taxi | rmse (lower is better) | - | - | sklearn-cpu 80.554149 |
 | algos | var | synthetic | forecast_rmse (lower is better) | 1.140790 | 1.140864 | statsmodels-cpu 1.144945 |
 | algos | var | taxi-hourly | forecast_rmse (lower is better) | 33.168000 | 33.167951 | statsmodels-cpu 33.167986 |
 | algos | voting-clf | istella | accuracy (higher is better) | 0.918360 | 0.918350 | sklearn-cpu 0.918480 |
@@ -872,6 +879,7 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | factor-analysis | taxi | Xq | - | 3.5 | 3.4 | - | sklearn-cpu 3.7 ms (IDENTICAL/arm 1.263) |
 | algos | fastica | istella | Xq | - | 35.7 | 36.8 | - | sklearn-cpu 11.0 ms (IDENTICAL/arm 2.978) |
 | algos | fastica | taxi | Xq | - | 2.1 | 2.2 | - | sklearn-cpu 2.1 ms (IDENTICAL/arm 1.614) |
+| algos | gamma | istella | Xq | - | - | - | - | sklearn-cpu 80.4 ms (IDENTICAL/arm -) |
 | algos | gamma | taxi | Xq | - | - | - | - | sklearn-cpu 3.6 ms (IDENTICAL/arm -) |
 | algos | gaussian-nb | istella | Xq | - | 35.9 | 36.9 | - | sklearn-cpu 183.8 ms (IDENTICAL/arm 0.170) |
 | algos | gaussian-nb | taxi | Xq | - | 6.8 | 5.0 | - | sklearn-cpu 12.2 ms (IDENTICAL/arm 0.390) |
@@ -1046,6 +1054,8 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | svgp | taxi | Xq | - | - | - | - | gpytorch-cpu 64.9 ms (IDENTICAL/arm -); gpytorch-gpu 13.9 ms (IDENTICAL/arm -) |
 | algos | target-encoder | istella | Xq | - | 8.1 | 8.6 | - | sklearn-cpu 19.6 ms (IDENTICAL/arm 0.415) |
 | algos | target-encoder | taxi | Xq | - | 7.1 | 7.1 | - | sklearn-cpu 11.3 ms (IDENTICAL/arm 0.655) |
+| algos | tweedie | istella | Xq | - | - | - | - | sklearn-cpu 80.2 ms (IDENTICAL/arm -) |
+| algos | tweedie | taxi | Xq | - | - | - | - | sklearn-cpu 14.7 ms (IDENTICAL/arm -) |
 | algos | variance-threshold | istella | Xq | - | 41.8 | 42.5 | - | sklearn-cpu 19.0 ms (IDENTICAL/arm 1.979) |
 | algos | variance-threshold | taxi | Xq | - | 2.8 | 2.9 | - | sklearn-cpu 0.7 ms (IDENTICAL/arm 3.734) |
 | algos | voting-clf | istella | Xq | - | 73.2 | 74.0 | - | sklearn-cpu 231.6 ms (IDENTICAL/arm 0.234) |
@@ -5822,6 +5832,33 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 
 parameters: NOT CHECKED
 
+### als / text (rows full, shape X 86626x4096; Xq 9626x4096; y 86626; yq 9626)
+
+race: done, driver rc 0, log `logs/algos.als.text.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| implicit-cpu | implicit | cpu | opponent | 321340.4 | 321340.4..321340.4 | 1 | - | - | 2070.9 | - | recall_at_10=0.548196 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'aeb2aba10161e1adf6a8e7e531dbd750b5c81d6ef6a29dd7f9443b2ae1dd87ad', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-opponents/board.json', 'finished': '2026-10-06T12:23:38Z', 'original_source': 'measured this run'}) |
+
+memory, implicit-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 1.0, 'calculate_training_loss': False, 'cg_steps': 3, 'factors': 64, 'iterations': 15, 'random_state': 7, 'regularization': 0.01, 'use_cg': False}. Rows: None. Timed: None.
+
+mismatch: implicit-gpu has only the conjugate-gradient solver (use_cg ignored there); ours and implicit-cpu solve each least-squares step exactly (use_cg=False)
+
+mismatch: each library draws its own initial factors from random_state=7
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `implicit-cpu`, seed 7): MATCHED
+
+| parameter | implicit-cpu |
+|---|---|
+| library (source) | implicit (declared) |
+| alpha | 1.0 |
+| n_estimators | 15 |
+| seed | 7 |
+
 ### ard / istella (rows full, shape X 100000x220; Xq 100000x220; y 100000; yq 100000)
 
 race: done, driver rc 0, log `logs/algos.ard.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
@@ -9151,6 +9188,40 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1889.0 | 1889.0..1889.0 | 1 | - | - | - | - | finite=1.000000, r2=0.218164, rmse=0.738615 | - | None | - | ok ({'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
 
 parameters: NOT CHECKED
+
+### gamma / istella (rows full, shape X 2043304x220; Xq 500000x220; y 2043304; yq 500000)
+
+race: done, driver rc 0, log `logs/algos.gamma.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 252506.5 | 252506.5..252506.5 | 1 | - | - | 6142.1 | - | finite=True, r2=0.310339, rmse=0.692968 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'aeb2aba10161e1adf6a8e7e531dbd750b5c81d6ef6a29dd7f9443b2ae1dd87ad', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-opponents/board.json', 'finished': '2026-10-06T12:04:23Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'fit_intercept': True, 'max_iter': 100, 'solver': 'lbfgs', 'tol': 0.0001}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| fit_intercept | true |
+| max_iter | 100 |
+| seed | "none (deterministic)" |
+| solver | "lbfgs" |
+| tol | 0.0001 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 80.4 | 80.4..80.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
 
 ### gamma / taxi (rows unrecorded, shape -)
 
@@ -19157,6 +19228,40 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 
 parameters: NOT CHECKED
 
+### tweedie / istella (rows full, shape X 2043304x220; Xq 500000x220; y 2043304; yq 500000)
+
+race: done, driver rc 0, log `logs/algos.tweedie.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 250154.3 | 250154.3..250154.3 | 1 | - | - | 6137.9 | - | finite=True, r2=-45804.275829, rmse=178.588288 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'aeb2aba10161e1adf6a8e7e531dbd750b5c81d6ef6a29dd7f9443b2ae1dd87ad', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-opponents/board.json', 'finished': '2026-10-06T12:12:46Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'fit_intercept': True, 'link': 'log', 'max_iter': 100, 'power': 1.5, 'solver': 'lbfgs', 'tol': 0.0001}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| fit_intercept | true |
+| max_iter | 100 |
+| seed | "none (deterministic)" |
+| solver | "lbfgs" |
+| tol | 0.0001 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 80.2 | 80.2..80.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
+
 ### tweedie / taxi (rows unrecorded, shape -)
 
 race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
@@ -19168,6 +19273,40 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 45.1 | 45.1..45.1 | 1 | - | - | - | - | finite=1.000000, r2=-10.074400, rmse=53.002600 | - | None | - | ok ({'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
 
 parameters: NOT CHECKED
+
+### tweedie / taxi (rows full, shape X 5250086x11; Xq 500000x11; y 5250086; yq 500000)
+
+race: done, driver rc 0, log `logs/algos.tweedie.taxi.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 4055.3 | 4055.3..4055.3 | 1 | - | - | 656.8 | - | finite=True, r2=-25.819594, rmse=80.554149 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'aeb2aba10161e1adf6a8e7e531dbd750b5c81d6ef6a29dd7f9443b2ae1dd87ad', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-opponents/board.json', 'finished': '2026-10-06T11:55:53Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'fit_intercept': True, 'link': 'log', 'max_iter': 100, 'power': 1.5, 'solver': 'lbfgs', 'tol': 0.0001}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| fit_intercept | true |
+| max_iter | 100 |
+| seed | "none (deterministic)" |
+| solver | "lbfgs" |
+| tol | 0.0001 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 14.7 | 14.7..14.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
 
 ### var / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
 

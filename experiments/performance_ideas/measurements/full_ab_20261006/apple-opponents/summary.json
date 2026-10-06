@@ -1,0 +1,193 @@
+{
+  "source_sha": "0f779ed5d3f0a2ab2f418e054d3af950a766e5f1",
+  "returncode": 0,
+  "planned": 4,
+  "completed": 4,
+  "failed": 0,
+  "pending": 0,
+  "excluded_warmups_per_arm": 1,
+  "scored_samples_per_arm": 1,
+  "measurements": [
+    {
+      "race": "algos/als/text/rows=full",
+      "arm": "implicit-cpu",
+      "shape": "X 86626x4096; Xq 9626x4096; y 86626; yq 9626",
+      "fit_ms": 321340.42008291,
+      "warmup_ms": 321382.0032499498,
+      "quality": {
+        "recall_at_10": 0.5481956918246254
+      },
+      "output_digest": "ea1ab9202db4eb2d",
+      "inference": []
+    },
+    {
+      "race": "algos/gamma/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000",
+      "fit_ms": 252506.46058400162,
+      "warmup_ms": 252503.33933299407,
+      "quality": {
+        "finite": true,
+        "r2": 0.3103390288055522,
+        "rmse": 0.6929677877131538
+      },
+      "output_digest": "e35641ebb019f4e0",
+      "inference": [
+        {
+          "arm": "sklearn-cpu",
+          "batch": "Xq",
+          "status": "ok",
+          "median_ms": 80.40099998470396,
+          "rounds": 1,
+          "warmup_ms": 80.6920420145616
+        }
+      ]
+    },
+    {
+      "race": "algos/tweedie/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000",
+      "fit_ms": 250154.33183393907,
+      "warmup_ms": 250126.68962497264,
+      "quality": {
+        "finite": true,
+        "r2": -45804.27582933507,
+        "rmse": 178.58828789440273
+      },
+      "output_digest": "64a778a00cb4e137",
+      "inference": [
+        {
+          "arm": "sklearn-cpu",
+          "batch": "Xq",
+          "status": "ok",
+          "median_ms": 80.2045000018552,
+          "rounds": 1,
+          "warmup_ms": 80.26779105421156
+        }
+      ]
+    },
+    {
+      "race": "algos/tweedie/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "shape": "X 5250086x11; Xq 500000x11; y 5250086; yq 500000",
+      "fit_ms": 4055.314124911092,
+      "warmup_ms": 4005.2709579467773,
+      "quality": {
+        "finite": true,
+        "r2": -25.819594484257607,
+        "rmse": 80.55414946210408
+      },
+      "output_digest": "e3d2665da5a81271",
+      "inference": [
+        {
+          "arm": "sklearn-cpu",
+          "batch": "Xq",
+          "status": "ok",
+          "median_ms": 14.663249952718616,
+          "rounds": 1,
+          "warmup_ms": 10.710416943766177
+        }
+      ]
+    }
+  ],
+  "quality_limitations": [
+    "Both sklearn Tweedie opponent R2 scores are negative (taxi -25.8195944843; Istella -45804.2758293351). Execution completed and metrics are finite; this is not a quality-acceptance claim.",
+    "Retained hash fields are output digests; no full SHA256 fitted-model export is claimed for these opponent runs."
+  ],
+  "comparison_policy": "Opponent-only timings; these four new race IDs have no own cells on the current main board. Do not infer A/B speedups or compare uncapped measurements with historical reduced shapes.",
+  "not_run": [
+    "Quantile/Istella: prior owner exclusion for excessive runtime.",
+    "Previously successful cells and retained backend failures were not rerun."
+  ],
+  "worker_resources": [
+    {
+      "file": "raw/als-text.json",
+      "arm": "implicit-cpu",
+      "resources": {
+        "cpu_count": 28,
+        "thread_env": {
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": []
+      }
+    },
+    {
+      "file": "raw/gamma-istella.json",
+      "arm": "sklearn-cpu",
+      "resources": {
+        "cpu_count": 28,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "filepath": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/sklearn/.dylibs/libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 28,
+            "prefix": "libomp",
+            "user_api": "openmp",
+            "version": null
+          }
+        ]
+      }
+    },
+    {
+      "file": "raw/tweedie-istella.json",
+      "arm": "sklearn-cpu",
+      "resources": {
+        "cpu_count": 28,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "filepath": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/sklearn/.dylibs/libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 28,
+            "prefix": "libomp",
+            "user_api": "openmp",
+            "version": null
+          }
+        ]
+      }
+    },
+    {
+      "file": "raw/tweedie-taxi.json",
+      "arm": "sklearn-cpu",
+      "resources": {
+        "cpu_count": 28,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "filepath": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/sklearn/.dylibs/libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 28,
+            "prefix": "libomp",
+            "user_api": "openmp",
+            "version": null
+          }
+        ]
+      }
+    }
+  ],
+  "source_evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple-opponent-tail/captured",
+  "snapshot_sha256": "aeb2aba10161e1adf6a8e7e531dbd750b5c81d6ef6a29dd7f9443b2ae1dd87ad"
+}

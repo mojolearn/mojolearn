@@ -1,0 +1,17 @@
+{
+  "cpu_count": 28,
+  "thread_caps": {
+    "OMP_NUM_THREADS": null,
+    "OPENBLAS_NUM_THREADS": null,
+    "MKL_NUM_THREADS": null,
+    "NUMEXPR_NUM_THREADS": null,
+    "VECLIB_MAXIMUM_THREADS": null,
+    "BLIS_NUM_THREADS": null
+  },
+  "hardware": "Mac15,14",
+  "harness_sha": "0f779ed5d3f0a2ab2f418e054d3af950a766e5f1",
+  "policy": "Serial full-machine uncapped CPU opponents; implicit retains its documented nested BLAS=1. Actual worker pools recorded by the existing driver.",
+  "python": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+  "source": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/source-0f779ed5d",
+  "source_sha": "0f779ed5d3f0a2ab2f418e054d3af950a766e5f1"
+}

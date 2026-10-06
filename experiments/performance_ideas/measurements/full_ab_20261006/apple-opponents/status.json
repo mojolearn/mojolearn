@@ -1,0 +1,82 @@
+{
+  "status": "COMPLETE",
+  "owner_pid": 52046,
+  "source_sha": "0f779ed5d3f0a2ab2f418e054d3af950a766e5f1",
+  "total": 4,
+  "completed": 4,
+  "failed": 0,
+  "started_at": 1791287725.581463,
+  "policy": "Missing opponents only, serial full-machine allocation; one excluded warmup and one score. No builds or separate verification.",
+  "evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail",
+  "original_evidence_preserved": true,
+  "heartbeat_at": 1791289421.799125,
+  "phase": "measure",
+  "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/missing_board.py",
+    "--vendor",
+    "apple",
+    "--modes",
+    "identical",
+    "--families",
+    "algos",
+    "--rows",
+    "full",
+    "--rounds",
+    "1",
+    "--python-env",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--skip-install",
+    "--no-smoke-gate",
+    "--opponents-only",
+    "--skip-failed",
+    "--cache",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/cache",
+    "--algos-data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data",
+    "--data-root",
+    "/Users/ec2-user/datasets/gbm-bench",
+    "--opponent-store",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/opponent-store.jsonl",
+    "--out",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/board"
+  ],
+  "worker_pid": null,
+  "prepare_returncode": 0,
+  "pending": 0,
+  "failures": [],
+  "cells": [
+    {
+      "race": "algos/als/text/rows=full",
+      "arm": "implicit-cpu",
+      "status": "ok",
+      "median_ms": 321340.42008291,
+      "shape": "X 86626x4096; Xq 9626x4096; y 86626; yq 9626"
+    },
+    {
+      "race": "algos/gamma/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "status": "ok",
+      "median_ms": 252506.46058400162,
+      "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000"
+    },
+    {
+      "race": "algos/tweedie/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "status": "ok",
+      "median_ms": 250154.33183393907,
+      "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000"
+    },
+    {
+      "race": "algos/tweedie/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "status": "ok",
+      "median_ms": 4055.314124911092,
+      "shape": "X 5250086x11; Xq 500000x11; y 5250086; yq 500000"
+    }
+  ],
+  "measure_returncode": 0,
+  "returncode": 0,
+  "finished_at": 1791289421.799117
+}
