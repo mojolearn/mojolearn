@@ -396,6 +396,18 @@ OWED (no record yet) or REFUSED; `--json` writes a report to share.
 [docs/VERIFY.md](docs/VERIFY.md) says what a local run proves and what it
 does not.
 
+For a direct GPU-versus-CPU comparison, the cross-check has three tiers:
+
+- `verify --cross-check quick`: one eligible lane per family, base fixture.
+- `verify --cross-check default`: up to 24 eligible lanes, base fixture.
+- `verify --cross-check all`: every eligible lane on every fixture, including
+  Apple Metal, using sequential batches in fresh processes.
+
+For example, `python -m mojolearn verify --cross-check all --cpu-threads 1 --json`
+runs the complete cross-check with one CPU thread. Explicit `--lanes` or
+`--fixtures` selections are labeled custom scope. Missing comparisons or
+execution failures prevent a successful exit.
+
 You can verify a certificate without trusting the maintainer. On any
 supported GPU, `MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify`
 runs a pinned fixture, captures its stage-level identity card and compares it
