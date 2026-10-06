@@ -69,5 +69,8 @@
     "MOJOLEARN_ATTN_ARM_TRIAL=1",
     "--define",
     "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
