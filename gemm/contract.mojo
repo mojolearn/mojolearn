@@ -106,8 +106,11 @@ def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
 # I04 supported research version: every device and host oracle imports
 # this constant. The profile cap/fold remain unchanged; partitions still
 # depend only on k. Requires an explicit IDENTICAL build and is default off.
-# I04 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-# I04 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# I04 AMD MI325X component LOSER (2026-10-06, source cbcc8dcd3303):
+# leaf64 / leaf128 1.268 (0.231 / 0.182 ms), retained GEMM m1024/n1024/k2048.
+# One same-process warmup and score; existing identity evidence reused, not rerun.
+# Component scope and pending full-caller qualification: retain leaf128 default.
+# Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I04.
 # Leaf64 requires IDENTICAL + MOJOLEARN_IDN_GEMM_FOLD_LEAF_64; otherwise leaf128.
 comptime CONTRACT_K_LEAF_MIN = (
     64 if (is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
