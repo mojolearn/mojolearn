@@ -8,8 +8,10 @@ the call instead of disguising it as asynchronous lifetime management.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm_workspace_max_floats
 
-# I02 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-# I02 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# I02 2026-10-06 L40S retained-scratch GEMM component WIN: 0.265 vs
+# 0.287 ms and 0.246 vs 0.267 ms (~1.084x), one same-process warmup/score.
+# AMD and full caller qualification remain pending; incumbent defaults retained.
+# Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 # Explicit caller-owned experiment workspace; no default dispatcher admission.
 struct BoundedGemmWorkspace(Movable):
     var workspace: GemmWorkspace
