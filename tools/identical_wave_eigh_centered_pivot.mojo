@@ -1,4 +1,4 @@
-"""Captured block-eigh pivot: expected REFUSAL, never a passed decomposition.
+"""Centered captured block-eigh pivot: local regression, not full qualification.
 
 Numerical source2191cd1ec, AMD MI325X, dense4096 2I+uuT fixture from
 identical_wave_quality.py, outer sweep0/round183/group71. Captured before
@@ -170,3 +170,33 @@ def main() raises:
         raise Error("centered pivot Frobenius guard failed")
     print("CENTERED_PIVOT_CONVERGED", "sweeps", got[1], "off", after[0], "diag", after[1])
     print("Local pivot only: full residual, cross-vendor identity and speed remain unqualified.")
+    for i in range(32):
+        print("EIGEN_BITS", i, bitcast[DType.uint32](a[i * 32 + i] + Float32(2.0)))
+    for i in range(1024):
+        print("VECTOR_BITS", i, bitcast[DType.uint32](v[i]))
+    # General guard cases: positive/negative clusters, opposite signs, zero
+    # diagonal, and unbalanced magnitudes. Off-diagonal words stay unchanged.
+    for kind in range(5):
+        var matrix = List[Float32](length=1024, fill=Float32(0.125))
+        for i in range(32):
+            var diagonal = Float32(2.0)
+            if kind == 1:
+                diagonal = Float32(-2.0)
+            elif kind == 2 and i % 2 == 1:
+                diagonal = Float32(-2.0)
+            elif kind == 3:
+                diagonal = Float32(0.0)
+            elif kind == 4 and i > 0:
+                diagonal = Float32(0.25)
+            matrix[i * 32 + i] = diagonal
+        var mp = F32Ptr(unsafe_from_address=Int(matrix.unsafe_ptr()))
+        for i in range(32):
+            for j in range(32):
+                var value = rb_gather_cell(mp, 32, 0, 1, i, j)
+                if i != j and value != matrix[i * 32 + j]:
+                    raise Error("centering modified an off-diagonal cell")
+                if i == j and abs(value) > abs(matrix[i * 32 + i]):
+                    raise Error("centering weakened relative convergence tolerance")
+                if (kind == 2 or kind == 4) and value != matrix[i * 32 + j]:
+                    raise Error("unsafe common shift was not rejected")
+        print("CENTER_GUARD_PASS", kind)
