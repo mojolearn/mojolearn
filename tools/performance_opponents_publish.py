@@ -84,10 +84,10 @@ def publish(source: dict, destination: Path) -> dict:
     hashes = dict(board_json=hashlib.sha256(raw).hexdigest(), board_markdown=hashlib.sha256(markdown).hexdigest())
     prior_path = out / "publication.json"
     prior = json.loads(prior_path.read_text()) if prior_path.exists() else {}
-    changed = prior.get("source_sha256") != hashes
+    changed = prior.get("source_sha256") != hashes or prior.get("harness_repairs", []) != source.get("harness_repairs", [])
     if changed:
         receipt = dict(schema="mojolearn-opponent-publication/1", source_sha256=hashes,
-                       source_directory=str(src), harness_source_sha=source["harness_source_sha"],
+                       source_directory=str(src), harness_source_sha=source["harness_source_sha"], harness_repairs=source.get("harness_repairs", []),
                        coverage=coverage, source_updated=board.get("updated"), published_at=time.time(),
                        policy="Exact opponent-only source files, hardware and failures retained. No A/B component ratios are derived.")
         # The receipt is written last, so readers can verify both files by hash.
