@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees split scoring: Gini/entropy classification and MSE regression."""
 
+from std.collections import InlineArray
 from std.math import fma
 
 from checks.numerics import ftz
@@ -523,6 +524,59 @@ struct EntropyObjectiveFunction[dtype: DType](
                 var v1 = _ftz_seam(val * _log_seam(val))
                 var v2 = _ftz_seam(v1 / _log_seam(Two))
                 gain = _ftz_seam(gain - v2)
+
+        if gain < Scalar[Self.dtype](0.0):
+            gain = Scalar[Self.dtype](0.0)
+        return gain
+
+    def GainPerSplitCached[
+        ml: Bool,
+        mt: Bool, //,
+        ol: Origin[mut=ml],
+        ot: Origin[mut=mt],
+    ](
+        self,
+        hist_left: Pointer[CountBin, ol],
+        hist_total: Pointer[CountBin, ot],
+        len: Int32,
+        nLeft: Int32,
+        parent_terms: InlineArray[Float32,32],
+    ) -> Scalar[Self.dtype]:
+        """compute the Entropy (or information gain) for each split."""
+        var nRight = len - nLeft
+        var gain = Scalar[Self.dtype](0.0)
+        if nLeft < self.min_samples_leaf or nRight < self.min_samples_leaf:
+            return Scalar[Self.dtype].MIN_FINITE
+        comptime One = Scalar[Self.dtype](1.0)
+        comptime Two = Scalar[Self.dtype](2.0)
+        var invLeft = _ftz_seam(One / Scalar[Self.dtype](Int(nLeft)))
+        var invRight = _ftz_seam(One / Scalar[Self.dtype](Int(nRight)))
+        var invLen = _ftz_seam(One / Scalar[Self.dtype](Int(len)))
+        for c in range(Int(self.nclasses)):
+            var val_i: Int32 = 0
+            var lval_i = hist_left[unsafe_offset=c].x
+            if lval_i != 0:
+                var lval = Scalar[Self.dtype](Int(lval_i))
+                var larg = _ftz_seam(lval * invLeft)
+                var l1 = _ftz_seam(_log_seam(larg) / _log_seam(Two))
+                var l2 = _ftz_seam(l1 * lval)
+                var l3 = _ftz_seam(l2 * invLen)
+                gain = _ftz_seam(gain + l3)
+
+            val_i += lval_i
+            var total_sum = hist_total[unsafe_offset=c].x
+            var rval_i = total_sum - lval_i
+            if rval_i != 0:
+                var rval = Scalar[Self.dtype](Int(rval_i))
+                var rarg = _ftz_seam(rval * invRight)
+                var r1 = _ftz_seam(_log_seam(rarg) / _log_seam(Two))
+                var r2 = _ftz_seam(r1 * rval)
+                var r3 = _ftz_seam(r2 * invLen)
+                gain = _ftz_seam(gain + r3)
+
+            val_i += rval_i
+            if val_i != 0:
+                gain = _ftz_seam(gain-parent_terms[c].cast[Self.dtype]())
 
         if gain < Scalar[Self.dtype](0.0):
             gain = Scalar[Self.dtype](0.0)

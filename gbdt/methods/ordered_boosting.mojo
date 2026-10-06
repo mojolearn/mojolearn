@@ -201,6 +201,7 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
 )
 from gbdt.methods.kernel.pointwise_split_resolve import PW_FUSED_LEVEL
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ord_all_on
+from gbdt.trees_identical_switches import T24, T25
 from gbdt.methods.oblivious_tree_fold_tasks import (
     fold_tasks_from_folds,
     plan_fold_layout,
@@ -665,6 +666,27 @@ def _ord_std_combine_kernel(
     if tid == 0:
         comptime for lane in range(3):
             dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])
+
+
+def _ord_std_combine_scale_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    sums: MutPointer[Float32, MutAnyOrigin],
+    count: Int32, tiny_bits: UInt64, mult_bits: UInt64,
+    random_strength: Float32, row_count: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """T24: retain the exact lane combine and portable scalar statements.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    Both stages publish/read the sums on thread zero. No host round trip,
+    changed reduction graph, vendor libm or additional pointer alias.
+    """
+    _ord_std_combine_kernel(part, sums)
+    barrier()
+    _ord_std_scale_kernel(
+        sums, Int32(0), Int32(1), sums, Int32(1), count, tiny_bits,
+        mult_bits, random_strength, row_count, dst,
+    )
 
 
 def _ord_std_wide_kernel(
@@ -1547,7 +1569,7 @@ def _ordered_estimate_complete(
         ref d_est = est_ws[0].d_est
         trace.record_device(ctx, tag, d_est, n_leaves)
         est_times.begin(ctx)
-        ctx.enqueue_function[_ordered_apply_kernel](
+        ctx.enqueue_function[_ordered_apply_kernel[T25]](
             permutation.unsafe_ptr(), bins.unsafe_ptr(), d_est.unsafe_ptr(),
             cursor.unsafe_ptr(), Int32(pending.apply_size),
             opts.learning_rate,
@@ -1577,7 +1599,7 @@ def _ordered_estimate_complete(
     for leaf in range(n_leaves):
         hl.unsafe_ptr().unsafe_store(leaf, leaves[leaf])
     ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
-    ctx.enqueue_function[_ordered_apply_kernel](
+    ctx.enqueue_function[_ordered_apply_kernel[T25]](
         permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
         cursor.unsafe_ptr(), Int32(pending.apply_size), opts.learning_rate,
         grid_dim=(_grid(pending.apply_size), 1, 1),
@@ -2393,6 +2415,10 @@ def fit_ordered(
                     comptime if ORDERED_SABOTAGE:
                         est = folds[f].quality_evaluate_samples.right
                     bounds.append(est)
+                    comptime if T25:
+                        # Cache also the apply suffix. Prefix statistics still
+                        # exclude these rows from this task's estimation.
+                        bounds.append(folds[f].quality_evaluate_samples.right)
             if p == est_p:
                 bounds.append(n_rows)
             parts.append(
@@ -2545,6 +2571,7 @@ def fit_ordered(
                         grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
                     )
                     std_done = True
+            var combined_scale = False
             if not std_done:
                 var std_split = String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0"
                 if std_split:
@@ -2553,10 +2580,20 @@ def fit_ordered(
                         Int32(total), part.unsafe_ptr(),
                         grid_dim=REDUCE_LANES_BLOCK // ORD_STD_LANES, block_dim=ORD_STD_LANES,
                     )
-                    ctx.enqueue_function[_ord_std_combine_kernel](
-                        part.unsafe_ptr(), d_sums.unsafe_ptr(),
-                        grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
-                    )
+                    comptime if T24:
+                        ctx.enqueue_function[_ord_std_combine_scale_kernel](
+                            part.unsafe_ptr(), d_sums.unsafe_ptr(), Int32(ord_count),
+                            bitcast[DType.uint64](Float64(1e-100)),
+                            bitcast[DType.uint64](ord_mult), opts.random_strength,
+                            Int32(total), d_ss.unsafe_ptr(),
+                            grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
+                        )
+                        combined_scale = True
+                    else:
+                        ctx.enqueue_function[_ord_std_combine_kernel](
+                            part.unsafe_ptr(), d_sums.unsafe_ptr(),
+                            grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
+                        )
                 else:
                     ctx.enqueue_function[_ord_std_and_mags_kernel](
                         sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
@@ -2569,13 +2606,14 @@ def fit_ordered(
                 # design; two untracked views pass the aliasing check (box-run-2).
                 var sums_p = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
                 var sums_w = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-                ctx.enqueue_function[_ord_std_scale_kernel](
-                    sums_p, Int32(0), Int32(1), sums_w, Int32(1),
-                    Int32(ord_count), bitcast[DType.uint64](Float64(1e-100)),
-                    bitcast[DType.uint64](ord_mult), opts.random_strength,
-                    Int32(total), d_ss.unsafe_ptr(),
-                    grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
-                )
+                if not combined_scale:
+                    ctx.enqueue_function[_ord_std_scale_kernel](
+                        sums_p, Int32(0), Int32(1), sums_w, Int32(1),
+                        Int32(ord_count), bitcast[DType.uint64](Float64(1e-100)),
+                        bitcast[DType.uint64](ord_mult), opts.random_strength,
+                        Int32(total), d_ss.unsafe_ptr(),
+                        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+                    )
                 # T5 drain (cpu3-gbdt-a): (std, scale) stay in `d_ss` for
                 # the snap and the searcher; no readback, no drain here.
                 # `part` is held past the learn-loss drain.
@@ -2879,18 +2917,24 @@ def fit_ordered(
             for lp in range(learn_count):
                 for f in range(n_folds):
                     var slot = lp * n_folds + f
+                    var apply_bins = bins.copy()
+                    comptime if T25:
+                        apply_bins = parts[lp].d_leaf.copy()
                     _ = _ordered_estimate_complete(
                         ctx, pend[slot], slots[slot], n_leaves, dperms[lp],
-                        bins,
+                        apply_bins,
                         cursors[lp][f], opts, est_pools[slot], trace,
                         tag + ".perm." + String(lp) + ".fold." + String(f),
                         est_times, walker_times, want_leaves=False,
                     )
             ord_dev_leaves = pend[est_slot].est.device_done
             ord_dev_slot = est_slot
+            var estimation_bins = bins.copy()
+            comptime if T25:
+                estimation_bins = parts[est_p].d_leaf.copy()
             leaves = _ordered_estimate_complete(
                 ctx, pend[est_slot], slots[est_slot], n_leaves,
-                dperms[est_p], bins,
+                dperms[est_p], estimation_bins,
                 est_cursor, opts, est_pools[est_slot], trace,
                 tag + ".estimation", est_times, walker_times,
             )

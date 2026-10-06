@@ -1,0 +1,68 @@
+{
+  "id": "C48_IF",
+  "title": "IF stable partition and child split publication",
+  "source_status": "source_integrated_unverified",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "default": "OFF",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "C48_IF",
+      "A": [
+        "MOJOLEARN_TREES_C48_IF_PARTITION=1"
+      ],
+      "B": [],
+      "scope": [
+        "IF"
+      ],
+      "production_callers": [
+        "isolation_forest/impl/isolation_forest.mojo:IsolationForest.fit",
+        "isolation_forest/estimator.mojo",
+        "python/mojolearn/_iforest_impl.py",
+        "isolation_forest/impl/isolation_tree_builder.mojo:_block_stable_partition"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "iforest:anomaly",
+        "iforest-contamination:anomaly",
+        "isolation_decision:anomaly",
+        "isolation_predict:anomaly"
+      ]
+    }
+  ],
+  "production_callers": [
+    "isolation_forest/impl/isolation_forest.mojo:IsolationForest.fit",
+    "isolation_forest/estimator.mojo",
+    "python/mojolearn/_iforest_impl.py",
+    "isolation_forest/impl/isolation_tree_builder.mojo:_block_stable_partition"
+  ],
+  "supported_estimators": [
+    "IF"
+  ],
+  "recipe_keys": [
+    "IF"
+  ],
+  "overlap_ids": [
+    "C48"
+  ],
+  "implementation": "One feature flag read and stable scan produce signed child destinations, exact child count and split offset; retained destinations feed scatter.",
+  "remaining_gaps": [],
+  "demonstrated_runtime_reach": false,
+  "evidence": [],
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "full_dataset_recipes": [
+    "iforest:anomaly",
+    "iforest-contamination:anomaly",
+    "isolation_decision:anomaly",
+    "isolation_predict:anomaly"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

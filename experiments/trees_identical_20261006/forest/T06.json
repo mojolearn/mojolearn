@@ -1,0 +1,93 @@
+{
+  "id": "T06",
+  "title": "Cache entropy count transforms",
+  "source_status": "PARTIAL_SOURCE_INTEGRATION",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "controls": [
+    {
+      "name": "cached-parent",
+      "A": [
+        "MOJOLEARN_TREES_T06=1"
+      ],
+      "B": [],
+      "scope": [
+        "RFClassifier",
+        "DTClassifier",
+        "ExtraTreesClassifier"
+      ],
+      "production_callers": [
+        "ensemble/decisiontree/batched_levelalgo/objectives.mojo",
+        "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "entropy:rf:taxi",
+        "entropy:rf:istella",
+        "entropy:et:taxi",
+        "entropy:et:istella",
+        "entropy:decisiontree:taxi",
+        "entropy:decisiontree:istella"
+      ]
+    }
+  ],
+  "production_callers": [
+    "ensemble/decisiontree/batched_levelalgo/objectives.mojo",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+    "extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo"
+  ],
+  "supported_estimators": [
+    "RFClassifier",
+    "DTClassifier",
+    "ExtraTreesClassifier"
+  ],
+  "recipe_keys": [
+    "entropy:rf:taxi",
+    "entropy:rf:istella",
+    "entropy:et:taxi",
+    "entropy:et:istella",
+    "entropy:decisiontree:taxi",
+    "entropy:decisiontree:istella"
+  ],
+  "overlap_ids": [],
+  "remaining_gaps": [
+    "RF caches parent class terms only for unweighted entropy with at most 64 classes. Weighted l+r Float32 rounding is candidate-dependent and retains B under the S contract. Larger class counts retain B.",
+    "ET existing supported entropy class cap is 32. A single node thread scores feature candidates in order using one cached parent vector; occupancy/performance remain unmeasured. ET weighted objectives remain an existing unsupported public/native boundary.",
+    "Dedicated best-split DecisionTree full-data constructor facts remain pending; inherited RF code does not establish a measured standalone-tree cell."
+  ],
+  "demonstrated_runtime_reach": false,
+  "default": "OFF",
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "timing_boundary": "cold/repeated complete preparation+fit+mandatory synchronization+consumed outputs; inference is a separate result",
+  "evidence": {
+    "compilation": "NOT COMPILED",
+    "tests": "NOT TESTED",
+    "identity": "NOT VERIFIED",
+    "quality": "NOT VERIFIED",
+    "measurement": "NOT MEASURED"
+  },
+  "no_difference_notes": [
+    "Host entropy retains the incumbent identical statements and does not need a device cache."
+  ],
+  "branch": "ideas/trees-identical-20261006",
+  "base_commit": "35b2d4976550a6a9a47c4563ca1c08b6de21670b",
+  "implementation_commit": "Containing Git commit; no frozen binary exists.",
+  "recipe_coverage": "Affected classifier/regressor and supported objective routes listed; absent dataset hash/version/full rows/features/classes/settings/weights/multioutput facts remain PENDING. Single-tree and auxiliary recipes must be saved independently; base recipe aliases are not evidence.",
+  "host_vendor_contract": "S branches retain incumbent host statement order; V branches share numerical source graph with host. NVIDIA/AMD/Apple/host identity, compilation and quality are UNVERIFIED.",
+  "full_dataset_recipes": [
+    "entropy:rf:taxi",
+    "entropy:rf:istella",
+    "entropy:et:taxi",
+    "entropy:et:istella",
+    "entropy:decisiontree:taxi",
+    "entropy:decisiontree:istella"
+  ],
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT"
+}

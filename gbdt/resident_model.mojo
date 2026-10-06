@@ -88,6 +88,7 @@ built with it.
 from std.ffi import _Global
 from std.memory import memcpy
 from std.sys.compile import is_defined
+from core.forest_experiments import C50_GB_PACKED
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.neural_context import process_ctx
@@ -242,10 +243,14 @@ def _build_packed_predict(
     chunk_start.append(0)
     var run = 0
     for t in range(n_trees):
-        if run > 0 and run + depths[t] > PRED_ALL_CHUNK_LEVELS:
+        # C50 counts a constant tree as one unit of leaf-load work, ensuring
+        # all-constant ensembles are bounded too. Real level bytes can only
+        # be smaller than this work bound, so the shared page always fits.
+        var work = max(1, depths[t]) if C50_GB_PACKED else depths[t]
+        if run > 0 and run + work > PRED_ALL_CHUNK_LEVELS:
             chunk_start.append(t)
             run = 0
-        run += depths[t]
+        run += work
     chunk_start.append(n_trees)
     var n_chunks = len(chunk_start) - 1
     var pack_len = (nw + 1 + 5 * ne) if fits else 0
@@ -656,6 +661,25 @@ struct ResidentGbdtModel(Movable):
         var wide = (n_rows + 255) // 256
         if wide > 1024:
             wide = 1024
+        comptime if C50_GB_PACKED:
+            # C50 GB: reuse the supported exact packed model metadata, but
+            # launch one bounded mixed-depth tree chunk at a time. The shared
+            # metadata byte capacity defines chunks, never board dimensions.
+            # Each cursor carries precisely the incumbent tree-order additions.
+            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+            var pp = _build_packed_predict(ctx, self.tm, self.layout, self.approx_dim)
+            var trees = pp.d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + pp.tree_at
+            var nt = self.tm.model.size()
+            for chunk in range(pp.n_chunks):
+                ctx.enqueue_function[compute_bins_and_add_all_kernel](
+                    self.d_cindex.value().unsafe_ptr(), self.d_off.unsafe_ptr(), self.d_shift.unsafe_ptr(),
+                    self.d_mask.unsafe_ptr(), self.d_bin.unsafe_ptr(), self.d_eq.unsafe_ptr(), trees, trees+nt,
+                    trees+2*nt+1, trees+3*nt+1+chunk, Int32(1), self.d_vals.unsafe_ptr(), Int32(n_rows),
+                    self.d_cursor.value().unsafe_ptr(), Int32(self.approx_dim), Int32(n_rows),
+                    grid_dim=(wide, self.approx_dim, 1), block_dim=(256,1,1))
+            ctx.synchronize()
+            _ = pp^
+            return
         var lvl = 0
         var leaf = 0
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:

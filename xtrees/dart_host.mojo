@@ -12,6 +12,7 @@ so the Python glue takes `_boost_loop_device` on both columns.
 
 Serial loops on purpose: this column is a verification digest and a
 CPU-only install's fit; it is never timed."""
+from gbdt.trees_identical_switches import T30
 from std.ffi import _Global
 from xtrees.ops import stream_base, draw
 from xtrees.dart_units import (
@@ -57,6 +58,7 @@ struct DartHostSession(Movable):
     var h: List[Float32]
     var nodes: List[UInt16]
     var values: List[Float32]
+    var cached: List[Float32]
     var flags: List[Int32]
     var bad: List[Int32]
     var part: List[Float32]
@@ -83,6 +85,7 @@ struct DartHostSession(Movable):
         self.h = List[Float32](length=k * n, fill=0.0)
         self.nodes = List[UInt16](length=cap_iters * k * n, fill=0)
         self.values = List[Float32](length=cap_iters * k * node_cap, fill=0.0)
+        self.cached = List[Float32](length=cap_iters * k * n if T30 else 0, fill=0.0)
         self.flags = List[Int32](length=cap_iters, fill=0)
         self.bad = List[Int32](length=1, fill=0)
         self.part = List[Float32](length=n_chunks * node_cap * 2, fill=0.0)
@@ -169,6 +172,7 @@ def dart_step(
                 dart_drop_unit(e, base, skip, thr, flags)
         var nodes = _hu16(reg[].sessions[idx].nodes)
         var values = _hf(reg[].sessions[idx].values)
+        var cached = _hf(reg[].sessions[idx].cached)
         var y = _hf(reg[].sessions[idx].y)
         var score = _hf(reg[].sessions[idx].score)
         var dsum = _hf(reg[].sessions[idx].dsum)
@@ -177,7 +181,7 @@ def dart_step(
         var kind = Int32(reg[].sessions[idx].kind)
         var node_cap = reg[].sessions[idx].node_cap
         for i in range(n):
-            dart_row_unit(i, n, k, t, kind, node_cap, flags, coef, nodes, values, y, score, dsum, target, h)
+            dart_row_unit(i, n, k, t, kind, node_cap, flags, coef, nodes, values, y, score, dsum, target, h, cached)
         if t > 0:
             var fo = I32P(unsafe_from_address=flags_out)
             for e in range(t):
@@ -222,6 +226,7 @@ def dart_add(
         var h = _hf(reg[].sessions[idx].h)
         var part = _hf(reg[].sessions[idx].part)
         var values = _hf(reg[].sessions[idx].values)
+        var cached = _hf(reg[].sessions[idx].cached)
         var dsum = _hf(reg[].sessions[idx].dsum)
         var score = _hf(reg[].sessions[idx].score)
         var row_off = j * n
@@ -240,7 +245,7 @@ def dart_add(
         for e in range(n_nodes):
             dart_newton_unit(e, n_nodes, n_chunks, part, Float32(lam), Float32(l1), Float32(mds), voff, values)
         for e in range(n):
-            dart_add_unit(e, class_off, row_off, voff, Float32(factor), Float32(shrink), nodes, values, dsum, score)
+            dart_add_unit(e, class_off, row_off, voff, Float32(factor), Float32(shrink), nodes, values, dsum, score, cached)
         var vo = F32P(unsafe_from_address=values_out)
         for e in range(n_nodes):
             vo[e] = values[voff + e]

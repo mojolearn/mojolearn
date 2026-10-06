@@ -323,11 +323,13 @@ def our_rf_arm(lane, cfg, data, extra=None):
     if extra:
         common.update(extra)       # `--ours-ab`: one keyword changed
 
+    criterion = common.pop("criterion", "squared_error" if data.task == "regression" else "gini")
+
     def make():
         if data.task == "regression":
             return mojolearn.RandomForestRegressor(
-                criterion="squared_error", **common)
-        return mojolearn.RandomForestClassifier(criterion="gini", **common)
+                criterion=criterion, **common)
+        return mojolearn.RandomForestClassifier(criterion=criterion, **common)
 
     return spec.Arm("ours", make, _our_fit, _our_score,
                     sync=_our_sync, library="mojolearn")
@@ -359,11 +361,13 @@ def our_et_arm(lane, cfg, data, extra=None):
     if extra:
         common.update(extra)       # `--ours-ab`: one keyword changed
 
+    criterion = common.pop("criterion", "squared_error" if data.task == "regression" else "gini")
+
     def make():
         if data.task == "regression":
             return mojolearn.ExtraTreesRegressor(
-                criterion="squared_error", **common)
-        return mojolearn.ExtraTreesClassifier(criterion="gini", **common)
+                criterion=criterion, **common)
+        return mojolearn.ExtraTreesClassifier(criterion=criterion, **common)
 
     return spec.Arm("ours", make, _our_fit, _our_score,
                     sync=_our_sync, library="mojolearn")
@@ -930,6 +934,11 @@ def build_parser():
         description="mojolearn's explicitly selected mode against native "
                     "opponents, one lane per process",
     )
+    # Source-only T01–T45/C45–C51 route. Its preparation/fit/consumption
+    # boundary is deliberately separate from the historical fit-only board.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    import trees_identical_workload
+    trees_identical_workload.add_arguments(p)
     p.add_argument("--lane", required=True, choices=spec.LANE_NAMES)
     p.add_argument("--dataset", default=None,
                    help="taxi, taxireg, istella, istellareg, higgs (retired), year, covtype, covtype2, synth, "
@@ -1089,6 +1098,10 @@ def main(argv=None):
     started = time.time()
     args = build_parser().parse_args(argv)
     lane = args.lane
+    tree_request = None
+    if args.trees_experiment:
+        import trees_identical_workload
+        tree_request = trees_identical_workload.prepare_request(args, spec)
     if args.opponents_only and (not args.arms or args.ours_only or args.ours_ab or args.host_digest):
         raise SystemExit("--opponents-only requires --arms and forbids ours options")
     # Default: our arm(s) only. Opponents race only on an explicit ask:
@@ -1134,6 +1147,7 @@ def main(argv=None):
           "CTR config split and prep marker; DEVIATION 2634 is observable)"
           % (lane, os.environ["MOJOLEARN_CTR_TRACE"]), flush=True)
 
+    # cpu-route: benchmark file decoding and task-fixture formation before estimator runtime.
     data = spec.load_with_fallback(dataset, size, args.rows)
     cfg = spec.lane_config(lane, size)
     task = spec.task_of(lane)
@@ -1158,6 +1172,13 @@ def main(argv=None):
             spec.emit_note(lane, ["*"], "mismatch", float(i + 1), why)
         spec.emit_note(lane, ["*"], "objectives", float(len(task["objectives"])),
                        "; ".join("%s %s" % kv for kv in sorted(task["objectives"].items())))
+    if tree_request is not None:
+        # File decoding/task construction above is a CPU-only input step.
+        # Public buffer preparation, fit, sync and output consumption are
+        # inside the new route's whole-operation timer, including warmup.
+        spec.prepare_anomaly_labels(lane, data)
+        return trees_identical_workload.run(tree_request, args, data, cfg,
+                                            sys.modules[__name__])
     spec.prepare_cuml_labels(data)
     spec.prepare_anomaly_labels(lane, data)
     if not args.opponents_only:

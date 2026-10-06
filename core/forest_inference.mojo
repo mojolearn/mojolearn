@@ -32,6 +32,7 @@ from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
+from core.forest_experiments import (T31_PACKED_A, T31_PACKED_B, T32_SHARED_ROWS, T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
 
 
 @always_inline
@@ -59,7 +60,7 @@ def finite_key(value: Float32) -> UInt32:
 # F13 M3 2026-10-06 MEASURED shared rows, depths4/11/9skew:
 # cold B/A0.9331/0.9938/0.9510, repeat1.1091/0.9332/0.9786; quality equal.
 # One warmup+score, mixed; FAST opt-in remains OFF. ab-20261006/repairs-54c1f35a5/F13.
-comptime FOREST_SHARED_ROWS = is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
+comptime FOREST_SHARED_ROWS = T32_SHARED_ROWS or is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
 comptime FOREST_SHARED_ROW_CAPACITY = 256
 
 #: DEVIATION 2964 (lane/forest-groves-row-schedule, 2026-09-17): the groves
@@ -98,7 +99,7 @@ comptime FOREST_ROW_THREADS_SABOTAGE = is_defined["MOJOLEARN_FOREST_ROW_THREADS_
 # 1.2171/1.1355/1.2153, repeat0.9942/0.9843/0.9526, refit1.0205/1.0163/1.0359.
 # Quality/output survival equal; one warmup+score. Mixed/cold regression:
 # no new promotion; existing cross-mode layout default retained, OFF escape above.
-comptime FOREST_PACKED_NODES = not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]()
+comptime FOREST_PACKED_NODES = T31_PACKED_A or (not T31_PACKED_B and not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]())
 
 
 @always_inline
@@ -455,7 +456,25 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
     """
     if n_rows == 0:
         return
+    comptime if T35_LEAF_REUSE or T36_FINITE_STAGE:
+        _launch_forest_leaf_reuse[RF_INPUT, GROVE, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
+        return
+    comptime if T34_CHUNK_FOLD:
+        ctx.enqueue_function[forest_chunk_kernel[RF_INPUT, PACKED]](
+            doff.unsafe_ptr(), dcol.unsafe_ptr(), dthr.unsafe_ptr(), dleft.unsafe_ptr(),
+            dleaf.unsafe_ptr(), dx.unsafe_ptr(), dout.unsafe_ptr(), Int32(n_rows), Int32(n_features), Int32(n_outputs), Int32(trees),
+            grid_dim=(n_rows*n_outputs+127)//128, block_dim=128)
+        return
     comptime if GROVE:
+        comptime if T33_COST_SCHEDULE:
+            # Compare feature cache lines with live logical tree lanes. All
+            # neighboring shapes use this work/cache estimate, never a board row.
+            var feature_lines = (n_features * 4 + 63) // 64
+            if feature_lines <= max(1, min(trees, 32) // 8):
+                _launch_grove_rows[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
+            else:
+                _launch_grove_lanes[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
+            return
         comptime if FOREST_ROW_THREADS:
             if n_features <= FOREST_ROW_THREADS_MAX_FEATURES:
                 _launch_grove_rows[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
@@ -1062,3 +1081,298 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
     if not out_ok:
         raise Error("forest inference prototype requires finite Float32 values")
     return result^
+
+# T34/T35/T38, C50. Default OFF through core.forest_experiments.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+@always_inline
+def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](
+    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
+    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
+    row: Int, features: Int, outputs: Int, trees: Int, channel: Int,
+) -> Float32:
+    var total = Float32(0)
+    comptime if T34_CHUNK_FOLD:
+        var chunk = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
+        var first = 0
+        while first < trees:
+            for i in range(FOREST_CHUNK):
+                chunk[i] = 0
+                if first + i < trees:
+                    var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, first+i, row, features)
+                    chunk[i] = leaves.unsafe_load(node*outputs+channel)
+            total = forest_add(total, forest_chunk_sum(chunk))
+            first += FOREST_CHUNK
+    elif GROVE:
+        var sums = InlineArray[Float32, 32](fill=Float32(0))
+        for lane in range(32):
+            var tree = lane
+            while tree < trees:
+                var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, row, features)
+                sums[lane] = forest_add(sums[lane], leaves.unsafe_load(node*outputs+channel))
+                tree += 32
+        var step = 16
+        while step > 0:
+            for i in range(step):
+                sums[i] = forest_add(sums[i], sums[i+step])
+            step //= 2
+        total = sums[0]
+    else:
+        for tree in range(trees):
+            var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, row, features)
+            total = forest_add(total, leaves.unsafe_load(node*outputs+channel))
+    return forest_chunk_finish(total, trees)
+
+
+def forest_chunk_kernel[RF_INPUT: Bool, PACKED: Bool](
+    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
+    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], rows: Int32, features: Int32, outputs: Int32, trees: Int32,
+):
+    var u = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if u < Int(rows)*Int(outputs):
+        output.unsafe_store(u, forest_prediction_value[RF_INPUT, False, PACKED](offsets, columns, thresholds, left, leaves, x,
+            u//Int(outputs), Int(features), Int(outputs), Int(trees), u%Int(outputs)))
+
+
+def forest_leaf_ids_kernel[RF_INPUT: Bool, PACKED: Bool](
+    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
+    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin], ids: MutPointer[Int32, MutAnyOrigin],
+    row_start: Int32, rows: Int32, features: Int32, trees: Int32,
+    bad: MutPointer[Int32, MutAnyOrigin],
+):
+    var u = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if u < Int(rows)*Int(trees):
+        comptime if T36_FINITE_STAGE:
+            # The mandatory leaf-ID preparation owns full rows, including every
+            # unused feature. Prediction cannot return until this flag is read.
+            if u%Int(trees) == 0:
+                for c in range(Int(features)):
+                    var value = x.unsafe_load((Int(row_start)+u//Int(trees))*Int(features)+c)
+                    if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
+                        _ = Atomic.max(bad, Int32(1))
+        ids.unsafe_store(u, Int32(reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x,
+            u%Int(trees), Int(row_start)+u//Int(trees), Int(features))))
+
+
+@always_inline
+def _forest_leaf_value[GROVE: Bool](ids: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],
+                                   row: Int, k: Int, nt: Int, channel: Int) -> Float32:
+    var total = Float32(0)
+    var sums = InlineArray[Float32, 32](fill=Float32(0))
+    comptime if T34_CHUNK_FOLD:
+        var first = 0
+        while first < nt:
+            for i in range(32):
+                sums[i] = 0
+                if first+i < nt:
+                    sums[i] = leaves.unsafe_load(Int(ids.unsafe_load(row*nt+first+i))*k+channel)
+            total = forest_add(total, forest_chunk_sum(sums))
+            first += 32
+    elif GROVE:
+        for lane in range(32):
+            var t = lane
+            while t < nt:
+                sums[lane] = forest_add(sums[lane], leaves.unsafe_load(Int(ids.unsafe_load(row*nt+t))*k+channel))
+                t += 32
+        var step = 16
+        while step > 0:
+            for i in range(step):
+                sums[i] = forest_add(sums[i], sums[i+step])
+            step //= 2
+        total = sums[0]
+    else:
+        for t in range(nt):
+            total = forest_add(total, leaves.unsafe_load(Int(ids.unsafe_load(row*nt+t))*k+channel))
+    return forest_chunk_finish(total, nt)
+
+
+def forest_leaf_reduce_kernel[GROVE: Bool](
+    ids: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], row_start: Int32, rows: Int32, outputs: Int32, trees: Int32,
+):
+    var u = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    var k = Int(outputs)
+    var nt = Int(trees)
+    if u >= Int(rows)*k:
+        return
+    var row = u//k
+    var channel = u%k
+    output.unsafe_store((Int(row_start)+row)*k+channel, _forest_leaf_value[GROVE](ids, leaves, row, k, nt, channel))
+
+
+def _launch_forest_leaf_reuse[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](
+    ctx: DeviceContext, mut offsets: DeviceBuffer[DType.int32], mut columns: DeviceBuffer[DType.int32],
+    mut thresholds: DeviceBuffer[DType.float32], mut left: DeviceBuffer[DType.int32],
+    mut leaves: DeviceBuffer[DType.float32], mut x: DeviceBuffer[DType.float32], mut output: DeviceBuffer[DType.float32],
+    rows: Int, features: Int, outputs: Int, trees: Int,
+) raises:
+    # 8 MiB bounded leaf-ID scratch; one complete row is the minimum atomic
+    # unit. No feature or dataset boundary. Every output shares the walk.
+    var capacity = max(1, min(rows, (8*1024*1024)//max(4*trees, 1)))
+    var ids = ctx.enqueue_create_buffer[DType.int32](capacity*trees)
+    var bad = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(bad, Int32(0))
+    var first = 0
+    while first < rows:
+        var count = min(capacity, rows-first)
+        _launch_leaf_ids[RF_INPUT, PACKED](ctx, offsets, columns, thresholds, left, x, ids, bad, first, count, features, trees)
+        ctx.enqueue_function[forest_leaf_reduce_kernel[GROVE]](
+            ids.unsafe_ptr(), leaves.unsafe_ptr(), output.unsafe_ptr(), Int32(first), Int32(count), Int32(outputs), Int32(trees),
+            grid_dim=(count*outputs+127)//128, block_dim=128)
+        first += count
+    # Scratch must remain alive through the last dependent fold.
+    var host_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=host_bad.unsafe_ptr(), src_buf=bad)
+    ctx.synchronize()
+    if host_bad.unsafe_ptr().unsafe_load(0) != 0:
+        raise Error("resident forest requires finite Float32 values")
+    _ = host_bad^
+    _ = bad^
+    _ = ids^
+
+
+def forest_labels_kernel[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](
+    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
+    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin], codes: MutPointer[Int32, MutAnyOrigin],
+    bad: MutPointer[Int32, MutAnyOrigin], rows: Int32, features: Int32, outputs: Int32, trees: Int32,
+):
+    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if row >= Int(rows):
+        return
+    var best = 0
+    var best_value = Float32(0)
+    for c in range(Int(outputs)):
+        var value = forest_prediction_value[RF_INPUT, GROVE, PACKED](offsets, columns, thresholds, left, leaves, x,
+            row, Int(features), Int(outputs), Int(trees), c)
+        if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
+            _ = Atomic.max(bad, Int32(1))
+            codes.unsafe_store(row, Int32(-1))
+            return
+        if c == 0 or value > best_value:
+            best = c
+            best_value = value
+    codes.unsafe_store(row, Int32(best))
+
+# T32×T33×T35×T36: physical schedule of the bounded leaf preparation.
+# Arithmetic is solely in the following output fold. Shared tiles carry all
+# feature bits and every required row is checked, including unused columns.
+def forest_leaf_ids_grouped_kernel[RF_INPUT: Bool, PACKED: Bool](
+    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
+    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin], ids: MutPointer[Int32, MutAnyOrigin],
+    row_start: Int32, rows: Int32, features: Int32, trees: Int32, bad: MutPointer[Int32, MutAnyOrigin],
+):
+    var tid = Int(thread_idx.x)
+    var group = tid//32
+    var lane = tid%32
+    var first = Int(block_idx.x)*4
+    var row = first+group
+    var tiled = False
+    var shared = stack_allocation[4*FOREST_SHARED_ROW_CAPACITY, Float32, address_space=AddressSpace.SHARED]()
+    comptime if FOREST_SHARED_ROWS:
+        if Int(features) <= FOREST_SHARED_ROW_CAPACITY:
+            tiled = True
+            var u = tid
+            while u < 4*Int(features):
+                var r = first+u//Int(features)
+                if r < Int(rows):
+                    shared.unsafe_store(u, x.unsafe_load((Int(row_start)+r)*Int(features)+u%Int(features)))
+                u += 128
+    barrier()
+    if row < Int(rows):
+        comptime if T36_FINITE_STAGE:
+            var c = lane
+            while c < Int(features):
+                var value = shared.unsafe_load(group*Int(features)+c) if tiled else x.unsafe_load((Int(row_start)+row)*Int(features)+c)
+                if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
+                    _ = Atomic.max(bad, Int32(1))
+                c += 32
+        var tree = lane
+        while tree < Int(trees):
+            var node = 0
+            if tiled:
+                node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, shared, tree, group, Int(features))
+            else:
+                node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, Int(row_start)+row, Int(features))
+            ids.unsafe_store(row*Int(trees)+tree, Int32(node))
+            tree += 32
+
+
+def forest_leaf_ids_row_kernel[RF_INPUT: Bool, PACKED: Bool](
+    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
+    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin], ids: MutPointer[Int32, MutAnyOrigin],
+    row_start: Int32, rows: Int32, features: Int32, trees: Int32, bad: MutPointer[Int32, MutAnyOrigin],
+):
+    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if row < Int(rows):
+        comptime if T36_FINITE_STAGE:
+            for c in range(Int(features)):
+                var value = x.unsafe_load((Int(row_start)+row)*Int(features)+c)
+                if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
+                    _ = Atomic.max(bad, Int32(1))
+        for tree in range(Int(trees)):
+            ids.unsafe_store(row*Int(trees)+tree, Int32(reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left,
+                x, tree, Int(row_start)+row, Int(features))))
+
+
+def _launch_leaf_ids[RF_INPUT: Bool, PACKED: Bool](ctx: DeviceContext,
+    mut offsets: DeviceBuffer[DType.int32], mut columns: DeviceBuffer[DType.int32],
+    mut thresholds: DeviceBuffer[DType.float32], mut left: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32], mut ids: DeviceBuffer[DType.int32], mut bad: DeviceBuffer[DType.int32],
+    first: Int, rows: Int, features: Int, trees: Int) raises:
+    comptime if T33_COST_SCHEDULE:
+        if (features*4+63)//64 <= max(1, min(trees, 32)//8):
+            ctx.enqueue_function[forest_leaf_ids_row_kernel[RF_INPUT, PACKED]](
+                offsets.unsafe_ptr(), columns.unsafe_ptr(), thresholds.unsafe_ptr(), left.unsafe_ptr(), x.unsafe_ptr(), ids.unsafe_ptr(),
+                Int32(first), Int32(rows), Int32(features), Int32(trees), bad.unsafe_ptr(), grid_dim=(rows+127)//128, block_dim=128)
+            return
+    ctx.enqueue_function[forest_leaf_ids_grouped_kernel[RF_INPUT, PACKED]](
+        offsets.unsafe_ptr(), columns.unsafe_ptr(), thresholds.unsafe_ptr(), left.unsafe_ptr(), x.unsafe_ptr(), ids.unsafe_ptr(),
+        Int32(first), Int32(rows), Int32(features), Int32(trees), bad.unsafe_ptr(), grid_dim=(rows+3)//4, block_dim=128)
+
+
+def forest_leaf_labels_kernel[GROVE: Bool](ids: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],
+    codes: MutPointer[Int32, MutAnyOrigin], bad: MutPointer[Int32, MutAnyOrigin], first: Int32, rows: Int32, outputs: Int32, trees: Int32):
+    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if row < Int(rows):
+        var best = 0
+        var best_value = Float32(0)
+        for c in range(Int(outputs)):
+            var value = _forest_leaf_value[GROVE](ids, leaves, row, Int(outputs), Int(trees), c)
+            if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
+                _ = Atomic.max(bad, Int32(1))
+                return
+            if c == 0 or value > best_value:
+                best = c
+                best_value = value
+        codes.unsafe_store(Int(first)+row, Int32(best))
+
+
+def launch_forest_leaf_labels[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](ctx: DeviceContext,
+    mut offsets: DeviceBuffer[DType.int32], mut columns: DeviceBuffer[DType.int32], mut thresholds: DeviceBuffer[DType.float32],
+    mut left: DeviceBuffer[DType.int32], mut leaves: DeviceBuffer[DType.float32], mut x: DeviceBuffer[DType.float32],
+    mut codes: DeviceBuffer[DType.int32], rows: Int, features: Int, outputs: Int, trees: Int) raises:
+    var capacity = max(1, min(rows, (8*1024*1024)//max(4*trees, 1)))
+    var ids = ctx.enqueue_create_buffer[DType.int32](capacity*trees)
+    var bad = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(bad, Int32(0))
+    var first = 0
+    while first < rows:
+        var count = min(capacity, rows-first)
+        _launch_leaf_ids[RF_INPUT, PACKED](ctx, offsets, columns, thresholds, left, x, ids, bad, first, count, features, trees)
+        ctx.enqueue_function[forest_leaf_labels_kernel[GROVE]](ids.unsafe_ptr(), leaves.unsafe_ptr(), codes.unsafe_ptr(), bad.unsafe_ptr(),
+            Int32(first), Int32(count), Int32(outputs), Int32(trees), grid_dim=(count+127)//128, block_dim=128)
+        first += count
+    var host_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=host_bad.unsafe_ptr(), src_buf=bad)
+    ctx.synchronize()
+    if host_bad.unsafe_ptr().unsafe_load(0) != 0:
+        raise Error("resident forest requires finite Float32 values")
+    _ = host_bad^
+    _ = bad^
+    _ = ids^

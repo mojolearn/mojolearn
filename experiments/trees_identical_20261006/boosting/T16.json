@@ -1,0 +1,115 @@
+{
+  "id": "T16",
+  "title": "Resident lossguide frontier",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "source_integrated_uncompiled_scoped",
+  "default": "OFF",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T16",
+      "A": [
+        "MOJOLEARN_TREES_T16=1"
+      ],
+      "B": [],
+      "scope": "Retain exact scored-node partition-stat snapshots using the existing resident-frontier implementation, including its bounded node arena.",
+      "production_callers": [
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+        "gbdt/methods/doc_parallel_boosting.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-lossguide:taxi",
+        "gbdt-lossguide:istella",
+        "gbdt-lossguide:taxireg",
+        "gbdt-lossguide:istellareg",
+        "gbdt-lossguide:year"
+      ]
+    }
+  ],
+  "supported_estimators": [
+    "gbdt-lossguide"
+  ],
+  "production_callers": [
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+    "gbdt/methods/doc_parallel_boosting.mojo"
+  ],
+  "implementation": "Retain exact scored-node partition-stat snapshots using the existing resident-frontier implementation, including its bounded node arena.",
+  "overlap_ids": [
+    "C47"
+  ],
+  "remaining_gaps": [
+    "Existing I17 scope/timings remain historical; the new full-workload T16 selector is unmeasured.",
+    "Host scheduling already holds frontier state; placement arm does not alter its graph."
+  ],
+  "demonstrated_runtime_reach": false,
+  "qualification": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false
+  },
+  "harness": {
+    "entry": "bench/speed/forest_speed_arm.py",
+    "selection": "tools/trees_identical_ideas.py",
+    "arguments": [
+      "--trees-experiment",
+      "T16",
+      "--trees-arm",
+      "A|B",
+      "--trees-recipe",
+      "<full-workload-recipe>",
+      "--trees-artifact",
+      "<frozen-artifact>",
+      "--trees-recipe-facts",
+      "<retained-facts.json>",
+      "--trees-result",
+      "<result.json>"
+    ],
+    "execution": "FORBIDDEN in this source-only task",
+    "whole_operation": "tools/trees_identical_workload.py",
+    "separate_spans": [
+      "fit",
+      "cold inference",
+      "repeated inference"
+    ]
+  },
+  "recipes": {
+    "saved_sources": [
+      "tools/bench_board.py:TREE_LANES/TREE_TASK_LANES/TREE_TASK_DATASETS",
+      "tools/speed_gbdt_arm.py:lane_config/TASK_LANES",
+      "experiments/performance_ideas/README.md"
+    ],
+    "lanes": [
+      "gbdt-lossguide"
+    ],
+    "dataset_version": null,
+    "dataset_hash": null,
+    "actual_dimensions": null,
+    "estimator_settings": null,
+    "full_dataset_intrinsic_caps_audited": false,
+    "coverage_status": "PENDING full retained recipe facts; no reduced substitution"
+  },
+  "modular_prerequisites": "No unsupported compiler/runtime technique introduced; toolchain support not demonstrated because compilation is forbidden.",
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_keys": [
+    "gbdt-lossguide"
+  ],
+  "full_dataset_recipes": [
+    "gbdt-lossguide:taxi",
+    "gbdt-lossguide:istella",
+    "gbdt-lossguide:taxireg",
+    "gbdt-lossguide:istellareg",
+    "gbdt-lossguide:year"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

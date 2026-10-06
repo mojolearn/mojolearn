@@ -287,9 +287,28 @@ struct _Forest(Movable):
     var slot: DeviceBuffer[DType.int32]
     var meta: DeviceBuffer[DType.int32]
 
+    var table_width: Int
+    var cached_table: Optional[DeviceBuffer[DType.float32]]
+    var cached_dead: Optional[DeviceBuffer[DType.int32]]
+    var cached_leaf_mf: Optional[DeviceBuffer[DType.int32]]
+    var cached_leaf_n: Optional[DeviceBuffer[DType.int32]]
+    var cached_rank: Optional[DeviceBuffer[DType.int32]]
+    var cached_nint: Optional[DeviceBuffer[DType.int32]]
+    var cached_needl: Optional[DeviceBuffer[DType.uint64]]
+    var cached_needr: Optional[DeviceBuffer[DType.uint64]]
+
     def __init__(out self, ctx: DeviceContext, forest: List[Int], tscale: Int, d: Int, n_trees: Int, k: Int,
                  n_nodes: Int) raises:
         """Uploads the forest and runs parent+mark and slot."""
+        self.table_width = 0
+        self.cached_table = Optional[DeviceBuffer[DType.float32]]()
+        self.cached_dead = Optional[DeviceBuffer[DType.int32]]()
+        self.cached_leaf_mf = Optional[DeviceBuffer[DType.int32]]()
+        self.cached_leaf_n = Optional[DeviceBuffer[DType.int32]]()
+        self.cached_rank = Optional[DeviceBuffer[DType.int32]]()
+        self.cached_nint = Optional[DeviceBuffer[DType.int32]]()
+        self.cached_needl = Optional[DeviceBuffer[DType.uint64]]()
+        self.cached_needr = Optional[DeviceBuffer[DType.uint64]]()
         self.offsets = _up_i32(ctx, forest[0], n_trees + 1)
         self.colid = _up_i32(ctx, forest[1], n_nodes)
         self.quesval = _up_f32(ctx, forest[2], n_nodes)
@@ -370,10 +389,17 @@ def _rows_per_chunk(n: Int, n_trees: Int, slots: Int, k: Int) -> Int:
 
 def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi: Int, n: Int, d: Int, n_trees: Int,
                      k: Int, n_nodes: Int, slots: Int, width: Int) raises:
-    """phi (Float32 n x d x k) = the TreeSHAP values of the n rows of x."""
     var ctx = _ctx()
     var fo = _Forest(ctx, forest, tscale, d, n_trees, k, n_nodes)
     var cover = _up_i32(ctx, cover_in, n_nodes)
+    _tree_shap_values_on(ctx, fo, cover, x, phi, n, d, n_trees, k, n_nodes, slots, width)
+    _ = cover^
+    _ = fo^
+
+
+def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceBuffer[DType.int32],
+                         x: Int, phi: Int, n: Int, d: Int, n_trees: Int, k: Int, n_nodes: Int,
+                         slots: Int, width: Int) raises:
     var dx = _up_f32(ctx, x, n * d)
     var dphi = ctx.enqueue_create_buffer[DType.float32](n * d * k)
     var rows = _rows_per_chunk(n, n_trees, slots, k)
@@ -385,37 +411,38 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
     var use_table = False
     comptime if SHAP_TABLE:
         use_table = width == 8 and n_nodes * tm * (nm + 1) * 4 <= TABLE_BYTES
-    var tsz = n_nodes * tm * nm if use_table else 1
-    var table = ctx.enqueue_create_buffer[DType.float32](tsz)
-    var dead = ctx.enqueue_create_buffer[DType.int32](n_nodes * tm if use_table else 1)
-    var leaf_mf = ctx.enqueue_create_buffer[DType.int32](n_nodes * nm if use_table else 1)
-    var leaf_n = ctx.enqueue_create_buffer[DType.int32](n_nodes if use_table else 1)
-    comptime if SHAP_TABLE:
-        if use_table:
-            var tu0 = n_nodes * tm
-            ctx.enqueue_function[table_kernel[8]](
-                Int32(tu0), Int32(tm), Int32(nm), fo.offsets.unsafe_ptr(), Int32(n_trees), fo.colid.unsafe_ptr(),
-                fo.left.unsafe_ptr(), fo.parent.unsafe_ptr(), cover.unsafe_ptr(), fo.tscale.unsafe_ptr(),
-                leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
-                fo.meta.unsafe_ptr(), grid_dim=_grid(tu0), block_dim=TPB)
-    # SHAP_TREE_TAB: ranks, internal counts and per-element decision masks
     var tt = False
     comptime if SHAP_TREE_TAB:
         tt = use_table
-    var rank = ctx.enqueue_create_buffer[DType.int32](n_nodes if tt else 1)
-    var nint = ctx.enqueue_create_buffer[DType.int32](n_trees if tt else 1)
-    var needl = ctx.enqueue_create_buffer[DType.uint64](n_nodes * nm if tt else 1)
-    var needr = ctx.enqueue_create_buffer[DType.uint64](n_nodes * nm if tt else 1)
-    comptime if SHAP_TREE_TAB:
-        if tt:
-            ctx.enqueue_function[tab_rank_kernel](
-                Int32(n_trees), fo.offsets.unsafe_ptr(), fo.left.unsafe_ptr(), rank.unsafe_ptr(), nint.unsafe_ptr(),
-                grid_dim=_grid(n_trees), block_dim=TPB)
-            ctx.enqueue_function[tab_need_kernel](
-                Int32(n_nodes), Int32(nm), fo.offsets.unsafe_ptr(), Int32(n_trees), fo.colid.unsafe_ptr(),
-                fo.left.unsafe_ptr(), fo.parent.unsafe_ptr(), rank.unsafe_ptr(), leaf_mf.unsafe_ptr(),
-                leaf_n.unsafe_ptr(), nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(),
-                grid_dim=_grid(n_nodes), block_dim=TPB)
+    if fo.table_width != width:
+        var tsz = n_nodes * tm * nm if use_table else 1
+        fo.cached_table = ctx.enqueue_create_buffer[DType.float32](tsz)
+        fo.cached_dead = ctx.enqueue_create_buffer[DType.int32](n_nodes * tm if use_table else 1)
+        fo.cached_leaf_mf = ctx.enqueue_create_buffer[DType.int32](n_nodes * nm if use_table else 1)
+        fo.cached_leaf_n = ctx.enqueue_create_buffer[DType.int32](n_nodes if use_table else 1)
+        comptime if SHAP_TABLE:
+            if use_table:
+                var tu0 = n_nodes * tm
+                ctx.enqueue_function[table_kernel[8]](
+                    Int32(tu0), Int32(tm), Int32(nm), fo.offsets.unsafe_ptr(), Int32(n_trees), fo.colid.unsafe_ptr(),
+                    fo.left.unsafe_ptr(), fo.parent.unsafe_ptr(), cover.unsafe_ptr(), fo.tscale.unsafe_ptr(),
+                    fo.cached_leaf_mf.value().unsafe_ptr(), fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(),
+                    fo.meta.unsafe_ptr(), grid_dim=_grid(tu0), block_dim=TPB)
+        fo.cached_rank = ctx.enqueue_create_buffer[DType.int32](n_nodes if tt else 1)
+        fo.cached_nint = ctx.enqueue_create_buffer[DType.int32](n_trees if tt else 1)
+        fo.cached_needl = ctx.enqueue_create_buffer[DType.uint64](n_nodes * nm if tt else 1)
+        fo.cached_needr = ctx.enqueue_create_buffer[DType.uint64](n_nodes * nm if tt else 1)
+        comptime if SHAP_TREE_TAB:
+            if tt:
+                ctx.enqueue_function[tab_rank_kernel](
+                    Int32(n_trees), fo.offsets.unsafe_ptr(), fo.left.unsafe_ptr(), fo.cached_rank.value().unsafe_ptr(), fo.cached_nint.value().unsafe_ptr(),
+                    grid_dim=_grid(n_trees), block_dim=TPB)
+                ctx.enqueue_function[tab_need_kernel](
+                    Int32(n_nodes), Int32(nm), fo.offsets.unsafe_ptr(), Int32(n_trees), fo.colid.unsafe_ptr(),
+                    fo.left.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.cached_rank.value().unsafe_ptr(), fo.cached_leaf_mf.value().unsafe_ptr(),
+                    fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_nint.value().unsafe_ptr(), fo.cached_needl.value().unsafe_ptr(), fo.cached_needr.value().unsafe_ptr(),
+                    grid_dim=_grid(n_nodes), block_dim=TPB)
+        fo.table_width = width
     var r0 = 0
     while r0 < n:
         var rc = min(rows, n - r0)
@@ -433,16 +460,16 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
                             Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
                             fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(),
                             fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(),
-                            leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
-                            nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
+                            fo.cached_leaf_mf.value().unsafe_ptr(), fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(),
+                            fo.cached_nint.value().unsafe_ptr(), fo.cached_needl.value().unsafe_ptr(), fo.cached_needr.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
                             buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
                     else:
                         ctx.enqueue_function[tab_row_kernel[0]](
                             Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
                             fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(),
                             fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(),
-                            leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
-                            nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
+                            fo.cached_leaf_mf.value().unsafe_ptr(), fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(),
+                            fo.cached_nint.value().unsafe_ptr(), fo.cached_needl.value().unsafe_ptr(), fo.cached_needr.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
                             buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
             elif use_table:
                 ran = True
@@ -450,15 +477,15 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
                     ctx.enqueue_function[table_row_kernel[TABLE_ACC]](
                         Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
                         fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(),
-                        fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), leaf_mf.unsafe_ptr(),
-                        leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
+                        fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), fo.cached_leaf_mf.value().unsafe_ptr(),
+                        fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
                         buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
                 else:
                     ctx.enqueue_function[table_row_kernel[0]](
                         Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
                         fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(),
-                        fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), leaf_mf.unsafe_ptr(),
-                        leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
+                        fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), fo.cached_leaf_mf.value().unsafe_ptr(),
+                        fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
                         buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
         comptime for wi in range(6):
             comptime W = 8 << wi
@@ -476,15 +503,62 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
         r0 += rc
     ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=phi), src_buf=dphi)
     _check_meta(ctx, fo.meta, 0)
-    _ = rank^
-    _ = nint^
-    _ = needl^
-    _ = needr^
-    _ = table^
-    _ = dead^
-    _ = leaf_mf^
-    _ = leaf_n^
     _ = buf^
     _ = dx^
-    _ = cover^
-    _ = fo^
+
+
+
+# T44/C51: registry owns the exact explanation snapshot, never a mutable X
+# address. Handles are monotonic; bindings hold the GIL through synchronous work.
+# Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+struct _CachedShap(Movable):
+    var forest: _Forest
+    var cover: DeviceBuffer[DType.int32]
+    var d: Int
+    var trees: Int
+    var k: Int
+    var nodes: Int
+
+    def __init__(out self, ctx: DeviceContext, forest: List[Int], tscale: Int, cover: Int, d: Int, trees: Int, k: Int, nodes: Int) raises:
+        self.forest = _Forest(ctx, forest, tscale, d, trees, k, nodes)
+        self.cover = _up_i32(ctx, cover, nodes)
+        self.d = d
+        self.trees = trees
+        self.k = k
+        self.nodes = nodes
+        ctx.synchronize()
+
+    def values(mut self, x: Int, phi: Int, n: Int, slots: Int, width: Int) raises:
+        _tree_shap_values_on(_ctx(), self.forest, self.cover, x, phi, n, self.d, self.trees, self.k, self.nodes, slots, width)
+
+struct _ShapCache(Defaultable, Movable):
+    var entries: Dict[Int, _CachedShap]
+    var next_id: Int
+    def __init__(out self):
+        self.entries = Dict[Int, _CachedShap]()
+        self.next_id = 1
+
+comptime _SHAP_CACHE = _Global[StorageType=_ShapCache, name="MojoTreesT44GPUCache", init_fn=_ShapCache.__init__]
+
+def shap_cache_create(forest: List[Int], tscale: Int, cover: Int, d: Int, n_trees: Int, k: Int, n_nodes: Int) raises -> Int:
+    var state = _SHAP_CACHE.get_or_create_ptr()
+    if state[].next_id == 9223372036854775807:
+        raise Error("TreeSHAP cache handle space exhausted")
+    var handle = state[].next_id
+    state[].next_id += 1
+    state[].entries[handle] = _CachedShap(_ctx(), forest, tscale, cover, d, n_trees, k, n_nodes)
+    return handle
+
+def shap_cache_values(handle: Int, x: Int, phi: Int, n: Int, slots: Int, width: Int) raises:
+    var state = _SHAP_CACHE.get_or_create_ptr()
+    if handle not in state[].entries:
+        raise Error("unknown or released TreeSHAP cache handle")
+    state[].entries[handle].values(x, phi, n, slots, width)
+
+def shap_cache_release(handle: Int) raises:
+    var state = _SHAP_CACHE.get_or_create_ptr()
+    if handle not in state[].entries:
+        raise Error("unknown or released TreeSHAP cache handle")
+    _ctx().synchronize()
+    var released = state[].entries.pop(handle)
+    _ = released^

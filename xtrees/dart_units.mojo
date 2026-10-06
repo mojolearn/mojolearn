@@ -31,6 +31,7 @@ from checks.numerics import (
 )
 from checks.soft_f64 import sf64_add, sf64_mul, sf64_from_f32
 from xtrees.ops import draw
+from gbdt.trees_identical_switches import T30
 
 comptime DART_PIN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
@@ -142,7 +143,7 @@ def dart_drop_unit(e: Int, base: UInt64, skip: Bool, thr: I64P, flags: I32P):
 @always_inline
 def dart_row_unit(
     i: Int, nn: Int, kk: Int, t: Int, kind: Int32, node_cap: Int, flags: I32P, coef: F32P, nodes: U16P,
-    values: F32P, y: F32P, score: F32P, dsum: F32P, target: F32P, h: F32P,
+    values: F32P, y: F32P, score: F32P, dsum: F32P, target: F32P, h: F32P, cached: F32P,
 ):
     """Row i: dsum[c, i] = the dropped trees' coef x leaf value (trees in
     ascending order), taken off the score; then main's `gradients` (kind 0
@@ -152,7 +153,12 @@ def dart_row_unit(
         for it in range(t):
             if flags[it] != Int32(0):
                 var j = it * kk + c
-                s = _mul_add(coef[j], values[j * node_cap + Int(nodes[j * nn + i])], s)
+                var value: Float32
+                comptime if T30:
+                    value = cached[j * nn + i]
+                else:
+                    value = values[j * node_cap + Int(nodes[j * nn + i])]
+                s = _mul_add(coef[j], value, s)
         dsum[c * nn + i] = s
         score[c * nn + i] = _sub(score[c * nn + i], s)
     if kind == Int32(2):
@@ -296,13 +302,17 @@ def dart_newton_unit(
 @always_inline
 def dart_add_unit(
     e: Int, class_off: Int, row_off: Int, voff: Int, factor: Float32, shrink: Float32, nodes: U16P, values: F32P,
-    dsum: F32P, score: F32P,
+    dsum: F32P, score: F32P, cached: F32P,
 ):
     """score[c, i] = (score[c, i] + factor * dsum[c, i]) + shrink *
     values[leaf of row i]: the dropped trees back at their rescaled weight
     and the new tree at its shrinkage, in that order."""
     var ci = class_off + e
-    score[ci] = _mul_add(shrink, values[voff + Int(nodes[row_off + e])], _mul_add(factor, dsum[ci], score[ci]))
+    var value = values[voff + Int(nodes[row_off + e])]
+    comptime if T30:
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        cached[row_off + e] = value
+    score[ci] = _mul_add(shrink, value, _mul_add(factor, dsum[ci], score[ci]))
 
 
 @always_inline

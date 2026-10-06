@@ -1,0 +1,205 @@
+{
+  "id": "T28",
+  "title": "CTR scratch, stable segment and compatible prefix-statistic reuse",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "source_integrated_uncompiled_scoped",
+  "default": "OFF",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T28",
+      "A": [
+        "MOJOLEARN_TREES_T28=1"
+      ],
+      "B": [],
+      "scope": "New IDENTICAL selector reuses fit-owned categorical prep/scratch; independent sort arm derives feature-frequency counts from the existing stable last-permutation category segments.",
+      "production_callers": [
+        "gbdt/ctrs/fast_prep.mojo",
+        "gbdt/train.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-categorical:taxicat",
+        "gbdt-categorical:criteo",
+        "gbdt-ordered:taxi",
+        "gbdt-ordered:istella",
+        "gbdt-ordered:taxireg",
+        "gbdt-ordered:istellareg"
+      ]
+    },
+    {
+      "name": "T28_SORT",
+      "A": [
+        "MOJOLEARN_TREES_T28_SORT=1"
+      ],
+      "B": [],
+      "scope": "Stable last-permutation category segments reused for frequency counts",
+      "production_callers": [
+        "gbdt/ctrs/fast_prep.mojo",
+        "gbdt/train.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-categorical:taxicat",
+        "gbdt-categorical:criteo",
+        "gbdt-ordered:taxi",
+        "gbdt-ordered:istella",
+        "gbdt-ordered:taxireg",
+        "gbdt-ordered:istellareg"
+      ]
+    },
+    {
+      "name": "T28_PREFIX",
+      "A": [
+        "MOJOLEARN_TREES_T28_PREFIX=1"
+      ],
+      "B": [],
+      "scope": "Retain exact exclusive-prefix denominators, flagged sample weights and gathered target across compatible simple-CTR config groups in the same stable category/permutation generation. Invalidate on every bins build, target/order upload and frequency pass; numerator and priors remain per config. Enables fit-owned prep as its required lifetime. No additional row-sized cache allocation.",
+      "production_callers": [
+        "gbdt/train.mojo:train",
+        "gbdt/ctrs/fast_prep.mojo:fast_dependent_ctrs",
+        "gbdt/ctrs/fast_prep.mojo:CtrPrepFast.borders_ctrs"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-categorical:taxicat",
+        "gbdt-categorical:criteo",
+        "gbdt-ordered:taxi",
+        "gbdt-ordered:istella",
+        "gbdt-ordered:taxireg",
+        "gbdt-ordered:istellareg"
+      ]
+    },
+    {
+      "name": "T28_ALL",
+      "A": [
+        "MOJOLEARN_TREES_T28=1",
+        "MOJOLEARN_TREES_T28_SORT=1",
+        "MOJOLEARN_TREES_T28_PREFIX=1"
+      ],
+      "B": [],
+      "scope": "Complete supported T28 simple-CTR configuration: fit scratch, frequency segment reuse and compatible exclusive-prefix sufficient statistics.",
+      "production_callers": [
+        "gbdt/train.mojo:train",
+        "gbdt/ctrs/fast_prep.mojo:fast_dependent_ctrs",
+        "gbdt/ctrs/fast_prep.mojo:CtrPrepFast.borders_ctrs"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-categorical:taxicat",
+        "gbdt-categorical:criteo",
+        "gbdt-ordered:taxi",
+        "gbdt-ordered:istella",
+        "gbdt-ordered:taxireg",
+        "gbdt-ordered:istellareg"
+      ]
+    }
+  ],
+  "supported_estimators": [
+    "gbdt-categorical",
+    "gbdt-ordered"
+  ],
+  "production_callers": [
+    "gbdt/ctrs/fast_prep.mojo",
+    "gbdt/train.mojo",
+    "gbdt/train.mojo:train",
+    "gbdt/ctrs/fast_prep.mojo:fast_dependent_ctrs",
+    "gbdt/ctrs/fast_prep.mojo:CtrPrepFast.borders_ctrs"
+  ],
+  "implementation": "New IDENTICAL selector reuses fit-owned categorical prep/scratch; independent sort arm derives feature-frequency counts from the existing stable last-permutation category segments. T28_PREFIX reuses exclusive-prefix denominator/sample state over an unchanged category/permutation/target generation. Existing fit-owned output columns feed every compatible tree; no global mutable-input cache or target leakage is introduced.",
+  "overlap_ids": [],
+  "remaining_gaps": [
+    "Public tree-tensor CTR training is refused at gbdt/options/catboost_options.mojo:TCatFeatureParams.check when max_tensor_complexity != 1; it requires tree_ctr_datasets_visitor integration. gbdt/train.mojo:TrainedModel.tensor_ctr_registry states public combination training does not yet populate the registry. An isolated cache in internal tensor helpers would not reach public training. This is an existing representation/caller prerequisite, not an implemented or claimed T28 cache.",
+    "Simple-CTR outputs already live for the fit and are reused by all trees. New T28_PREFIX reuse saves rebuilds between compatible config groups in that prep; a single group has no prefix-reuse benefit.",
+    "Inputs/permutation/targets belong to one fit; no cross-fit mutable-input cache. Every feature/permutation rebuild and target replacement invalidates prefix scratch.",
+    "Strict ordered-prefix exclusions, target-border/bucket numerators and requested priors are retained."
+  ],
+  "demonstrated_runtime_reach": false,
+  "qualification": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false
+  },
+  "harness": {
+    "entry": "bench/speed/forest_speed_arm.py",
+    "selection": "tools/trees_identical_ideas.py",
+    "arguments": [
+      "--trees-experiment",
+      "T28",
+      "--trees-arm",
+      "A|B",
+      "--trees-recipe",
+      "<full-workload-recipe>",
+      "--trees-artifact",
+      "<frozen-artifact>",
+      "--trees-recipe-facts",
+      "<retained-facts.json>",
+      "--trees-result",
+      "<result.json>"
+    ],
+    "execution": "FORBIDDEN in this source-only task",
+    "whole_operation": "tools/trees_identical_workload.py",
+    "separate_spans": [
+      "fit",
+      "cold inference",
+      "repeated inference"
+    ]
+  },
+  "recipes": {
+    "saved_sources": [
+      "tools/bench_board.py:TREE_LANES/TREE_TASK_LANES/TREE_TASK_DATASETS",
+      "tools/speed_gbdt_arm.py:lane_config/TASK_LANES",
+      "experiments/performance_ideas/README.md"
+    ],
+    "lanes": [
+      "gbdt-categorical",
+      "gbdt-ordered"
+    ],
+    "dataset_version": null,
+    "dataset_hash": null,
+    "actual_dimensions": null,
+    "estimator_settings": null,
+    "full_dataset_intrinsic_caps_audited": false,
+    "coverage_status": "PENDING full retained recipe facts; no reduced substitution"
+  },
+  "modular_prerequisites": "No unsupported compiler/runtime technique introduced; toolchain support not demonstrated because compilation is forbidden.",
+  "unsupported_prerequisites": [
+    {
+      "scope": "tree-tensor cross-tree prefix cache",
+      "dependency": "public tree_ctr_datasets_visitor and fit-owned tensor/permutation identity; max_tensor_complexity>1 currently refused",
+      "source_paths": [
+        "gbdt/options/catboost_options.mojo:TCatFeatureParams.check",
+        "gbdt/train.mojo:TrainedModel.tensor_ctr_registry",
+        "gbdt/methods/batch_feature_tensor_builder.mojo:TBatchFeatureTensorBuilder"
+      ],
+      "reason": "Existing internal tensor table/staging helpers do not provide a public fit caller for a cache; removing the explicit refusal would falsely advertise unsupported training."
+    }
+  ],
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_keys": [
+    "gbdt-categorical",
+    "gbdt-ordered"
+  ],
+  "full_dataset_recipes": [
+    "gbdt-categorical:taxicat",
+    "gbdt-categorical:criteo",
+    "gbdt-ordered:taxi",
+    "gbdt-ordered:istella",
+    "gbdt-ordered:taxireg",
+    "gbdt-ordered:istellareg"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

@@ -378,6 +378,9 @@ which already priced the width for the reduction this scratch feeds.
 =================================================================
 """
 
+from ensemble.tree_moments import moment_pair, moment_finish
+from checks.soft_f64 import sf64_from_f32
+from ensemble.tree_identical_ideas import T01, T01_REPLICAS, T04, T05, T07, T08, T08_LAYOUT, T08_BITS, T14, T14_EXACT, C48
 from std.gpu import (
     WARP_SIZE,
     block_dim,
@@ -521,7 +524,7 @@ same forest (`-D MOJOLEARN_RF_SPLIT_CANDIDATES_OFF`).
 build default; its forests move run to run and its build gate refuses).
 """
 
-comptime SMALL_NODE_FUSED_DEFAULT = (
+comptime SMALL_NODE_FUSED_DEFAULT = T05 or (
     BUILD_MODE == NUMERIC_FAST
     and is_defined["MOJOLEARN_RF_SMALL_NODE_FUSED"]()
 )
@@ -643,7 +646,8 @@ comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 # same-context warmup and one scored fit, rc=0; prior identity evidence reused.
 # Default OFF: generated representative fits do not qualify the full datasets.
 # Evidence: measurements/20261006/index.json.
-comptime IDN_RF_STREAM_REPLICAS = BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_STREAM_REPLICAS"]()
+comptime IDN_RF_STREAM_REPLICAS = T01 or (BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_STREAM_REPLICAS"]())
+comptime STREAM_REPLICAS = T01_REPLICAS if T01 else 4
 
 struct _StreamReplicaAudit(Defaultable, Movable):
     var launches: Int64
@@ -1798,46 +1802,52 @@ def launch_node_split_kernel[
     if n_blocks_dimx == 0:
         return
 
-    # `:155-160` -- `constexpr int reset_tpb = 128;`
-    comptime RESET_TPB = 128
-    var reset_grid = ceildiv(n_work_items, RESET_TPB)
-    comptime k_reset = reset_local_left_counts_kernel[dtype]
-    log_launch_ctx(ctx, "nodesplit_reset")
-    ctx.enqueue_function[k_reset](
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        scratch.local_nleft.unsafe_ptr(),
-        Int32(n_work_items),
-        grid_dim=reset_grid if reset_grid > 0 else 1,
-        block_dim=RESET_TPB,
-    )
+    comptime if C48 and sabotage == 0:
+        ctx.enqueue_function[publish_histogram_child_counts_kernel[dtype]](
+            splits.unsafe_origin_cast[MutAnyOrigin](), Int32(n_work_items),
+            grid_dim=max(1,ceildiv(n_work_items,128)), block_dim=128,
+        )
+    else:
+        # `:155-160` -- `constexpr int reset_tpb = 128;`
+        comptime RESET_TPB = 128
+        var reset_grid = ceildiv(n_work_items, RESET_TPB)
+        comptime k_reset = reset_local_left_counts_kernel[dtype]
+        log_launch_ctx(ctx, "nodesplit_reset")
+        ctx.enqueue_function[k_reset](
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            scratch.local_nleft.unsafe_ptr(),
+            Int32(n_work_items),
+            grid_dim=reset_grid if reset_grid > 0 else 1,
+            block_dim=RESET_TPB,
+        )
 
-    # `:161-164`
-    comptime count_sab = 1 if sabotage == 7 else 0
-    comptime k_count = count_local_left_kernel[
-        dtype, label_dtype, TPB, count_sab
-    ]
-    log_launch_ctx(ctx, "nodesplit_count_left")
-    ctx.enqueue_function[k_count](
-        argsp.unsafe_origin_cast[MutAnyOrigin](),
-        work_items.unsafe_origin_cast[MutAnyOrigin](),
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        workload_info.unsafe_origin_cast[MutAnyOrigin](),
-        scratch.local_nleft.unsafe_ptr(),
-        grid_dim=n_blocks_dimx,
-        block_dim=TPB,
-    )
+        # `:161-164`
+        comptime count_sab = 1 if sabotage == 7 else 0
+        comptime k_count = count_local_left_kernel[
+            dtype, label_dtype, TPB, count_sab
+        ]
+        log_launch_ctx(ctx, "nodesplit_count_left")
+        ctx.enqueue_function[k_count](
+            argsp.unsafe_origin_cast[MutAnyOrigin](),
+            work_items.unsafe_origin_cast[MutAnyOrigin](),
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            workload_info.unsafe_origin_cast[MutAnyOrigin](),
+            scratch.local_nleft.unsafe_ptr(),
+            grid_dim=n_blocks_dimx,
+            block_dim=TPB,
+        )
 
-    # DEVIATION 127: their 64-bit atomic landed straight in the field;
-    # ours widens the shadow into it here, before `:113` reads it.
-    comptime k_pub = publish_local_left_counts_kernel[dtype]
-    log_launch_ctx(ctx, "nodesplit_publish")
-    ctx.enqueue_function[k_pub](
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        scratch.local_nleft.unsafe_ptr(),
-        Int32(n_work_items),
-        grid_dim=reset_grid if reset_grid > 0 else 1,
-        block_dim=RESET_TPB,
-    )
+        # DEVIATION 127: their 64-bit atomic landed straight in the field;
+        # ours widens the shadow into it here, before `:113` reads it.
+        comptime k_pub = publish_local_left_counts_kernel[dtype]
+        log_launch_ctx(ctx, "nodesplit_publish")
+        ctx.enqueue_function[k_pub](
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            scratch.local_nleft.unsafe_ptr(),
+            Int32(n_work_items),
+            grid_dim=reset_grid if reset_grid > 0 else 1,
+            block_dim=RESET_TPB,
+        )
 
     # `:166-206` -- the fused segmented scan. "Each slot corresponds to
     # one thread lane in the tiled workload_info layout. workload_info is
@@ -2158,6 +2168,52 @@ def leaf_kernel[
     comptime if sabotage != 2:
         if not node.IsLeaf():
             return
+
+    comptime if T14 and not O.BinT.is_classification:
+        # V1 row-ID keyed fixed logical partials, independent of row sorting,
+        # block/warp width, bootstrap order and vendor. EXACT sub-arm retains
+        # the incumbent numeric values but uses the balanced integer tree.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        var partials = stack_allocation[128,O.BinT,address_space=AddressSpace.SHARED]()
+        var moments = stack_allocation[128,UInt64,address_space=AddressSpace.SHARED]()
+        var lane = Int(thread_idx.x)
+        while lane < 128:
+            partials[unsafe_offset=lane] = O.BinT()
+            lane += Int(block_dim.x)
+        barrier()
+        var pos = range.begin + Int(thread_idx.x)
+        while pos < range.begin + range.count:
+            var row = dataset.row_ids[unsafe_offset=pos]
+            var stat = row
+            comptime if sampled_labels:
+                stat = Int32(pos)
+            var label = dataset.labels[unsafe_offset=Int(stat)]
+            var logical = Int(row) % 128
+            objective.IncrementHistogram(partials.unsafe_offset(logical),Int32(1),Int32(0),label,dataset,stat)
+            pos += Int(block_dim.x)
+        barrier()
+        comptime if not T14_EXACT:
+            lane = Int(thread_idx.x)
+            while lane < 128:
+                moments[unsafe_offset=lane] = sf64_from_f32(objective.LabelMoment(partials[unsafe_offset=lane]).cast[DType.float32]())
+                lane += Int(block_dim.x)
+            barrier()
+        var distance = 64
+        while distance > 0:
+            lane = Int(thread_idx.x)
+            while lane < distance:
+                partials[unsafe_offset=lane] = partials[unsafe_offset=lane] + partials[unsafe_offset=lane+distance]
+                comptime if not T14_EXACT:
+                    moments[unsafe_offset=lane] = moment_pair(moments[unsafe_offset=lane],moments[unsafe_offset=lane+distance])
+                lane += Int(block_dim.x)
+            barrier()
+            distance //= 2
+        if Int(thread_idx.x) == 0:
+            comptime if T14_EXACT:
+                O.SetLeafVector(partials,dataset.num_outputs,leaves.unsafe_offset(Int(dataset.num_outputs)*node_id),objective.Scales())
+            else:
+                leaves[unsafe_offset=Int(dataset.num_outputs)*node_id] = moment_finish(moments[unsafe_offset=0],partials[unsafe_offset=0].Weight(objective.Scales()).cast[DType.float32]()).cast[O.DataT]()
+        return
 
     # `:228-232`
     var tid = Int(thread_idx.x)
@@ -2965,7 +3021,7 @@ def launch_build_histograms_kernel[
             comptime ENABLED = (
                 IDN_RF_STREAM_REPLICAS or USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
             )
-            comptime COPIES = 4 if IDN_RF_STREAM_REPLICAS else 1
+            comptime COPIES = STREAM_REPLICAS if IDN_RF_STREAM_REPLICAS else 1
             comptime if ENABLED and (SMEM_COPIES == 1 or IDN_RF_STREAM_REPLICAS) and sabotage == 0:
                 # Actual bin bytes bound the four-column replicated footprint.
                 # Above16KiB the original single-column replica/fallback path runs.
@@ -3004,7 +3060,7 @@ def launch_build_histograms_kernel[
                 sabotage,
                 True,
                 sampled_labels,
-                4 if IDN_RF_STREAM_REPLICAS else SMEM_COPIES,
+                STREAM_REPLICAS if IDN_RF_STREAM_REPLICAS else SMEM_COPIES,
             ]
             log_launch_ctx(ctx, "histogram_binned")
             ctx.enqueue_function[ksb](
@@ -3388,6 +3444,7 @@ def small_node_split_kernel[
     TPB: Int,
     SLOTS: Int,
     sampled_labels: Bool = False,
+    candidates: Bool = False,
 ](
     argsp: MutPointer[FindBestSplitsArgs[O], MutAnyOrigin],
     work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
@@ -3396,6 +3453,7 @@ def small_node_split_kernel[
     mutex: MutPointer[Int32, MutAnyOrigin],
     splits: MutPointer[Split[O.DataT], MutAnyOrigin],
     max_n_bins: Int32,
+    cand: MutPointer[Split[O.DataT], MutAnyOrigin],
 ):
     """FAST (`SMALL_NODE_FUSED_DEFAULT`): `build_histograms_kernel` and
     `find_best_splits_kernel` for ONE (node, column) in ONE block, for a
@@ -3478,13 +3536,17 @@ def small_node_split_kernel[
     )
     sp.pure = Int32(1) if node_pure else Int32(0)
     barrier()
-    sp.eval_best_split(
-        split_scratch,
-        splits.unsafe_offset(Int(nid)),
-        mutex.unsafe_offset(Int(nid)),
-        quantiles_for_split,
-        n_bins,
-    )
+    comptime if candidates:
+        sp.eval_best_split_to_candidate(
+            split_scratch,
+            cand.unsafe_offset(Int(nid)*Int(grid_dim.y)+Int(block_idx.y)),
+            quantiles_for_split, n_bins,
+        )
+    else:
+        sp.eval_best_split(
+            split_scratch, splits.unsafe_offset(Int(nid)),
+            mutex.unsafe_offset(Int(nid)), quantiles_for_split, n_bins,
+        )
     if Int(block_idx.y) == 0 and Int(thread_idx.x) == 0:
         Split[O.DataT].pure_flag_ptr(splits.unsafe_offset(Int(nid)))[
             unsafe_offset=0
@@ -3748,6 +3810,90 @@ def merge_split_candidates_kernel[
         splits[unsafe_offset=nid] = reg.copy()
 
 
+def merge_split_candidates_parallel_kernel[dtype: DType](
+    splits: MutPointer[Split[dtype], MutAnyOrigin],
+    cand: MutPointer[Split[dtype], MutAnyOrigin],
+    n_nodes: Int32, n_cand: Int32,
+):
+    """T07/C45: logical 128-lane binary tree over distinct-feature winners.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    Invalid/NaN scores never enter: Gain admits only gain > its finite gate.
+    Within-feature plateau merging still uses the incumbent kernel/scan order.
+    """
+    var nid = Int(block_idx.x)
+    var lane = Int(thread_idx.x)
+    if nid >= Int(n_nodes):
+        return
+    var page = stack_allocation[128, Split[dtype], address_space=AddressSpace.SHARED]()
+    var mine = Split[dtype]()
+    var y = lane
+    while y < Int(n_cand):
+        var c = cand.unsafe_load(nid*Int(n_cand)+y)
+        if c.IsValid() and mine.update(c.quesval,c.colid,c.best_metric_val,c.global_nLeft,c.split_start,c.split_end):
+            mine.pure = c.pure
+        y += 128
+    page[unsafe_offset=lane] = mine
+    barrier()
+    var step = 64
+    while step > 0:
+        if lane < step:
+            var c = page[unsafe_offset=lane+step]
+            var best = page[unsafe_offset=lane]
+            if c.IsValid() and best.update(c.quesval,c.colid,c.best_metric_val,c.global_nLeft,c.split_start,c.split_end):
+                best.pure = c.pure
+            page[unsafe_offset=lane] = best
+        barrier()
+        step //= 2
+    if lane == 0:
+        var best = splits.unsafe_load(nid)
+        var c = page[unsafe_offset=0]
+        if c.IsValid() and best.update(c.quesval,c.colid,c.best_metric_val,c.global_nLeft,c.split_start,c.split_end):
+            best.pure = c.pure
+            splits.unsafe_store(nid,best)
+
+
+def clear_live_histogram_bins_kernel[O: ObjectiveLike](
+    argsp: MutPointer[HistogramArgs[O], MutAnyOrigin],
+    hist: MutPointer[O.BinT, MutAnyOrigin],
+    columns: MutPointer[Int32, MutAnyOrigin],
+    col_start: Int32, max_bins: Int32,
+):
+    """T04: initialize exactly the cells both histogram and score consume.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    All padded node tasks are cleared too, including zero-row tasks; no reader
+    sees stale storage. Actual per-feature bins exclude unused max_bins tails.
+    """
+    ref args = argsp[unsafe_offset=0]
+    var node = Int(block_idx.x)
+    var col = Int(columns.unsafe_load(node*Int(args.dataset.n_sampled_cols)+Int(col_start)+Int(block_idx.y)))
+    var outputs = Int(args.objective.NumClasses())
+    var count = Int(args.quantiles.n_bins_array.unsafe_load(col))*outputs
+    var base = (node*Int(grid_dim.y)+Int(block_idx.y))*Int(max_bins)*outputs
+    var i = Int(thread_idx.x)
+    while i < count:
+        hist.unsafe_store(base+i,O.BinT())
+        i += Int(block_dim.x)
+
+
+def publish_histogram_child_counts_kernel[dtype: DType](
+    splits: MutPointer[Split[dtype], MutAnyOrigin], n: Int32,
+):
+    """C48: the single-device histogram already counted this exact row set.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    Reuse that exact count as the stable scan's right-child offset. This
+    removes reset/count/publish and its redundant feature-row pass. The scan
+    still scatters rows, labels and weights together in original child order.
+    """
+    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if i < Int(n):
+        var sp = splits.unsafe_load(i)
+        sp.local_nLeft = sp.global_nLeft if sp.IsValid() else Int64(0)
+        splits.unsafe_store(i,sp)
+
+
 # ===========================================================================
 # DEVIATION 314 -- the dataset is binned ONCE per forest.
 # ===========================================================================
@@ -3788,10 +3934,21 @@ def bin_dataset_kernel[dtype: DType](
             Int64(i) * row_stride + Int64(Int(col)) * col_stride
         )
         var b = lower_bound_aspace(q, n_bins, data[unsafe_offset=off])
-        if bins_row_major != 0:
-            bins[unsafe_offset = i * Int(n_cols) + Int(col)] = UInt8(Int(b))
+        comptime if T08:
+            var bin_offset = Int(col)*Int(n_rows)+i
+            comptime if T08_LAYOUT == 1:
+                bin_offset = i*Int(n_cols)+Int(col)
+            elif T08_LAYOUT == 3:
+                bin_offset = ((i//32)*Int(n_cols)+Int(col))*32+i%32
+            comptime if T08_BITS == 16:
+                bins.unsafe_bitcast[UInt16]()[unsafe_offset=bin_offset] = UInt16(Int(b))
+            else:
+                bins[unsafe_offset=bin_offset] = UInt8(Int(b))
         else:
-            bins[unsafe_offset=off] = UInt8(Int(b))
+            if bins_row_major != 0:
+                bins[unsafe_offset = i * Int(n_cols) + Int(col)] = UInt8(Int(b))
+            else:
+                bins[unsafe_offset=off] = UInt8(Int(b))
         i += stride
 
 

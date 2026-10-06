@@ -182,7 +182,7 @@ def _ordered_gather_kernel(
         out_b.unsafe_store(i, bins.unsafe_load(row))
 
 
-def _ordered_apply_kernel(
+def _ordered_apply_kernel[PERMUTATION_BINS: Bool = False](
     permutation: MutPointer[UInt32, MutAnyOrigin],
     bins: MutPointer[UInt32, MutAnyOrigin],
     leaves: MutPointer[Float32, MutAnyOrigin],
@@ -192,7 +192,9 @@ def _ordered_apply_kernel(
     var size = Int(size_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < size:
-        var row = Int(permutation.unsafe_load(i))
+        var row = i
+        comptime if not PERMUTATION_BINS:
+            row = Int(permutation.unsafe_load(i))
         var leaf = Int(bins.unsafe_load(row))
         # Upstream Rescale(step) precedes AppendModels. Round the stored
         # model value before adding, so exported-model prediction and the

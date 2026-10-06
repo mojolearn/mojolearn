@@ -1,0 +1,118 @@
+{
+  "id": "T25",
+  "title": "Apply-prefix leaf index reuse",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "source_integrated_uncompiled_scoped",
+  "default": "OFF",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T25",
+      "A": [
+        "MOJOLEARN_TREES_T25=1"
+      ],
+      "B": [],
+      "scope": "Grow cached permutation leaf coverage to each apply prefix while retaining estimation-prefix exclusion; completion reads permutation-order leaf IDs directly.",
+      "production_callers": [
+        "gbdt/methods/ordered_boosting.mojo",
+        "gbdt/methods/dynamic_boosting.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-categorical:taxicat",
+        "gbdt-categorical:criteo",
+        "gbdt-ordered:taxi",
+        "gbdt-ordered:istella",
+        "gbdt-ordered:taxireg",
+        "gbdt-ordered:istellareg"
+      ]
+    }
+  ],
+  "supported_estimators": [
+    "gbdt-ordered",
+    "gbdt-categorical"
+  ],
+  "production_callers": [
+    "gbdt/methods/ordered_boosting.mojo",
+    "gbdt/methods/dynamic_boosting.mojo"
+  ],
+  "implementation": "Grow cached permutation leaf coverage to each apply prefix while retaining estimation-prefix exclusion; completion reads permutation-order leaf IDs directly.",
+  "overlap_ids": [],
+  "remaining_gaps": [
+    "Batched ordered estimation only; nonbatch and other mappings use incumbent.",
+    "Extra apply-prefix preparation is inside fit and may cost more than saved gathers."
+  ],
+  "demonstrated_runtime_reach": false,
+  "qualification": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false
+  },
+  "harness": {
+    "entry": "bench/speed/forest_speed_arm.py",
+    "selection": "tools/trees_identical_ideas.py",
+    "arguments": [
+      "--trees-experiment",
+      "T25",
+      "--trees-arm",
+      "A|B",
+      "--trees-recipe",
+      "<full-workload-recipe>",
+      "--trees-artifact",
+      "<frozen-artifact>",
+      "--trees-recipe-facts",
+      "<retained-facts.json>",
+      "--trees-result",
+      "<result.json>"
+    ],
+    "execution": "FORBIDDEN in this source-only task",
+    "whole_operation": "tools/trees_identical_workload.py",
+    "separate_spans": [
+      "fit",
+      "cold inference",
+      "repeated inference"
+    ]
+  },
+  "recipes": {
+    "saved_sources": [
+      "tools/bench_board.py:TREE_LANES/TREE_TASK_LANES/TREE_TASK_DATASETS",
+      "tools/speed_gbdt_arm.py:lane_config/TASK_LANES",
+      "experiments/performance_ideas/README.md"
+    ],
+    "lanes": [
+      "gbdt-ordered",
+      "gbdt-categorical"
+    ],
+    "dataset_version": null,
+    "dataset_hash": null,
+    "actual_dimensions": null,
+    "estimator_settings": null,
+    "full_dataset_intrinsic_caps_audited": false,
+    "coverage_status": "PENDING full retained recipe facts; no reduced substitution"
+  },
+  "modular_prerequisites": "No unsupported compiler/runtime technique introduced; toolchain support not demonstrated because compilation is forbidden.",
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_keys": [
+    "gbdt-ordered",
+    "gbdt-categorical"
+  ],
+  "full_dataset_recipes": [
+    "gbdt-categorical:taxicat",
+    "gbdt-categorical:criteo",
+    "gbdt-ordered:taxi",
+    "gbdt-ordered:istella",
+    "gbdt-ordered:taxireg",
+    "gbdt-ordered:istellareg"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

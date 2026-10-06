@@ -1,0 +1,124 @@
+{
+  "id": "C50_GB",
+  "title": "GB exact packed and bounded inference",
+  "source_status": "source_integrated_unverified",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "default": "OFF",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "C50_GB",
+      "A": [
+        "MOJOLEARN_TREES_C50_GB_PACKED=1"
+      ],
+      "B": [],
+      "scope": [
+        "GB"
+      ],
+      "production_callers": [
+        "gbdt/resident_model.mojo:ResidentGbdtModel._apply",
+        "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo:add_non_symmetric_trees_packed",
+        "core/gbdt_host_predict.mojo:gbdt_host_predict"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-symmetric:taxi",
+        "gbdt-symmetric:istella",
+        "gbdt-symmetric:taxireg",
+        "gbdt-symmetric:istellareg",
+        "gbdt-symmetric:year",
+        "gbdt-symmetric-1000:taxi",
+        "gbdt-symmetric-1000:istella",
+        "gbdt-symmetric-1000:taxireg",
+        "gbdt-symmetric-1000:istellareg",
+        "gbdt-symmetric-1000:year",
+        "gbdt-depthwise:taxi",
+        "gbdt-depthwise:istella",
+        "gbdt-depthwise:taxireg",
+        "gbdt-depthwise:istellareg",
+        "gbdt-depthwise:year",
+        "gbdt-lossguide:taxi",
+        "gbdt-lossguide:istella",
+        "gbdt-lossguide:taxireg",
+        "gbdt-lossguide:istellareg",
+        "gbdt-lossguide:year",
+        "gbdt-rank-yetirank:istellarank",
+        "gbdt-rank-pairlogit:istellarank",
+        "gbdt-multiclass:taximc",
+        "gbdt-multiclass:istellamc",
+        "gbdt-categorical:taxicat",
+        "gbdt-categorical:criteo",
+        "gbdt-ordered:taxi",
+        "gbdt-ordered:istella",
+        "gbdt-ordered:taxireg",
+        "gbdt-ordered:istellareg"
+      ]
+    }
+  ],
+  "production_callers": [
+    "gbdt/resident_model.mojo:_apply",
+    "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo:add_non_symmetric_trees_packed",
+    "core/gbdt_host_predict.mojo:gbdt_host_predict",
+    "bindings/_mojolearn_gbdt.mojo:gbdt_resident_predict_binding"
+  ],
+  "supported_estimators": [
+    "GB"
+  ],
+  "recipe_keys": [
+    "GB",
+    "OT"
+  ],
+  "overlap_ids": [
+    "C50"
+  ],
+  "implementation": "Oblivious GPU prediction reuses exact shared packed metadata in bounded consecutive mixed-depth tree launches; host uses exact vector split records, byte-budgeted row tiles and row-owned ordered folds. Non-symmetric GPU prediction packs eight integer node words, traverses once per row/tree for all output planes in model-byte-bounded tree groups, retains exact cursor adds in ascending tree order; host uses exact vector node records within original checked walk/refusal order. Bias, NaN/categorical preparation and link functions remain existing callers.",
+  "remaining_gaps": [
+    "Standalone non-resident oblivious legacy prediction does not use the resident model arm; public resident prediction and host archive inference are wired.",
+    "Packing/preparation cost is inside inference boundary; no speed improvement is established.",
+    "Categorical, ordered and ranking resident models retain existing preprocessing/archive guards. Unsupported combined simple-CTR/tensor-CTR or missing archive-table configurations are not newly supported."
+  ],
+  "demonstrated_runtime_reach": false,
+  "evidence": [],
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "full_dataset_recipes": [
+    "gbdt-symmetric:taxi",
+    "gbdt-symmetric:istella",
+    "gbdt-symmetric:taxireg",
+    "gbdt-symmetric:istellareg",
+    "gbdt-symmetric:year",
+    "gbdt-symmetric-1000:taxi",
+    "gbdt-symmetric-1000:istella",
+    "gbdt-symmetric-1000:taxireg",
+    "gbdt-symmetric-1000:istellareg",
+    "gbdt-symmetric-1000:year",
+    "gbdt-depthwise:taxi",
+    "gbdt-depthwise:istella",
+    "gbdt-depthwise:taxireg",
+    "gbdt-depthwise:istellareg",
+    "gbdt-depthwise:year",
+    "gbdt-lossguide:taxi",
+    "gbdt-lossguide:istella",
+    "gbdt-lossguide:taxireg",
+    "gbdt-lossguide:istellareg",
+    "gbdt-lossguide:year",
+    "gbdt-rank-yetirank:istellarank",
+    "gbdt-rank-pairlogit:istellarank",
+    "gbdt-multiclass:taximc",
+    "gbdt-multiclass:istellamc",
+    "gbdt-categorical:taxicat",
+    "gbdt-categorical:criteo",
+    "gbdt-ordered:taxi",
+    "gbdt-ordered:istella",
+    "gbdt-ordered:taxireg",
+    "gbdt-ordered:istellareg"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}
