@@ -1,7 +1,7 @@
 {
   "schema": "mojolearn.saved-quality-review/1",
-  "observed_at": "2026-10-06T16:47:47.999863+00:00",
-  "scope": "Native next9 regression/GMM pairs, Apple2resample pairs, and Apple next9reg pairs as captured; saved taskmetrics only",
+  "observed_at": "2026-10-06T16:56:21.154708+00:00",
+  "scope": "Native/Apple regression,GMM,resample and authorized expanded-reg pairs as captured; saved taskmetrics only; original12classicalpairs reviewed separately",
   "no_fits_builds_or_verification_reruns": true,
   "gate_sources": [
     "tools/af_quality.py rel_tol=1e-3 abs_tol=1e-6 and recorded metric directions",
@@ -11,12 +11,12 @@
   ],
   "sample_policy": "One excludedwarmup and one scored execution perarm; no extra samples demanded",
   "counts": {
-    "PENDING": 14,
+    "PENDING": 16,
     "TASK_METRIC_GATE_PASSED": 1
   },
-  "completed_pairs_reviewed": 15,
+  "completed_pairs_reviewed": 17,
   "baseline_comparison_counts": {
-    "SAME": 15
+    "SAME": 17
   },
   "unfinished_or_failed_receipts": [
     {
@@ -24,6 +24,12 @@
       "workload": "more:gmm@dataset=taxi",
       "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/03f523ab5951d08a295b/attempts/attempt-0001/receipt.json",
       "status": "MEASUREMENT_FAILED"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pa-reg@dataset=taxi",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/expanded-reg/runs/d74a68acdb33bdd77426/attempts/attempt-0001/receipt.json",
+      "status": "RUNNING"
     }
   ],
   "read_errors": [],
@@ -142,7 +148,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "AMD timing and same-arm cross-column IDENTICAL identity",
         "Complete affected estimator/configuration coverage"
@@ -253,7 +259,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "AMD timing and same-arm cross-column IDENTICAL identity",
         "Complete affected estimator/configuration coverage"
@@ -364,7 +370,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "AMD timing and same-arm cross-column IDENTICAL identity",
         "Complete affected estimator/configuration coverage"
@@ -475,7 +481,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "AMD timing and same-arm cross-column IDENTICAL identity",
         "Complete affected estimator/configuration coverage"
@@ -586,7 +592,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "AMD timing and same-arm cross-column IDENTICAL identity",
         "Complete affected estimator/configuration coverage"
@@ -697,7 +703,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "AMD timing and same-arm cross-column IDENTICAL identity",
         "Complete affected estimator/configuration coverage"
@@ -808,7 +814,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "AMD timing and same-arm cross-column IDENTICAL identity",
         "Complete affected estimator/configuration coverage"
@@ -919,7 +925,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "AMD timing and same-arm cross-column IDENTICAL identity",
         "Complete affected estimator/configuration coverage"
@@ -1010,7 +1016,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "Independent same-full-workload opponent quality unless explicitly qualified above",
         "Complete affected estimator/configuration coverage"
@@ -1101,12 +1107,248 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "Independent same-full-workload opponent quality unless explicitly qualified above",
         "Complete affected estimator/configuration coverage"
       ],
       "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/resample-full/runs/047898b203cef197f8fa/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-reg@dataset=istella",
+      "mode": "fast",
+      "lane": "sgd-reg",
+      "dataset": "istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/22c62826ae044e079978/attempt-0001/receipt.json",
+      "receipt_sha256": "8a4cfe78800af675a721d75a1c8945d15013f4ac0d6d9ad68d0e84eae07d3e56",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.33167739764062487,
+          "rmse": 0.6821632151900116
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.33167739764062487,
+          "rmse": 0.6821632151900116
+        }
+      },
+      "output_sha256": {
+        "A": "1fd52e899139455eb21fccdeb39d886e3412155366b9d60322ae821f0fce63f7",
+        "B": "1fd52e899139455eb21fccdeb39d886e3412155366b9d60322ae821f0fce63f7"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.33167739764062487,
+            0.33167739764062487,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.6821632151900116,
+            0.6821632151900116,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "algos/sgd-reg/istella/page",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": null,
+          "quality": {}
+        },
+        {
+          "race": "algos/sgd-reg/istella/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": -2.196547126433484e+24,
+            "rmse": 1238028636580.1003
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/expanded-reg/runs/22c62826ae044e079978/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-reg@dataset=taxi",
+      "mode": "fast",
+      "lane": "sgd-reg",
+      "dataset": "taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d3adb34325456bfba29c/attempt-0001/receipt.json",
+      "receipt_sha256": "e5169cf48c45e5dc99e4b75bc9397634c80454b56117cc09f8ac8a42185e6d91",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9087707711113641,
+          "rmse": 4.698170947980658
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9087707711113641,
+          "rmse": 4.698170947980658
+        }
+      },
+      "output_sha256": {
+        "A": "a4f2fa5d11a6b665a7afbd976ae66716e92eb2de7a58ad3a266559b4113756c1",
+        "B": "a4f2fa5d11a6b665a7afbd976ae66716e92eb2de7a58ad3a266559b4113756c1"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9087707711113641,
+            0.9087707711113641,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            4.698170947980658,
+            4.698170947980658,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "algos/sgd-reg/taxi/page",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": null,
+          "quality": {}
+        },
+        {
+          "race": "algos/sgd-reg/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.8806807489108228,
+            "rmse": 5.501638497936155
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/expanded-reg/runs/d3adb34325456bfba29c/attempts/attempt-0001/receipt.json"
     },
     {
       "vendor": "apple",
@@ -1222,7 +1464,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "Independent same-full-workload opponent quality unless explicitly qualified above",
         "Complete affected estimator/configuration coverage"
@@ -1333,7 +1575,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "Independent same-full-workload opponent quality unless explicitly qualified above",
         "Complete affected estimator/configuration coverage"
@@ -1444,7 +1686,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "Independent same-full-workload opponent quality unless explicitly qualified above",
         "Complete affected estimator/configuration coverage"
@@ -1555,7 +1797,7 @@
         }
       ],
       "quality_assessment": "PENDING",
-      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
       "remaining_requirements": [
         "Independent same-full-workload opponent quality unless explicitly qualified above",
         "Complete affected estimator/configuration coverage"

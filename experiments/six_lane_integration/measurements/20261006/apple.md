@@ -5,7 +5,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 
 | Candidate | Mode | Measurement status | Captured pairs |
 |---|---|---|---:|
-| AF.X.complete-proposed | fast | FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED | 0 |
+| AF.X.complete-proposed | fast | FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION, QUALITY_FAILED | 16 |
 | I.X.complete-proposed | identical | PENDING_MEASUREMENT | 0 |
 
 ## Captured evidence
@@ -27,12 +27,16 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | AF.X.complete-proposed | apple/apple-fast | classical2/linearsvr@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/71dfc119e59c074352bb/attempt-0001/receipt.json |
 | AF.X.complete-proposed | apple/apple-fast | classical2/ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/94c802682d07720f1572/attempt-0001/receipt.json |
 | AF.X.complete-proposed | apple/apple-fast | classical2/gmm@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/d4f24411b4f604c84997/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple/apple-fast | algos/sgd-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/22c62826ae044e079978/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple/apple-fast | algos/pa-reg@dataset=istella/attempt-0001 | full_workload | IN_PROGRESS | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/6fcf310a716926c2d853/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple/apple-fast | algos/sgd-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d3adb34325456bfba29c/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple/apple-fast | algos/pa-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d74a68acdb33bdd77426/attempt-0001/receipt.json |
 
 ## Campaign notes
 
 - A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.
 - These are combined-configuration full workloads, not completed individual constituent experiments.
-- Saved independent quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit.
+- Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.
 - One excluded warmup and one scored sample per arm. Original failed attempts are retained.
 - NVIDIA PTX and AMD have no compatible retained artifacts; missing-only build question remains pending.
 - IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.

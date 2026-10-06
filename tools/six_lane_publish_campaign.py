@@ -18,7 +18,10 @@ SOURCES=[('apple',ROOT/'apple/captured/runs'),
          ('apple',ROOT/'apple/captured/kmeans-repair2/runs'),
          ('apple',ROOT/'apple/captured/resample-full/runs'),
          ('apple',ROOT/'apple/captured/reg-full/runs'),
+         ('apple',ROOT/'apple/captured/expanded-reg/runs'),
+         ('apple',ROOT/'apple/captured/gmm-istella-full/runs'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-next-reg'),
+         ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements')]
 
 
@@ -45,6 +48,7 @@ def main():
             selected={r['arm']:r for r in receipt['runs'] if r['phase']=='scored' and r.get('returncode')==0 and r.get('result')}
             execution_status=receipt.get('status','IN_PROGRESS')
             complete=execution_status=='MEASURED_FULL' and set(selected)=={'A','B'}
+            samples={arm:{phase:sum(run.get('arm')==arm and run.get('phase')==phase and run.get('returncode')==0 and bool(run.get('result')) for run in receipt['runs']) for phase in ('warmup','scored')} for arm in ('A','B')}
             controller=source.relative_to(ROOT).as_posix().replace('/','--')
             target=OUT/'receipts'/vendor/controller/receipt['key']/path.parent.name/'receipt.json'
             target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(path,target)
@@ -53,7 +57,10 @@ def main():
                      scope='full_workload',status='PENDING_ADMISSION' if complete else 'IN_PROGRESS' if execution_status=='IN_PROGRESS' else 'FAILED_OR_INCOMPLETE',
                      source_sha=receipt['source_sha'],evidence=str(target.relative_to(REPO)),
                      dimensions=job['dimensions'],dataset_sha256=job['dataset_sha256'],
-                     warmups=1,scored_samples=1 if complete else 0,
+                     execution_status=execution_status,
+                     actual_sample_counts=samples,
+                     warmups=min(samples[arm]['warmup'] for arm in samples),
+                     scored_samples=min(samples[arm]['scored'] for arm in samples),
                      quality='PENDING' if complete else 'NOT_ASSESSED',
                      identity='NOT_REQUIRED' if receipt['mode']=='fast' else 'INCOMPLETE',
                      route='native-sm90' if vendor=='nvidia' else 'apple-fast',
@@ -89,7 +96,7 @@ def main():
         dict(id='I.X.complete-proposed',title='IDENTICAL complete proposed configuration',mode='identical',vendors=['nvidia','amd','apple','host'])])
     notes=['A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.',
            'These are combined-configuration full workloads, not completed individual constituent experiments.',
-           'Saved independent quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit.',
+           'Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.',
            'One excluded warmup and one scored sample per arm. Original failed attempts are retained.',
            'NVIDIA PTX and AMD have no compatible retained artifacts; missing-only build question remains pending.',
            'IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.',

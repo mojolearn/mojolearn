@@ -43,6 +43,17 @@
             ]
           },
           "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PENDING",
@@ -111,6 +122,17 @@
             ]
           },
           "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PASS_TASK_METRICS",
@@ -179,7 +201,18 @@
             ]
           },
           "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
-          "warmups": 1,
+          "execution_status": "MEASUREMENT_FAILED",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 0,
+              "scored": 0
+            },
+            "B": {
+              "warmup": 0,
+              "scored": 0
+            }
+          },
+          "warmups": 0,
           "scored_samples": 0,
           "quality": "NOT_ASSESSED",
           "identity": "NOT_REQUIRED",
@@ -219,7 +252,18 @@
             ]
           },
           "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
-          "warmups": 1,
+          "execution_status": "MEASUREMENT_FAILED",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 0,
+              "scored": 0
+            },
+            "B": {
+              "warmup": 0,
+              "scored": 0
+            }
+          },
+          "warmups": 0,
           "scored_samples": 0,
           "quality": "NOT_ASSESSED",
           "identity": "NOT_REQUIRED",
@@ -259,6 +303,17 @@
             ]
           },
           "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PENDING",
@@ -323,6 +378,17 @@
             ]
           },
           "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PASS_TASK_METRICS",
@@ -387,6 +453,17 @@
             ]
           },
           "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PENDING",
@@ -453,6 +530,17 @@
             ]
           },
           "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "FAIL",
@@ -515,6 +603,17 @@
             ]
           },
           "dataset_sha256": "090cbfba29a11e0fa362b66ebb421022caa47d87aa365b5a349f121dbbfa5060",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PENDING",
@@ -545,7 +644,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
         },
         {
           "id": "AF.X.complete-proposed",
@@ -572,6 +671,17 @@
             ]
           },
           "dataset_sha256": "d0434339bed6f38495de319097654bbafff56579343eb69db183c96b4c949037",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PENDING",
@@ -602,7 +712,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
         },
         {
           "id": "AF.X.complete-proposed",
@@ -629,6 +739,17 @@
             ]
           },
           "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PENDING",
@@ -663,7 +784,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
         },
         {
           "id": "AF.X.complete-proposed",
@@ -690,6 +811,17 @@
             ]
           },
           "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PENDING",
@@ -724,7 +856,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
         },
         {
           "id": "AF.X.complete-proposed",
@@ -751,6 +883,17 @@
             ]
           },
           "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PENDING",
@@ -785,7 +928,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
         },
         {
           "id": "AF.X.complete-proposed",
@@ -812,6 +955,17 @@
             ]
           },
           "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PENDING",
@@ -846,7 +1000,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
         },
         {
           "id": "AF.X.complete-proposed",
@@ -867,6 +1021,17 @@
             ]
           },
           "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
           "warmups": 1,
           "scored_samples": 1,
           "quality": "PASS_TASK_METRICS",
@@ -902,9 +1067,267 @@
           },
           "quality_assessment": "TASK_METRIC_GATE_PASSED",
           "quality_reason": "Recorded candidate task metrics preserve baseline and meet same-input independent sklearn quality under existing tolerances."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/sgd-reg@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/22c62826ae044e079978/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "8a4cfe78800af675a721d75a1c8945d15013f4ac0d6d9ad68d0e84eae07d3e56",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(sgd-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.33167739764062487,
+                  "rmse": 0.6821632151900116
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(sgd-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.33167739764062487,
+                  "rmse": 0.6821632151900116
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/pa-reg@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "IN_PROGRESS",
+          "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/6fcf310a716926c2d853/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "IN_PROGRESS",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 0
+            },
+            "B": {
+              "warmup": 0,
+              "scored": 0
+            }
+          },
+          "warmups": 0,
+          "scored_samples": 0,
+          "quality": "NOT_ASSESSED",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "9a99474eb8bb2f949c085598e165d0feb9f406a36dd1021ada465b8d0e1744d0",
+          "source_coverage_pending": []
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/sgd-reg@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d3adb34325456bfba29c/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "e5169cf48c45e5dc99e4b75bc9397634c80454b56117cc09f8ac8a42185e6d91",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(sgd-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.9087707711113641,
+                  "rmse": 4.698170947980658
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(sgd-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.9087707711113641,
+                  "rmse": 4.698170947980658
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/pa-reg@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d74a68acdb33bdd77426/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "2afbc4b259e70bf8f8e9c6fec88c54c97237aeea048a6606d1fb6e9ae9145d26",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(pa-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.9003800254969431,
+                  "rmse": 4.909474697616844
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(pa-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.9003800254969431,
+                  "rmse": 4.909474697616844
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          }
         }
       ],
-      "status": "FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED"
+      "status": "FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION, QUALITY_FAILED"
     },
     {
       "id": "I.X.complete-proposed",
@@ -923,7 +1346,7 @@
   "notes": [
     "A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.",
     "These are combined-configuration full workloads, not completed individual constituent experiments.",
-    "Saved independent quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit.",
+    "Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.",
     "One excluded warmup and one scored sample per arm. Original failed attempts are retained.",
     "NVIDIA PTX and AMD have no compatible retained artifacts; missing-only build question remains pending.",
     "IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.",

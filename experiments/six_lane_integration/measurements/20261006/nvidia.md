@@ -5,7 +5,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 
 | Candidate | Mode | Measurement status | Captured pairs |
 |---|---|---|---:|
-| I.X.complete-proposed | identical | FAILED_OR_INCOMPLETE, PENDING_ADMISSION | 0 |
+| I.X.complete-proposed | identical | FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION | 14 |
 
 ## Captured evidence
 
@@ -20,6 +20,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I.X.complete-proposed | nvidia/native-sm90 | more:linearsvr@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/55b2b5ab6491c0d7e9fe/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | more:elasticnet@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/71d06cebb7470b76364a/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | more:ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/80deb286d318651dcdf8/attempt-0001/receipt.json |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:sgd-reg@dataset=taxi/attempt-0001 | full_workload | IN_PROGRESS | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c9e1357590bfdcd9481/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | classical:ols@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/201c5234acc7b0ac4689/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | classical:ols@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/5df5c5720c0d6d872c16/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | classical:kmeans@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/8af58db47601e372485e/attempt-0001/receipt.json |
@@ -31,7 +32,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 
 - A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.
 - These are combined-configuration full workloads, not completed individual constituent experiments.
-- Saved independent quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit.
+- Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.
 - One excluded warmup and one scored sample per arm. Original failed attempts are retained.
 - NVIDIA PTX and AMD have no compatible retained artifacts; missing-only build question remains pending.
 - IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.

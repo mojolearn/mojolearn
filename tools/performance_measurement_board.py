@@ -97,7 +97,13 @@ def write(board, out):
                  'Component and public-caller fixtures retain their stated scope. Full-workload results and opponent comparisons require their own measurements. Default decisions are recorded beside source toggles; this board does not change them.', '',
                  '| Candidate | Mode | Measurement status | Captured pairs |', '|---|---|---|---:|']
         for card in data['cards']:
-            measured = sum(c['status'] == 'MEASURED' for c in card['cells'])
+            # Completed execution and admission are separate. A retained full
+            # pair can still fail quality or await identity; the status column
+            # keeps that limitation visible without claiming no data exists.
+            measured = sum(c['status'] == 'MEASURED' or
+                           (c.get('execution_status') == 'MEASURED_FULL' and
+                            c.get('warmups') == 1 and c.get('scored_samples') == 1)
+                           for c in card['cells'])
             lines.append(f"| {card['id']} | {card['mode']} | {escape(card['status'])} | {measured} |")
         lines += ['', '## Captured evidence', '',
                   '| Candidate | Vendor / route | Case | Scope | Status | B/A time | Evidence |',

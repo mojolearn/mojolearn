@@ -1,5 +1,5 @@
 {
-  "updated_at": 1791305365.268639,
+  "updated_at": 1791305839.568822,
   "pairs": [
     {
       "configuration": "AF.X.complete-proposed",
@@ -599,7 +599,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -661,7 +661,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -739,7 +739,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -823,7 +823,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -901,7 +901,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -985,7 +985,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -1070,6 +1070,249 @@
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "TASK_METRIC_GATE_PASSED",
       "quality_reason": "Recorded candidate task metrics preserve baseline and meet same-input independent sklearn quality under existing tolerances."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/sgd-reg@dataset=istella",
+      "vendor": "apple",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/22c62826ae044e079978/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 7.248178375069983,
+      "baseline_seconds": 7.1927933329716325,
+      "observed_candidate_over_baseline": 1.0077000741623519,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality(sgd-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours-fast": {
+              "finite": true,
+              "r2": 0.33167739764062487,
+              "rmse": 0.6821632151900116
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality(sgd-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours-fast": {
+              "finite": true,
+              "r2": 0.33167739764062487,
+              "rmse": 0.6821632151900116
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "1fd52e899139455eb21fccdeb39d886e3412155366b9d60322ae821f0fce63f7",
+        "B": "1fd52e899139455eb21fccdeb39d886e3412155366b9d60322ae821f0fce63f7"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SGDRegressor",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SGDRegressor",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/pa-reg@dataset=istella",
+      "vendor": "apple",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "execution_status": "IN_PROGRESS",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/6fcf310a716926c2d853/attempt-0001/receipt.json",
+      "returncodes": [
+        0
+      ]
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/sgd-reg@dataset=taxi",
+      "vendor": "apple",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d3adb34325456bfba29c/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 13.757316125091165,
+      "baseline_seconds": 13.848073333036155,
+      "observed_candidate_over_baseline": 0.9934462213073008,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality(sgd-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours-fast": {
+              "finite": true,
+              "r2": 0.9087707711113641,
+              "rmse": 4.698170947980658
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality(sgd-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours-fast": {
+              "finite": true,
+              "r2": 0.9087707711113641,
+              "rmse": 4.698170947980658
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "a4f2fa5d11a6b665a7afbd976ae66716e92eb2de7a58ad3a266559b4113756c1",
+        "B": "a4f2fa5d11a6b665a7afbd976ae66716e92eb2de7a58ad3a266559b4113756c1"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SGDRegressor",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SGDRegressor",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/pa-reg@dataset=taxi",
+      "vendor": "apple",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d74a68acdb33bdd77426/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 8.707507833023556,
+      "baseline_seconds": 8.700152582954615,
+      "observed_candidate_over_baseline": 1.0008454162152685,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality(pa-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours-fast": {
+              "finite": true,
+              "r2": 0.9003800254969431,
+              "rmse": 4.909474697616844
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality(pa-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours-fast": {
+              "finite": true,
+              "r2": 0.9003800254969431,
+              "rmse": 4.909474697616844
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+        "B": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "PassiveAggressiveRegressor",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "PassiveAggressiveRegressor",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage"
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -1164,7 +1407,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -1248,7 +1491,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -1332,7 +1575,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -1416,7 +1659,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -1494,7 +1737,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -1572,7 +1815,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -1656,7 +1899,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -1740,7 +1983,18 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "I.X.complete-proposed",
+      "workload": "expanded:sgd-reg@dataset=taxi",
+      "vendor": "nvidia",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "execution_status": "IN_PROGRESS",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c9e1357590bfdcd9481/attempt-0001/receipt.json",
+      "returncodes": [
+        0
+      ]
     },
     {
       "configuration": "I.X.complete-proposed",

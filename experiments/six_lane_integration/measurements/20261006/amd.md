@@ -16,7 +16,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 
 - A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.
 - These are combined-configuration full workloads, not completed individual constituent experiments.
-- Saved independent quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit.
+- Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.
 - One excluded warmup and one scored sample per arm. Original failed attempts are retained.
 - NVIDIA PTX and AMD have no compatible retained artifacts; missing-only build question remains pending.
 - IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.
