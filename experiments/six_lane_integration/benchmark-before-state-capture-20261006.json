@@ -33,7 +33,7 @@
       "base_sha256": "521ed9f02439a3f81c2953d811f92e286cdda9dcb3f22daeacaf6d5c6cd54045",
       "changed": true,
       "changed_incumbent_module_assignments": {},
-      "integrated_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+      "integrated_sha256": "dd50603fb00666237f86868db5e3f21420ee6fedf96c18bffeb228ff112f037b",
       "path": "tools/bench_board_algos.py"
     },
     {
@@ -82,15 +82,12 @@
       "path": "tools/bench_neural_decode.py"
     },
     {
-      "added_integration_assignments": [
-        "PUBLIC_FITTED_STATE_CONTRACTS",
-        "_PUBLIC_FITTED_TYPES"
-      ],
+      "added_integration_assignments": [],
       "base_git_blob": "390d47e655502288aa06c69efb4acc1391028250",
       "base_sha256": "cf11311ca8bf966e99eef2a28cb4973f827b40ef5cbd19fb7860c487ebd3c168",
-      "changed": true,
+      "changed": false,
       "changed_incumbent_module_assignments": {},
-      "integrated_sha256": "9cc6ca47e5083d55939077a401bda4d44a928faf47fca46d77cc2d1c3ed20b24",
+      "integrated_sha256": "cf11311ca8bf966e99eef2a28cb4973f827b40ef5cbd19fb7860c487ebd3c168",
       "path": "tools/bench_board_state.py"
     },
     {
@@ -153,16 +150,13 @@
       "path": "tools/speed_torch_seq.py"
     }
   ],
-  "merge_review": {
-    "numerical_validation": "No compilation or numerical verification repeated; existing artifact provenance reused.",
-    "reviewed_changes": {
-      "tools/bench_board_algos.py": "Opt-in sklearn-only LARS direct/stable opponent recipes; current regression/resampling queues do not enable these recipes. Existing default data/settings/timing unchanged.",
-      "tools/bench_board_state.py": "Typed public-state evidence capture for PCA/KMeans. No estimator or numerical runtime change; existing receipts unchanged."
-    },
-    "source_sha": "a1db58c7a7100458e26272b780aa859e339dcd2c"
-  },
+  "merge_review": "Preserve latest-main LARS/GMM opponent precision repairs and explicit full-GMM saved recipes; master more-runner now forwards the unchanged saved recipe. No measurements executed.",
   "opponent_execution": "NOT RUN; opponent source/dependencies/results untouched",
   "policy": "Existing datasets, splits, seeds, preprocessing, workload sizes, estimator settings, modes, quality rules, timing definitions and opponent roster are immutable. Added capture/selector APIs do not authorize alternate races.",
-  "previous_freeze": "experiments/six_lane_integration/benchmark-before-state-capture-20261006.json",
+  "previous_freeze": {
+    "integration_commit": "46bf6fd3ed01b9be272e75568ce086903fa0d8d0",
+    "path": "experiments/six_lane_integration/benchmark.integration-freeze.json",
+    "sha256": "639b705ea1ff176622ae004c5c3f6f22a3bcbdf015c689b019cac99f506e0824"
+  },
   "schema": "mojolearn.benchmark-freeze/1"
 }
