@@ -17,7 +17,7 @@ def queue_install_command():
  return 'cat > '+tmp+' && mv '+tmp+' /root/overnight-nvidia/repair-queue.json'
 def route_retired(route):
  p=E/(route+'-capture/manager-status.json')
- return p.exists() and json.loads(p.read_text()).get('status')=='TERMINATED_VERIFIED'
+ return p.exists() and json.loads(p.read_text()).get('status') in ['TERMINATED','TERMINATED_VERIFIED']
 def publish_queues():
  errors={}
  for route in ['specific','default']:
@@ -31,7 +31,8 @@ def publish_queues():
   except Exception as error:
    errors[route]=repr(error)
    (E/(route+'-publication-error.log')).write_text(traceback.format_exc())
-   notify('publication-'+route+'-'+type(error).__name__,'NVIDIA '+route+' queue publication failed; other routes continue. Inspect '+str(E/(route+'-publication-error.log')))
+   try:notify('publication-'+route+'-'+type(error).__name__,'NVIDIA '+route+' queue publication failed; other routes continue. Inspect '+str(E/(route+'-publication-error.log')))
+   except Exception:pass  # Notification transport cannot block another route.
  return errors
 def cases(id,source_sha=""):
  if id=="I06" and source_sha.startswith("e80a1d0a"):
