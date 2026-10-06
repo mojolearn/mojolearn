@@ -2,14 +2,16 @@
 """I16 compact exact query/list chunks. Eight logical warp-width batches
 per task bounds serial candidate visits while amortizing task descriptors.
 The 256-row work unit is independent of vendor wave width and board rows.
-Every point uses the existing ascending feature FMA chain; task top-k and
+IDENTICAL points use the existing ascending feature FMA chain. FAST points
+use the incumbent's direct squared differences to avoid expanded-norm
+cancellation for nearby vectors. Task top-k and
 query merge compare the same total (distance,index) keys. Partial lists are
 exact: any globally selected point must occur in its task's KM best.
 One integer task-total readback sizes scratch; no input arithmetic on host."""
 from std.gpu import block_idx,thread_idx,lane_id
 from std.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceBuffer,DeviceContext
-from checks.numerics import ftz,identical_mul_add
+from checks.numerics import ftz,identical_mul_add,GLOBAL_NUMERIC_MODE,NUMERIC_FAST
 from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import WARP_SIZE,_key,_kless
 from ivf.impl.neighbors.ivf_flat.ivf_group_device import device_exclusive_scan_total_from
 comptime TASK_ROWS=256
@@ -45,12 +47,21 @@ def _scan_task[KM:Int](queries: MutPointer[Float32,MutAnyOrigin],qn: MutPointer[
     while pos<end:
         var id=ids[pos]
         if keep_len==0 or keep[Int(id)]!=0:
-            var acc=Float32(0)
-            for f in range(dim):
-                acc=ftz(identical_mul_add(ftz(queries[q*dim+f]),ftz(data[pos*dim+f]),acc))
-            var d=ftz(identical_mul_add(Float32(-2),acc,ftz(ftz(qn[q])+ftz(norm[pos]))))
-            if d<=Float32(0):
-                d=Float32(0)
+            var d=Float32(0)
+            comptime if GLOBAL_NUMERIC_MODE==NUMERIC_FAST:
+                # Match fast_ivf_scan_kernel's arithmetic, including the
+                # ascending feature order. Splitting a list into tasks must
+                # not replace well-conditioned differences with qn+xn-2dot.
+                for f in range(dim):
+                    var delta=data[pos*dim+f]-queries[q*dim+f]
+                    d+=delta*delta
+            else:
+                var acc=Float32(0)
+                for f in range(dim):
+                    acc=ftz(identical_mul_add(ftz(queries[q*dim+f]),ftz(data[pos*dim+f]),acc))
+                d=ftz(identical_mul_add(Float32(-2),acc,ftz(ftz(qn[q])+ftz(norm[pos]))))
+                if d<=Float32(0):
+                    d=Float32(0)
             var key=_key(d)
             var ck=key
             var cd=d
