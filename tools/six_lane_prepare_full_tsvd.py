@@ -31,6 +31,7 @@ CLASSES = {'tsvd': 'TruncatedSVD', 'fastica': 'FastICA',
            'gaussian-rp': 'GaussianRandomProjection', 'sparse-rp': 'SparseRandomProjection',
            'incremental-pca': 'IncrementalPCA'}
 LOCKS = {'nvidia': '/root/six-lane-full-ab-20261006/device-measurement.lock',
+         'amd': '/root/six-lane-full-ab-20261006/device-measurement.lock',
          'apple': '/Users/ec2-user/mojolearn-full-f867b50e8/gpu.lock'}
 
 
@@ -169,19 +170,20 @@ def plan(args):
                preserve_original='Original 1M-row recipes, estimators, opponent roster, results and active freezes remain intact.',
                timing_policy='Preparation/load, existing lane split, construction, operation, required synchronization and consumed outputs; hashes and independent quality outside timer.',
                locks=LOCKS, scheduling={'nvidia': 'After current expanded/GMM/PLS chain and a new reviewed main freeze.',
+                                       'amd': 'Only after native gfx receipts are accepted and source/input preparation is serialized under its canonical lock.',
                                        'apple': 'Only after queued CPU14 completes and a new reviewed main freeze; do not delay its quality budget.'},
                retained_deployments={}, recipes=[], unresolved=['New full-input variant registration and root review; no automatic admission.',
                     'Complete fitted-state/returned-output identity scope where noted.',
-                    'AMD and default/PTX accepted full bindings are pending; no new artifacts provided to this helper.'])
-    for vendor in ('nvidia', 'apple'):
+                    'AMD and default/PTX admission requires accepted full bindings; this planner does not establish artifact availability.'])
+    for vendor in ('nvidia', 'amd', 'apple'):
         p = getattr(args, vendor + '_deployments')
         doc['retained_deployments'][vendor] = (dict(path=str(p), sha256=digest(p), contents=json.loads(p.read_text()),
             scope='Caller-supplied retained metadata. No binding opened, rehashed, compiled or requalified here.') if p else
             dict(status='PENDING_ATTACHMENT', scope='Reuse owning peer accepted A/B package receipts; do not build or infer coverage.'))
-        cfg = 'I.X.complete-proposed' if vendor == 'nvidia' else 'AF.X.complete-proposed'
+        cfg = 'AF.X.complete-proposed' if vendor == 'apple' else 'I.X.complete-proposed'
         for ds in ('taxi', 'istella'):
             for lane in ('tsvd', 'incremental-pca', 'randomized-svd', 'gaussian-rp', 'sparse-rp', 'fastica'):
-                prefix = ('more:' if lane == 'tsvd' else 'expanded:') if vendor == 'nvidia' else ('classical2/' if lane == 'tsvd' else 'algos/')
+                prefix = ('more:' if lane == 'tsvd' else 'expanded:') if vendor != 'apple' else ('classical2/' if lane == 'tsvd' else 'algos/')
                 original = prefix + lane + '@dataset=' + ds
                 cells = [c for c in matrix['cells'] if c['configuration'] == cfg and c['vendor'] == vendor and c['workload_id'] == original]
                 if not cells:  # No invented Apple/other vendor race or roster entry.
@@ -380,12 +382,13 @@ def main():
     p.add_argument('--source-facts', type=Path, required=True)
     p.add_argument('--nvidia-deployments', type=Path)
     p.add_argument('--apple-deployments', type=Path)
+    p.add_argument('--amd-deployments', type=Path)
     p.add_argument('--output', type=Path, required=True)
     p.set_defaults(fn=plan)
     p = sub.add_parser('project', help='Explicit later offline data projection under existing worker lock; no models/jobs')
     p.add_argument('--plan', type=Path, required=True)
     p.add_argument('--dataset', choices=('taxi', 'istella'), required=True)
-    p.add_argument('--vendor', choices=('nvidia', 'apple'), required=True)
+    p.add_argument('--vendor', choices=('nvidia', 'amd', 'apple'), required=True)
     p.add_argument('--input-directory', type=Path, required=True)
     p.add_argument('--lock-file', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)

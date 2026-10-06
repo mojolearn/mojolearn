@@ -21,7 +21,7 @@ def original_id(workload_id):
 
 def eligible(cell):
     vendor, cfg = cell['vendor'], cell['configuration']
-    if vendor == 'nvidia' and cfg == 'I.X.complete-proposed':
+    if vendor in ('nvidia', 'amd') and cfg == 'I.X.complete-proposed':
         prefixes = ['more:tsvd'] + ['expanded:' + x for x in LANES if x != 'tsvd']
     elif vendor == 'apple' and cfg == 'AF.X.complete-proposed':
         prefixes = ['algos/randomized-svd']

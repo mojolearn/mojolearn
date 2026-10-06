@@ -37,7 +37,7 @@ def facts_from_projection(directory, cells, source, vendor):
         work = {k: copy.deepcopy(row[k]) for k in ('harness','harness_sha256','lane','dataset','input_files',
                 'data_directory','actual_shapes','estimator_settings_record','inference','dataset_version',
                 'split','seed','output_paths','capture_limitation','repeated_operations')}
-        work.update(runtime_vendor={'nvidia':'cuda','apple':'metal'}[vendor],
+        work.update(runtime_vendor={'nvidia':'cuda','amd':'hip','apple':'metal'}[vendor],
                     quality_gate_source=row['harness']+':quality/'+row['lane']+'; full-input opponent and complete state qualification pending',
                     intrinsic_cap_audit=dict(reviewed=True,unresolved=[],evidence=str(receipt_path)))
         fact = dict(source_sha=source,changes_frozen_race=True,registered_input_variant=reg,
@@ -85,7 +85,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--projection',type=Path,action='append',required=True)
     p.add_argument('--deployments',type=Path,required=True)
-    p.add_argument('--vendor',choices=['nvidia','apple'],required=True)
+    p.add_argument('--vendor',choices=['nvidia','amd','apple'],required=True)
     p.add_argument('--target-track',required=True)
     p.add_argument('--output',type=Path,required=True)
     run(p.parse_args())

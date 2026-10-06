@@ -36,7 +36,9 @@ The plan derives constructor records from committed source without importing
 estimators. It retains original settings, modes, configurations, implementation
 IDs and matrix references. On the reviewed source the existing complete-proposed
 matrix supplies 12 NVIDIA-native recipes (more:tsvd plus five expanded lanes,
-each on two datasets) and two Apple FAST recipes (randomized-svd). No Apple
+each on two datasets), twelve matching AMD IDENTICAL proposals, and two Apple
+FAST recipes (randomized-svd). AMD execution still requires accepted native gfx
+artifacts; a registered proposal does not supply a binary. No Apple
 more:tsvd or other vendor race is invented when absent from that configuration.
 
 ## Planning without dataset reads
@@ -187,3 +189,23 @@ coverage remains pending as recorded in each proposal and worker. Registration
 neither qualifies output identity nor promotes a candidate or synthesizes an
 opponent comparison. Apple scheduling still waits for CPU14 and failed-only
 quality retries before any input projection or execution.
+
+## Native AMD full variants
+
+The same twelve full input recipes are explicitly registered for AMD IDENTICAL
+`I.X.complete-proposed`, with distinct AMD cell keys and original AMD matrix
+links. They retain the same raw corpus, split, constructor settings and capture
+limitations as NVIDIA. AMD projection uses the owning Linux worker's canonical
+`/root/six-lane-full-ab-20261006/device-measurement.lock`. Pass `--vendor amd` to
+projection and registration, `--amd-deployments` to planning when available,
+and the actual native target track (for example `amd-gfx942`) to registration.
+The existing materializer still requires the exact supported native gfx target,
+compiler/source closure, arm flags, and deployed artifact hashes. No portable or
+generic AMD mode is admitted; registration is not evidence of compilation.
+
+A new reviewed harness freeze and plan are required. Existing numerical source
+closures are unchanged, so already accepted matching compile receipts may be
+reused; no NVIDIA/Apple rebuild or completed-cell rerun is implied. A missing
+AMD artifact remains blocked until its independently authorized compile repair
+provides the accepted native receipt. Same-arm cross-vendor identity and task
+quality remain separate requirements, including the existing output/state gaps.
