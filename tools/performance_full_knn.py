@@ -6,6 +6,8 @@ brute-force algorithm, automatic query tile, and distance/index tie semantics.
 Use every training and saved query row. The grouped-query kernel only applies
 to <=32 features and <=16 neighbors; reject other workloads as no distinct
 candidate route, rather than altering dimensions or k to make them applicable.
+The retained pair must also explicitly disable the preceding FAST MMA route;
+without MOJOLEARN_KNN_FAST_MMA_OFF the grouped-query path is shadowed.
 
 Existing native stage-time lines witness fused top-k execution. They are not a
 query-group counter: the accepted binding receipt establishes the group define.
@@ -43,6 +45,21 @@ def validate_inputs(x, query, meta, k):
     # not benchmark shape choices. Preserve all features and report no route.
     if not (1 <= x.shape[1] <= 32 and 1 <= k <= 16):
         raise ValueError('NO_DISTINCT_CANDIDATE_ROUTE: grouped queries require features<=32 and k<=16')
+
+
+def validate_artifact_controls(defines, arm):
+    def enabled(name):
+        return any(value.split('=')[0] == name and value.split('=')[-1] != '0'
+                   for value in defines)
+    group = enabled('MOJOLEARN_KNN_FAST_QUERY_GROUP4')
+    if group != (arm == 'B'):
+        raise ValueError('Accepted artifact defines do not describe F14 A/B controls')
+    # In the retained source, fast_mma_knn is dispatched first and covers all
+    # feature/k combinations admitted by fast_topk_knn. Shape eligibility alone
+    # therefore cannot establish candidate reach. Never time this no-op pair.
+    if not enabled('MOJOLEARN_KNN_FAST_MMA_OFF'):
+        raise ValueError('NO_DISTINCT_CANDIDATE_ROUTE: preceding FAST MMA shadows grouped queries; retained pair must explicitly disable it')
+    return group
 
 
 @contextmanager
@@ -106,10 +123,7 @@ def main():
     if args.arm == 'B' and args.baseline_result is None:
         args.baseline_result = args.output.with_name(args.phase + '-A.json')
     defines = json.loads(args.artifact_defines_json)
-    group_define = any(value.split('=')[0] == 'MOJOLEARN_KNN_FAST_QUERY_GROUP4'
-                       and value.split('=')[-1] != '0' for value in defines)
-    if group_define != (args.arm == 'B'):
-        raise ValueError('Accepted artifact defines do not describe F14 A/B controls')
+    group_define = validate_artifact_controls(defines, args.arm)
     if os.environ.get('MOJOLEARN_VENDOR') != 'apple' or os.environ.get('MOJOLEARN_NUMERIC_MODE') != 'fast':
         raise RuntimeError('Explicit Apple FAST mode required')
     chip = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).strip()
