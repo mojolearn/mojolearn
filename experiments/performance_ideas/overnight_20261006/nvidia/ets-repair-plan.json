@@ -1,0 +1,10 @@
+{
+  "commit": "75bcde24199643a4ce803886ddf8d9638c416eb8",
+  "patch": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/ets-host-production.patch",
+  "patch_sha256": "7ded7fea6db54c881b3ff5c27a7a41a81899fdc6ca13e48597376ca9abf2020a",
+  "owner_worker": 21356,
+  "created": 1791274543.6594172,
+  "deadline": 1791288943.659418,
+  "target": "classical2/ets/synthetic/rows=full",
+  "policy": "Wait full current tail terminal; no idle hold, exact failed race only; no other completed race replay"
+}
