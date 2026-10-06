@@ -232,6 +232,7 @@ comptime KNN_APPLE_MMA_DIST = (
 comptime KNN_CERTIFIED_MMA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_COLUMN == COLUMN_APPLE
+    # I15 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     and not is_defined["MOJOLEARN_KNN_CERTIFIED_MMA_OFF"]()
 )
 # Experimental metadata only: no new query route or device work. This
