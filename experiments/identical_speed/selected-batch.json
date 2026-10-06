@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "purpose": "One consolidated source tree; select only requested A/B experiments. Selection never flips production defaults.",
+  "families": {
+    "rf": {
+      "baseline": "rf-k4",
+      "candidates": [
+        "rf-k1",
+        "rf-k2",
+        "rf-k8"
+      ],
+      "datasets": [
+        "taxi",
+        "istella"
+      ],
+      "binding": "rf"
+    },
+    "et": {
+      "baseline": "et-float",
+      "candidates": [
+        "et-u16"
+      ],
+      "datasets": [
+        "istellareg",
+        "year"
+      ],
+      "binding": "trees"
+    }
+  },
+  "selected_families": [
+    "rf",
+    "et"
+  ],
+  "vendors": [
+    "nvidia",
+    "amd"
+  ],
+  "measurement": {
+    "warmup": 1,
+    "samples": 1,
+    "opponents": false,
+    "parallel_across_vendors": true,
+    "serial_per_gpu": true,
+    "verification_from_scored_model": true,
+    "apple_blocks_timing": false
+  },
+  "completed_excluded": [
+    "gemm-one-page",
+    "gemm-group-slack2",
+    "gemm-group-slack8",
+    "gemm-body-tiles",
+    "gemm-packed64",
+    "kmeans256",
+    "gmm-stack",
+    "ocsvm256"
+  ],
+  "diagnostic_only_excluded": [
+    "centered-block-eigh"
+  ],
+  "retained_binaries": {
+    "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+    "capture_sha256": "5bb694ad98060341854b18473945f3240e0735f5830b56a011d815a57acb43ab",
+    "jobs": 19,
+    "reuse_rule": "Retain original source and hashes. Reuse only when relevant numerical sources, flags, architecture and compiler match; never relabel a006 binaries as built from the consolidated commit."
+  },
+  "launch_policy": "Only selected candidates plus necessary baseline. Do not repeat completed experiments or run diagnostic-only candidates. Existing owned boxes; no duplicate controllers."
+}
