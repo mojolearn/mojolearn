@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "I19",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "GPU DeviceContext fixture; host qualification is an independent owed gate, not this executable.",
+  "default_policy": "New candidates default off; existing promoted controls unchanged.",
+  "arms": [
+    {
+      "name": "incumbent",
+      "source": "experiments/performance_ideas/I19/check.mojo",
+      "defines": []
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I19/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RAGGED_FLOAT_RADIX=1"
+      ]
+    }
+  ]
+}
