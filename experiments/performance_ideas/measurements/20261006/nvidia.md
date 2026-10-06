@@ -8,11 +8,11 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | A01 | identical | PARTIAL_MEASUREMENTS_RETAINED | 216 |
 | A02 | identical | PENDING_MEASUREMENT | 0 |
 | A03 | identical | PARTIAL_MEASUREMENTS_RETAINED | 144 |
-| A04 | identical | PENDING_MEASUREMENT | 0 |
+| A04 | identical | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 | A05 | identical | PARTIAL_MEASUREMENTS_RETAINED | 72 |
 | A06 | identical | PENDING_MEASUREMENT | 0 |
 | A07 | identical | PENDING_MEASUREMENT | 0 |
-| A08 | identical | PENDING_MEASUREMENT | 0 |
+| A08 | identical | PARTIAL_MEASUREMENTS_RETAINED | 4 |
 | I01 | identical | PENDING_MEASUREMENT | 0 |
 | I02 | identical | PENDING_MEASUREMENT | 0 |
 | I03 | identical | PARTIAL_MEASUREMENTS_RETAINED | 9 |
@@ -27,24 +27,24 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I12 | identical | PENDING_MEASUREMENT | 0 |
 | I13 | identical | PENDING_MEASUREMENT | 0 |
 | I14 | identical | PENDING_MEASUREMENT | 0 |
-| I15 | identical | PENDING_MEASUREMENT | 0 |
-| I16 | identical | PENDING_MEASUREMENT | 0 |
+| I15 | identical | NO_DISTINCT_RUNTIME_ARM | 0 |
+| I16 | identical | PARTIAL_MEASUREMENTS_RETAINED | 3 |
 | I17 | identical | PENDING_MEASUREMENT | 0 |
 | I18 | identical | PENDING_MEASUREMENT | 0 |
 | I19 | identical | PENDING_MEASUREMENT | 0 |
-| I20 | identical | PENDING_MEASUREMENT | 0 |
+| I20 | identical | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 | I21 | identical | PENDING_MEASUREMENT | 0 |
 | I22 | identical | PENDING_MEASUREMENT | 0 |
 | I23 | identical | PENDING_MEASUREMENT | 0 |
-| I24 | identical | PENDING_MEASUREMENT | 0 |
+| I24 | identical | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 | N01 | identical | PARTIAL_MEASUREMENTS_RETAINED | 288 |
 | N02 | identical | PARTIAL_MEASUREMENTS_RETAINED | 240 |
 | N03 | identical | PARTIAL_MEASUREMENTS_RETAINED | 6 |
 | N04 | identical | PARTIAL_MEASUREMENTS_RETAINED | 72 |
 | N05 | identical | PARTIAL_MEASUREMENTS_RETAINED | 27 |
-| N06 | identical | PENDING_MEASUREMENT | 0 |
-| N07 | identical | PENDING_MEASUREMENT | 0 |
-| N08 | identical | PENDING_MEASUREMENT | 0 |
+| N06 | identical | PARTIAL_MEASUREMENTS_RETAINED | 1 |
+| N07 | identical | PARTIAL_MEASUREMENTS_RETAINED | 2 |
+| N08 | identical | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 
 ## Captured evidence
 
@@ -410,6 +410,8 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | A03 | nvidia/default | pad8/f5/fixture=3,k=4609,m=575,n=578,op=0 | component | MEASURED | 0.9936 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
 | A03 | nvidia/default | pad8/f5/fixture=3,k=4609,m=575,n=578,op=1 | component | MEASURED | 0.9951 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
 | A03 | nvidia/default | pad8/f5/fixture=3,k=4609,m=575,n=578,op=2 | component | MEASURED | 0.9971 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
+| A04 | nvidia/default | A04-paired-5b467815b5-f0/runtime0 | component | MEASURED | 0.7867 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| A04 | nvidia/default | A04-paired-5b467815b5-f1/runtime0 | component | MEASURED | 0.9396 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
 | A05 | nvidia/default | compact_rows/f0/fixture=0,k=257,m=127,n=130,op=0 | component | MEASURED | 1.4354 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
 | A05 | nvidia/default | compact_rows/f0/fixture=0,k=257,m=127,n=130,op=1 | component | MEASURED | 1.4752 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
 | A05 | nvidia/default | compact_rows/f0/fixture=0,k=257,m=127,n=130,op=2 | component | MEASURED | 1.4582 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
@@ -482,21 +484,36 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | A05 | nvidia/default | compact_rows/f5/fixture=3,k=4609,m=575,n=578,op=0 | component | MEASURED | 0.8122 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
 | A05 | nvidia/default | compact_rows/f5/fixture=3,k=4609,m=575,n=578,op=1 | component | MEASURED | 0.8268 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
 | A05 | nvidia/default | compact_rows/f5/fixture=3,k=4609,m=575,n=578,op=2 | component | MEASURED | 0.7613 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
+| A08 | nvidia/default | A08-1024_conv_poll1-5b467815b5-f0/case0 | public_caller_component | MEASURED | 1.2278 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| A08 | nvidia/default | A08-256_conv_poll1-5b467815b5-f0/case0 | public_caller_component | MEASURED | 0.8161 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| A08 | nvidia/default | A08-wide4096-5b467815b5-f0/case0 | public_caller_component | MEASURED | 3.0076 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| A08 | nvidia/default | A08-old1024-5b467815b5-f0/case0 | public_caller_component | MEASURED | 1.3006 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
 | I03 | nvidia/default | grouped/jobs=3,op=0 | component | MEASURED | 0.4909 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
 | I03 | nvidia/default | grouped/jobs=3,op=1 | component | MEASURED | 0.3683 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
 | I03 | nvidia/default | grouped/jobs=3,op=2 | component | MEASURED | 0.3794 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
-| I03 | nvidia/default | I03-paired-f32549d28-f0/paired0 | component | MEASURED | 0.7923 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I03 | nvidia/default | I03-paired-f32549d28-f0/paired1 | component | MEASURED | 3.9445 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I03 | nvidia/default | I03-paired-f32549d28-f0/paired2 | component | MEASURED | 0.8056 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I03 | nvidia/default | I03-paired-f32549d28-f1/paired0 | component | MEASURED | 0.9941 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I03 | nvidia/default | I03-paired-f32549d28-f1/paired1 | component | MEASURED | 0.9984 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I03 | nvidia/default | I03-paired-f32549d28-f1/paired2 | component | MEASURED | 0.9715 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I05 | nvidia/default | I05-paired-f32549d28-f0/paired0 | component | MEASURED | 1.7968 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I05 | nvidia/default | I05-paired-f32549d28-f0/paired1 | component | MEASURED | 1.7490 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I05 | nvidia/default | I05-paired-f32549d28-f0/paired2 | component | MEASURED | 2.4665 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I05 | nvidia/default | I05-paired-f32549d28-f1/paired0 | component | MEASURED | 1.0394 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I05 | nvidia/default | I05-paired-f32549d28-f1/paired1 | component | MEASURED | 1.7125 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
-| I05 | nvidia/default | I05-paired-f32549d28-f1/paired2 | component | MEASURED | 1.1799 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/dc8209f4b054f249257139f3962bb19fe2941c296d239d38be13f817252c17ee.json |
+| I03 | nvidia/default | I03-paired-f32549d28-f0/paired0 | component | MEASURED | 0.7923 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I03 | nvidia/default | I03-paired-f32549d28-f0/paired1 | component | MEASURED | 3.9445 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I03 | nvidia/default | I03-paired-f32549d28-f0/paired2 | component | MEASURED | 0.8056 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I03 | nvidia/default | I03-paired-f32549d28-f1/paired0 | component | MEASURED | 0.9941 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I03 | nvidia/default | I03-paired-f32549d28-f1/paired1 | component | MEASURED | 0.9984 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I03 | nvidia/default | I03-paired-f32549d28-f1/paired2 | component | MEASURED | 0.9715 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I05 | nvidia/default | I05-paired-f32549d28-f0/paired0 | component | MEASURED | 1.7968 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I05 | nvidia/default | I05-paired-f32549d28-f0/paired1 | component | MEASURED | 1.7490 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I05 | nvidia/default | I05-paired-f32549d28-f0/paired2 | component | MEASURED | 2.4665 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I05 | nvidia/default | I05-paired-f32549d28-f1/paired0 | component | MEASURED | 1.0394 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I05 | nvidia/default | I05-paired-f32549d28-f1/paired1 | component | MEASURED | 1.7125 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I05 | nvidia/default | I05-paired-f32549d28-f1/paired2 | component | MEASURED | 1.1799 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I15 | nvidia/default | I15-baseline-f32549d28-f0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I15 | nvidia/default | I15-baseline-f32549d28-f1 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I15 | nvidia/default | I15-candidate-f32549d28-f0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I15 | nvidia/default | I15-candidate-f32549d28-f1 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I16 | nvidia/default | I16-paired-5b467815b5-f0/runtime0 | public_caller_component | MEASURED | 1.3925 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I16 | nvidia/default | I16-paired-5b467815b5-f0/runtime1 | public_caller_component | MEASURED | 1.3444 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I16 | nvidia/default | I16-paired-5b467815b5-f0/runtime2 | public_caller_component | MEASURED | 1.3808 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I20 | nvidia/default | I20-candidate-f32549d28-f0/case0 | public_caller_component | MEASURED | 0.9928 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I20 | nvidia/default | I20-candidate-f32549d28-f1/case0 | public_caller_component | MEASURED | 0.9916 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I24 | nvidia/default | I24-candidate-f32549d28-f0/case0 | public_caller_component | MEASURED | 0.5189 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
+| I24 | nvidia/default | I24-candidate-f32549d28-f1/case0 | public_caller_component | MEASURED | 1.2556 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9ecddbedd065def860900951dd633ef1445838c25ec69ca7f8bc4f479d566a57.json |
 | N01 | nvidia/specific | packed64/f0/fixture=0,k=257,m=127,n=130,op=0 | component | MEASURED | 0.9785 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
 | N01 | nvidia/specific | packed64/f0/fixture=0,k=257,m=127,n=130,op=1 | component | MEASURED | 0.9780 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
 | N01 | nvidia/specific | packed64/f0/fixture=0,k=257,m=127,n=130,op=2 | component | MEASURED | 0.9822 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
@@ -1025,12 +1042,12 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | N02 | nvidia/specific | bounded_fs2/f9/fixture=3,k=1537,m=1087,n=1090,op=0 | component | MEASURED | 1.0040 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
 | N02 | nvidia/specific | bounded_fs2/f9/fixture=3,k=1537,m=1087,n=1090,op=1 | component | MEASURED | 1.0008 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
 | N02 | nvidia/specific | bounded_fs2/f9/fixture=3,k=1537,m=1087,n=1090,op=2 | component | MEASURED | 0.9968 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
-| N03 | nvidia/specific | N03-paired-f32549d28-f0/paired0 | component | MEASURED | 2.2173 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N03 | nvidia/specific | N03-paired-f32549d28-f0/paired1 | component | MEASURED | 2.2144 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N03 | nvidia/specific | N03-paired-f32549d28-f0/paired2 | component | MEASURED | 2.1289 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N03 | nvidia/specific | N03-paired-f32549d28-f1/paired0 | component | MEASURED | 4.2323 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N03 | nvidia/specific | N03-paired-f32549d28-f1/paired1 | component | MEASURED | 0.9916 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N03 | nvidia/specific | N03-paired-f32549d28-f1/paired2 | component | MEASURED | 4.3237 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
+| N03 | nvidia/specific | N03-paired-f32549d28-f0/paired0 | component | MEASURED | 2.2173 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N03 | nvidia/specific | N03-paired-f32549d28-f0/paired1 | component | MEASURED | 2.2144 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N03 | nvidia/specific | N03-paired-f32549d28-f0/paired2 | component | MEASURED | 2.1289 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N03 | nvidia/specific | N03-paired-f32549d28-f1/paired0 | component | MEASURED | 4.2323 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N03 | nvidia/specific | N03-paired-f32549d28-f1/paired1 | component | MEASURED | 0.9916 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N03 | nvidia/specific | N03-paired-f32549d28-f1/paired2 | component | MEASURED | 4.3237 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
 | N04 | nvidia/specific | gather/f0/fixture=0,k=257,m=63,n=131,op=0 | component | MEASURED | 0.8779 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
 | N04 | nvidia/specific | gather/f0/fixture=0,k=257,m=63,n=131,op=1 | component | MEASURED | 1.0171 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
 | N04 | nvidia/specific | gather/f0/fixture=0,k=257,m=63,n=131,op=2 | component | MEASURED | 1.0191 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
@@ -1112,24 +1129,29 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | N05 | nvidia/specific | grouped/jobs=3,op=0,version=2 | component | MEASURED | 0.3671 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
 | N05 | nvidia/specific | grouped/jobs=3,op=1,version=2 | component | MEASURED | 0.3665 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
 | N05 | nvidia/specific | grouped/jobs=3,op=2,version=2 | component | MEASURED | 0.3670 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired0 | component | MEASURED | 0.7623 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired1 | component | MEASURED | 3.9675 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired2 | component | MEASURED | 0.8009 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired3 | component | MEASURED | 0.7753 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired4 | component | MEASURED | 3.9848 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired5 | component | MEASURED | 0.7879 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired6 | component | MEASURED | 0.7884 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired7 | component | MEASURED | 3.9866 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired8 | component | MEASURED | 0.7950 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired0 | component | MEASURED | 0.9916 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired1 | component | MEASURED | 1.0121 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired2 | component | MEASURED | 0.9719 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired3 | component | MEASURED | 0.9868 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired4 | component | MEASURED | 1.0041 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired5 | component | MEASURED | 0.9733 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired6 | component | MEASURED | 0.9834 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired7 | component | MEASURED | 0.9978 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
-| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired8 | component | MEASURED | 0.9720 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/ecb55be092c3c19e725f9a3cc15050c466233585637c9bb8aa208e13ad1210dc.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired0 | component | MEASURED | 0.7623 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired1 | component | MEASURED | 3.9675 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired2 | component | MEASURED | 0.8009 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired3 | component | MEASURED | 0.7753 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired4 | component | MEASURED | 3.9848 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired5 | component | MEASURED | 0.7879 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired6 | component | MEASURED | 0.7884 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired7 | component | MEASURED | 3.9866 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f0/paired8 | component | MEASURED | 0.7950 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired0 | component | MEASURED | 0.9916 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired1 | component | MEASURED | 1.0121 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired2 | component | MEASURED | 0.9719 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired3 | component | MEASURED | 0.9868 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired4 | component | MEASURED | 1.0041 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired5 | component | MEASURED | 0.9733 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired6 | component | MEASURED | 0.9834 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired7 | component | MEASURED | 0.9978 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N05 | nvidia/specific | N05-paired-f32549d28-f1/paired8 | component | MEASURED | 0.9720 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N06 | nvidia/specific | N06-paired-cbcc8dcd33-f0/runtime0 | component | MEASURED | 0.7204 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N07 | nvidia/specific | N07-candidate-cbcc8dcd33-f0/case0 | public_caller_component | MEASURED | 1.2930 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N07 | nvidia/specific | N07-candidate-cbcc8dcd33-f1/case0 | public_caller_component | MEASURED | 1.2265 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N08 | nvidia/specific | N08-paired-cbcc8dcd33-f0/runtime0 | component | MEASURED | 0.9655 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
+| N08 | nvidia/specific | N08-paired-cbcc8dcd33-f1/runtime0 | component | MEASURED | 0.9954 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-snapshots/91f8fc9e47640e8ab8f3802a864fff5a67fa4631c1889dd05d1403ab3fc69091.json |
 
 ## Campaign notes
 

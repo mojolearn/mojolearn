@@ -14,7 +14,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | A07 | identical | PENDING_MEASUREMENT | 0 |
 | A08 | identical | PENDING_MEASUREMENT | 0 |
 | F01 | fast | PARTIAL_MEASUREMENTS_RETAINED | 32 |
-| F02 | fast | PARTIAL_MEASUREMENTS_RETAINED | 29 |
+| F02 | fast | PARTIAL_MEASUREMENTS_RETAINED | 65 |
 | F03 | fast | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 | F04 | fast | PARTIAL_MEASUREMENTS_RETAINED | 3 |
 | F05 | fast | PARTIAL_MEASUREMENTS_RETAINED | 8 |
@@ -29,10 +29,10 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F14 | fast | PARTIAL_MEASUREMENTS_RETAINED | 15 |
 | F15 | fast | PARTIAL_MEASUREMENTS_RETAINED | 54 |
 | F16 | fast | PARTIAL_MEASUREMENTS_RETAINED | 3 |
-| F17 | fast | FAILED | 0 |
-| F18 | fast | FAILED | 0 |
-| F19 | fast | FAILED | 0 |
-| F20 | fast | FAILED | 0 |
+| F17 | fast | PARTIAL_MEASUREMENTS_RETAINED | 3 |
+| F18 | fast | PARTIAL_MEASUREMENTS_RETAINED | 12 |
+| F19 | fast | PARTIAL_MEASUREMENTS_RETAINED | 9 |
+| F20 | fast | PARTIAL_MEASUREMENTS_RETAINED | 11 |
 | I01 | identical | PENDING_MEASUREMENT | 0 |
 | I02 | identical | PENDING_MEASUREMENT | 0 |
 | I03 | identical | PENDING_MEASUREMENT | 0 |
@@ -121,6 +121,42 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F02 | apple/pca | pca/clustered/inverse_ms | public_caller_component | MEASURED | 0.8741 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F02/pca/result.json |
 | F02 | apple/pca | pca/clustered/fit_ms | public_caller_component | MEASURED | 1.0053 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F02/pca/result.json |
 | F02 | apple/pca | pca/clustered/embedding_ms | public_caller_component | MEASURED | 1.0033 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F02/pca/result.json |
+| F02 | apple/mcd | mcd/mcd-313-5-singular0/consumer_ms/score | public_caller_component | MEASURED | 0.6082 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-313-5-singular0/fit_ms | public_caller_component | MEASURED | 0.8322 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-313-5-singular0/consumer_ms/mahalanobis | public_caller_component | MEASURED | 0.9854 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-313-5-singular0/consumer_ms/score | public_caller_component | MEASURED | 1.0323 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-313-5-singular0/consumer_ms/score_samples | public_caller_component | MEASURED | 0.9668 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-313-5-singular0/fit_ms | public_caller_component | MEASURED | 0.9304 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-313-5-singular0/consumer_ms/mahalanobis | public_caller_component | MEASURED | 0.9808 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-313-5-singular0/consumer_ms/decision_function | public_caller_component | MEASURED | 1.0096 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-313-5-singular0/consumer_ms/predict | public_caller_component | MEASURED | 0.5247 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-601-9-singular0/consumer_ms/score | public_caller_component | MEASURED | 1.3252 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-601-9-singular0/fit_ms | public_caller_component | MEASURED | 0.9215 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-601-9-singular0/consumer_ms/mahalanobis | public_caller_component | MEASURED | 0.9713 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-601-9-singular0/consumer_ms/score | public_caller_component | MEASURED | 1.0334 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-601-9-singular0/consumer_ms/score_samples | public_caller_component | MEASURED | 1.0192 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-601-9-singular0/fit_ms | public_caller_component | MEASURED | 0.9316 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-601-9-singular0/consumer_ms/mahalanobis | public_caller_component | MEASURED | 0.3652 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-601-9-singular0/consumer_ms/decision_function | public_caller_component | MEASURED | 0.9970 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-601-9-singular0/consumer_ms/predict | public_caller_component | MEASURED | 1.0015 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-907-13-singular0/consumer_ms/score | public_caller_component | MEASURED | 0.6157 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-907-13-singular0/fit_ms | public_caller_component | MEASURED | 0.9202 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-907-13-singular0/consumer_ms/mahalanobis | public_caller_component | MEASURED | 0.9780 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-907-13-singular0/consumer_ms/score | public_caller_component | MEASURED | 0.7941 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-907-13-singular0/consumer_ms/score_samples | public_caller_component | MEASURED | 1.0097 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-907-13-singular0/fit_ms | public_caller_component | MEASURED | 0.9333 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-907-13-singular0/consumer_ms/mahalanobis | public_caller_component | MEASURED | 1.0306 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-907-13-singular0/consumer_ms/decision_function | public_caller_component | MEASURED | 1.0149 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-907-13-singular0/consumer_ms/predict | public_caller_component | MEASURED | 1.0097 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-383-7-singular1/consumer_ms/score | public_caller_component | MEASURED | 0.9917 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-383-7-singular1/fit_ms | public_caller_component | MEASURED | 0.9409 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/mcd-383-7-singular1/consumer_ms/mahalanobis | public_caller_component | MEASURED | 1.0245 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-383-7-singular1/consumer_ms/score | public_caller_component | MEASURED | 1.0085 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-383-7-singular1/consumer_ms/score_samples | public_caller_component | MEASURED | 0.6915 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-383-7-singular1/fit_ms | public_caller_component | MEASURED | 0.9472 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-383-7-singular1/consumer_ms/mahalanobis | public_caller_component | MEASURED | 1.0645 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-383-7-singular1/consumer_ms/decision_function | public_caller_component | MEASURED | 0.8344 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
+| F02 | apple/mcd | mcd/elliptic-383-7-singular1/consumer_ms/predict | public_caller_component | MEASURED | 1.0332 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F02/mcd/result.json |
 | F02 | apple/cholesky | cholesky | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/cholesky/result.json |
 | F02 | apple/default | default/257/factor_ms | public_caller_component | MEASURED | 1.6020 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default/result.json |
 | F02 | apple/default | default/257/solve_ms | public_caller_component | MEASURED | 1.4119 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default/result.json |
@@ -562,6 +598,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F13 | apple/packed-layout | packed-layout/depth9-c3-skewTrue/cold_predict_ms | public_caller_component | MEASURED | 1.2153 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F13/packed-layout/result.json |
 | F13 | apple/packed-layout | packed-layout/depth9-c3-skewTrue/repeated_predict_ms | public_caller_component | MEASURED | 0.9526 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F13/packed-layout/result.json |
 | F13 | apple/shap | shap | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F13/shap/result.json |
+| F13 | apple/shap | shap | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F13/shap/result.json |
 | F13 | apple/default | default | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F13/default/result.json |
 | F13 | apple/packed-layout | packed-layout | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F13/packed-layout/result.json |
 | F13 | apple/shap | shap | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F13/shap/result.json |
@@ -638,11 +675,50 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F16 | apple/default | default/257/fit_search_forecast_ms | public_caller_component | MEASURED | 1.0416 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F16/default/result.json |
 | F16 | apple/default | default/509/fit_search_forecast_ms | public_caller_component | MEASURED | 1.0132 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F16/default/result.json |
 | F16 | apple/default | default | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F16/default/result.json |
+| F17 | apple/default | default/129/fit_search_forecast_ms | public_caller_component | MEASURED | 1.7453 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F17/default/result.json |
+| F17 | apple/default | default/257/fit_search_forecast_ms | public_caller_component | MEASURED | 0.9778 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F17/default/result.json |
+| F17 | apple/default | default/509/fit_search_forecast_ms | public_caller_component | MEASURED | 0.9918 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F17/default/result.json |
 | F17 | apple/default | default | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F17/default/result.json |
+| F18 | apple/default | default/509-3/repeated_ms_trajectory_total | public_caller_component | MEASURED | 0.4917 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/default/result.json |
+| F18 | apple/default | default/509-3/cold_ms | public_caller_component | MEASURED | 0.6349 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/default/result.json |
+| F18 | apple/default | default/521-7/repeated_ms_trajectory_total | public_caller_component | MEASURED | 0.7277 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/default/result.json |
+| F18 | apple/default | default/521-7/cold_ms | public_caller_component | MEASURED | 0.9221 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/default/result.json |
+| F18 | apple/default | default/997-13/repeated_ms_trajectory_total | public_caller_component | MEASURED | 0.9234 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/default/result.json |
+| F18 | apple/default | default/997-13/cold_ms | public_caller_component | MEASURED | 0.8119 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/default/result.json |
+| F18 | apple/immutable | immutable/509-3/repeated_ms_trajectory_total | public_caller_component | MEASURED | 0.4999 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/immutable/result.json |
+| F18 | apple/immutable | immutable/509-3/cold_ms | public_caller_component | MEASURED | 0.7578 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/immutable/result.json |
+| F18 | apple/immutable | immutable/521-7/repeated_ms_trajectory_total | public_caller_component | MEASURED | 0.9233 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/immutable/result.json |
+| F18 | apple/immutable | immutable/521-7/cold_ms | public_caller_component | MEASURED | 0.9473 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/immutable/result.json |
+| F18 | apple/immutable | immutable/997-13/repeated_ms_trajectory_total | public_caller_component | MEASURED | 0.7824 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/immutable/result.json |
+| F18 | apple/immutable | immutable/997-13/cold_ms | public_caller_component | MEASURED | 0.6224 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F18/immutable/result.json |
 | F18 | apple/default | default | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F18/default/result.json |
 | F18 | apple/immutable | immutable | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F18/immutable/result.json |
+| F19 | apple/default | default/(1, 37)/public_ms | public_caller_component | MEASURED | 1.0402 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F19/default/result.json |
+| F19 | apple/default | default/(3, 129)/public_ms | public_caller_component | MEASURED | 0.9868 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F19/default/result.json |
+| F19 | apple/default | default/(1, 7, 67)/public_ms | public_caller_component | MEASURED | 1.7701 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F19/default/result.json |
+| F19 | apple/permutation | permutation/(1, 37)/public_ms | public_caller_component | MEASURED | 1.6429 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F19/permutation/result.json |
+| F19 | apple/permutation | permutation/(3, 129)/public_ms | public_caller_component | MEASURED | 0.6770 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F19/permutation/result.json |
+| F19 | apple/permutation | permutation/(1, 7, 67)/public_ms | public_caller_component | MEASURED | 0.4746 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F19/permutation/result.json |
+| F19 | apple/permutation | permutation/permute-509-3/public_ms | public_caller_component | MEASURED | 2.0031 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F19/permutation/result.json |
+| F19 | apple/permutation | permutation/permute-521-129/public_ms | public_caller_component | MEASURED | 2.1569 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F19/permutation/result.json |
+| F19 | apple/permutation | permutation/permute-997-67/public_ms | public_caller_component | MEASURED | 1.0847 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F19/permutation/result.json |
 | F19 | apple/default | default | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F19/default/result.json |
 | F19 | apple/permutation | permutation | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F19/permutation/result.json |
+| F20 | apple/default | default | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/default/result.json |
+| F20 | apple/normalization | normalization/131-17-1.0/backward_ms | public_caller_component | MEASURED | 0.8322 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/normalization/result.json |
+| F20 | apple/normalization | normalization/131-17-1.0/downstream_ms | public_caller_component | MEASURED | 0.6184 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/normalization/result.json |
+| F20 | apple/normalization | normalization/131-17-1.0/forward_ms | public_caller_component | MEASURED | 0.9739 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/normalization/result.json |
+| F20 | apple/normalization | normalization/137-65-0.01/backward_ms | public_caller_component | MEASURED | 2.0792 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/normalization/result.json |
+| F20 | apple/normalization | normalization/137-65-0.01/downstream_ms | public_caller_component | MEASURED | 1.2856 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/normalization/result.json |
+| F20 | apple/normalization | normalization/137-65-0.01/forward_ms | public_caller_component | MEASURED | 1.1342 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/normalization/result.json |
+| F20 | apple/normalization | normalization/257-129-1000.0/backward_ms | public_caller_component | MEASURED | 1.0993 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/normalization/result.json |
+| F20 | apple/normalization | normalization/257-129-1000.0/downstream_ms | public_caller_component | MEASURED | 0.9373 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/normalization/result.json |
+| F20 | apple/normalization | normalization/257-129-1000.0/forward_ms | public_caller_component | MEASURED | 0.9834 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/normalization/result.json |
+| F20 | apple/status | status | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-54c1f35a5/results/F20/status/result.json |
+| F20 | apple/default | default/two-head-fixed-task/train_step_ms_trajectory_total | public_caller_component | MEASURED | 0.8528 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-f20-3e19f734e/results/F20/default/result.json |
+| F20 | apple/status | status/two-head-fixed-task/train_step_ms_trajectory_total | public_caller_component | MEASURED | 1.0514 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-f20-3e19f734e/results/F20/status/result.json |
+| F20 | apple/default | default | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F20/default/result.json |
+| F20 | apple/status | status | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-next-5ae0c6f7a/results/F20/status/result.json |
 | F20 | apple/default | default | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F20/default/result.json |
 | F20 | apple/normalization | normalization | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F20/normalization/result.json |
 | F20 | apple/status | status | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F20/status/result.json |
