@@ -967,6 +967,21 @@ comptime IDN_RF_FUSED_PARTITION = (
 # never builds it.
 # `-D MOJOLEARN_IDN_RF_DEVICE_LOOP_K1` / `_K2` / `_K8` pick the batches per
 # drain (default 4).
+# 2026-10-05 real full-harness IDENTICAL A/B: keep K4; K1/K2/K8 not promoted.
+# Numerical source a006da73d, harness e5f3b578b; full Taxi and Istella.
+# One excluded warmup / one scored fit per arm and GPU. Candidate/base time
+# ratios below are Taxi / Istella; geometric combined weights all four cells.
+# rf-k1: NVIDIA 1.006916 / 1.003164; AMD 1.000522 / 1.001382;
+#   combined 1.002993: no measured net improvement; retain baseline.
+# rf-k2: NVIDIA 1.004539 / 1.001776; AMD 0.999258 / 1.002636;
+#   combined 1.002050: no measured net improvement; retain baseline.
+# rf-k8: NVIDIA 1.002375 / 1.000626; AMD 0.998824 / 1.008045;
+#   combined 1.002461: no measured net improvement; retain baseline.
+# All full model/prediction arrays match baseline and across NVIDIA/AMD.
+# Same inputs/settings and verified worker bindings; no extra fit for identity.
+# Differences are small, single-sample observations: no variance/significance claim.
+# Original AMD Taxi evidence failures retained; four scoped receipt repairs used.
+# Evidence: experiments/identical_speed/results/20261005/forest-final-decisions/board.json.
 comptime LOOP_K = 1 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K1"]() else (
     2 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K2"]() else (
         8 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K8"]() else 4
