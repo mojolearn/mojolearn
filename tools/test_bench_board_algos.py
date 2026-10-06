@@ -27,6 +27,18 @@ A = _load("bench_board_algos")
 bb = _load("bench_board")
 
 
+def test_cuml_minmax_uses_supported_unclipped_constructor(monkeypatch):
+    class MinMaxScaler:
+        def __init__(self, feature_range=(0, 1)):
+            self.feature_range = feature_range
+
+    monkeypatch.setattr(A, "_imp", lambda spec: MinMaxScaler)
+    make, _, params = A._est_factory("minmax-scaler", "cuml-gpu", {})
+    assert make().feature_range == (0, 1)
+    assert params == {"feature_range": (0, 1)}
+    assert A.LANES["minmax-scaler"]["params"]["clip"] is False
+
+
 @pytest.mark.parametrize("values", [
     np.array([0, 1, 1], dtype=np.int64),
     np.array([0.25, -1.5, 3.75], dtype=np.float32),
