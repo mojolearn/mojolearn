@@ -1,6 +1,6 @@
 {
   "id": "A02",
-  "source": "gemm/experiments/profile_check.mojo",
+  "source": "experiments/performance_ideas/A02/check.mojo",
   "arms": [
     {
       "name": "library_depth",

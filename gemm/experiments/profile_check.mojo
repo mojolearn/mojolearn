@@ -22,7 +22,7 @@ from gemm.checks.gemm_step_arms import (
 from gemm.checks.gemm_identical import contract_partition
 
 
-def main() raises:
+def run_profile() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, "IDENTICAL only"
     var ctx = DeviceContext()
     var cases = gemm_step_env_int("MOJOLEARN_EXPERIMENT_CASES", 4)
@@ -82,3 +82,7 @@ def main() raises:
                 raise Error("profile bit/poison gate failed at "+String(cmp[2]))
         ctx.synchronize()
     print("PROFILE_PASS orientations=NN,NT,TN cases="+String(cases))
+
+
+def main() raises:
+    run_profile()
