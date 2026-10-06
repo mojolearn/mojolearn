@@ -770,7 +770,14 @@ class KernelDensity(NumericModeMixin):
                 "mojolearn KernelDensity: X contains a NaN or an infinity; "
                 "refused by name at fit (DEVIATION 604)"
             )
-        self._x = x  # kept alive; score_samples reads it
+        # Opt-in immutable snapshot: transport-only copy of caller bytes.
+        # Residency never relies on external mutable pointer identity.
+        binding = self._bind("_mojolearn_estimators")
+        immutable = bool(getattr(binding, "kde_fast_immutable_fit", lambda: 0)())
+        if immutable:
+            x = x.copy()
+            self.input_copied_ = True
+        self._x = x  # owned snapshot when the experiment is enabled
         self.n_features_in_ = x.shape[1]
         self.n_samples_fit_ = x.shape[0]
         if sample_weight is not None:
@@ -794,7 +801,7 @@ class KernelDensity(NumericModeMixin):
                 raise ValueError(
                     "mojolearn KernelDensity: sample_weight must sum to > 0"
                 )
-            self._w = w
+            self._w = w.copy() if immutable else w
         else:
             self._w = None
         return self

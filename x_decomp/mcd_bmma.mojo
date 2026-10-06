@@ -96,6 +96,25 @@ comptime MCD_ORDERED_COV = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_MCD_ORDERED_COV"]())
 
+# Bound the queued candidate plane independently of features/datasets. This
+# scheduling experiment preserves inactive-candidate gates and input strides;
+# it changes neither support selection nor candidate count.
+comptime MCD_FAST_BOUND_BATCH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_MCD_FAST_BOUND_BATCH"]())
+comptime MCD_CANDIDATE_BATCH = 32
+
+struct McdBatchAudit(Defaultable, Movable):
+    var launches: Int
+    def __init__(out self):
+        self.launches = 0
+
+comptime BATCH_STATE = _Global[StorageType=McdBatchAudit, name="McdCandidateBatchAudit", init_fn=McdBatchAudit.__init__]
+
+def mcd_fast_batch_count() raises -> Int:
+    return BATCH_STATE.get_or_create_ptr()[].launches
+
+
 #: AFN_TILE_SQUARE's shape (`afn_launch_tile_aux`'s default branch).
 comptime MB_SGM = 2
 comptime MB_SGN = 2
@@ -343,6 +362,18 @@ def launch_gemm_mma_batched(
             grid_dim=(tiles, splits, nc), block_dim=(MB_NT, 1, 1),
         )
     else:
+        comptime if MCD_FAST_BOUND_BATCH:
+            for first in range(0, nc, MCD_CANDIDATE_BATCH):
+                var count = min(MCD_CANDIDATE_BATCH, nc - first)
+                ctx.enqueue_function[mcd_bmma_kernel[False]](
+                    c + first * c_bs, a + first * a_bs, b + first * b_bs, gate + first, ga,
+                    Int32(m), Int32(n), Int32(k),
+                    Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k),
+                    Int32(a_bs), Int32(b_bs), Int32(c_bs),
+                    grid_dim=(tiles, 1, count), block_dim=(MB_NT, 1, 1),
+                )
+                BATCH_STATE.get_or_create_ptr()[].launches += 1
+            return
         ctx.enqueue_function[mcd_bmma_kernel[False]](
             c, a, b, gate, ga, Int32(m), Int32(n), Int32(k),
             Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k),

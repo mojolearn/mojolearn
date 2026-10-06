@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "id": "F16",
+  "title": "Compensated Kalman full estimator prerequisite and quality fixture",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "blocked_prerequisite",
+  "implementation_paths": [
+    "experiments/performance_ideas/F16/caller.py",
+    "experiments/performance_ideas/F16/prerequisite.py",
+    "experiments/performance_ideas/apple_fast/arima_task.py",
+    "arima/impl/fast_scalar_df.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_ARIMA_FAST_K3_DF_PROBE"
+  ],
+  "baseline_defines": [],
+  "build_argv": [],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/F16/prerequisite.py"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F16/prerequisite.py",
+    "tools/arima_k3_df_gpu_quality.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "independent covariance/gradient oracle before estimator timing",
+    "production Jones/initializer/optimizer failure semantics",
+    "selected order and heldout forecast quality"
+  ],
+  "timing_contract": "No timing authorization until production compensated likelihood+gradient integration and full quality pass",
+  "blocker": "Installed K3 DF candidate is a supplied-state private AR1 probe, not a full AutoARIMA likelihood/gradient route; no actual product caller exists. Root considering safe FastEvalWS adapter.",
+  "output_kind": "directory",
+  "binding": "arima",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
+}

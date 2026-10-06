@@ -29,7 +29,8 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import ftz, identical_div
+from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
 from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
 
 
@@ -55,7 +56,7 @@ def finite_key(value: Float32) -> UInt32:
 #: in shared memory once (when `features <= FOREST_SHARED_ROW_CAPACITY`) and
 #: every lane's feature reads come from that tile. The values compared are
 #: the same words in either case. Both are default off until the pod A/B.
-comptime FOREST_SHARED_ROWS = is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]()
+comptime FOREST_SHARED_ROWS = is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
 comptime FOREST_SHARED_ROW_CAPACITY = 256
 
 #: DEVIATION 2964 (lane/forest-groves-row-schedule, 2026-09-17): the groves

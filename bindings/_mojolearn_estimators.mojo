@@ -74,6 +74,7 @@ from core.labeled_reference_predict import labeled_reference_predict
 from dbscan.estimator import dbscan_fit
 from kde.estimator import kde_score_samples_host_ptr
 from kde.resident_fit import (
+    KDE_FAST_IMMUTABLE_FIT,
     kde_fit_prepare,
     kde_fit_release,
     kde_score_samples_resident,
@@ -1291,6 +1292,10 @@ def kde_score_samples_binding(
     return PythonObject(n_query)
 
 
+def kde_fast_immutable_fit_binding() raises -> PythonObject:
+    return PythonObject(Int(KDE_FAST_IMMUTABLE_FIT))
+
+
 def kde_fit_prepare_binding(
     train_addr: PythonObject,
     weights_addr: PythonObject,
@@ -1448,6 +1453,7 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[kde_fit_prepare_binding]("kde_fit_prepare")
+        m.def_function[kde_fast_immutable_fit_binding]("kde_fast_immutable_fit")
         m.def_function[kde_fit_release_binding]("kde_fit_release")
         m.def_function[kde_score_samples_resident_binding]("kde_score_samples_resident")
         comptime if SCOPED_AUDIT:

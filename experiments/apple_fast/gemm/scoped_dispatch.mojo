@@ -63,10 +63,11 @@ def scoped_last(index: Int) raises -> Int:
     return STATE.get_or_create_ptr()[].last[index]
 
 
-def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool](
+def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool, SUBTRACT: Bool = False](
     dst: FPtr, a: FPtr, b: FPtr,
     m_in: Int32, n_in: Int32, k_in: Int32,
     a_si_in: Int32, a_sp_in: Int32, b_sp_in: Int32, b_sj_in: Int32, per_in: Int32,
+    dst_stride_in: Int32 = Int32(0),
 ):
     var m = Int(m_in)
     var n = Int(n_in)
@@ -76,6 +77,7 @@ def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool](
     var b_sp = Int(b_sp_in)
     var b_sj = Int(b_sj_in)
     var per = Int(per_in)
+    comptime assert not (SPLIT and SUBTRACT), "subtract requires an unsplit accumulation"
     comptime assert BM % 16 == 0 and BN % 16 == 0
     comptime RM = BM // 16
     comptime RN = BN // 16
@@ -127,6 +129,9 @@ def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool](
                 if row < m and col < n:
                     comptime if SPLIT:
                         _ = Atomic.fetch_add(dst.unsafe_offset(row * n + col), fragment[s])
+                    elif SUBTRACT:
+                        var cell = row * Int(dst_stride_in) + col
+                        dst.unsafe_store(cell, dst.unsafe_load(cell) - fragment[s])
                     else:
                         dst.unsafe_store(row * n + col, fragment[s])
 

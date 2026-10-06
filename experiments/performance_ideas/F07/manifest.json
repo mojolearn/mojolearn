@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "id": "F07",
+  "title": "FLASH and true GQA caller qualification with reach counters",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "transformer/impl/llama/afn_apple_fast.mojo",
+    "bindings/_mojolearn_transformer.mojo",
+    "experiments/performance_ideas/F07/caller.py"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_AFN_ATTN_FLASH",
+    "MOJOLEARN_AFN_ATTN_AUDIT"
+  ],
+  "baseline_defines": [
+    "MOJOLEARN_AFN_ATTN_AUDIT"
+  ],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F07",
+    "--output",
+    "{output}/arms"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F07",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F07/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "full-block FP64 reference error no material loss",
+    "real GQA ratios >1 and grouped reach counter",
+    "short/long causal tails",
+    "inference only: backward training separately qualified"
+  ],
+  "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
+  "blocker": null,
+  "variants": {
+    "default": [
+      "MOJOLEARN_AFN_ATTN_FLASH",
+      "MOJOLEARN_AFN_ATTN_AUDIT"
+    ],
+    "gqa": [
+      "MOJOLEARN_AFN_ATTN_GQA_TILE",
+      "MOJOLEARN_AFN_ATTN_AUDIT"
+    ]
+  },
+  "output_kind": "directory",
+  "binding": "transformer",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
+}

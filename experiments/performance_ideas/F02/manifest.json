@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "id": "F02",
+  "title": "Share GEMM fragments with strided fused LU subtract",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/apple_fast/gemm/scoped_dispatch.mojo",
+    "x_decomp/lu_fast_mma.mojo",
+    "experiments/performance_ideas/F02/caller.py"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_LU_FAST_SHARED_SUB"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F02",
+    "--output",
+    "{output}/arms"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F02",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F02/caller.py"
+  ],
+  "depends_on": [
+    "F01"
+  ],
+  "quality_gates": [
+    "factor/solve residual against FAST incumbent",
+    "retain strided subtract epilogue without extra pass",
+    "Cholesky triangular and MCD batching adapters still require independent integration"
+  ],
+  "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "x_decomp",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
+}

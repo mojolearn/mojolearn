@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "id": "F12",
+  "title": "Qualify resident boosting partition and leaf-input reuse",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/F12/caller.py",
+    "gbdt/methods/sym_iter_fast.mojo",
+    "gbdt/methods/leaves_estimation/apple_fast_est.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_SYM_REUSE_PARTITION"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F12",
+    "--output",
+    "{output}/arms"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F12",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F12/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "actual complete boosting fit",
+    "same tree count/depth/random seed/sampling semantics",
+    "heldout RMSE no material loss",
+    "categorical/ranking/depthwise/lossguide extension qualification still owed"
+  ],
+  "timing_contract": "Whole boosting fit and first prediction separately from retained prediction",
+  "blocker": null,
+  "output_kind": "directory",
+  "variants": {
+    "default": [
+      "MOJOLEARN_SYM_REUSE_PARTITION"
+    ],
+    "leaf-inputs": [
+      "MOJOLEARN_SYM_LEAF_FROM_STATS"
+    ],
+    "arena": [
+      "MOJOLEARN_SYM_BUF_ARENA"
+    ]
+  },
+  "binding": "gbdt",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
+}
