@@ -6,8 +6,8 @@ Every point uses the existing ascending feature FMA chain; task top-k and
 query merge compare the same total (distance,index) keys. Partial lists are
 exact: any globally selected point must occur in its task's KM best.
 One integer task-total readback sizes scratch; no input arithmetic on host."""
-from std.gpu import block_idx,thread_idx,lane_id,shuffle_xor
-from std.collections import InlineArray
+from std.gpu import block_idx,thread_idx,lane_id
+from std.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz,identical_mul_add
 from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import WARP_SIZE,_key,_kless
@@ -104,6 +104,8 @@ def ivf_balanced_scan[KM:Int](ctx: DeviceContext,mut query: DeviceBuffer[DType.f
     var pairs=nq*np
     if nq<0 or np<1 or dim<1 or k<1 or k>KM or pairs>2147483647:
         raise Error("I16 balanced task shape refused")
+    if nq*((len(ids)+TASK_ROWS-1)//TASK_ROWS+np)>2147483647//KM:
+        raise Error("I16 maximum task count exceeds int32 scratch bound")
     if pairs==0:
         return
     var counts=ctx.enqueue_create_buffer[DType.int32](pairs+1)
