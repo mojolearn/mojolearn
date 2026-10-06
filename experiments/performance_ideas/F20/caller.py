@@ -64,7 +64,11 @@ def exercise(args):
         final=[float(cross_entropy(linear_forward(hidden,w,numeric_mode='fast'),y,numeric_mode='fast')) for w,y in zip(weights,targets)]
         saved=[w.copy() for w in weights];bad=[np.zeros_like(w) for w in weights];bad[0][0,0]=np.nan
         try:optimizer.step(bad)
-        except (ValueError,RuntimeError):pass
+        except Exception as error:
+            # Native Mojo Error crosses this binding as plain Exception.
+            # Only this deliberate refusal is expected; other errors still fail.
+            assert str(error)==('optimizer: NaN in grad at flat index 0 REFUSED '
+                '(row 39: NaN payloads are vendor-shaped; no stage may record one)'),str(error)
         else:raise AssertionError('nonfinite optimizer gradient accepted')
         assert all(np.array_equal(a,b) for a,b in zip(saved,weights)), 'refused update changed parameters'
         cases['two-head-fixed-task']=dict(contract=dict(rows=41,d=17,classes=[7,11],steps=12,lr=.05,momentum=.9,seed=197),
