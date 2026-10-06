@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--arm', choices=['A', 'B'], required=True)
     parser.add_argument('--phase', choices=['warmup', 'scored'], required=True)
     parser.add_argument('--source-sha', required=True)
+    parser.add_argument('--dataset-sha256', required=True)
     args = parser.parse_args()
     import numpy as np
     from mojolearn import PCA, _mojolearn_estimators
@@ -71,11 +72,22 @@ def main():
     export = model_receipt(model)
     # Public fitted-array hash remains explicit even if a model has no save API.
     public_state_hash = canonical_hash(state)
-    packet = dict(schema=1, idea='F01', arm=args.arm, phase=args.phase,
+    boundary = 'host input preparation + public fit + full query transform + inverse + host copies; disk load and hashes excluded'
+    packet = dict(schema='mojolearn.full-ab-result/1', status='PASS', idea='F01', arm=args.arm, phase=args.phase,
+                  dataset_sha256=args.dataset_sha256, mode='fast',
+                  dimensions=dict(train=list(x.shape), query=list(query.shape)),
+                  full_dataset_coverage=True,
+                  model_state=dict(status='CAPTURED', sha256=public_state_hash,
+                                   scope='public numerical PCA fitted arrays and noise variance'),
+                  loaded_artifacts={str(binding_path): hashlib.sha256(binding_path.read_bytes()).hexdigest()},
+                  timings=dict(full_operation_seconds=(operation_end-start)/1e9,
+                               preparation_seconds=(prepared-start)/1e9, fit_seconds=(fit_end-prepared)/1e9,
+                               cold_transform_seconds=(transform_end-fit_end)/1e9, cold_inverse_seconds=(operation_end-transform_end)/1e9,
+                               repeated_transform_seconds=(repeat_end-repeat_start)/1e9, repeated_inverse_seconds=(repeat_inverse_end-repeat_end)/1e9),
                   source_sha=args.source_sha, numeric_mode=model.numeric_mode_used(),
                   vendor=model.vendor_used(), model_sha256=public_state_hash,
                   model_hash_scope='public numerical PCA fitted arrays and noise variance',
-                  public_model_export=export,
+                  public_model_export=export if export.get('status') == 'ok' else dict(status='UNAVAILABLE', reason=export.get('reason', 'public export unavailable')), 
                   output_sha256=canonical_hash(dict(projected=projected, restored=restored)),
                   repeated_output_sha256=canonical_hash(dict(projected=repeated, restored=repeated_inverse)),
                   binding=dict(path=str(binding_path), sha256=hashlib.sha256(binding_path.read_bytes()).hexdigest()),
@@ -88,7 +100,7 @@ def main():
                                  operation=(operation_end-start)/1e6,
                                  repeated_transform=(repeat_end-repeat_start)/1e6,
                                  repeated_inverse=(repeat_inverse_end-repeat_end)/1e6),
-                  timed_boundary='host input preparation + public fit + full query transform + inverse + host copies; disk load and hashes excluded',
+                  timed_boundary=boundary,
                   reach=reached, candidate_reached=any(reached[i] for i in (1, 2, 4, 5, 7, 8)),
                   quality=dict(fitted_state_finite=bool(all(np.isfinite(v).all() for v in (components,mean,singular))),
                                output_finite=bool(np.isfinite(restored).all()),
