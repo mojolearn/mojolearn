@@ -106,6 +106,7 @@ def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
 # I04 supported research version: every device and host oracle imports
 # this constant. The profile cap/fold remain unchanged; partitions still
 # depend only on k. Requires an explicit IDENTICAL build and is default off.
+# I04 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
 # I04 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Leaf64 requires IDENTICAL + MOJOLEARN_IDN_GEMM_FOLD_LEAF_64; otherwise leaf128.
 comptime CONTRACT_K_LEAF_MIN = (
