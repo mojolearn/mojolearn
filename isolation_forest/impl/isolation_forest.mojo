@@ -1504,7 +1504,7 @@ def if_select_two_kernel(scores: MutPointer[Float32, MutAnyOrigin], selected: Mu
     var mask = UInt32(0)
     var bit = 31
     while bit >= 0:
-        var flag = UInt32(1) << bit
+        var flag = UInt32(1) << UInt32(bit)
         var count = 0
         var r = tid
         while r < Int(n):

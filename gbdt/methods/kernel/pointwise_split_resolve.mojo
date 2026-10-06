@@ -594,5 +594,5 @@ def pw_resolve_pack_bins_kernel(
         else:
             goes_right = feature_val > value
         if goes_right:
-            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << bin_depth))
+            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << UInt32(bin_depth)))
         i += stride

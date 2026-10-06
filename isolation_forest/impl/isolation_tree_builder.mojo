@@ -581,7 +581,7 @@ def _block_select_smallest(
             cum += c
         k_rem -= cum
         prefix = prefix | (UInt32(digit) << shift)
-        mask = mask | (UInt32(15) << shift)
+        mask = mask | (UInt32(15) << UInt32(shift))
         barrier()
     # `prefix` is the k-th smallest key; `k_rem` rows holding it are taken,
     # lowest row first

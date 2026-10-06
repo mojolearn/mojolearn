@@ -40,16 +40,16 @@ def centered_gram_cell(x: F32Ptr, means: F32Ptr, n: Int, d: Int, i: Int, j: Int)
         for r in range(first, min(n, first + 256)):
             acc = ftz(identical_mul_add(sub(x.unsafe_load(r * d + i), mi), sub(x.unsafe_load(r * d + j), mj), acc))
         var level = 0
-        while (occupied & (UInt32(1) << level)) != 0:
+        while (occupied & (UInt32(1) << UInt32(level))) != 0:
             acc = ftz(levels[level] + acc)
-            occupied = occupied & ~(UInt32(1) << level)
+            occupied = occupied & ~(UInt32(1) << UInt32(level))
             level += 1
         levels[level] = acc
-        occupied = occupied | (UInt32(1) << level)
+        occupied = occupied | (UInt32(1) << UInt32(level))
     var acc = Float32(0)
     var have = False
     for level in range(32):
-        if (occupied & (UInt32(1) << level)) != 0:
+        if (occupied & (UInt32(1) << UInt32(level))) != 0:
             acc = ftz(levels[level] + acc) if have else levels[level]
             have = True
     return acc

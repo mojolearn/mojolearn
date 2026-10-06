@@ -19,16 +19,16 @@ def classical_dot(a: CFP, b: CFP, a0: Int, b0: Int, sa: Int, sb: Int, k: Int) ->
         for q in range(leaf_begin(t, leaf), leaf_end(t, leaf, k)):
             acc = ftz(identical_mul_add(ftz(a.unsafe_load(a0 + q * sa)), ftz(b.unsafe_load(b0 + q * sb)), acc))
         var level = 0
-        while (occupied & (UInt32(1) << level)) != 0:
+        while (occupied & (UInt32(1) << UInt32(level))) != 0:
             acc = ftz(levels[level] + acc)
-            occupied = occupied & ~(UInt32(1) << level)
+            occupied = occupied & ~(UInt32(1) << UInt32(level))
             level += 1
         levels[level] = acc
-        occupied = occupied | (UInt32(1) << level)
+        occupied = occupied | (UInt32(1) << UInt32(level))
     var acc = Float32(0)
     var have = False
     for level in range(11):
-        if (occupied & (UInt32(1) << level)) != 0:
+        if (occupied & (UInt32(1) << UInt32(level))) != 0:
             acc = ftz(levels[level] + acc) if have else levels[level]
             have = True
     return acc

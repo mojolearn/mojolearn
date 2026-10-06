@@ -395,7 +395,7 @@ def op_mlp_perm(t: Int, a: Args):
             return
     var n = UInt32(a.i0)
     var h = UInt32(a.i1)
-    var mask = (UInt32(1) << h) - UInt32(1)
+    var mask = (UInt32(1) << UInt32(h)) - UInt32(1)
     var k0 = UInt32(a.i2) | (UInt32(a.i3) << UInt32(16))
     var k1 = UInt32(a.i4) | (UInt32(a.i5) << UInt32(16))
     var x = UInt32(t)

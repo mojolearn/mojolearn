@@ -1370,7 +1370,7 @@ def o_mlp_perm(n: Int, seed: UInt64, epoch: Int, alt: Bool) -> List[Float32]:
     while (1 << bits) < n:
         bits += 1
     var h = UInt32((bits + 1) // 2)
-    var mask = (UInt32(1) << h) - UInt32(1)
+    var mask = (UInt32(1) << UInt32(h)) - UInt32(1)
     var rounds = 5 if alt else 6
     var out = List[Float32]()
     for t in range(n):

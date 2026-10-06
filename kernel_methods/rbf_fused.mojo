@@ -94,20 +94,20 @@ def classical_projection_kernel[FUSED: Bool](dst: MutPointer[Float32, MutAnyOrig
                 if first + row < n:
                     acc[row] = ftz(identical_mul_add(ftz(x.unsafe_load((first + row) * d + f)), weight, acc[row]))
         var level = 0
-        while (occupied & (UInt32(1) << level)) != 0:
+        while (occupied & (UInt32(1) << UInt32(level))) != 0:
             comptime for row in range(4):
                 acc[row] = ftz(levels[level * 4 + row] + acc[row])
-            occupied = occupied & ~(UInt32(1) << level)
+            occupied = occupied & ~(UInt32(1) << UInt32(level))
             level += 1
         comptime for row in range(4):
             levels[level * 4 + row] = acc[row]
-        occupied = occupied | (UInt32(1) << level)
+        occupied = occupied | (UInt32(1) << UInt32(level))
     comptime for row in range(4):
         if first + row < n:
             var acc = Float32(0)
             var have = False
             for level in range(11):
-                if (occupied & (UInt32(1) << level)) != 0:
+                if (occupied & (UInt32(1) << UInt32(level))) != 0:
                     acc = ftz(levels[level * 4 + row] + acc) if have else levels[level * 4 + row]
                     have = True
             comptime if FUSED:

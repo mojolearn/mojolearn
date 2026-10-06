@@ -469,7 +469,7 @@ def update_bins_from_compressed_index_kernel(
         else:
             goes_right = feature_val > value
         if goes_right:
-            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << depth))
+            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << UInt32(depth)))
         i += stride
 
 
@@ -500,7 +500,7 @@ def update_bins_from_desc_kernel(
         else:
             goes_right = feature_val > value
         if goes_right:
-            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << depth))
+            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << UInt32(depth)))
         i += stride
 
 

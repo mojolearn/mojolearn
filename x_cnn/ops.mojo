@@ -1904,7 +1904,7 @@ def epoch_row_val(i: Int, p: IP) -> Int32:
     if _g(p, EP_SHUFFLE) == 0:
         return Int32(pos)
     var h = UInt32(_g(p, EP_HALF))
-    var mask = (UInt32(1) << h) - UInt32(1)
+    var mask = (UInt32(1) << UInt32(h)) - UInt32(1)
     var k0 = UInt32(_g(p, EP_KEY)) | (UInt32(_g(p, EP_KEY + 1)) << UInt32(16))
     var k1 = UInt32(_g(p, EP_KEY + 2)) | (UInt32(_g(p, EP_KEY + 3)) << UInt32(16))
     var x = UInt32(pos)
