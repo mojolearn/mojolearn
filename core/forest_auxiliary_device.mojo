@@ -11,11 +11,11 @@ from core.forest_auxiliary_units import AuxI32, AuxF32, forest_auxiliary_row
 
 def _auxiliary_kernel[RF_INPUT: Bool](offsets: AuxI32, colid: AuxI32, threshold: AuxF32, left: AuxI32, leaves: AuxF32,
     x: AuxF32, leaf_out: AuxI32, prefix_out: AuxF32, pred_out: AuxF32, totals: AuxF32, bad: AuxI32,
-    rows: Int32, features: Int32, trees: Int32, outputs: Int32, emit_leaf: Bool, emit_prefix: Bool, emit_pred: Bool):
+    rows: Int32, features: Int32, trees: Int32, outputs: Int32, emit_leaf: Int32, emit_prefix: Int32, emit_pred: Int32):
     var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if row < Int(rows):
         if not forest_auxiliary_row[RF_INPUT](offsets, colid, threshold, left, leaves, x, leaf_out, prefix_out, pred_out,
-            totals, row, Int(features), Int(trees), Int(outputs), emit_leaf, emit_prefix, emit_pred):
+            totals, row, Int(features), Int(trees), Int(outputs), emit_leaf != 0, emit_prefix != 0, emit_pred != 0):
             _ = Atomic.max(bad, Int32(1))
 
 
@@ -48,12 +48,12 @@ def forest_auxiliary_device(forest: List[Int], x: Int, leaf_out: Int, prefix_out
     if rf_input:
         ctx.enqueue_function[_auxiliary_kernel[True]](doff.unsafe_ptr(), dcol.unsafe_ptr(), dthr.unsafe_ptr(), dleft.unsafe_ptr(), dleaf.unsafe_ptr(),
             dx.unsafe_ptr(), did.unsafe_ptr(), dpre.unsafe_ptr(), dpred.unsafe_ptr(), sums.unsafe_ptr(), bad.unsafe_ptr(),
-            Int32(rows), Int32(features), Int32(trees), Int32(outputs), leaf_out!=0, prefix_out!=0, pred_out!=0,
+            Int32(rows), Int32(features), Int32(trees), Int32(outputs), Int32(leaf_out!=0), Int32(prefix_out!=0), Int32(pred_out!=0),
             grid_dim=(rows+127)//128, block_dim=128)
     else:
         ctx.enqueue_function[_auxiliary_kernel[False]](doff.unsafe_ptr(), dcol.unsafe_ptr(), dthr.unsafe_ptr(), dleft.unsafe_ptr(), dleaf.unsafe_ptr(),
             dx.unsafe_ptr(), did.unsafe_ptr(), dpre.unsafe_ptr(), dpred.unsafe_ptr(), sums.unsafe_ptr(), bad.unsafe_ptr(),
-            Int32(rows), Int32(features), Int32(trees), Int32(outputs), leaf_out!=0, prefix_out!=0, pred_out!=0,
+            Int32(rows), Int32(features), Int32(trees), Int32(outputs), Int32(leaf_out!=0), Int32(prefix_out!=0), Int32(pred_out!=0),
             grid_dim=(rows+127)//128, block_dim=128)
     var hbad = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_ptr=hbad.unsafe_ptr(), src_buf=bad)
