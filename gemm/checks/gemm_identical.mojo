@@ -7076,6 +7076,12 @@ def _shipped_body_kpack_hg[
             else:
                 # `-D MOJOLEARN_GEMM_NV_FS4_OFF` keeps the profile-wide stack.
                 comptime if not is_defined["MOJOLEARN_GEMM_NV_FS4_OFF"]():
+                    comptime if is_defined["MOJOLEARN_IDN_GEMM_FS2"]():
+                        if gemm_kpack_fold_slots_for(
+                            contract_partition(k)[1], gemm_default_ksplit_leaves(m,n,k)
+                        ) == 2:
+                            _kpack_hg_run_with_ws[2,SAB](ctx,c,a,b,ws,m,n,k,op)
+                            return
                     if gemm_kpack_fold_slots_for(
                         contract_partition(k)[1], gemm_default_ksplit_leaves(m, n, k)
                     ) == 4:
@@ -7916,6 +7922,12 @@ def gemm_kpack_fold_slots_for(p_count: Int, group_leaves: Int) -> Int:
     var bound = p_count
     if group_leaves > 0 and group_leaves < bound:
         bound = group_leaves
+    # N02: two levels are sufficient for at most two logical leaves:
+    # the second push carries into level1. This proof depends on logical
+    # contraction/group bounds only and holds across neighboring outputs.
+    comptime if is_defined["MOJOLEARN_IDN_GEMM_FS2"]():
+        if bound <= 2:
+            return 2
     if bound <= 8:
         return 4
     if bound <= 128:
@@ -8161,7 +8173,7 @@ def identical_gemm_kpack_kernel[
     comptime assert (
         FS >= GEMM_FOLD_LEVELS
         or is_defined["MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL"]()
-        or (TARGET_COLUMN == COLUMN_NVIDIA and (FS == 4 or FS == 8))
+        or (TARGET_COLUMN == COLUMN_NVIDIA and (FS == 4 or FS == 8 or (FS == 2 and is_defined["MOJOLEARN_IDN_GEMM_FS2"]())))
     ), (
         "identical_gemm_kpack_kernel: the local fold stack must cover the"
         " profile cap CONTRACT_MAX_LEAVES (smaller stacks are trial-only and"
