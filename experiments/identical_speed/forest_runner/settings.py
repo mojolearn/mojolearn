@@ -24,3 +24,16 @@ def worker_environment(vendor,runtime,data_environment,base=None):
  env.update(data_environment)
  if vendor=='nvidia':env['MOJOLEARN_CUDA_PATH']='native'
  return env
+
+def planned_cells(packet):
+ groups=[('rf',['taxi','istella'],['rf-k4','rf-k1','rf-k2','rf-k8']),('et',['istellareg','year'],['et-float','et-u16'])]
+ universe={family+'-'+dataset+'-'+profile for family,datasets,profiles in groups for dataset in datasets for profile in profiles if profile in packet['arms']}
+ selected=packet.get('selected_cells')
+ if selected is None:return universe
+ assert selected and all(row['vendor']==packet['vendor'] for row in selected)
+ wanted={row['family']+'-'+row['dataset']+'-'+row['profile'] for row in selected}
+ assert len(wanted)==len(selected) and wanted<=universe
+ for row in selected:
+  baseline='rf-k4' if row['family']=='rf' else 'et-float'
+  assert row['family']+'-'+row['dataset']+'-'+baseline in wanted,'selected candidate lacks baseline'
+ return wanted
