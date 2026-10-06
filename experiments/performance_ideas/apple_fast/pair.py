@@ -48,6 +48,17 @@ def main():
     binding = manifest['binding']
     assert binding == card.get('variant_bindings', {}).get(args.variant, card['binding'])
     args.output.mkdir(parents=True, exist_ok=False)
+    # Independent structural/gradient gates run before measured public calls.
+    required=card.get('native_checks',[])
+    assert set(manifest.get('native_checks',{}))=={check['name'] for check in required}
+    for check in required:
+        receipt=manifest['native_checks'][check['name']]
+        binary=args.arms/check['name']
+        assert receipt['source_sha']==source and receipt['numeric_mode']=='fast' and receipt['vendor']=='apple'
+        assert receipt['defines']==defines and receipt['sha256']==sha(binary)
+        with (args.output/(check['name']+'.log')).open('x') as stream:
+            outcome=subprocess.run([str(binary.resolve())],cwd=ROOT,env=dict(os.environ,MOJOLEARN_NUMERIC_MODE='fast',MOJOLEARN_VENDOR='apple'),stdout=stream,stderr=subprocess.STDOUT)
+        if outcome.returncode:raise RuntimeError('independent prerequisite failed rc='+str(outcome.returncode)+'; '+str(args.output/(check['name']+'.log')))
     records = {}
     for arm in ('A', 'B'):
         package = args.output / arm / 'package' / 'mojolearn'
