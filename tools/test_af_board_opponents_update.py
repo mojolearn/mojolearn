@@ -50,6 +50,16 @@ def test_uncapped_repair_keeps_historical_comparison_and_is_idempotent():
     assert count['already_current']==1 and again['extra_races']==result['extra_races']
 
 
+def test_full_failed_attempt_keeps_its_own_workload_scope():
+    board,source,resources=fixtures()
+    source['races']['r']['cells'][0].update(shape='200x3',status='REFUSED(solver overflow)',
+                                         median_ms=None,times_ms=[],rounds=0)
+    result,count=merge(board,source,resources,'hash','snapshot.json',separate_workloads=True)
+    assert result['races']==board['races'] and count['failed']==1
+    assert len(result['extra_races'])==1
+    assert next(iter(result['extra_races'].values()))['cells'][0]['median_ms'] is None
+
+
 def test_idempotent_cells_and_resource_proof():
     board,source,resources=fixtures();first,_=merge(board,source,resources,'hash','snapshot.json')
     second,count=merge(first,source,resources,'hash','snapshot.json')

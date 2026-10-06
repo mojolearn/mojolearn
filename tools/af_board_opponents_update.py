@@ -17,13 +17,13 @@ def merge(board, snapshot, resources, digest, evidence, separate_workloads=False
         target=records.get(rid)
         if separate_workloads and target is not None:
             own=[c for c in target['cells'] if render.is_ours(c)]
-            measured=[c for c in cells if c['status']=='ok']
+            shaped=[c for c in cells if c.get('shape')]
             if any(not old.get('shape') or old['shape']!=new.get('shape')
-                   for old in own for new in measured):
+                   for old in own for new in shaped):
                 # Uncapped repairs must not overwrite a historical reduced
                 # workload or acquire a ratio against its own-model timings.
-                shapes=sorted({c.get('shape') for c in measured if c.get('shape')})
-                assert len(shapes)==1 and all(c.get('shape') for c in measured),('missing/mixed repair shapes',rid)
+                shapes=sorted({c['shape'] for c in shaped})
+                assert len(shapes)==1,('mixed repair shapes',rid)
                 original_rid=rid
                 rid += '/workload=' + hashlib.sha256(shapes[0].encode()).hexdigest()[:16]
                 incoming=dict(incoming,id=rid,original_race_id=original_rid,

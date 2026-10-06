@@ -1,0 +1,172 @@
+{
+  "race": "classical2/gmm/taxi/rows=full",
+  "arm": "sklearn-cpu",
+  "allocation_seconds": 2400,
+  "returncode": 0,
+  "elapsed_seconds": 251.28891706466675,
+  "status": "MEASURED",
+  "killed_owned_pids": [],
+  "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/source-6897b8da0/experiments/performance_ideas/apple_repair_20261006/selected_board.py",
+    "--vendor",
+    "apple",
+    "--modes",
+    "identical",
+    "--families",
+    "algos,classical2",
+    "--rows",
+    "full",
+    "--rounds",
+    "1",
+    "--python-env",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--skip-install",
+    "--no-smoke-gate",
+    "--opponents-only",
+    "--skip-failed",
+    "--round-seconds",
+    "2400",
+    "--cache",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cache",
+    "--algos-data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data",
+    "--more-data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data",
+    "--data-root",
+    "/Users/ec2-user/datasets/gbm-bench",
+    "--opponent-store",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-03/opponent-store.jsonl",
+    "--out",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-03/board"
+  ],
+  "race_status": "done",
+  "cells": [
+    {
+      "arm": "sklearn-cpu",
+      "comparability": {
+        "span": {
+          "input_home": "host",
+          "inside_clock": "fit",
+          "pre_clock_fit": false,
+          "upload_ms_untimed": null
+        },
+        "span_asymmetry": []
+      },
+      "dataset": "taxi",
+      "device": "cpu",
+      "device_name": "arm",
+      "family": "classical2",
+      "hash": "80dbd152632f82fe",
+      "hash_stable": null,
+      "lane": "gmm",
+      "library": "scikit-learn",
+      "library_version": "1.7.2",
+      "max_ms": 122133.5104170721,
+      "median_ms": 122133.5104170721,
+      "memory": {
+        "children_mb": 1.7,
+        "gpu_method": "cpu arm: no device memory",
+        "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+        "peak_gpu_mb": null,
+        "peak_host_mb": 2816.8,
+        "rounds_sampled": 1,
+        "warmup_gpu_mb": null,
+        "warmup_host_mb": 3337.5
+      },
+      "min_ms": 122133.5104170721,
+      "mode": "opponent",
+      "neural_shape": null,
+      "operations": [
+        {
+          "dataset_load_included": false,
+          "fresh_process": false,
+          "ms": 121639.80958401226,
+          "preparation_ms": 0.000959029421210289,
+          "round": 0,
+          "scope": "call-consume",
+          "startup_probe_preparation_excluded": true,
+          "warmup": true
+        },
+        {
+          "dataset_load_included": false,
+          "fresh_process": false,
+          "ms": 122133.52729205508,
+          "preparation_ms": 0.0011670636013150215,
+          "round": 1,
+          "scope": "call-consume",
+          "startup_probe_preparation_excluded": true,
+          "warmup": false
+        }
+      ],
+      "params": {
+        "library": "sklearn",
+        "params": {
+          "covariance_type": "full",
+          "init_params": "kmeans",
+          "max_iter": 100,
+          "n_components": 8,
+          "n_init": 1,
+          "reg_covar": 1e-06,
+          "seed": 7,
+          "tol": 0.001
+        },
+        "source": "get_params"
+      },
+      "peak_gpu_mb": null,
+      "peak_host_mb": 2816.8,
+      "quality": {
+        "bic": -184832994.344408,
+        "mean_log_likelihood": 10.690672192719653,
+        "n_iter": 24
+      },
+      "ratio_ours_fast_over": null,
+      "ratio_ours_identical_over": null,
+      "rounds": 1,
+      "rows": null,
+      "rows_tag": "full",
+      "settings": {
+        "block": "reg",
+        "config": "the board's own settings (no NVIDIA harness entry)",
+        "driver": "tools/bench_board_more.py",
+        "interleaved": true,
+        "lane_config": {
+          "data": "constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)",
+          "mismatches": [
+            "init_params='kmeans': each library seeds its own k-means (ours the identity-certified k-means, scikit-learn KMeans(n_init=1, k-means++))"
+          ],
+          "opponent_precision": "scikit-learn receives the same values promoted to float64 inside the fit clock; original float32 covariance failure retained",
+          "params": "n_components=8, covariance_type='full', tol=1e-3, reg_covar=1e-6 on taxi and 3e-3 on Istella-S (GMM_REG_COVAR), max_iter=100, init_params='kmeans', n_init=1, warm_start=False, random_state=7",
+          "quality": "held-out mean log-likelihood, BIC on the fit rows (from each arm's parameters)",
+          "reg_covar": "Istella-S takes 3e-3 on every arm: on its 100,000 x 200 float32 fit rows scikit-learn's GaussianMixture refuses at 1e-3 (ill-defined empirical covariance) and both arms fit at 3e-3 (m2pro, 2026-09-29, tools/gmm_istella_probe.py); taxi keeps 1e-6, where both arms fit",
+          "rows": "100000 fit and 20000 held-out stride rows of the reg block (standardized by the fit rows); an explicitly full_dataset_coverage recipe retains all fit/eval rows",
+          "timed": "fit"
+        },
+        "rounds": 1,
+        "rows_cap": null,
+        "seed": 7,
+        "warmup_rounds": 1
+      },
+      "shape": "X 5250086x11; Xq 500000x11",
+      "source": "measured this run",
+      "state_receipts": [
+        {
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "output_sha256": "86354b94c730223921cba976e0827f700d27b473721b88b16d0349e2ccb587d9",
+          "output_status": "ok",
+          "schema": "mojolearn-scored-receipt/1"
+        }
+      ],
+      "status": "ok",
+      "times_ms": [
+        122133.5104170721
+      ],
+      "verdict": "LIKE-FOR-LIKE-SPAN",
+      "warmup_ms": 121639.79312498122
+    }
+  ]
+}

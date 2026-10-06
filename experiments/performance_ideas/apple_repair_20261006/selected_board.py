@@ -20,4 +20,4 @@ def selected(*args, **kwargs):
 
 board.plan_races = selected
 if __name__ == '__main__':
-    board.main()
+    raise SystemExit(board.main())

@@ -392192,6 +392192,556 @@
    "identical_page": {
     "status": "Opponent full measurement; no matching own cell"
    }
+  },
+  "classical2/gmm/taxi/rows=full/workload=743e2c8bc8a5925d": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/source-6897b8da0/tools/bench_board_more.py",
+    "race",
+    "--lane",
+    "gmm",
+    "--dataset",
+    "taxi",
+    "--data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data/rows-full",
+    "--arms",
+    "sklearn-cpu",
+    "--rounds",
+    "1",
+    "--out",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-03/board/raw/classical2/rows-full",
+    "--work",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-03/board/work",
+    "--ours-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--theirs-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--ready-seconds",
+    "2400",
+    "--warmup-seconds",
+    "2400",
+    "--round-seconds",
+    "2400"
+   ],
+   "dataset": "taxi",
+   "env": {},
+   "family": "classical2",
+   "finished": "2026-10-06T13:47:13Z",
+   "host": {
+    "hostname": "ip-172-31-43-215.ec2.internal",
+    "pod_id": null
+   },
+   "id": "classical2/gmm/taxi/rows=full/workload=743e2c8bc8a5925d",
+   "lane": "gmm",
+   "lane_config": {
+    "data": "constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)",
+    "mismatches": [
+     "init_params='kmeans': each library seeds its own k-means (ours the identity-certified k-means, scikit-learn KMeans(n_init=1, k-means++))"
+    ],
+    "opponent_precision": "scikit-learn receives the same values promoted to float64 inside the fit clock; original float32 covariance failure retained",
+    "params": "n_components=8, covariance_type='full', tol=1e-3, reg_covar=1e-6 on taxi and 3e-3 on Istella-S (GMM_REG_COVAR), max_iter=100, init_params='kmeans', n_init=1, warm_start=False, random_state=7",
+    "quality": "held-out mean log-likelihood, BIC on the fit rows (from each arm's parameters)",
+    "reg_covar": "Istella-S takes 3e-3 on every arm: on its 100,000 x 200 float32 fit rows scikit-learn's GaussianMixture refuses at 1e-3 (ill-defined empirical covariance) and both arms fit at 3e-3 (m2pro, 2026-09-29, tools/gmm_istella_probe.py); taxi keeps 1e-6, where both arms fit",
+    "rows": "100000 fit and 20000 held-out stride rows of the reg block (standardized by the fit rows); an explicitly full_dataset_coverage recipe retains all fit/eval rows",
+    "timed": "fit"
+   },
+   "log": "logs/classical2.gmm.taxi.rows-full.log",
+   "our_arms": {},
+   "params": {
+    "arms": {
+     "sklearn-cpu": {
+      "library": "sklearn",
+      "params": {
+       "covariance_type": "full",
+       "init_params": "kmeans",
+       "max_iter": 100,
+       "n_components": 8,
+       "n_init": 1,
+       "reg_covar": 1e-06,
+       "seed": 7,
+       "tol": 0.001
+      },
+      "source": "get_params"
+     }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "classical2",
+    "lane": "gmm",
+    "problems": [],
+    "reference": "sklearn-cpu",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+   },
+   "params_check": "MATCHED",
+   "race_json": "raw/classical2/rows-full/gmm-taxi.json",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T13:43:05Z",
+   "status": "done",
+   "stored_arms": [],
+   "stored_now": 1,
+   "wall_s": 248.9,
+   "original_race_id": "classical2/gmm/taxi/rows=full",
+   "comparison_note": "Separate measured workload: historical own shape differs; no own/opponent ratio",
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "80dbd152632f82fe",
+     "hash_stable": null,
+     "lane": "gmm",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 122133.5104170721,
+     "median_ms": 122133.5104170721,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 2816.8,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 3337.5
+     },
+     "min_ms": 122133.5104170721,
+     "mode": "opponent",
+     "neural_shape": null,
+     "operations": [
+      {
+       "dataset_load_included": false,
+       "fresh_process": false,
+       "ms": 121639.80958401226,
+       "preparation_ms": 0.000959029421210289,
+       "round": 0,
+       "scope": "call-consume",
+       "startup_probe_preparation_excluded": true,
+       "warmup": true
+      },
+      {
+       "dataset_load_included": false,
+       "fresh_process": false,
+       "ms": 122133.52729205508,
+       "preparation_ms": 0.0011670636013150215,
+       "round": 1,
+       "scope": "call-consume",
+       "startup_probe_preparation_excluded": true,
+       "warmup": false
+      }
+     ],
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "covariance_type": "full",
+       "init_params": "kmeans",
+       "max_iter": 100,
+       "n_components": 8,
+       "n_init": 1,
+       "reg_covar": 1e-06,
+       "seed": 7,
+       "tol": 0.001
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 2816.8,
+     "quality": {
+      "bic": -184832994.344408,
+      "mean_log_likelihood": 10.690672192719653,
+      "n_iter": 24
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "data": "constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)",
+       "mismatches": [
+        "init_params='kmeans': each library seeds its own k-means (ours the identity-certified k-means, scikit-learn KMeans(n_init=1, k-means++))"
+       ],
+       "opponent_precision": "scikit-learn receives the same values promoted to float64 inside the fit clock; original float32 covariance failure retained",
+       "params": "n_components=8, covariance_type='full', tol=1e-3, reg_covar=1e-6 on taxi and 3e-3 on Istella-S (GMM_REG_COVAR), max_iter=100, init_params='kmeans', n_init=1, warm_start=False, random_state=7",
+       "quality": "held-out mean log-likelihood, BIC on the fit rows (from each arm's parameters)",
+       "reg_covar": "Istella-S takes 3e-3 on every arm: on its 100,000 x 200 float32 fit rows scikit-learn's GaussianMixture refuses at 1e-3 (ill-defined empirical covariance) and both arms fit at 3e-3 (m2pro, 2026-09-29, tools/gmm_istella_probe.py); taxi keeps 1e-6, where both arms fit",
+       "rows": "100000 fit and 20000 held-out stride rows of the reg block (standardized by the fit rows); an explicitly full_dataset_coverage recipe retains all fit/eval rows",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 5250086x11; Xq 500000x11",
+     "source": {
+      "opponent_snapshot_sha256": "b8691bf84eb79e764347f2703809b61f530cac9190c02f63abb48ca99e436bd5",
+      "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/gmm-lars-board.json",
+      "finished": "2026-10-06T13:47:13Z",
+      "original_source": "measured this run"
+     },
+     "state_receipts": [
+      {
+       "model": {
+        "reason": "runner does not retain an exportable model",
+        "status": "unavailable"
+       },
+       "output_sha256": "86354b94c730223921cba976e0827f700d27b473721b88b16d0349e2ccb587d9",
+       "output_status": "ok",
+       "schema": "mojolearn-scored-receipt/1"
+      }
+     ],
+     "status": "ok",
+     "times_ms": [
+      122133.5104170721
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 121639.79312498122,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null,
+       "BLIS_NUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5"
+     }
+    }
+   ],
+   "infer_cells": [],
+   "fast_page": {
+    "status": "Opponent full measurement; no matching own cell"
+   },
+   "identical_page": {
+    "status": "Opponent full measurement; no matching own cell"
+   }
+  },
+  "algos/lars/istella/rows=full/workload=2e6d04ce2f8d70b7": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/source-6897b8da0/tools/bench_board_algos.py",
+    "race",
+    "--lane",
+    "lars",
+    "--dataset",
+    "istella",
+    "--data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data/rows-full",
+    "--arms",
+    "sklearn-cpu",
+    "--rounds",
+    "1",
+    "--out",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-04/board/raw/algos/rows-full",
+    "--work",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-04/board/work",
+    "--ours-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--theirs-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--ready-seconds",
+    "120",
+    "--warmup-seconds",
+    "120",
+    "--round-seconds",
+    "120"
+   ],
+   "dataset": "istella",
+   "env": {},
+   "family": "algos",
+   "finished": "2026-10-06T13:47:19Z",
+   "host": {
+    "hostname": "ip-172-31-43-215.ec2.internal",
+    "pod_id": null
+   },
+   "id": "algos/lars/istella/rows=full/workload=2e6d04ce2f8d70b7",
+   "lane": "lars",
+   "lane_config": {
+    "block": "reg",
+    "cuml": "cuml.experimental.linear_model:Lars",
+    "datasets": [
+     "taxi",
+     "istella"
+    ],
+    "expansion_lane": "linear",
+    "kind": "est",
+    "mismatches": [],
+    "notes": [],
+    "ours_class": "mojolearn.Lars",
+    "params": {
+     "eps": 2.220446049250313e-16,
+     "fit_intercept": true,
+     "n_nonzero_coefs": 500,
+     "random_state": 7
+    },
+    "quality": "held-out R2 and RMSE",
+    "sklearn": "sklearn.linear_model:Lars",
+    "task": "reg",
+    "timed_fit": "fit(X, y)",
+    "timed_infer": "predict(Xq)"
+   },
+   "log": "logs/algos.lars.istella.rows-full.log",
+   "our_arms": {},
+   "params": {
+    "arms": {
+     "sklearn-cpu": {
+      "library": "sklearn",
+      "params": {
+       "eps": 2.220446049250313e-16,
+       "fit_intercept": true,
+       "precompute": "auto",
+       "seed": 7
+      },
+      "source": "get_params"
+     }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/lars",
+    "problems": [],
+    "reference": "sklearn-cpu",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+   },
+   "params_check": "MATCHED",
+   "race_json": "raw/algos/rows-full/lars-istella.json",
+   "rc": 1,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T13:47:16Z",
+   "status": "failed",
+   "stored_arms": [],
+   "stored_now": 1,
+   "wall_s": 3.2,
+   "original_race_id": "algos/lars/istella/rows=full",
+   "comparison_note": "Separate measured workload: historical own shape differs; no own/opponent ratio",
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit(X, y)",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "algos",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "lars",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {
+      "gpu_method": "not sampled",
+      "host_method": "not sampled"
+     },
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": null,
+     "operations": [],
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "eps": 2.220446049250313e-16,
+       "fit_intercept": true,
+       "precompute": "auto",
+       "seed": 7
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_algos.py",
+      "interleaved": true,
+      "lane_config": {
+       "block": "reg",
+       "cuml": "cuml.experimental.linear_model:Lars",
+       "datasets": [
+        "taxi",
+        "istella"
+       ],
+       "expansion_lane": "linear",
+       "kind": "est",
+       "mismatches": [],
+       "notes": [],
+       "ours_class": "mojolearn.Lars",
+       "params": {
+        "eps": 2.220446049250313e-16,
+        "fit_intercept": true,
+        "n_nonzero_coefs": 500,
+        "random_state": 7
+       },
+       "quality": "held-out R2 and RMSE",
+       "sklearn": "sklearn.linear_model:Lars",
+       "task": "reg",
+       "timed_fit": "fit(X, y)",
+       "timed_infer": "predict(Xq)"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000",
+     "source": {
+      "opponent_snapshot_sha256": "b8691bf84eb79e764347f2703809b61f530cac9190c02f63abb48ca99e436bd5",
+      "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/gmm-lars-board.json",
+      "finished": "2026-10-06T13:47:19Z",
+      "original_source": "measured this run"
+     },
+     "state_receipts": [],
+     "status": "REFUSED(error: {\"error\": \"OverflowError('int too large to convert to float')\", \"event\": \"error\", \"stage\": \"round 0\"})",
+     "times_ms": [],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null,
+       "BLIS_NUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5"
+     }
+    }
+   ],
+   "infer_cells": [
+    {
+     "arm": "sklearn-cpu",
+     "batch": "Xq",
+     "batch_rows": null,
+     "call": "predict(Xq)(Xq)",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit(X, y)",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": [],
+      "upload_ms_untimed": null
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "family": "algos",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "lars",
+     "library": "scikit-learn",
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {},
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": null,
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "phase": "infer",
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_algos.py",
+      "interleaved": true,
+      "lane_config": {
+       "block": "reg",
+       "cuml": "cuml.experimental.linear_model:Lars",
+       "datasets": [
+        "taxi",
+        "istella"
+       ],
+       "expansion_lane": "linear",
+       "kind": "est",
+       "mismatches": [],
+       "notes": [],
+       "ours_class": "mojolearn.Lars",
+       "params": {
+        "eps": 2.220446049250313e-16,
+        "fit_intercept": true,
+        "n_nonzero_coefs": 500,
+        "random_state": 7
+       },
+       "quality": "held-out R2 and RMSE",
+       "sklearn": "sklearn.linear_model:Lars",
+       "task": "reg",
+       "timed_fit": "fit(X, y)",
+       "timed_infer": "predict(Xq)"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "status": "REFUSED(error: {\"error\": \"OverflowError('int too large to convert to float')\", \"event\": \"error\", \"stage\": \"round 0\"})",
+     "times_ms": [],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": null
+    }
+   ],
+   "fast_page": {
+    "status": "Opponent full measurement; no matching own cell"
+   },
+   "identical_page": {
+    "status": "Opponent full measurement; no matching own cell"
+   }
   }
  },
  "fast_page": {
@@ -392633,6 +393183,31 @@
     "imported": 2,
     "successful": 2,
     "failed": 0,
+    "stored_skipped": 0,
+    "already_current": 0
+   },
+   "resource_policy": {
+    "cpu_count": 28,
+    "thread_caps": {
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "MKL_NUM_THREADS": null,
+     "NUMEXPR_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "BLIS_NUM_THREADS": null
+    },
+    "hardware": "Mac15,14",
+    "harness_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+    "source_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+    "policy": "Serial full-machine uncapped CPU; worker resource readback retained."
+   }
+  },
+  "b8691bf84eb79e764347f2703809b61f530cac9190c02f63abb48ca99e436bd5": {
+   "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/gmm-lars-board.json",
+   "counts": {
+    "imported": 2,
+    "successful": 1,
+    "failed": 1,
     "stored_skipped": 0,
     "already_current": 0
    },

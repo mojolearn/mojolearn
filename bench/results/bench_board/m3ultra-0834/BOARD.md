@@ -42,9 +42,9 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 1 planned, 428 done, 29 failed, 0 unsupported, 0 pending. Cells: 1546 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 28, ok 1512).
+Races: 1 planned, 429 done, 30 failed, 0 unsupported, 0 pending. Cells: 1548 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 29, ok 1513).
 
-Inference cells: 923 (REFUSED 48, ok 875).
+Inference cells: 924 (REFUSED 49, ok 875).
 
 ## Quality at a glance
 
@@ -651,6 +651,9 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | gmm | taxi | bic (lower is better) | - | -3.67e+06 | sklearn-cpu - |
 | classical2 | gmm | taxi | mean_log_likelihood (higher is better) | - | 12.861940 | sklearn-cpu - |
 | classical2 | gmm | taxi | n_iter | - | 32 | sklearn-cpu - |
+| classical2 | gmm | taxi | bic (lower is better) | - | - | sklearn-cpu -1.848e+08 |
+| classical2 | gmm | taxi | mean_log_likelihood (higher is better) | - | - | sklearn-cpu 10.690672 |
+| classical2 | gmm | taxi | n_iter | - | - | sklearn-cpu 24 |
 | classical2 | gpc | istella | accuracy (higher is better) | 0.901333 | 0.901333 | sklearn-cpu 0.901333 |
 | classical2 | gpc | istella | logloss (lower is better) | 0.232592 | 0.232590 | sklearn-cpu 0.232597 |
 | classical2 | gpc | istella | nonfinite_proba_rows | 0 | 0 | sklearn-cpu 0 |
@@ -932,6 +935,7 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | label-spreading | istella | Xq | - | - | - | - | sklearn-cpu 1277.1 ms (IDENTICAL/arm -) |
 | algos | label-spreading | taxi | Xq | - | 548.4 | 596.3 | - | sklearn-cpu 959.8 ms (IDENTICAL/arm -) |
 | algos | lars | istella | Xq | - | 13.3 | 14.1 | - | sklearn-cpu - ms (IDENTICAL/arm -) |
+| algos | lars | istella | Xq | - | - | - | - | sklearn-cpu - ms (IDENTICAL/arm -) |
 | algos | lars | taxi | Xq | - | 1.3 | 1.4 | - | sklearn-cpu 0.4 ms (IDENTICAL/arm 3.139) |
 | algos | lasso-cv | istella | Xq | - | 17.0 | 19.7 | - | sklearn-cpu 3.8 ms (IDENTICAL/arm 5.159) |
 | algos | lasso-cv | taxi | Xq | - | 2.2 | 2.1 | - | sklearn-cpu 0.4 ms (IDENTICAL/arm 5.318) |
@@ -3655,6 +3659,36 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | reg_covar | 1e-06 | 1e-06 |
 | seed | 7 | 7 |
 | tol | 0.001 | 0.001 |
+
+### gmm / taxi (rows full, shape X 5250086x11; Xq 500000x11)
+
+race: done, driver rc 0, log `logs/classical2.gmm.taxi.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 122133.5 | 122133.5..122133.5 | 1 | - | - | 2816.8 | - | bic=-1.848e+08, mean_log_likelihood=10.690672, n_iter=24 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'b8691bf84eb79e764347f2703809b61f530cac9190c02f63abb48ca99e436bd5', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/gmm-lars-board.json', 'finished': '2026-10-06T13:47:13Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: n_components=8, covariance_type='full', tol=1e-3, reg_covar=1e-6 on taxi and 3e-3 on Istella-S (GMM_REG_COVAR), max_iter=100, init_params='kmeans', n_init=1, warm_start=False, random_state=7. Rows: 100000 fit and 20000 held-out stride rows of the reg block (standardized by the fit rows); an explicitly full_dataset_coverage recipe retains all fit/eval rows. Timed: fit.
+
+mismatch: init_params='kmeans': each library seeds its own k-means (ours the identity-certified k-means, scikit-learn KMeans(n_init=1, k-means++))
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| covariance_type | "full" |
+| init_params | "kmeans" |
+| max_iter | 100 |
+| n_components | 8 |
+| n_init | 1 |
+| reg_covar | 1e-06 |
+| seed | 7 |
+| tol | 0.001 |
 
 ### gpc / istella (rows full, shape X 3000x220; Xq 3000x220; y 3000; yq 3000)
 
@@ -11623,6 +11657,36 @@ Inference (each arm predicts with its own model from the fit rounds above):
 inference call, ours: predict(Xq)(Xq)
 
 inference call, ours-fast: predict(Xq)(Xq)
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
+
+### lars / istella (rows full, shape X 2043304x220; Xq 500000x220; y 2043304; yq 500000)
+
+race: failed, driver rc 1, log `logs/algos.lars.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "OverflowError('int too large to convert to float')", "event": "error", "stage": "round 0"}) ({'opponent_snapshot_sha256': 'b8691bf84eb79e764347f2703809b61f530cac9190c02f63abb48ca99e436bd5', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/gmm-lars-board.json', 'finished': '2026-10-06T13:47:19Z', 'original_source': 'measured this run'}) |
+
+settings: {'eps': 2.220446049250313e-16, 'fit_intercept': True, 'n_nonzero_coefs': 500, 'random_state': 7}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| eps | 2.220446049250313e-16 |
+| fit_intercept | true |
+| precompute | "auto" |
+| seed | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | - | - | 0 | - | - | - | - | LIKE-FOR-LIKE-SPAN | REFUSED(error: {"error": "OverflowError('int too large to convert to float')", "event": "error", "stage": "round 0"}) |
 
 inference call, sklearn-cpu: predict(Xq)(Xq)
 
