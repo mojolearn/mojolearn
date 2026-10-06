@@ -9,7 +9,7 @@
     "apple",
     "host"
   ],
-  "status": "source_ready",
+  "status": "build_passed",
   "implementation_paths": [
     "gemm/experiments/bounded_workspace.mojo",
     "gemm/experiments/bounded_workspace_check.mojo"
@@ -48,5 +48,21 @@
     "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
-  "blocker": null
+  "blocker": null,
+  "baseline_build_argv": [
+    "pixi",
+    "run",
+    "mojo",
+    "build",
+    "-j1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-I",
+    "{repo}",
+    "-D",
+    "MOJOLEARN_STEP_PHASE_TIMERS=1",
+    "{repo}/gemm/checks/gemm_workspace_check.mojo",
+    "-o",
+    "{output}"
+  ]
 }
