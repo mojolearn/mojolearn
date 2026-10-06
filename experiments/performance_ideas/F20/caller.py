@@ -12,7 +12,8 @@ def exercise(args):
     import numpy as np
     cases={}
     if args.variant=='normalization':
-        from mojolearn import LayerNorm,linear_forward,cross_entropy
+        from mojolearn import LayerNorm
+        from mojolearn.training import linear_forward,cross_entropy
         from mojolearn import _mojolearn_x_sequence as binding
         identity=binding_check(binding,'x_sequence')
         for rows,d,scale,offset in ((131,17,1.,0.),(137,65,.01,1e5),(257,129,1e3,0.)):
@@ -42,7 +43,7 @@ def exercise(args):
             cases[f'{rows}-{d}-{scale}']=dict(contract=dict(rows=rows,d=d,scale=scale,offset=offset,seed=197),
                 metrics=dict(normalization_error=dict(value=error,rtol=.1,atol=1e-5),input_gradient_error=dict(value=dxerror,rtol=.1,atol=1e-5),affine_gradient_error=dict(value=affine_error,rtol=.1,atol=1e-5),downstream_loss_error=dict(value=model_error,rtol=.1,atol=1e-5)),forward_ms=forward,backward_ms=backward,downstream_ms=model_ms)
     else:
-        from mojolearn import SGD,linear_forward,linear_backward,cross_entropy
+        from mojolearn.training import SGD,linear_forward,linear_backward,cross_entropy
         from mojolearn import _mojolearn_training as binding
         identity=binding_check(binding,'training')
         rng=np.random.default_rng(197);hidden=rng.normal(size=(41,17)).astype('float32')

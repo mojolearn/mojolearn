@@ -39,7 +39,10 @@ def exercise(args):
         peer=KernelDensity(bandwidth=.7).fit(original)
         consumed(lambda:peer.score_samples(q[:1]))
         try:model.score_samples(np.full((1,d),np.nan,'float32'))
-        except (ValueError,RuntimeError):pass
+        except Exception as error:
+            # Mojo Error is exported as plain Exception; require this exact
+            # expected refusal rather than accepting unrelated runtime failures.
+            assert str(error)=='kde: query contains NaN at row 0, column 0 (DEVIATION 604)',str(error)
         else:raise AssertionError('nonfinite query accepted')
         model.fit(original);consumed(lambda:model.score_samples(q))
         cases[f'{n}-{d}']=dict(contract=dict(rows=n,d=d,queries=37,seed=918),
