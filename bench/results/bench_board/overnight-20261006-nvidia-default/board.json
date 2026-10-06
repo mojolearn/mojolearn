@@ -18910,8 +18910,306 @@
       "stored_arms": [],
       "stored_now": 1,
       "wall_s": 19.9
+    },
+    "algos/ivf-pq/istella/rows=full": {
+      "arms": [
+        "cuvs-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuvs-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "index build",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 343.31132285296917
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "6f806da6c581415d",
+          "hash_stable": null,
+          "lane": "ivf-pq",
+          "library": "cuvs",
+          "library_version": "26.08.01",
+          "max_ms": 1905.2240904420614,
+          "median_ms": 1905.2240904420614,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 822.0,
+            "peak_host_mb": 1793.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 816.0,
+            "warmup_host_mb": 1806.8
+          },
+          "min_ms": 1905.2240904420614,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuvs",
+            "params": {
+              "n_neighbors": 10,
+              "nlist": 1024,
+              "nprobe": 32,
+              "seed": "none (no argument; draws random numbers, see exceptions)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 822.0,
+          "peak_host_mb": 1793.1,
+          "quality": {
+            "recall_at_10": 0.7913
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "ivf",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "ann",
+              "kind": "ann",
+              "mismatches": [],
+              "notes": [
+                "the classical knn lane's block (tools/knn_datasets.real_block, the classical2 ivf block): 400,000 index rows, 4,000 queries, raw",
+                "pq_dim = d when d <= 16 else d // 4 (taxi 11, Istella 55); no refine"
+              ],
+              "ours_class": "mojolearn.IVFPQIndex",
+              "params": {
+                "kmeans_n_iters": 20,
+                "n_lists": 1024,
+                "n_neighbors": 10,
+                "n_probes": 32,
+                "pq_bits": 8,
+                "random_state": 7
+              },
+              "quality": "recall@10 against a float64 NumPy brute force",
+              "task": "ivf-pq",
+              "timed_fit": "index build",
+              "timed_infer": "search(queries)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "index 400000x220; queries 4000x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1905.2240904420614
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1896.135987713933
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "ivf-pq",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "cuvs-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:41:56Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/ivf-pq/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuvs-gpu",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "search(queries)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "index build",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 343.31132285296917
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 343.31132285296917
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "6f806da6c581415d",
+          "hash_stable": null,
+          "lane": "ivf-pq",
+          "library": "cuvs",
+          "max_ms": 11.804595589637756,
+          "median_ms": 11.804595589637756,
+          "memory": {},
+          "min_ms": 11.804595589637756,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "ivf",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "ann",
+              "kind": "ann",
+              "mismatches": [],
+              "notes": [
+                "the classical knn lane's block (tools/knn_datasets.real_block, the classical2 ivf block): 400,000 index rows, 4,000 queries, raw",
+                "pq_dim = d when d <= 16 else d // 4 (taxi 11, Istella 55); no refine"
+              ],
+              "ours_class": "mojolearn.IVFPQIndex",
+              "params": {
+                "kmeans_n_iters": 20,
+                "n_lists": 1024,
+                "n_neighbors": 10,
+                "n_probes": 32,
+                "pq_bits": 8,
+                "random_state": 7
+              },
+              "quality": "recall@10 against a float64 NumPy brute force",
+              "task": "ivf-pq",
+              "timed_fit": "index build",
+              "timed_infer": "search(queries)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            11.804595589637756
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 759.7923129796982
+        }
+      ],
+      "lane": "ivf-pq",
+      "lane_config": {
+        "block": "ivf",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "ann",
+        "kind": "ann",
+        "mismatches": [],
+        "notes": [
+          "the classical knn lane's block (tools/knn_datasets.real_block, the classical2 ivf block): 400,000 index rows, 4,000 queries, raw",
+          "pq_dim = d when d <= 16 else d // 4 (taxi 11, Istella 55); no refine"
+        ],
+        "ours_class": "mojolearn.IVFPQIndex",
+        "params": {
+          "kmeans_n_iters": 20,
+          "n_lists": 1024,
+          "n_neighbors": 10,
+          "n_probes": 32,
+          "pq_bits": 8,
+          "random_state": 7
+        },
+        "quality": "recall@10 against a float64 NumPy brute force",
+        "task": "ivf-pq",
+        "timed_fit": "index build",
+        "timed_infer": "search(queries)"
+      },
+      "log": "logs/algos.ivf-pq.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuvs-gpu": {
+            "library": "cuvs",
+            "params": {
+              "n_neighbors": 10,
+              "nlist": 1024,
+              "nprobe": 32,
+              "seed": "none (no argument; draws random numbers, see exceptions)"
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [
+          {
+            "arm": "cuvs-gpu",
+            "param": "seed",
+            "reason": "cuVS IndexParams take no seed and the index build samples rows; ours and faiss get 7",
+            "value": null
+          }
+        ],
+        "family": "algos",
+        "lane": "algos/ivf-pq",
+        "problems": [],
+        "reference": "cuvs-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/ivf-pq-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:41:13Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 43.3
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T07:41:13Z"
+  "updated": "2026-10-06T07:41:56Z"
 }
