@@ -2211,6 +2211,16 @@ def fit_non_symmetric_tree[
     # LG_EXACT_ID: each node's partition stats as of its score wait, the
     # stats a folded-back leaf keeps (`stat_count` per node)
     var lg_node_stats = List[Float32]()
+    # Default-off IDENTICAL lifetime candidate: keep scored parent words
+    # on device rather than copying the whole leaf-stat capacity each round.
+    # One current snapshot plus the binary tree's bounded node arena.
+    var lg_resident_stats = List[DeviceBuffer[DType.float32]]()
+    var lg_resident_snapshots = 0
+    comptime if LG_EXACT_ID and is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]():
+        if lg_exact and max_leaves>0 and stat_count>0 and max_leaves<=(1<<22)//(3*stat_count):
+            lg_resident_stats.append(ctx.enqueue_create_buffer[DType.float32]((2*max_leaves-1)*stat_count))
+            lg_resident_stats.append(ctx.enqueue_create_buffer[DType.float32](max_leaves*stat_count))
+            enqueue_fill(ctx,lg_resident_stats[0],Float32(0))
     comptime if LG_EXACT_BATCH:
         for _ in range(stat_count):  # small-loop(stat_count: stat planes, 1 plus classes): root node stats placeholder
             lg_node_stats.append(Float32(0.0))
@@ -3107,10 +3117,16 @@ def fit_non_symmetric_tree[
             # the host fold's
             comptime if LG_EXACT_ID:
                 if lg_exact:
-                    ctx.enqueue_copy(
-                        dst_ptr=h_part_stats.unsafe_ptr(),
-                        src_buf=part_stats,
-                    )
+                    if len(lg_resident_stats)>0:
+                        var snapshot=part_stats.create_sub_buffer[DType.float32](0,max_leaves*stat_count)
+                        ctx.enqueue_copy(dst_buf=lg_resident_stats[1],src_buf=snapshot)
+                        _ = snapshot^
+                        lg_resident_snapshots+=1
+                    else:
+                        ctx.enqueue_copy(
+                            dst_ptr=h_part_stats.unsafe_ptr(),
+                            src_buf=part_stats,
+                        )
             mgr.wait_complete()
             stage_times.end(ctx, "score.read")
             # the identity ladder's records are UNCHANGED: the
@@ -3459,12 +3475,18 @@ def fit_non_symmetric_tree[
                         var pn = lg_leaf_node[left_id]
                         lg_node_path[pn] = parent.path.copy()
                         comptime if LG_EXACT_ID:
-                            for st in range(stat_count):  # small-loop(stat_count: stat planes, 1 plus classes): copy of the split node's stats
-                                lg_node_stats[pn * stat_count + st] = (
-                                    h_part_stats.unsafe_ptr().unsafe_load(
-                                        left_id * stat_count + st
+                            if len(lg_resident_stats)>0:
+                                var current=lg_resident_stats[1].create_sub_buffer[DType.float32](left_id*stat_count,stat_count)
+                                var kept=lg_resident_stats[0].create_sub_buffer[DType.float32](pn*stat_count,stat_count)
+                                ctx.enqueue_copy(dst_buf=kept,src_buf=current)
+                                _ = current^; _ = kept^
+                            else:
+                                for st in range(stat_count):  # small-loop(stat_count: stat planes, 1 plus classes): copy of the split node's stats
+                                    lg_node_stats[pn * stat_count + st] = (
+                                        h_part_stats.unsafe_ptr().unsafe_load(
+                                            left_id * stat_count + st
+                                        )
                                     )
-                                )
                         var cn = len(lg_node_leaf)
                         lg_node_left[pn] = cn
                         lg_node_right[pn] = cn + 1
@@ -3863,6 +3885,13 @@ def fit_non_symmetric_tree[
                 ctx.enqueue_copy(
                     dst_ptr=h_leaf_vals.unsafe_ptr(), src_buf=d_leaf_vals
                 )
+            if len(lg_resident_stats)>0:
+                # All logical node slots were initialized, and only scored
+                # split parents are consumed by the exact replay. This copy
+                # rides the existing final leaf-value/statistics wait.
+                var kept=lg_resident_stats[0].create_sub_buffer[DType.float32](0,len(lg_node_stats))
+                ctx.enqueue_copy(dst_ptr=lg_node_stats.unsafe_ptr(),src_buf=kept)
+                _ = kept^
             ctx.enqueue_copy(
                 dst_ptr=h_part_stats.unsafe_ptr(), src_buf=part_stats
             )
@@ -4070,6 +4099,9 @@ def fit_non_symmetric_tree[
     comptime if REPORT_PART_STATS_WORK:
         print("part_stats_work", options.policy, n_rows,
               part_stats_leaves_reduced, part_stats_rows_reduced)
+    comptime if LG_EXACT_ID and is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]():
+        print("I17 frontier_resident_snapshots",lg_resident_snapshots,"retained_nodes",len(lg_node_stats)//stat_count)
+    _ = lg_resident_stats^
     return model^
 
 

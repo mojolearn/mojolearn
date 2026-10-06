@@ -5,6 +5,7 @@ split sequence, leaf values and weights; A/B builds attribute frontier and
 partition inheritance independently. A separate full-model cache witness is recorded as an additional
 validation path for weighted boosting/prediction/loss words."""
 from max.gpu.host import DeviceContext
+from experiments.performance_ideas.I17.caller_check import check_grow_policy_callers
 from checks.depthwise_check import Fixture, default_options
 from checks.lossguide_check import fit_policy, lossguide_options
 from checks.gbdt_partition_cache_check import tree_hash
@@ -25,5 +26,6 @@ def main() raises:
                 elif h!=reference:
                     raise Error("I17 frontier state leaked across fits")
                 print("I17 fingerprint policy=",policy,"max_leaves=",leaves,"repeat=",repeat,"words=",h)
+    check_grow_policy_callers(ctx)
     _ = fx^
     print("I17 PASS live_leaf_fits=12 split_leaf_weight_fingerprints")
