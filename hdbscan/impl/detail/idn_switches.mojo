@@ -23,6 +23,7 @@ comptime _IDN_HDB_ON = (
 )
 
 comptime IDN_HDB_ONE_SYNC = (
+    # I14 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_ONE_SYNC_OFF"]()
 )
 """The extract's eight output downloads and the runner's six under one wait
@@ -30,6 +31,7 @@ each (`td_stage_*` / `td_take_*`, af-hdbscan2's HDB_ONE_SYNC route)."""
 
 comptime IDN_HDB_CONDENSE_TWO_READS = (
     _IDN_HDB_ON
+    # I14 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     and not is_defined["MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF"]()
 )
 """The condense with two status readbacks instead of eight waits
@@ -37,6 +39,7 @@ comptime IDN_HDB_CONDENSE_TWO_READS = (
 order, the refusals with the same messages and first indices."""
 
 comptime IDN_HDB_SELECT_ONE_READ = (
+    # I14 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF"]()
 )
 """Stabilities, selection, labels, scores and probabilities with no wait in
@@ -44,6 +47,7 @@ between and ONE readback (`extract.mojo::_extract_one_read`); a nonzero
 `cluster_selection_epsilon` keeps the multi-read route."""
 
 comptime IDN_HDB_MR_FUSED_GUARD = (
+    # I14 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF"]()
 )
 """Dense arm: the NaN count of the distance matrix (DEVIATION 623) and the
@@ -53,6 +57,7 @@ back together, instead of two more m * m passes with two waits each. Same
 counts, same refusals, the distance refusal first."""
 
 comptime IDN_HDB_SOFT_LEAN = (
+    # I14 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF"]()
 )
 """Soft clustering: the four intermediates are downloaded only when a trace
@@ -61,12 +66,14 @@ with one wait at the end instead of one each."""
 
 comptime IDN_HDB_PREDICT_DEVICE_CAST = (
     _IDN_HDB_ON
+    # I14 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     and not is_defined["MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF"]()
 )
 """approximate_predict: the k-NN's UInt32 indices are narrowed to Int32 by
 the fit's device kernel instead of a host loop over nq * k cells."""
 
 comptime IDN_HDB_PREDICT_LEAN = (
+    # I14 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF"]()
 )
 """approximate_predict (lane fix-c1-cluster): every host staging buffer is

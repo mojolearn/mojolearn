@@ -102,6 +102,7 @@ comptime MAX_LABEL = Int32(2147483647)
 comptime IDN_DBSCAN_CC_GATED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
+        # I14 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         is_defined["MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
