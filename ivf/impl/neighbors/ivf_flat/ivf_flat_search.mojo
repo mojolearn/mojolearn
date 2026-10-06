@@ -81,6 +81,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
+from ivf.impl.neighbors.ivf_flat.ivf_balanced_tasks import ivf_balanced_scan
 from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import (
     IIVF_MAX_DIM,
     IIVF_QPB,
@@ -884,7 +885,9 @@ def ivf_flat_search_prepared(
                 comptime for KM in [8, 16, 32]:
                     if k <= KM and (KM == 8 or k > KM // 2):
                         comptime if IVF_IDENTICAL_SCAN:
-                            if _ivf_scan_grouped():
+                            if is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1":
+                                ivf_balanced_scan[KM](ctx,dq,dq_norm,dev.dlist_data,dev.dlist_norm,dev.d_off,dev.d_ind,dprobe_idx,d_keep,keep_len,d_od,d_oi,n_queries,n_probes,dim,k)
+                            elif _ivf_scan_grouped():
                                 # lane neural-pass42: the (query, probe) pairs grouped by
                                 # list, ascending (q, p) within a list, the blocks GQPB
                                 # pairs of one list each; lane cgr4-download-loop: the
