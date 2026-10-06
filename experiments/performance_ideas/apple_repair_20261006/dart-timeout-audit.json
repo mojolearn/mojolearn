@@ -1,0 +1,84 @@
+{
+  "schema": "dart_timeout_readonly_audit_v1",
+  "audited_at": "2026-10-06T13:39:23.580508+00:00",
+  "head": "2f2da91fc1485c026384f16361cba33d5afbd0e6",
+  "scope": [
+    "dart/istella/xgboost-cpu",
+    "dart-reg/istella/xgboost-cpu"
+  ],
+  "historical_failure": {
+    "date": "2026-09-30",
+    "train_shape": [
+      1000000,
+      220
+    ],
+    "query_shape": [
+      100000,
+      220
+    ],
+    "warmup_limit_seconds": 300,
+    "scored_limit_seconds": 300,
+    "failed_round": 0,
+    "completed_fit_timings": 0,
+    "stderr_bytes": 0,
+    "conclusion": "Explicit five-minute warmup deadline expired; no evidence establishes deadlock."
+  },
+  "required_workload": {
+    "train_shape": [
+      2043304,
+      220
+    ],
+    "query_shape": [
+      500000,
+      220
+    ],
+    "estimators": 200,
+    "max_depth": 8,
+    "warmups_per_cell": 1,
+    "scored_per_cell": 1,
+    "cells": 2,
+    "fits_total": 4,
+    "device": "cpu",
+    "tree_method": "hist",
+    "n_jobs": -1
+  },
+  "current_deadlines": {
+    "direct_algos_default_seconds": 1800,
+    "board_full_default_seconds": 3600,
+    "source": "tools/bench_board.py:more_round_seconds and algos_cmd; tools/bench_board_algos.py:parser"
+  },
+  "runtime_evidence": {
+    "taxi_old_train_shape": [
+      1000000,
+      11
+    ],
+    "taxi_cls_fit_ms": 49274.54375000525,
+    "taxi_reg_fit_ms": 49059.84587499552,
+    "full_istella_estimate_seconds": null,
+    "reason": "No completed Istella warmup or iteration progress retained. Different dataset feature counts and distributions prevent a defensible extrapolation from taxi. Four fits in 60\u201380 minutes would require each approximately 15\u201320 minutes before other overhead; this has not been demonstrated."
+  },
+  "thread_evidence": {
+    "historical_config_n_jobs": -1,
+    "historical_effective_pools": "unrecorded",
+    "current_worker_policy": "bench_board_algos._worker_env -> bench_board_more._worker_env -> classical_two_datasets.apply_cpu_quota; Apple CPU libraries unrestricted",
+    "utilization_claim": null
+  },
+  "recommended_change": {
+    "product_code": null,
+    "reason": "No actual DART implementation defect established. Existing CPU route and all-core configuration are appropriate. Historical five-minute override should not be reused. A run controller must enforce the shared two-hour absolute deadline, deduct elapsed other cells/retries, and preserve timeout/pending distinctly from success."
+  },
+  "validation": {
+    "read_only": true,
+    "new_timing_runs": 0,
+    "builds": 0,
+    "preverification": 0,
+    "remote_reads_exit_code": 0,
+    "evidence_files": [
+      "dart-remote-evidence.json",
+      "dart-original-log-inventory.json",
+      "dart-original-arm-records.json",
+      "dart-parent-log-diagnostics.json"
+    ]
+  },
+  "remaining": "Parent chooses bounded scheduling within shared two-hour deadline; no measured evidence guarantees completion of both DART full workloads."
+}

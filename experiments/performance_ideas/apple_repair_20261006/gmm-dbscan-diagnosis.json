@@ -1,0 +1,71 @@
+{
+  "status": "HARNESS_REPAIR_READY_UNMEASURED",
+  "historical": [
+    {
+      "cell": "gmm-taxi",
+      "status": "error",
+      "failed_round": 0,
+      "scored_samples": 0,
+      "historical_wall_seconds": 2.0,
+      "params": {
+        "covariance_type": "full",
+        "init_params": "kmeans",
+        "max_iter": 100,
+        "means_init": null,
+        "n_components": 8,
+        "n_init": 1,
+        "precisions_init": null,
+        "random_state": 7,
+        "reg_covar": 1e-06,
+        "tol": 0.001,
+        "verbose_interval": 10,
+        "weights_init": null
+      },
+      "retained_error": {
+        "error": "ValueError('Fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the number of components, increase reg_covar, or scale the input data. The numerical accuracy can also be improved by passing float64 data instead of float32.')",
+        "event": "error",
+        "stage": "round 0"
+      },
+      "shape": "X 100000x11; Xq 20000x11",
+      "source": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/raw/classical2/rows-full/gmm-taxi.json"
+    },
+    {
+      "cell": "dbscan-taxi",
+      "status": "timeout",
+      "failed_round": 0,
+      "scored_samples": 0,
+      "historical_wall_seconds": 17.0,
+      "params": {
+        "algorithm": "brute",
+        "eps": 3.0,
+        "leaf_size": 30,
+        "metric": "euclidean",
+        "metric_params": null,
+        "min_samples": 2,
+        "p": null
+      },
+      "retained_error": null,
+      "shape": null,
+      "source": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/raw/classical/rows-full/dbscan-taxi.json"
+    }
+  ],
+  "gmm": {
+    "cause": "Float32 covariance factorization failure during sklearn initialization; exact retained error recommends float64",
+    "repair": "Lossless input float32-to-float64 conversion inside timed fit; unchanged estimator parameters; full input metadata bypasses legacy100k/20k caps for every arm and quality",
+    "full_rows": 5250086,
+    "full_eval_rows": 500000,
+    "features": 11,
+    "proposal_budget_seconds": 2400,
+    "estimate": "Budget suggestion only, not a predicted completion time. No successful comparable full-data timing exists; full8component100iteration warmup+scored plus full quality may exceed40min."
+  },
+  "dbscan": {
+    "status": "RESOURCE_BLOCKED_UNCHANGED_OPPONENT",
+    "cause": "Retained HOST MEMORY event killed236.4GB worker/process tree253.9GB at90percent of274.9GB machine; bulk radius neighborhoods retained for1m rows",
+    "required_full_rows": 5250086,
+    "params_unchanged": true,
+    "repair": "No faithful harness-only repair: smaller rows/eps or alternative algorithm would change the workload. Chunked distance construction does not remove final bulk neighborhood storage.",
+    "retry_recommendation": "Do not consume two-hour batch repeating the known OOM; retain failed original and explicit full-size resource blocker."
+  },
+  "measurements_run": 0,
+  "compilation_run": 0
+}

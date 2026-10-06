@@ -4,7 +4,7 @@ import argparse,copy,hashlib,json,math,pathlib
 import af_board_render as render
 import bench_board as bb
 
-def merge(board, snapshot, resources, digest, evidence):
+def merge(board, snapshot, resources, digest, evidence, separate_workloads=False):
     assert snapshot['box']['gpu']['name']==board['box']['gpu']['name']=='Apple M3 Ultra'
     assert resources['cpu_count']==28 and all(v is None for v in resources['thread_caps'].values())
     result=copy.deepcopy(board);records={**result.get('races',{}),**result.get('extra_races',{})}
@@ -15,6 +15,20 @@ def merge(board, snapshot, resources, digest, evidence):
         assert all(not render.is_ours(c) for c in incoming.get('cells',[]))
         if not cells:continue
         target=records.get(rid)
+        if separate_workloads and target is not None:
+            own=[c for c in target['cells'] if render.is_ours(c)]
+            measured=[c for c in cells if c['status']=='ok']
+            if any(not old.get('shape') or old['shape']!=new.get('shape')
+                   for old in own for new in measured):
+                # Uncapped repairs must not overwrite a historical reduced
+                # workload or acquire a ratio against its own-model timings.
+                shapes=sorted({c.get('shape') for c in measured if c.get('shape')})
+                assert len(shapes)==1 and all(c.get('shape') for c in measured),('missing/mixed repair shapes',rid)
+                original_rid=rid
+                rid += '/workload=' + hashlib.sha256(shapes[0].encode()).hexdigest()[:16]
+                incoming=dict(incoming,id=rid,original_race_id=original_rid,
+                              comparison_note='Separate measured workload: historical own shape differs; no own/opponent ratio')
+                target=records.get(rid)
         if target is None:
             target={k:copy.deepcopy(v) for k,v in incoming.items() if k not in ['cells','infer_cells']}
             target['cells']=[];target['infer_cells']=[]
@@ -55,9 +69,9 @@ def merge(board, snapshot, resources, digest, evidence):
     return result,counts
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--snapshot',required=True);p.add_argument('--resources',required=True);p.add_argument('--board-dir',default=render.BOARD_DIR);p.add_argument('--docs-dir',default=render.DOCS);p.add_argument('--interruption-receipt');a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--snapshot',required=True);p.add_argument('--resources',required=True);p.add_argument('--board-dir',default=render.BOARD_DIR);p.add_argument('--docs-dir',default=render.DOCS);p.add_argument('--interruption-receipt');p.add_argument('--separate-workloads',action='store_true',help='Retain shape-changing repairs as separate opponent-only rows; preserve historical comparisons');a=p.parse_args()
     raw=pathlib.Path(a.snapshot).read_bytes();digest=hashlib.sha256(raw).hexdigest();path=pathlib.Path(a.board_dir)/'board.json'
-    board,counts=merge(json.loads(path.read_text()),json.loads(raw),json.loads(pathlib.Path(a.resources).read_text()),digest,a.snapshot)
+    board,counts=merge(json.loads(path.read_text()),json.loads(raw),json.loads(pathlib.Path(a.resources).read_text()),digest,a.snapshot,a.separate_workloads)
     if a.interruption_receipt:
         interruption=json.loads(pathlib.Path(a.interruption_receipt).read_text())
         assert interruption['status']=='INTERRUPTED_BY_USER' and interruption['timing_admitted'] is False

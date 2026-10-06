@@ -36,6 +36,20 @@ def test_shape_mismatch_refused():
     with pytest.raises(AssertionError,match='shape mismatch'):merge(board,source,resources,'hash','snapshot.json')
 
 
+def test_uncapped_repair_keeps_historical_comparison_and_is_idempotent():
+    board,source,resources=fixtures();before=copy.deepcopy(board)
+    source['races']['r']['cells'][0]['shape']='200x3'
+    result,count=merge(board,source,resources,'hash','snapshot.json',separate_workloads=True)
+    assert result['races']==before['races']
+    assert count['successful']==1 and len(result['extra_races'])==1
+    key,race=next(iter(result['extra_races'].items()))
+    assert key.startswith('r/workload=') and race['original_race_id']=='r'
+    assert all(c['library']!='mojolearn' for c in race['cells'])
+    assert race['cells'][0].get('ratio_ours_identical_over') is None
+    again,count=merge(result,source,resources,'hash','snapshot.json',separate_workloads=True)
+    assert count['already_current']==1 and again['extra_races']==result['extra_races']
+
+
 def test_idempotent_cells_and_resource_proof():
     board,source,resources=fixtures();first,_=merge(board,source,resources,'hash','snapshot.json')
     second,count=merge(first,source,resources,'hash','snapshot.json')

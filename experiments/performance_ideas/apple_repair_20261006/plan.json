@@ -1,0 +1,53 @@
+{
+  "budget_seconds": 7200,
+  "budget_policy": "One persistent absolute deadline for preparation and six serial cells; successful cells are not repeated. Cell allocations sum to7020seconds, leaving180seconds for input preparation. Interruptions retain logs/receipts and are never admitted as successful scores.",
+  "cells": [
+    {
+      "race": "algos/qn-reg/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "max_cell_seconds": 300
+    },
+    {
+      "race": "algos/qn-reg/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "max_cell_seconds": 600
+    },
+    {
+      "race": "classical2/gmm/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "max_cell_seconds": 2400
+    },
+    {
+      "race": "algos/lars/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "max_cell_seconds": 120
+    },
+    {
+      "race": "algos/dart/istella/rows=full",
+      "arm": "xgboost-cpu",
+      "max_cell_seconds": 1800
+    },
+    {
+      "race": "algos/dart-reg/istella/rows=full",
+      "arm": "xgboost-cpu",
+      "max_cell_seconds": 1800
+    }
+  ],
+  "repairs": {
+    "qn-reg": "Reuse accepted71f3333fd dense LinearRegression tolerance exception; olderOct1 refusals predate it.",
+    "gmm": "Lossless float64 conversion inside sklearn fit clock, parametersunchanged; explicitly uncapped inputrecipe honored during worker and quality.",
+    "dart": "Replace old300-second warmup attempt with bounded full-data retry under shared deadline; currenthistCPU n_jobs=-1 unchanged.",
+    "lars": "One bounded full-data attempt; retained solver overflow has no faithful harness fix. Currentacceptedpackage reused."
+  },
+  "not_retried": {
+    "dbscan/taxi": "Actual253.9GB process-tree OOM on1mrows; full5.25m cannot be repaired by smallerdata or changingeps/algorithm.",
+    "mps_linear_algebra": "Unsupported backend operation; await upstream support.",
+    "mamba_samba_metal_compile": "Retained backend compiler refusals; no unsupported compiler workaround.",
+    "quantile/istella": "Previous explicit owner exclusion for excessive runtime."
+  },
+  "sample_policy": {
+    "excluded_warmups_per_arm": 1,
+    "scored_samples_per_arm": 1
+  },
+  "validation": "Source syntax, metadata and publication-isolation checks only. No compilation, installation, smoke or numerical verification rerun."
+}
