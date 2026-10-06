@@ -10,9 +10,13 @@
   ],
   "status": "source_ready",
   "implementation_paths": [
-    "experiments/performance_ideas/I17/check.mojo"
+    "experiments/performance_ideas/I17/check.mojo",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+    "experiments/performance_ideas/I17/caller_check.mojo"
   ],
-  "candidate_defines": [],
+  "candidate_defines": [
+    "MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT=1"
+  ],
   "baseline_defines": [
     "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1",
     "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
@@ -30,7 +34,9 @@
     "--mojo",
     "{mojo}",
     "--output",
-    "{output}"
+    "{output}",
+    "--define",
+    "MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT=1"
   ],
   "run_argv": [
     "{output}"
