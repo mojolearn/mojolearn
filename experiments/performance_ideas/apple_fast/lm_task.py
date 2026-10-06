@@ -44,6 +44,17 @@ def train_case(args, *, resident=True, vocabulary=257, logits=False):
     resumed_loss = float(resumed.evaluate(heldout))
     # This check admits normal FAST rounding but catches stale parameter views.
     assert abs(resumed_loss-final) <= max(1e-5,abs(final)*1e-4)
+    # Independent live sessions must not share mutable parameter/output slots.
+    peer = Trainer(parameters, shape=shape, resident=resident,
+                   step_result='lean' if resident else 'full', data_schedule={'fixture':'peer'})
+    peer.train_step(batches[-1])
+    after_peer = float(trainer.evaluate(heldout))
+    assert abs(after_peer-final) <= max(1e-5,abs(final)*1e-4)
+    peer.close()
+    # close exports/releases; a later call re-admits from exactly that state.
+    trainer.close(); trainer.close()
+    reopened = float(trainer.evaluate(heldout))
+    assert abs(reopened-final) <= max(1e-5,abs(final)*1e-4)
     trainer.close(); resumed.close()
     return binding_check(binding,'byte_lm'), dict(contract=dict(shape=[2,7,24,3,1,8,40,2,vocabulary], steps=12, seed=738),
         metrics=dict(heldout_loss=dict(value=final,rtol=1e-3,atol=1e-5),
