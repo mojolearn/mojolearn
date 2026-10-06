@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "F02",
-  "title": "Share strided GEMM with fused LU and lower-triangle Cholesky subtract",
+  "title": "Share GEMM infrastructure through independent fused and unfused caller adapters",
   "mode": "fast",
   "vendors": [
     "apple"
@@ -13,7 +13,10 @@
     "experiments/performance_ideas/F02/caller.py",
     "cholesky/checks/fast_trsm.mojo",
     "bindings/_mojolearn_gp.mojo",
-    "bindings/_mojolearn_x_decomp.mojo"
+    "bindings/_mojolearn_x_decomp.mojo",
+    "core/gemm.mojo",
+    "gemm/checks/gemm_identical.mojo",
+    "bindings/_mojolearn_scoped_gemm_probe.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_LU_FAST_SHARED_SUB"
@@ -46,9 +49,9 @@
   "quality_gates": [
     "factor/solve residual against FAST incumbent",
     "retain strided subtract epilogue without extra pass",
-    "Cholesky factor/solve and exact upper-triangle preservation; MCD/SDK adapters separately owed"
+    "Independent SDK, LU, Cholesky lower triangle, PCA and active-batched MCD variants require positive actual reach"
   ],
-  "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
+  "timing_contract": "Complete caller through first read; each adapter independently built/qualified; no full-fit admission from matrix-only SDK checks",
   "blocker": null,
   "output_kind": "directory",
   "binding": "x_decomp",
@@ -59,9 +62,45 @@
   "variants": {
     "cholesky": [
       "MOJOLEARN_CHOL_FAST_SHARED_SUB"
+    ],
+    "sdk": [
+      "MOJOLEARN_SCOPED_GEMM_AUDIT",
+      "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+      "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+      "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+      "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+      "MOJOLEARN_SCOPED_GEMM_SPLIT",
+      "MOJOLEARN_SCOPED_GEMM_PCA"
+    ],
+    "pca": [
+      "MOJOLEARN_SCOPED_GEMM_AUDIT",
+      "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+      "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+      "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+      "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+      "MOJOLEARN_SCOPED_GEMM_SPLIT",
+      "MOJOLEARN_SCOPED_GEMM_PCA"
+    ],
+    "mcd": [
+      "MOJOLEARN_MCD_FAST_G1_GRAM",
+      "MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"
     ]
   },
   "variant_bindings": {
-    "cholesky": "gp"
+    "cholesky": "gp",
+    "sdk": "scoped_gemm_probe",
+    "pca": "estimators",
+    "mcd": "x_decomp"
+  },
+  "variant_baseline_defines": {
+    "sdk": [
+      "MOJOLEARN_SCOPED_GEMM_AUDIT"
+    ],
+    "pca": [
+      "MOJOLEARN_SCOPED_GEMM_AUDIT"
+    ],
+    "mcd": [
+      "MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"
+    ]
   }
 }

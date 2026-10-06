@@ -7,6 +7,12 @@ from support import capture_main, binding_check, consumed
 
 def exercise(args):
     import numpy as np
+    if args.variant == "sdk":
+        return sdk(args)
+    if args.variant == "mcd":
+        return mcd(args)
+    if args.variant == "pca":
+        return pca(args)
     if args.variant == "cholesky":
         return cholesky(args)
     from mojolearn import lu_factor, lu_solve
@@ -57,4 +63,55 @@ def cholesky(args):
     reached=int(binding.gp_shared_sub_count())-before
     if args.arm=='B': assert reached>0,'Cholesky did not reach triangular shared subtract'
     return dict(binding=binding_check(binding,'gp'),cases=cases,shared_products=reached)
+def mcd(args):
+    import importlib.util
+    from types import SimpleNamespace
+    from mojolearn import _mojolearn_x_decomp as binding
+    spec=importlib.util.spec_from_file_location('mcd_caller',Path(__file__).resolve().parents[1]/'F06/caller.py')
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    before=int(binding.mcd_g1_gram_count(2))
+    # This independent arm measures shared active batching, not F06 bounded
+    # launch scheduling. Keep F06's exact seeds/task but its route assertion off.
+    packet=module.exercise(SimpleNamespace(arm='A',variant='default'))
+    reached=int(binding.mcd_g1_gram_count(2))-before
+    if args.arm=='B':assert reached>0,'active batched shared MCD products never reached'
+    packet['active_batched_products']=reached
+    return packet
+
+def pca(args):
+    import importlib.util
+    from types import SimpleNamespace
+    from mojolearn import _mojolearn_estimators as binding
+    spec=importlib.util.spec_from_file_location('pca_caller',Path(__file__).resolve().parents[1]/'F11/caller.py')
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    before=int(binding.scoped_gemm_count(2,2))
+    # Reuse fixed PCA quality fixtures, but assert this adapter's own counter.
+    packet=module.pca(SimpleNamespace(arm='A',variant='pca'))
+    reached=int(binding.scoped_gemm_count(2,2))-before
+    if args.arm=='B':assert reached>0,'PCA split adapter never reached'
+    packet['split_products']=reached
+    return packet
+
+def sdk(args):
+    import numpy as np
+    from mojolearn import _mojolearn_scoped_gemm_probe as binding
+    cases={}
+    # SDK NN/NT and true alias-Gram; preserve n1/GEMV and tails controls.
+    for entrance,ta,tb,alias,m,n,k in ((1,0,1,0,509,37,129),(1,0,1,1,137,137,521),
+        (2,0,1,0,521,31,133),(2,0,0,0,509,41,131),(2,0,1,0,17,1,67)):
+        rng=np.random.default_rng(904)
+        a=rng.normal(size=(m,k)).astype('float32')
+        b=a if alias else rng.normal(size=(n,k) if tb else (k,n)).astype('float32')
+        c=np.full((m,n),np.nan,'float32')
+        before=[int(binding.route_count(r,t)) for r in range(3) for t in range(3)]
+        def launch():binding.gemm(a.ctypes.data,b.ctypes.data,c.ctypes.data,[m,n,k,ta,tb,alias,entrance]);return c
+        result,elapsed=consumed(launch)
+        delta=[int(binding.route_count(r,t))-before[r*3+t] for r in range(3) for t in range(3)]
+        if args.arm=='B' and n>1:assert sum(delta[1::3])+sum(delta[2::3])>0,'unfused SDK adapter missed'
+        oracle=a.astype(float)@(b.astype(float).T if tb else b.astype(float))
+        error=float(np.linalg.norm(np.asarray(result,float)-oracle)/np.linalg.norm(oracle))
+        cases[f'{entrance}-{m}-{n}-{k}-{alias}']=dict(contract=dict(entrance=entrance,m=m,n=n,k=k,ta=ta,tb=tb,alias=alias,seed=904),
+            metrics=dict(product_error=dict(value=error,rtol=.1,atol=2e-7)),call_ms=elapsed,products=delta)
+    return dict(binding=binding_check(binding,'scoped_gemm_probe'),cases=cases)
+
 if __name__ == '__main__': capture_main(exercise)
