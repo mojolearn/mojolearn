@@ -40,7 +40,9 @@ def exercise(args):
                 result['cases'][f'permute-{rows}-{width}']=dict(contract=dict(rows=rows,width=width,count=count,seed=109,replace=False),
                     metrics=dict(sampling_errors=dict(value=0,rtol=0,atol=0)),public_ms=elapsed,device_calls=sum(calls),output_bytes=count*width*4)
             try:resample(source,n_samples=rows+1,replace=False,numeric_mode='fast')
-            except (ValueError,RuntimeError):pass
+            except Exception as error:
+                # Native Mojo Error is exported as plain Python Exception.
+                assert str(error)==f"resample: cannot sample {rows+1} out of arrays with dim {rows} when replace is False (scikit-learn's words)",str(error)
             else:raise AssertionError('permutation accepted oversampling')
         finally:binding.resample_permutation_gather_gpu=original
     result['without_replacement']='separate permutation variant: GPU keys, stable total-order device merges, tiled gather, caller-owned consumed output'
