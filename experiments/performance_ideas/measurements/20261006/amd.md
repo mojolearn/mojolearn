@@ -18,7 +18,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I03 | identical | PARTIAL_MEASUREMENTS_RETAINED | 3 |
 | I04 | identical | PARTIAL_MEASUREMENTS_RETAINED | 1 |
 | I05 | identical | PARTIAL_MEASUREMENTS_RETAINED | 3 |
-| I06 | identical | PENDING_MEASUREMENT | 0 |
+| I06 | identical | PARTIAL_MEASUREMENTS_RETAINED | 1 |
 | I07 | identical | PENDING_MEASUREMENT | 0 |
 | I08 | identical | PENDING_MEASUREMENT | 0 |
 | I09 | identical | PENDING_MEASUREMENT | 0 |
@@ -222,6 +222,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "0", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 0, "m": 1025, "n": 513, "op": 0, "version": 0} | component | MEASURED | 0.9580 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "0", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 0, "m": 1025, "n": 513, "op": 1, "version": 0} | component | MEASURED | 1.0256 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "0", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 0, "m": 1025, "n": 513, "op": 2, "version": 0} | component | MEASURED | 0.9840 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I06 | amd/gfx942 | {}/{"heads": 12, "kv_heads": 4, "length": 1024}/candidate | component | MEASURED | 0.1164 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I15 | amd/gfx942 | amd-I15-baseline-I15-0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I15 | amd/gfx942 | amd-I15-baseline-I15-1 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I15 | amd/gfx942 | amd-I15-baseline-I15-2 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
