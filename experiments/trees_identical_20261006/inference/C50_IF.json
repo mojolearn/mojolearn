@@ -1,0 +1,73 @@
+{
+  "id": "C50_IF",
+  "title": "IF resident exact packed scoring nodes",
+  "source_status": "source_integrated_unverified",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "default": "OFF",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "C50_IF",
+      "A": [
+        "MOJOLEARN_TREES_C50_IF_PACKED=1"
+      ],
+      "B": [],
+      "scope": [
+        "IF"
+      ],
+      "production_callers": [
+        "isolation_forest/impl/isolation_forest.mojo:IsolationForest.fit",
+        "isolation_forest/estimator.mojo",
+        "python/mojolearn/_iforest_impl.py",
+        "isolation_forest/impl/isolation_forest.mojo:if_pack_nodes_kernel",
+        "isolation_forest/impl/isolation_forest.mojo:if_packed_paths_kernel"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "iforest:anomaly",
+        "iforest-contamination:anomaly",
+        "isolation_decision:anomaly",
+        "isolation_predict:anomaly"
+      ]
+    }
+  ],
+  "production_callers": [
+    "isolation_forest/impl/isolation_forest.mojo:IsolationForest.fit",
+    "isolation_forest/estimator.mojo",
+    "python/mojolearn/_iforest_impl.py",
+    "isolation_forest/impl/isolation_forest.mojo:if_pack_nodes_kernel",
+    "isolation_forest/impl/isolation_forest.mojo:if_packed_paths_kernel"
+  ],
+  "supported_estimators": [
+    "IF"
+  ],
+  "recipe_keys": [
+    "IF"
+  ],
+  "overlap_ids": [
+    "C50",
+    "T31"
+  ],
+  "implementation": "Fit packs exact feature/threshold/left/right words; score traverses vector nodes and retains original ascending tree fold.",
+  "remaining_gaps": [
+    "One-device packed IF required; multi-device packed implementation is explicitly refused."
+  ],
+  "demonstrated_runtime_reach": false,
+  "evidence": [],
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "full_dataset_recipes": [
+    "iforest:anomaly",
+    "iforest-contamination:anomaly",
+    "isolation_decision:anomaly",
+    "isolation_predict:anomaly"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

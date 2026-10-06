@@ -1,0 +1,189 @@
+{
+  "id": "T23",
+  "title": "Device one-step preparation fusion",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "source_integrated_uncompiled_scoped",
+  "default": "OFF",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T23",
+      "A": [
+        "MOJOLEARN_TREES_T23=1"
+      ],
+      "B": [],
+      "scope": "For exactly one requested step fuse three +0 workspace fills and the optional exact weight copy into one leaf pass. Reuse incumbent device walker/objective/regularization arithmetic.",
+      "production_callers": [
+        "gbdt/methods/leaves_estimation/device_walker.mojo",
+        "gbdt/methods/doc_parallel_boosting.mojo",
+        "gbdt/methods/ordered_boosting.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-symmetric:taxi",
+        "gbdt-symmetric:istella",
+        "gbdt-symmetric:taxireg",
+        "gbdt-symmetric:istellareg",
+        "gbdt-symmetric:year",
+        "gbdt-symmetric-1000:taxi",
+        "gbdt-symmetric-1000:istella",
+        "gbdt-symmetric-1000:taxireg",
+        "gbdt-symmetric-1000:istellareg",
+        "gbdt-symmetric-1000:year",
+        "gbdt-depthwise:taxi",
+        "gbdt-depthwise:istella",
+        "gbdt-depthwise:taxireg",
+        "gbdt-depthwise:istellareg",
+        "gbdt-depthwise:year",
+        "gbdt-lossguide:taxi",
+        "gbdt-lossguide:istella",
+        "gbdt-lossguide:taxireg",
+        "gbdt-lossguide:istellareg",
+        "gbdt-lossguide:year",
+        "gbdt-rank-yetirank:istellarank",
+        "gbdt-rank-pairlogit:istellarank",
+        "gbdt-multiclass:taximc",
+        "gbdt-multiclass:istellamc",
+        "gbdt-categorical:taxicat",
+        "gbdt-categorical:criteo",
+        "gbdt-ordered:taxi",
+        "gbdt-ordered:istella",
+        "gbdt-ordered:taxireg",
+        "gbdt-ordered:istellareg"
+      ]
+    }
+  ],
+  "supported_estimators": [
+    "gbdt-symmetric",
+    "gbdt-symmetric-1000",
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-ordered",
+    "gbdt-categorical",
+    "gbdt-multiclass",
+    "gbdt-rank-yetirank",
+    "gbdt-rank-pairlogit"
+  ],
+  "production_callers": [
+    "gbdt/methods/leaves_estimation/device_walker.mojo",
+    "gbdt/methods/doc_parallel_boosting.mojo",
+    "gbdt/methods/ordered_boosting.mojo"
+  ],
+  "implementation": "For exactly one requested step fuse three +0 workspace fills and the optional exact weight copy into one leaf pass. Reuse incumbent device walker/objective/regularization arithmetic.",
+  "overlap_ids": [],
+  "remaining_gaps": [
+    "Single-dimensional device-walker routes only; blocked-Hessian multiclass keeps its current route.",
+    "Incumbent device one-step solver was already enabled; candidate changes preparation, never requested iteration count."
+  ],
+  "demonstrated_runtime_reach": false,
+  "qualification": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false
+  },
+  "harness": {
+    "entry": "bench/speed/forest_speed_arm.py",
+    "selection": "tools/trees_identical_ideas.py",
+    "arguments": [
+      "--trees-experiment",
+      "T23",
+      "--trees-arm",
+      "A|B",
+      "--trees-recipe",
+      "<full-workload-recipe>",
+      "--trees-artifact",
+      "<frozen-artifact>",
+      "--trees-recipe-facts",
+      "<retained-facts.json>",
+      "--trees-result",
+      "<result.json>"
+    ],
+    "execution": "FORBIDDEN in this source-only task",
+    "whole_operation": "tools/trees_identical_workload.py",
+    "separate_spans": [
+      "fit",
+      "cold inference",
+      "repeated inference"
+    ]
+  },
+  "recipes": {
+    "saved_sources": [
+      "tools/bench_board.py:TREE_LANES/TREE_TASK_LANES/TREE_TASK_DATASETS",
+      "tools/speed_gbdt_arm.py:lane_config/TASK_LANES",
+      "experiments/performance_ideas/README.md"
+    ],
+    "lanes": [
+      "gbdt-symmetric",
+      "gbdt-symmetric-1000",
+      "gbdt-depthwise",
+      "gbdt-lossguide",
+      "gbdt-ordered",
+      "gbdt-categorical",
+      "gbdt-multiclass",
+      "gbdt-rank-yetirank",
+      "gbdt-rank-pairlogit"
+    ],
+    "dataset_version": null,
+    "dataset_hash": null,
+    "actual_dimensions": null,
+    "estimator_settings": null,
+    "full_dataset_intrinsic_caps_audited": false,
+    "coverage_status": "PENDING full retained recipe facts; no reduced substitution"
+  },
+  "modular_prerequisites": "No unsupported compiler/runtime technique introduced; toolchain support not demonstrated because compilation is forbidden.",
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_keys": [
+    "gbdt-symmetric",
+    "gbdt-symmetric-1000",
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-ordered",
+    "gbdt-categorical",
+    "gbdt-multiclass",
+    "gbdt-rank-yetirank",
+    "gbdt-rank-pairlogit"
+  ],
+  "full_dataset_recipes": [
+    "gbdt-symmetric:taxi",
+    "gbdt-symmetric:istella",
+    "gbdt-symmetric:taxireg",
+    "gbdt-symmetric:istellareg",
+    "gbdt-symmetric:year",
+    "gbdt-symmetric-1000:taxi",
+    "gbdt-symmetric-1000:istella",
+    "gbdt-symmetric-1000:taxireg",
+    "gbdt-symmetric-1000:istellareg",
+    "gbdt-symmetric-1000:year",
+    "gbdt-depthwise:taxi",
+    "gbdt-depthwise:istella",
+    "gbdt-depthwise:taxireg",
+    "gbdt-depthwise:istellareg",
+    "gbdt-depthwise:year",
+    "gbdt-lossguide:taxi",
+    "gbdt-lossguide:istella",
+    "gbdt-lossguide:taxireg",
+    "gbdt-lossguide:istellareg",
+    "gbdt-lossguide:year",
+    "gbdt-rank-yetirank:istellarank",
+    "gbdt-rank-pairlogit:istellarank",
+    "gbdt-multiclass:taximc",
+    "gbdt-multiclass:istellamc",
+    "gbdt-categorical:taxicat",
+    "gbdt-categorical:criteo",
+    "gbdt-ordered:taxi",
+    "gbdt-ordered:istella",
+    "gbdt-ordered:taxireg",
+    "gbdt-ordered:istellareg"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

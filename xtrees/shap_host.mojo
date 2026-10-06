@@ -6,6 +6,7 @@ order of xtrees/shap_device.mojo, so its bits are the GPU columns' bits.
 The unit loops are split over host tasks; every unit writes its own cells
 (the integer atomics of the cover and the meta words are order free), so the
 task count moves no bit. GPU installs never import this file."""
+from std.ffi import _Global
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from xtrees.shap import (
@@ -96,8 +97,13 @@ def shap_prepare(forest: List[Int], tscale: Int, bg: Int, cover_out: Int, ev: In
 
 def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi: Int, n: Int, d: Int, n_trees: Int,
                      k: Int, n_nodes: Int, slots: Int, width: Int) raises:
-    """xtrees/shap_device.mojo `tree_shap_values`, on the host."""
     var fo = _HostForest(forest, d, n_trees, n_nodes)
+    _tree_shap_values_on(fo, forest, tscale, cover_in, x, phi, n, d, n_trees, k, n_nodes, slots, width)
+    _ = fo^
+
+
+def _tree_shap_values_on(mut fo: _HostForest, forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi: Int,
+                         n: Int, d: Int, n_trees: Int, k: Int, n_nodes: Int, slots: Int, width: Int) raises:
     var offsets = I32P(unsafe_from_address=forest[0])
     var colid = I32P(unsafe_from_address=forest[1])
     var quesval = F32P(unsafe_from_address=forest[2])
@@ -133,4 +139,96 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
     if fo.meta[SHAP_META_BAD] != 0:
         raise Error("x_trees tree_shap: malformed tree (reason " + String(fo.meta[SHAP_META_BAD]) + ")")
     _ = buf^
-    _ = fo^
+
+
+# T44/C51 host snapshot owns every model/cover word; refits and subsequent
+# calls cannot invalidate a prepared explanation or previously returned phi.
+# Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+def _cache_i32(address: Int, n: Int) -> List[Int32]:
+    var p = I32P(unsafe_from_address=address)
+    var result = List[Int32](length=n, fill=0)
+    for i in range(n):
+        result[i] = p.unsafe_load(i)
+    return result^
+
+def _cache_f32(address: Int, n: Int) -> List[Float32]:
+    var p = F32P(unsafe_from_address=address)
+    var result = List[Float32](length=n, fill=0)
+    for i in range(n):
+        result[i] = p.unsafe_load(i)
+    return result^
+
+struct _CachedHostShap(Movable):
+    var offsets: List[Int32]
+    var colid: List[Int32]
+    var threshold: List[Float32]
+    var left: List[Int32]
+    var leaves: List[Float32]
+    var scale: List[Float32]
+    var cover: List[Int32]
+    var metadata: _HostForest
+    var d: Int
+    var trees: Int
+    var k: Int
+    var nodes: Int
+
+    def __init__(out self, forest: List[Int], tscale: Int, cover: Int, d: Int, trees: Int, k: Int, nodes: Int):
+        self.offsets = _cache_i32(forest[0], trees+1)
+        self.colid = _cache_i32(forest[1], nodes)
+        self.threshold = _cache_f32(forest[2], nodes)
+        self.left = _cache_i32(forest[3], nodes)
+        self.leaves = _cache_f32(forest[4], nodes*k)
+        self.scale = _cache_f32(tscale, trees)
+        self.cover = _cache_i32(cover, nodes)
+        self.d = d
+        self.trees = trees
+        self.k = k
+        self.nodes = nodes
+        var addresses = List[Int]()
+        addresses.append(Int(self.offsets.unsafe_ptr()))
+        addresses.append(Int(self.colid.unsafe_ptr()))
+        addresses.append(Int(self.threshold.unsafe_ptr()))
+        addresses.append(Int(self.left.unsafe_ptr()))
+        addresses.append(Int(self.leaves.unsafe_ptr()))
+        self.metadata = _HostForest(addresses, d, trees, nodes)
+
+    def values(mut self, x: Int, phi: Int, n: Int, slots: Int, width: Int) raises:
+        var addresses = List[Int]()
+        addresses.append(Int(self.offsets.unsafe_ptr()))
+        addresses.append(Int(self.colid.unsafe_ptr()))
+        addresses.append(Int(self.threshold.unsafe_ptr()))
+        addresses.append(Int(self.left.unsafe_ptr()))
+        addresses.append(Int(self.leaves.unsafe_ptr()))
+        _tree_shap_values_on(self.metadata, addresses, Int(self.scale.unsafe_ptr()), Int(self.cover.unsafe_ptr()),
+            x, phi, n, self.d, self.trees, self.k, self.nodes, slots, width)
+
+struct _HostShapCache(Defaultable, Movable):
+    var entries: Dict[Int, _CachedHostShap]
+    var next_id: Int
+    def __init__(out self):
+        self.entries = Dict[Int, _CachedHostShap]()
+        self.next_id = 1
+
+comptime _SHAP_HOST_CACHE = _Global[StorageType=_HostShapCache, name="MojoTreesT44HostCache", init_fn=_HostShapCache.__init__]
+
+def shap_cache_create(forest: List[Int], tscale: Int, cover: Int, d: Int, n_trees: Int, k: Int, n_nodes: Int) raises -> Int:
+    var state = _SHAP_HOST_CACHE.get_or_create_ptr()
+    if state[].next_id == 9223372036854775807:
+        raise Error("TreeSHAP cache handle space exhausted")
+    var handle = state[].next_id
+    state[].next_id += 1
+    state[].entries[handle] = _CachedHostShap(forest, tscale, cover, d, n_trees, k, n_nodes)
+    return handle
+
+def shap_cache_values(handle: Int, x: Int, phi: Int, n: Int, slots: Int, width: Int) raises:
+    var state = _SHAP_HOST_CACHE.get_or_create_ptr()
+    if handle not in state[].entries:
+        raise Error("unknown or released TreeSHAP cache handle")
+    state[].entries[handle].values(x, phi, n, slots, width)
+
+def shap_cache_release(handle: Int) raises:
+    var state = _SHAP_HOST_CACHE.get_or_create_ptr()
+    if handle not in state[].entries:
+        raise Error("unknown or released TreeSHAP cache handle")
+    var released = state[].entries.pop(handle)
+    _ = released^

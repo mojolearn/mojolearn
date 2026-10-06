@@ -1,0 +1,81 @@
+{
+  "id": "T40",
+  "title": "Isolation forest row major preparation",
+  "source_status": "source_integrated_unverified",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "default": "OFF (new experiment; inherited defaults preserved)",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T40",
+      "A": [
+        "MOJOLEARN_TREES_T40_ROWMAJOR=1"
+      ],
+      "B": [],
+      "scope": [
+        "IF"
+      ],
+      "production_callers": [
+        "isolation_forest/impl/isolation_forest.mojo:IsolationForest.fit",
+        "isolation_forest/estimator.mojo",
+        "python/mojolearn/_iforest_impl.py",
+        "isolation_forest/impl/isolation_tree_builder.mojo:IF_FAST_ROWMAJOR"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "iforest:anomaly",
+        "iforest-contamination:anomaly",
+        "isolation_decision:anomaly",
+        "isolation_predict:anomaly"
+      ]
+    }
+  ],
+  "production_callers": [
+    "isolation_forest/impl/isolation_forest.mojo:IsolationForest.fit",
+    "isolation_forest/estimator.mojo",
+    "python/mojolearn/_iforest_impl.py",
+    "isolation_forest/impl/isolation_tree_builder.mojo:IF_FAST_ROWMAJOR"
+  ],
+  "supported_estimators": [
+    "IF"
+  ],
+  "recipe_keys": [
+    "IF"
+  ],
+  "overlap_ids": [],
+  "implementation": "Extends row-major gather to every IDENTICAL GPU and preserves FTZ plus whole-input validation.",
+  "remaining_gaps": [],
+  "demonstrated_runtime_reach": false,
+  "validation": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false,
+    "reason": "Execution prohibited by owner"
+  },
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_facts": {
+    "dataset_version": "pending retained artifact selection",
+    "dataset_hash": "pending",
+    "actual_dimensions": "pending full recipe resolution; do not substitute reduced workloads",
+    "numeric_mode": "IDENTICAL",
+    "timing_boundary": "Preparation + training/model construction + required synchronization + consumed outputs; cold/repeated inference/explanation separate."
+  },
+  "evidence": [],
+  "full_dataset_recipes": [
+    "iforest:anomaly",
+    "iforest-contamination:anomaly",
+    "isolation_decision:anomaly",
+    "isolation_predict:anomaly"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

@@ -415,10 +415,10 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
             )
         if max_leaf_nodes is not None:
             _refuse("max_leaf_nodes", _MAX_LEAF_NODES_WHY)
-        if oob_score:
-            _refuse("oob_score=True", "the engine computes it"
-                    " (`fit_forest(oob_score=True)`) but this boundary does"
-                    " not carry it yet.")
+        if not is_bool(oob_score):
+            raise ValueError("oob_score must be a boolean; callable scoring is not supported")
+        if oob_score and not bootstrap:
+            raise ValueError("oob_score=True requires bootstrap=True")
         if warm_start:
             _refuse("warm_start=True", "there is no incremental fit here,"
                     " and accepting it would silently refit from scratch.")
@@ -460,6 +460,7 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
             random_state=(0 if random_state is None else int(random_state)),
             n_streams=int(n_streams),
             max_batch_size=int(max_batch_size),
+            oob_score=bool(oob_score),
         )
 
     def _fit_params(self, n_rows, n_features, n_classes):
@@ -682,10 +683,13 @@ class RandomForestClassifier(_RandomForestBase):
         )
         self.criterion = criterion
 
-    def fit(self, X, y):
-        return self._fit_with_tree_start(X, y)
+    def fit(self, X, y, *, feature_importances=False):
+        """Fit; optionally consume native impurity importances in this fit."""
+        return self._fit_with_tree_start(X, y, feature_importances=feature_importances)
 
-    def _fit_with_tree_start(self, X, y, tree_start=None):
+    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False):
+        if not is_bool(feature_importances):
+            raise ValueError("feature_importances must be a boolean fit-output request")
         self._refresh_config()
         self._capture_fit_mode()
         # DEVIATION 2500: one native pass for a numeric buffer, the Python
@@ -698,6 +702,37 @@ class RandomForestClassifier(_RandomForestBase):
                    _class_weight_rows(self.class_weight, self.classes_, y32,
                                       self._bind("_mojolearn_x_trees")))
         binding = self._bind("_mojolearn_rf")
+        self.__dict__.pop("oob_decision_function_", None)
+        self.__dict__.pop("oob_score_", None)
+        self.__dict__.pop("feature_importances_", None)
+        if self._cfg["oob_score"] or feature_importances:
+            # T15: native fit-owned bootstrap membership and split statistics
+            # produce the requested outputs without a second model fit.
+            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+            if tree_start is not None:
+                raise ValueError("auxiliary outputs require a complete forest, not a tree-ID shard")
+            entry = getattr(binding, "rf_classifier_fit_aux_export", None)
+            if not callable(entry):
+                raise NotImplementedError("this RF binding does not expose native requested fit outputs")
+            oob = empty((len(y32), self.n_classes_), "<f8") if self._cfg["oob_score"] else None
+            score = empty((1,), "<f8") if oob is not None else None
+            importance = [None]  # glue: owns the one optional native result buffer
+            def oob_fit(x_addr, y_addr, params, criterion):
+                if feature_importances:
+                    importance[0] = empty((int(params[1]),), "<f4")
+                return _export_fit_result(binding, entry(
+                    x_addr, y_addr, params, criterion,
+                    0 if weights is None else addr_ro(weights, name="weights"),
+                    0 if oob is None else addr(oob, name="oob"),
+                    0 if score is None else addr(score, name="oob_score"),
+                    0 if importance[0] is None else addr(importance[0], name="importance")))
+            self._fit_arrays(X, y32, self.n_classes_, oob_fit)
+            if oob is not None:
+                self.oob_decision_function_ = oob
+                self.oob_score_ = float(score[0])
+            if importance[0] is not None:
+                self.feature_importances_ = importance[0]
+            return self
         fit_fn = _forest_fit_function(binding, "rf_classifier_fit")
         rowmajor_fn = _rowmajor_fit_function(binding, "rf_classifier_fit")
         if weights is not None:
@@ -823,8 +858,9 @@ class RandomForestRegressor(_RandomForestBase):
         )
         self.criterion = criterion
 
-    def fit(self, X, y):
-        return self._fit_with_tree_start(X, y)
+    def fit(self, X, y, *, feature_importances=False):
+        """Fit; optionally consume native impurity importances in this fit."""
+        return self._fit_with_tree_start(X, y, feature_importances=feature_importances)
 
     def _fit_in_session(self, session, y, rows=None):
         """`fit(X, y)` for the X a `ForestDataSession` holds (trees-apple3):
@@ -882,7 +918,9 @@ class RandomForestRegressor(_RandomForestBase):
         self._num_outputs = int(meta[1])
         return self
 
-    def _fit_with_tree_start(self, X, y, tree_start=None):
+    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False):
+        if not is_bool(feature_importances):
+            raise ValueError("feature_importances must be a boolean fit-output request")
         self._refresh_config()
         self._capture_fit_mode()
         y32, _ = as_f32_c(y, ndim=1, name="y")
@@ -911,6 +949,35 @@ class RandomForestRegressor(_RandomForestBase):
                     " a stump silently"
                 )
         binding = self._bind("_mojolearn_rf")
+        self.__dict__.pop("oob_prediction_", None)
+        self.__dict__.pop("oob_score_", None)
+        self.__dict__.pop("feature_importances_", None)
+        if self._cfg["oob_score"] or feature_importances:
+            # T15 consumes native fit-owned OOB and importance buffers.
+            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+            if tree_start is not None:
+                raise ValueError("auxiliary outputs require a complete forest, not a tree-ID shard")
+            entry = getattr(binding, "rf_regressor_fit_aux_export", None)
+            if not callable(entry):
+                raise NotImplementedError("this RF binding does not expose native requested fit outputs")
+            oob = empty((len(y32),), "<f8") if self._cfg["oob_score"] else None
+            score = empty((1,), "<f8") if oob is not None else None
+            importance = [None]
+            def oob_fit(x_addr, y_addr, params, criterion):
+                if feature_importances:
+                    importance[0] = empty((int(params[1]),), "<f4")
+                return _export_fit_result(binding, entry(
+                    x_addr, y_addr, params, criterion,
+                    0 if oob is None else addr(oob, name="oob"),
+                    0 if score is None else addr(score, name="oob_score"),
+                    0 if importance[0] is None else addr(importance[0], name="importance")))
+            self._fit_arrays(X, y32, 0, oob_fit)
+            if oob is not None:
+                self.oob_prediction_ = oob
+                self.oob_score_ = float(score[0])
+            if importance[0] is not None:
+                self.feature_importances_ = importance[0]
+            return self
         if tree_start is not None:
             if not callable(getattr(binding, 'rf_regressor_fit_shard', None)):
                 raise ImportError('rebuild RF binding for global tree-ID shards')

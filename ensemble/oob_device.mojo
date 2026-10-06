@@ -182,6 +182,51 @@ def rf_oob_rows_kernel(
     counts.unsafe_store(r, Int32(cnt))
 
 
+def rf_oob_rows_outputs_kernel(
+    x: MutPointer[Float32, MutAnyOrigin], masks: MutPointer[UInt8, MutAnyOrigin],
+    offsets: MutPointer[Int32, MutAnyOrigin], colid: MutPointer[Int32, MutAnyOrigin],
+    quesval: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin], acc: MutPointer[UInt64, MutAnyOrigin],
+    counts: MutPointer[Int32, MutAnyOrigin], n_rows: Int32, n_cols: Int32,
+    n_trees: Int32, n_out: Int32, row_major: Int32, in_bag_scores: Int32,
+):
+    """T15: one register fold per (row,output), fixed ascending tree order.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    Reuses fit-owned membership/model; one final output store replaces one
+    read/write per voter. Multiclass repeats walks across outputs, a declared
+    tradeoff to measure. Zero voters preserve +0 and an exact zero count.
+    """
+    var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell >= Int(n_rows)*Int(n_out):
+        return
+    var row = cell // Int(n_out)
+    var output = cell % Int(n_out)
+    var total = UInt64(0)
+    var count = 0
+    for t in range(Int(n_trees)):
+        var in_bag = masks.unsafe_load(t*Int(n_rows)+row) != UInt8(0)
+        if in_bag_scores != Int32(0):
+            in_bag = not in_bag
+        if in_bag:
+            continue
+        var base = Int(offsets.unsafe_load(t))
+        var node = 0
+        var child = Int(left.unsafe_load(base))
+        while child != -1:
+            var column = Int(colid.unsafe_load(base+node))
+            var pos = row*Int(n_cols)+column if row_major != Int32(0) else column*Int(n_rows)+row
+            node = child if ftz(x.unsafe_load(pos)) <= quesval.unsafe_load(base+node) else child+1
+            child = Int(left.unsafe_load(base+node))
+        total = sf64_add(total,sf64_from_f32(leaves.unsafe_load((base+node)*Int(n_out)+output)))
+        count += 1
+    if count > 0:
+        total = sf64_div(total,sf64_from_int(count))
+    acc.unsafe_store(cell,total)
+    if output == 0:
+        counts.unsafe_store(row,Int32(count))
+
+
 # ------------------------------------------------- score epilogue (B6) --
 
 

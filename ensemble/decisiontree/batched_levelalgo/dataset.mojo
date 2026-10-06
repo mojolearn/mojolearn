@@ -66,6 +66,7 @@ passed as a `DatasetView`, not as loose scalars.
 =================================================================
 """
 
+from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -184,6 +185,18 @@ struct DatasetView[dtype: DType, label_dtype: DType](Copyable, Movable):
         """DEVIATION 314: the precomputed `lower_bound` index for
         (row, col). Valid only when `has_bins`; same offset formula as
         `value` above, or ROW-major under `RF_BINS_ROW_MAJOR` (FAST)."""
+        comptime if T08:
+            var offset = Int(col)*Int(self.n_rows)+Int(row)
+            comptime if T08_LAYOUT == 1:
+                offset = Int(row)*Int(self.n_cols)+Int(col)
+            elif T08_LAYOUT == 3:
+                # 32 logical rows per column tile, fixed for every vendor;
+                # allocation pads only the last tile, never a data row/drop.
+                offset = ((Int(row)//32)*Int(self.n_cols)+Int(col))*32+Int(row)%32
+            comptime if T08_BITS == 16:
+                return Int32(self.bins.unsafe_bitcast[UInt16]()[unsafe_offset=offset])
+            else:
+                return Int32(self.bins[unsafe_offset=offset])
         comptime if RF_BINS_ROW_MAJOR:
             if self.bins_row_major:
                 return Int32(

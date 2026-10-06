@@ -242,6 +242,9 @@ are the same on Metal, PTX and AMDGPU, run to run and vendor to vendor.
 =================================================================
 """
 
+from std.collections import InlineArray
+from ensemble.tree_identical_ideas import T06, T14, T14_EXACT
+from ensemble.tree_moments import balanced_mse_gain
 from std.gpu import block_dim, thread_idx
 from max.gpu.memory import AddressSpace
 
@@ -414,6 +417,10 @@ trait ObjectiveLike(Copyable & Deinitable):
         with a non-negative `min_impurity_decrease` (a pure node's Gini and
         entropy gains are exactly 0 for every threshold). False for
         regression, whose single histogram plane cannot show purity."""
+        ...
+
+    def LabelMoment(self, bin: Self.BinT) -> Scalar[Self.DataT]:
+        """T14 per-partial first moment; classification never calls it."""
         ...
 
     def Scales(self) -> BinScales:
@@ -719,6 +726,85 @@ struct ClassificationObjectiveFunction[
         return gain
 
     @always_inline
+    def EntropyGainCached[
+        ho: MutOrigin, aspace: AddressSpace, //
+    ](
+        self,
+        hist: MutPointer[Self.BinT, ho, address_space=aspace],
+        i: Int32,
+        n_bins: Int32,
+        len: Int64,
+        nLeft: Int64,
+        nRight: Int64,
+        parent_terms: InlineArray[Scalar[Self.dtype], 64],
+    ) -> Scalar[Self.dtype]:
+        """`objectives.cuh:80-118`. See DEVIATION 113 for `raft::log` and
+        DEVIATION 406 for the `_log_seam` routing."""
+        # `:83-85`
+        var total_weight = self.WeightAt(hist, n_bins - 1, n_bins)
+        var left_weight = self.WeightAt(hist, i, n_bins)
+        var right_weight = total_weight - left_weight
+
+        # `:87-88`
+        if total_weight <= 0 or left_weight <= 0 or right_weight <= 0:
+            return -Scalar[Self.dtype].MAX_FINITE
+
+        # `:90-93`. DEVIATION 406: the divisions store through `_ftz_seam`
+        # -- comptime no-ops under FAST, the pinned arithmetic under
+        # IDENTICAL.
+        var gain = Scalar[Self.dtype](0.0)
+        var invLeft = _ftz_seam(
+            Scalar[Self.dtype](1.0) / left_weight.cast[Self.dtype]()
+        )
+        var invRight = _ftz_seam(
+            Scalar[Self.dtype](1.0) / right_weight.cast[Self.dtype]()
+        )
+        var invLen = _ftz_seam(
+            Scalar[Self.dtype](1.0) / total_weight.cast[Self.dtype]()
+        )
+        # `:94-115`. DEVIATION 406: every `raft::log` routes through
+        # `_log_seam` and the arithmetic around it is decomposed in their
+        # association order -- products through `_ftz_seam`, each
+        # accumulation one `_mul_add_seam`. `raft::log(DataT(2))` stays
+        # recomputed per term, where they compute it.
+        for c in range(Int(self.nclasses)):
+            var val_i = Scalar[Self.BinT.weight_dtype](0)
+            var lval_i = hist[
+                unsafe_offset = Int(n_bins) * c + Int(i)
+            ].Weight(self.scales)
+            if lval_i != 0:
+                var lval = _ftz_seam(lval_i.cast[Self.dtype]())
+                # `gain += log(lval * invLeft) / log(2) * lval * invLen`
+                var larg = _ftz_seam(lval * invLeft)
+                var l1 = _ftz_seam(
+                    _log_seam(larg) / _log_seam(Scalar[Self.dtype](2))
+                )
+                var l2 = _ftz_seam(l1 * lval)
+                gain = _mul_add_seam(l2, invLen, gain)
+
+            val_i += lval_i
+            var total_sum = hist[
+                unsafe_offset = Int(n_bins) * c + Int(n_bins) - 1
+            ].Weight(self.scales)
+            var rval_i = total_sum - lval_i
+            if rval_i != 0:
+                var rval = _ftz_seam(rval_i.cast[Self.dtype]())
+                # `gain += log(rval * invRight) / log(2) * rval * invLen`
+                var rarg = _ftz_seam(rval * invRight)
+                var r1 = _ftz_seam(
+                    _log_seam(rarg) / _log_seam(Scalar[Self.dtype](2))
+                )
+                var r2 = _ftz_seam(r1 * rval)
+                gain = _mul_add_seam(r2, invLen, gain)
+
+            val_i += rval_i
+            if val_i != 0:
+                # T06 keeps the original class-ordered subtract at this site.
+                gain = _ftz_seam(gain - parent_terms[c])
+
+        return gain
+
+    @always_inline
     def GainPerSplit[
         ho: MutOrigin, aspace: AddressSpace, //
     ](
@@ -756,6 +842,10 @@ struct ClassificationObjectiveFunction[
         """DEVIATION 2502: a pure node's gain is exactly 0 under Gini and
         entropy, and `Gain` admits only `gain > min_impurity_decrease`."""
         return self.min_impurity_decrease >= Scalar[Self.dtype](0)
+
+    @always_inline
+    def LabelMoment(self, bin: Self.BinT) -> Scalar[Self.dtype]:
+        return Scalar[Self.dtype](0)
 
     @always_inline
     def Scales(self) -> BinScales:
@@ -830,6 +920,9 @@ struct ClassificationObjectiveFunction[
         step: Int32,
     ) -> Split[Self.dtype]:
         """`Gain` over bins `first, first + step, ...`."""
+        comptime if T06 and not Self.weighted:
+            if self.criterion == CRITERION_ENTROPY and self.nclasses <= 64 and len > 0:
+                return self.GainStridedCachedEntropy(shist,squantiles,col,len,n_bins,first,step)
         var sp = Split[Self.dtype]()
         var i = first
         while i < n_bins:
@@ -842,6 +935,57 @@ struct ClassificationObjectiveFunction[
             ):
                 var gain = self.GainPerSplit(
                     shist, i, n_bins, len, nLeft, nRight
+                )
+                if gain > self.min_impurity_decrease:
+                    _ = sp.update_bin(
+                        squantiles[unsafe_offset = Int(i)],
+                        col,
+                        gain,
+                        nLeft,
+                        i,
+                    )
+            i += step
+        return sp
+
+    @always_inline
+    def GainStridedCachedEntropy[
+        ho: MutOrigin, aspace: AddressSpace, qo: MutOrigin, qs: AddressSpace, //
+    ](
+        self,
+        shist: MutPointer[Self.BinT, ho, address_space=aspace],
+        squantiles: MutPointer[Scalar[Self.dtype], qo, address_space=qs],
+        col: Int32,
+        len: Int64,
+        n_bins: Int32,
+        first: Int32,
+        step: Int32,
+    ) -> Split[Self.dtype]:
+        """`Gain` over bins `first, first + step, ...`."""
+        # T06: 64 scalars bound private cache to 256 bytes for float32.
+        # Only exact integer class counts qualify. Weighted l+r may round and
+        # therefore retains the original expressions rather than hoisting.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        var parent_terms = InlineArray[Scalar[Self.dtype],64](fill=Scalar[Self.dtype](0))
+        var total_weight = self.WeightAt(shist,n_bins-1,n_bins)
+        var inv_len = _ftz_seam(Scalar[Self.dtype](1)/total_weight.cast[Self.dtype]())
+        for c in range(Int(self.nclasses)):
+            var total = shist[unsafe_offset=Int(n_bins)*c+Int(n_bins)-1].Weight(self.scales)
+            if total != 0:
+                var value = _ftz_seam(total.cast[Self.dtype]()*inv_len)
+                var term = _ftz_seam(value*_log_seam(value))
+                parent_terms[c] = _ftz_seam(term/_log_seam(Scalar[Self.dtype](2)))
+        var sp = Split[Self.dtype]()
+        var i = first
+        while i < n_bins:
+            # `:168-169`
+            var nLeft = count_left(shist, i, n_bins, self.nclasses)
+            var nRight = len - nLeft
+            # `:170-174`
+            if nLeft >= Int64(Int(self.min_samples_leaf)) and nRight >= Int64(
+                Int(self.min_samples_leaf)
+            ):
+                var gain = self.EntropyGainCached(
+                    shist, i, n_bins, len, nLeft, nRight, parent_terms
                 )
                 if gain > self.min_impurity_decrease:
                     _ = sp.update_bin(
@@ -1001,6 +1145,8 @@ struct RegressionObjectiveFunction[
                 self.scales
             ).cast[Self.dtype]()
         )
+        comptime if T14 and not T14_EXACT and Self.dtype == DType.float32:
+            return balanced_mse_gain(parent_weight.cast[DType.float32](),left_weight.cast[DType.float32](),label_sum.cast[DType.float32](),left_label_sum.cast[DType.float32]()).cast[Self.dtype]()
         # `parent_obj = -label_sum * label_sum * invLen`
         var p1 = _ftz_seam(-label_sum * label_sum)
         var parent_obj = _ftz_seam(p1 * invLen)
@@ -1324,6 +1470,10 @@ struct RegressionObjectiveFunction[
     def PureNodeIsTerminal(self) -> Bool:
         """DEVIATION 2502: never marked; one plane shows no purity."""
         return False
+
+    @always_inline
+    def LabelMoment(self, bin: Self.BinT) -> Scalar[Self.dtype]:
+        return _ftz_seam(bin.LabelSum(self.scales).cast[Self.dtype]())
 
     @always_inline
     def Scales(self) -> BinScales:

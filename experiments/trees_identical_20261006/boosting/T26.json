@@ -1,0 +1,132 @@
+{
+  "id": "T26",
+  "title": "Canonical no-sort RMSE leaf reduction V1",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "source_integrated_uncompiled_scoped",
+  "default": "OFF",
+  "contract": "V1",
+  "controls": [
+    {
+      "name": "T26",
+      "A": [
+        "MOJOLEARN_TREES_T26=1"
+      ],
+      "B": [],
+      "scope": "Original-row logical chunks of 256; row-order per-leaf partials then adjacent balanced merge, using shared software-rounded Float32/FTZ units. Host and GPU callers bypass partition/sort/gather and apply the same new-version leaf estimates.",
+      "production_callers": [
+        "gbdt/methods/doc_parallel_boosting.mojo",
+        "gbdt/host/gbdt_oracle_depthwise.mojo",
+        "gbdt/methods/leaves_estimation/tree_t26_units.mojo",
+        "gbdt/methods/leaves_estimation/tree_t26_device.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-depthwise:taxi",
+        "gbdt-depthwise:istella",
+        "gbdt-depthwise:taxireg",
+        "gbdt-depthwise:istellareg",
+        "gbdt-depthwise:year",
+        "gbdt-lossguide:taxi",
+        "gbdt-lossguide:istella",
+        "gbdt-lossguide:taxireg",
+        "gbdt-lossguide:istellareg",
+        "gbdt-lossguide:year"
+      ]
+    }
+  ],
+  "supported_estimators": [
+    "gbdt-depthwise",
+    "gbdt-lossguide"
+  ],
+  "production_callers": [
+    "gbdt/methods/doc_parallel_boosting.mojo",
+    "gbdt/host/gbdt_oracle_depthwise.mojo",
+    "gbdt/methods/leaves_estimation/tree_t26_units.mojo",
+    "gbdt/methods/leaves_estimation/tree_t26_device.mojo"
+  ],
+  "implementation": "Original-row logical chunks of 256; row-order per-leaf partials then adjacent balanced merge, using shared software-rounded Float32/FTZ units. Host and GPU callers bypass partition/sort/gather and apply the same new-version leaf estimates. Host and device share explicit positive Int32 row/leaf ABI limits, a 64 MiB per-leaf chunk scratch limit and nonfinite regularization refusal via t26_chunks.",
+  "overlap_ids": [],
+  "remaining_gaps": [
+    "Only unweighted RMSE, one permutation, one-dimensional Newton with exactly one requested estimation iteration.",
+    "Ordered, symmetric, multiclass, weighted and multi-step contracts remain pending; those routes explicitly retain B.",
+    "64 MiB scratch budget streams leaf batches; a single leaf exceeding that budget is refused.",
+    "Quality and new-version identity remain entirely unverified; no A-vs-B bit-equality requirement."
+  ],
+  "demonstrated_runtime_reach": false,
+  "qualification": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false
+  },
+  "harness": {
+    "entry": "bench/speed/forest_speed_arm.py",
+    "selection": "tools/trees_identical_ideas.py",
+    "arguments": [
+      "--trees-experiment",
+      "T26",
+      "--trees-arm",
+      "A|B",
+      "--trees-recipe",
+      "<full-workload-recipe>",
+      "--trees-artifact",
+      "<frozen-artifact>",
+      "--trees-recipe-facts",
+      "<retained-facts.json>",
+      "--trees-result",
+      "<result.json>"
+    ],
+    "execution": "FORBIDDEN in this source-only task",
+    "whole_operation": "tools/trees_identical_workload.py",
+    "separate_spans": [
+      "fit",
+      "cold inference",
+      "repeated inference"
+    ]
+  },
+  "recipes": {
+    "saved_sources": [
+      "tools/bench_board.py:TREE_LANES/TREE_TASK_LANES/TREE_TASK_DATASETS",
+      "tools/speed_gbdt_arm.py:lane_config/TASK_LANES",
+      "experiments/performance_ideas/README.md"
+    ],
+    "lanes": [
+      "gbdt-depthwise",
+      "gbdt-lossguide"
+    ],
+    "dataset_version": null,
+    "dataset_hash": null,
+    "actual_dimensions": null,
+    "estimator_settings": null,
+    "full_dataset_intrinsic_caps_audited": false,
+    "coverage_status": "PENDING full retained recipe facts; no reduced substitution"
+  },
+  "modular_prerequisites": "No unsupported compiler/runtime technique introduced; toolchain support not demonstrated because compilation is forbidden.",
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_keys": [
+    "gbdt-depthwise",
+    "gbdt-lossguide"
+  ],
+  "full_dataset_recipes": [
+    "gbdt-depthwise:taxi",
+    "gbdt-depthwise:istella",
+    "gbdt-depthwise:taxireg",
+    "gbdt-depthwise:istellareg",
+    "gbdt-depthwise:year",
+    "gbdt-lossguide:taxi",
+    "gbdt-lossguide:istella",
+    "gbdt-lossguide:taxireg",
+    "gbdt-lossguide:istellareg",
+    "gbdt-lossguide:year"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

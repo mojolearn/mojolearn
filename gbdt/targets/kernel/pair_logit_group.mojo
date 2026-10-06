@@ -71,6 +71,9 @@ from checks.numerics import (
     identical_mul,
 )
 from gbdt.data.pairs import IDN_PAIRLOGIT_GROUP
+from gbdt.trees_identical_switches import T29, T29_VERSIONED
+from gbdt.targets.tree_t29_units import T29_GROUP_LANES
+from gbdt.targets.kernel.tree_t29_pair import pair_logit_group_versioned_kernel
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     pinned_block_sum,
@@ -265,6 +268,7 @@ def pair_logit_group_kernel[
     store_acc: Bool,
     threads: Int = PLG_THREADS,
     pairs_once: Bool = False,
+    work_class: Int = 0,
 ](
     point: MutPointer[Float32, MutAnyOrigin],
     grades: MutPointer[Float32, MutAnyOrigin],
@@ -317,6 +321,15 @@ def pair_logit_group_kernel[
     var begin = Int(group_offsets.unsafe_load(g))
     var end = Int(group_offsets.unsafe_load(g + 1))
     var size = end - begin
+    # T29 scheduling only: short and long queries use separate launches.
+    # The threshold is one shared-memory tile, not a dataset dimension.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    comptime if work_class == 1:
+        if size > threads:
+            return
+    elif work_class == 2:
+        if size <= threads:
+            return
     var w = group_w.unsafe_load(g)
     var n_chunks = (size + threads - 1) // threads
     var fv_local = Float32(0.0)
@@ -606,24 +619,62 @@ def launch_pair_logit_group[
     given offsets, passed as ONE pointer plus offsets (two pointers
     derived from `acc` are refused as aliasing; the accumulators are
     written only under `store_acc`)."""
-    ctx.enqueue_function[
-        pair_logit_group_kernel[
-            estimation, second_order, store_acc, PLG_LAUNCH_THREADS, PL_PAIRS_ONCE
-        ]
-    ](
-        point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
-        acc.unsafe_ptr(), Int32(group_w_at), row_weights.unsafe_ptr(), Int32(n_rows),
-        write_map.unsafe_ptr(), Int32(1) if has_write_map else Int32(0),
-        stats.unsafe_ptr(), function_value.unsafe_ptr(),
-        Int32(1) if compute_fv else Int32(0),
-        plane_magnitudes.unsafe_ptr(),
-        Int32(1) if compute_magnitudes else Int32(0),
-        Int32(der_acc_at),
-        Int32(der2_acc_at),
-        Int32(fv_acc_at),
-        grid_dim=(n_groups, 1, 1),
-        block_dim=(PLG_LAUNCH_THREADS, 1, 1),
-    )
+    comptime if T29_VERSIONED:
+        comptime for class_slot in range(2 if T29 else 1):
+            ctx.enqueue_function[
+                pair_logit_group_versioned_kernel[
+                    estimation, second_order, store_acc, class_slot + 1 if T29 else 0
+                ]
+            ](
+                point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
+                acc.unsafe_ptr(), Int32(group_w_at), row_weights.unsafe_ptr(), Int32(n_rows),
+                write_map.unsafe_ptr(), Int32(1) if has_write_map else Int32(0),
+                stats.unsafe_ptr(), function_value.unsafe_ptr(),
+                Int32(1) if compute_fv else Int32(0),
+                plane_magnitudes.unsafe_ptr(),
+                Int32(1) if compute_magnitudes else Int32(0),
+                Int32(der_acc_at), Int32(der2_acc_at), Int32(fv_acc_at),
+                grid_dim=(n_groups, 1, 1), block_dim=(T29_GROUP_LANES, 1, 1),
+            )
+    elif T29:
+        comptime for wc in range(1, 3):
+            ctx.enqueue_function[
+                pair_logit_group_kernel[
+                    estimation, second_order, store_acc, PLG_LAUNCH_THREADS, PL_PAIRS_ONCE, wc
+                ]
+            ](
+                point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
+                acc.unsafe_ptr(), Int32(group_w_at), row_weights.unsafe_ptr(), Int32(n_rows),
+                write_map.unsafe_ptr(), Int32(1) if has_write_map else Int32(0),
+                stats.unsafe_ptr(), function_value.unsafe_ptr(),
+                Int32(1) if compute_fv else Int32(0),
+                plane_magnitudes.unsafe_ptr(),
+                Int32(1) if compute_magnitudes else Int32(0),
+                Int32(der_acc_at),
+                Int32(der2_acc_at),
+                Int32(fv_acc_at),
+                grid_dim=(n_groups, 1, 1),
+                block_dim=(PLG_LAUNCH_THREADS, 1, 1),
+            )
+    else:
+        ctx.enqueue_function[
+            pair_logit_group_kernel[
+                estimation, second_order, store_acc, PLG_LAUNCH_THREADS, PL_PAIRS_ONCE
+            ]
+        ](
+            point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
+            acc.unsafe_ptr(), Int32(group_w_at), row_weights.unsafe_ptr(), Int32(n_rows),
+            write_map.unsafe_ptr(), Int32(1) if has_write_map else Int32(0),
+            stats.unsafe_ptr(), function_value.unsafe_ptr(),
+            Int32(1) if compute_fv else Int32(0),
+            plane_magnitudes.unsafe_ptr(),
+            Int32(1) if compute_magnitudes else Int32(0),
+            Int32(der_acc_at),
+            Int32(der2_acc_at),
+            Int32(fv_acc_at),
+            grid_dim=(n_groups, 1, 1),
+            block_dim=(PLG_LAUNCH_THREADS, 1, 1),
+        )
 
 
 def launch_pair_logit_group_reuse(

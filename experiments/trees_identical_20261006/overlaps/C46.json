@@ -1,0 +1,20 @@
+{
+  "id": "C46",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "SHARED_SCOPED_IMPLEMENTATIONS_UNVERIFIED",
+  "default": "OFF",
+  "shared_implementations": [
+    "T03"
+  ],
+  "implementation_records": [
+    "experiments/trees_identical_20261006/forest/T03.json"
+  ],
+  "overlap_explanation": "Exact bounded sibling subtraction only; T20 reuses boosting incumbent histogram-lifetime machinery but does not extend this RF/ET accumulator claim.",
+  "selector": "tools/trees_identical_ideas.py:OVERLAPS",
+  "harness": "bench/speed/forest_speed_arm.py --trees-experiment C46",
+  "recipe_mapping": "experiments/trees_identical_20261006/recipes.json",
+  "full_dataset_facts": "PENDING; every shared record retains its affected scopes and gaps",
+  "demonstrated_runtime_reach": false,
+  "evidence": [],
+  "classical_source": "../mojolearn-classical-identical-ideas/docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md (read only)"
+}

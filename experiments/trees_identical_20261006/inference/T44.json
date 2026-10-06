@@ -1,0 +1,135 @@
+{
+  "id": "T44",
+  "title": "Resident TreeSHAP metadata and path reuse",
+  "source_status": "source_integrated_unverified",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "default": "OFF (new experiment; inherited defaults preserved)",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T44",
+      "A": [
+        "MOJOLEARN_TREES_T44_METADATA_CACHE=1"
+      ],
+      "B": [],
+      "scope": [
+        "AUX"
+      ],
+      "production_callers": [
+        "xtrees/shap.mojo",
+        "xtrees/shap_host.mojo",
+        "xtrees/shap_device.mojo",
+        "xtrees/api.mojo",
+        "python/mojolearn/_expansion_trees.py:TreeExplainer"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "shap:rf:taxi",
+        "shap:rf:taxireg",
+        "shap:rf:istella",
+        "shap:rf:istellareg",
+        "shap:rf:year",
+        "shap:rf:taximc",
+        "shap:rf:istellamc",
+        "shap:et:taxi",
+        "shap:et:taxireg",
+        "shap:et:istella",
+        "shap:et:istellareg",
+        "shap:et:year",
+        "shap:et:taximc",
+        "shap:et:istellamc",
+        "shap:decisiontree:taxi",
+        "shap:decisiontree:taxireg",
+        "shap:decisiontree:istella",
+        "shap:decisiontree:istellareg",
+        "shap:decisiontree:year"
+      ]
+    }
+  ],
+  "production_callers": [
+    "xtrees/shap.mojo",
+    "xtrees/shap_host.mojo",
+    "xtrees/shap_device.mojo",
+    "xtrees/api.mojo",
+    "python/mojolearn/_expansion_trees.py:TreeExplainer"
+  ],
+  "supported_estimators": [
+    "AUX"
+  ],
+  "recipe_keys": [
+    "shap:rf:taxi",
+    "shap:rf:taxireg",
+    "shap:rf:istella",
+    "shap:rf:istellareg",
+    "shap:rf:year",
+    "shap:rf:taximc",
+    "shap:rf:istellamc",
+    "shap:et:taxi",
+    "shap:et:taxireg",
+    "shap:et:istella",
+    "shap:et:istellareg",
+    "shap:et:year",
+    "shap:et:taximc",
+    "shap:et:istellamc",
+    "shap:decisiontree:taxi",
+    "shap:decisiontree:taxireg",
+    "shap:decisiontree:istella",
+    "shap:decisiontree:istellareg",
+    "shap:decisiontree:year"
+  ],
+  "overlap_ids": [
+    "C51"
+  ],
+  "implementation": "Owning host/GPU registries retain immutable forest, cover, parent, slot, bounded leaf-pattern tables and decision masks across calls; monotonic handles and explicit/finalizer release; existing row/tree scratch batching is bounded.",
+  "remaining_gaps": [
+    "Supported explanation outputs remain standard exact SHAP; no interaction API exists in this source."
+  ],
+  "demonstrated_runtime_reach": false,
+  "validation": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false,
+    "reason": "Execution prohibited by owner"
+  },
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_facts": {
+    "dataset_version": "pending retained artifact selection",
+    "dataset_hash": "pending",
+    "actual_dimensions": "pending full recipe resolution; do not substitute reduced workloads",
+    "numeric_mode": "IDENTICAL",
+    "timing_boundary": "Preparation + training/model construction + required synchronization + consumed outputs; cold/repeated inference/explanation separate."
+  },
+  "evidence": [],
+  "full_dataset_recipes": [
+    "shap:rf:taxi",
+    "shap:rf:taxireg",
+    "shap:rf:istella",
+    "shap:rf:istellareg",
+    "shap:rf:year",
+    "shap:rf:taximc",
+    "shap:rf:istellamc",
+    "shap:et:taxi",
+    "shap:et:taxireg",
+    "shap:et:istella",
+    "shap:et:istellareg",
+    "shap:et:year",
+    "shap:et:taximc",
+    "shap:et:istellamc",
+    "shap:decisiontree:taxi",
+    "shap:decisiontree:taxireg",
+    "shap:decisiontree:istella",
+    "shap:decisiontree:istellareg",
+    "shap:decisiontree:year"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

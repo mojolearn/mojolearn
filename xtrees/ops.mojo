@@ -442,7 +442,7 @@ def samme_alpha(err: Float64, k: Float64, learning_rate: Float64) -> Float64:
     return identical_mul64(learning_rate, identical_log64((1.0 - err) / err) + identical_log64(k - 1.0))
 
 
-def samme_step(
+def samme_step[CACHE: Bool = False](
     w: MutPointer[Float64, MutUntrackedOrigin], pred: MutPointer[Int32, MutUntrackedOrigin],
     y: MutPointer[Int32, MutUntrackedOrigin], n: Int, n_classes: Int,
     learning_rate: Float64, last: Bool, stats: MutPointer[Float64, MutUntrackedOrigin],
@@ -455,12 +455,16 @@ def samme_step(
     error, the total and the new sum fold in the fixed order."""
     var m = fold_chunks(n)
     var p = List[Float64](length=2 * m, fill=0.0)
+    var wrong = List[Bool](length=n if CACHE else 0, fill=False)
     for c in range(m):
         var e: Float64 = 0.0
         var t: Float64 = 0.0
         for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, n)):
             t = t + w[unsafe_offset=i]
-            if pred[unsafe_offset=i] != y[unsafe_offset=i]:
+            var miss = pred[unsafe_offset=i] != y[unsafe_offset=i]
+            comptime if CACHE:
+                wrong[i] = miss
+            if miss:
                 e = e + w[unsafe_offset=i]
         p[2 * c] = e
         p[2 * c + 1] = t
@@ -489,7 +493,12 @@ def samme_step(
         for c in range(m):
             var run: Float64 = 0.0
             for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, n)):
-                if pred[unsafe_offset=i] != y[unsafe_offset=i] and w[unsafe_offset=i] > 0.0:
+                var miss: Bool
+                comptime if CACHE:
+                    miss = wrong[i]
+                else:
+                    miss = pred[unsafe_offset=i] != y[unsafe_offset=i]
+                if miss and w[unsafe_offset=i] > 0.0:
                     w[unsafe_offset=i] = identical_mul64(w[unsafe_offset=i], boost)
                 run = run + w[unsafe_offset=i]
             q[c] = run
@@ -517,7 +526,7 @@ def r2_error(p: Float32, t: Float32, emax: Float64, loss: Int) -> Float64:
     return e
 
 
-def r2_step(
+def r2_step[CACHE: Bool = False](
     w: MutPointer[Float64, MutUntrackedOrigin], pred: MutPointer[Float32, MutUntrackedOrigin],
     y: MutPointer[Float32, MutUntrackedOrigin], n: Int, loss: Int,
     learning_rate: Float64, last: Bool, stats: MutPointer[Float64, MutUntrackedOrigin],
@@ -536,11 +545,15 @@ def r2_step(
                 emax = e
     var m = fold_chunks(n)
     var p = List[Float64](length=m, fill=0.0)
+    var errors = List[Float64](length=n if CACHE else 0, fill=0.0)
     for c in range(m):
         var run: Float64 = 0.0
         for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, n)):
             if w[unsafe_offset=i] > 0.0:
-                run = run + identical_mul64(w[unsafe_offset=i], r2_error(pred[unsafe_offset=i], y[unsafe_offset=i], emax, loss))
+                var e = r2_error(pred[unsafe_offset=i], y[unsafe_offset=i], emax, loss)
+                comptime if CACHE:
+                    errors[i] = e
+                run = run + identical_mul64(w[unsafe_offset=i], e)
         p[c] = run
     fold_tree_host(p, m, 1)
     var err = p[0]
@@ -562,7 +575,11 @@ def r2_step(
         var run: Float64 = 0.0
         for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, n)):
             if not last and w[unsafe_offset=i] > 0.0:
-                var e = r2_error(pred[unsafe_offset=i], y[unsafe_offset=i], emax, loss)
+                var e: Float64
+                comptime if CACHE:
+                    e = errors[i]
+                else:
+                    e = r2_error(pred[unsafe_offset=i], y[unsafe_offset=i], emax, loss)
                 var t = identical_mul64(1.0 - e, learning_rate)
                 w[unsafe_offset=i] = identical_mul64(w[unsafe_offset=i], identical_exp64(identical_mul64(t, lb)))
             run = run + w[unsafe_offset=i]

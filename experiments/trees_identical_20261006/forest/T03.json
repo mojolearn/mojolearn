@@ -1,0 +1,82 @@
+{
+  "id": "T03",
+  "title": "Sibling histogram subtraction",
+  "source_status": "PARTIAL_SOURCE_INTEGRATION",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "controls": [
+    {
+      "name": "retained",
+      "A": [
+        "MOJOLEARN_TREES_T03=1"
+      ],
+      "B": [],
+      "scope": [
+        "RFClassifier",
+        "DTClassifier"
+      ],
+      "production_callers": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "ensemble/decisiontree/batched_levelalgo/retained_count_histograms.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "all-features:rf:taxi",
+        "all-features:rf:istella",
+        "all-features:decisiontree:taxi",
+        "all-features:decisiontree:istella"
+      ]
+    }
+  ],
+  "production_callers": [
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+    "ensemble/decisiontree/batched_levelalgo/retained_count_histograms.mojo"
+  ],
+  "supported_estimators": [
+    "RFClassifier",
+    "DTClassifier"
+  ],
+  "recipe_keys": [
+    "all-features:rf:taxi",
+    "all-features:rf:istella",
+    "all-features:decisiontree:taxi",
+    "all-features:decisiontree:istella"
+  ],
+  "overlap_ids": [
+    "C46"
+  ],
+  "remaining_gaps": [
+    "Retained exact unweighted classifier parent histograms apply only when all features have matching quantile bins; sampled-feature intersections and weighted/regression sufficient statistics need an explicit compatible cache representation.",
+    "ET draws new node thresholds, so parent threshold counts cannot be subtracted into child threshold counts; raw-value/threshold sufficient statistics would be a separate algorithm and are not falsely aliased.",
+    "Dedicated best-split DecisionTree full-data constructor facts remain pending; inherited RF code does not establish a measured standalone-tree cell."
+  ],
+  "demonstrated_runtime_reach": false,
+  "default": "OFF",
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "timing_boundary": "cold/repeated complete preparation+fit+mandatory synchronization+consumed outputs; inference is a separate result",
+  "evidence": {
+    "compilation": "NOT COMPILED",
+    "tests": "NOT TESTED",
+    "identity": "NOT VERIFIED",
+    "quality": "NOT VERIFIED",
+    "measurement": "NOT MEASURED"
+  },
+  "branch": "ideas/trees-identical-20261006",
+  "base_commit": "35b2d4976550a6a9a47c4563ca1c08b6de21670b",
+  "implementation_commit": "Containing Git commit; no frozen binary exists.",
+  "recipe_coverage": "Affected classifier/regressor and supported objective routes listed; absent dataset hash/version/full rows/features/classes/settings/weights/multioutput facts remain PENDING. Single-tree and auxiliary recipes must be saved independently; base recipe aliases are not evidence.",
+  "host_vendor_contract": "S branches retain incumbent host statement order; V branches share numerical source graph with host. NVIDIA/AMD/Apple/host identity, compilation and quality are UNVERIFIED.",
+  "full_dataset_recipes": [
+    "all-features:rf:taxi",
+    "all-features:rf:istella",
+    "all-features:decisiontree:taxi",
+    "all-features:decisiontree:istella"
+  ],
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT"
+}

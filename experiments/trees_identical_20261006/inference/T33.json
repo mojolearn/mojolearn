@@ -1,0 +1,158 @@
+{
+  "id": "T33",
+  "title": "Map rows and tree groups by cost",
+  "source_status": "source_integrated_unverified",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "default": "OFF (new experiment; inherited defaults preserved)",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T33",
+      "A": [
+        "MOJOLEARN_TREES_T33_COST_SCHEDULE=1"
+      ],
+      "B": [],
+      "scope": [
+        "RF",
+        "ET"
+      ],
+      "production_callers": [
+        "core/forest_inference.mojo:launch_forest_inference",
+        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "python/mojolearn/_forest_protocol.py"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "groves:rf:taxi",
+        "groves-labels:rf:taxi",
+        "groves:rf:taxireg",
+        "groves:rf:istella",
+        "groves-labels:rf:istella",
+        "groves:rf:istellareg",
+        "groves:rf:year",
+        "groves:rf:taximc",
+        "groves-labels:rf:taximc",
+        "groves:rf:istellamc",
+        "groves-labels:rf:istellamc",
+        "groves:et:taxi",
+        "groves-labels:et:taxi",
+        "groves:et:taxireg",
+        "groves:et:istella",
+        "groves-labels:et:istella",
+        "groves:et:istellareg",
+        "groves:et:year",
+        "groves:et:taximc",
+        "groves-labels:et:taximc",
+        "groves:et:istellamc",
+        "groves-labels:et:istellamc"
+      ]
+    }
+  ],
+  "production_callers": [
+    "core/forest_inference.mojo:launch_forest_inference",
+    "core/forest_inference_model.mojo:ResidentForest.predict_into",
+    "python/mojolearn/_forest_protocol.py"
+  ],
+  "supported_estimators": [
+    "RF",
+    "ET"
+  ],
+  "recipe_keys": [
+    "groves:rf:taxi",
+    "groves-labels:rf:taxi",
+    "groves:rf:taxireg",
+    "groves:rf:istella",
+    "groves-labels:rf:istella",
+    "groves:rf:istellareg",
+    "groves:rf:year",
+    "groves:rf:taximc",
+    "groves-labels:rf:taximc",
+    "groves:rf:istellamc",
+    "groves-labels:rf:istellamc",
+    "groves:et:taxi",
+    "groves-labels:et:taxi",
+    "groves:et:taxireg",
+    "groves:et:istella",
+    "groves-labels:et:istella",
+    "groves:et:istellareg",
+    "groves:et:year",
+    "groves:et:taximc",
+    "groves-labels:et:taximc",
+    "groves:et:istellamc",
+    "groves-labels:et:istellamc"
+  ],
+  "overlap_ids": [
+    "C50"
+  ],
+  "implementation": "Selects row walker versus 32-tree group from feature cache lines and live logical tree lanes; also schedules T35/T36 preparation.",
+  "remaining_gaps": [
+    "Old dispatch is preserved only in B; required neighboring-shape/non-board A/B is not run.",
+    "Ordinary ordered RF/ET predictions without T35/T36 do not dispatch this standalone schedule."
+  ],
+  "demonstrated_runtime_reach": false,
+  "validation": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false,
+    "reason": "Execution prohibited by owner"
+  },
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_facts": {
+    "dataset_version": "pending retained artifact selection",
+    "dataset_hash": "pending",
+    "actual_dimensions": "pending full recipe resolution; do not substitute reduced workloads",
+    "numeric_mode": "IDENTICAL",
+    "timing_boundary": "Preparation + training/model construction + required synchronization + consumed outputs; cold/repeated inference/explanation separate."
+  },
+  "evidence": [],
+  "standalone_runtime_configuration": {
+    "inference_engine": "parallel_groves",
+    "A_and_B_same_engine": true,
+    "recipes": [
+      "groves:rf:taxi",
+      "groves:rf:istella",
+      "groves:et:taxi",
+      "groves:et:istella",
+      "groves-labels:rf:taxi",
+      "groves-labels:rf:istella",
+      "groves-labels:et:taxi",
+      "groves-labels:et:istella"
+    ],
+    "interaction_X07": "T35/T36 preparation applies these controls also to ordered models"
+  },
+  "full_dataset_recipes": [
+    "groves:rf:taxi",
+    "groves-labels:rf:taxi",
+    "groves:rf:taxireg",
+    "groves:rf:istella",
+    "groves-labels:rf:istella",
+    "groves:rf:istellareg",
+    "groves:rf:year",
+    "groves:rf:taximc",
+    "groves-labels:rf:taximc",
+    "groves:rf:istellamc",
+    "groves-labels:rf:istellamc",
+    "groves:et:taxi",
+    "groves-labels:et:taxi",
+    "groves:et:taxireg",
+    "groves:et:istella",
+    "groves-labels:et:istella",
+    "groves:et:istellareg",
+    "groves:et:year",
+    "groves:et:taximc",
+    "groves-labels:et:taximc",
+    "groves:et:istellamc",
+    "groves-labels:et:istellamc"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

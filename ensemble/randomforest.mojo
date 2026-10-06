@@ -2,6 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest estimator surface, parameters, metrics, training dispatch, and host inference, aligned with pinned cuML behavior."""
 
+from ensemble.bootstrap_sort import sort_passes_for, sort_selected_rows
+from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, T09, T10, T12, T12_BYTES, T15
 from std.math import fma
 from std.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys.compile import is_defined
@@ -47,6 +49,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
 )
 from core.device_liveness import assert_device_alive
 from std.memory import bitcast, memcpy
+from ensemble.importance_device import ImportanceStore
 from ensemble.oob_device import (
     OOB_STATS,
     OOB_TPB,
@@ -57,6 +60,7 @@ from ensemble.oob_device import (
     rf_oob_reg_ysum_kernel,
     rf_oob_append_tree_kernel,
     rf_oob_rows_kernel,
+    rf_oob_rows_outputs_kernel,
     rf_oob_score_kernel,
 )
 from xtrees.oob import (
@@ -143,7 +147,7 @@ comptime LABELS_SAMPLED_ORDER = True
 # see `fused_gather_ok` in `fit_forest`. Same drawn multiset, same integer /
 # fixed-point histograms, counts and leaves, so the forest is the one the
 # drawn order builds and the host column is untouched.
-comptime IDN_RF_ROWS_SORTED = (
+comptime IDN_RF_ROWS_SORTED = T09 or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_IDN_RF_ROWS_SORTED"]()
@@ -196,7 +200,7 @@ comptime ROWS_SORTED_MIN_COLS = 64
 # route. HIP remains unchanged after a small Taxi regression on MI325X. The
 # explicit candidate define still permits experiments on other vendors, and
 # OFF restores the old two-launch route everywhere.
-comptime FUSED_BOOTSTRAP_GATHER = (
+comptime FUSED_BOOTSTRAP_GATHER = T10 or (
     not is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF"]()
     and (
         has_nvidia_gpu_accelerator()
@@ -979,6 +983,7 @@ struct RandomForestMetaData[dtype: DType, label_dtype: DType](
     var oob_decision_function_: List[Float64]
     # `:750` -- regressor only: the averaged OOB prediction per row.
     var oob_prediction_: List[Float64]
+    var feature_importances_: List[Scalar[Self.dtype]]
 
     def __init__(
         out self,
@@ -997,6 +1002,7 @@ struct RandomForestMetaData[dtype: DType, label_dtype: DType](
         self.oob_score_ = Float64(0.0)
         self.oob_decision_function_ = List[Float64]()
         self.oob_prediction_ = List[Float64]()
+        self.feature_importances_ = List[Scalar[Self.dtype]]()
 
 
 # ---------------------------------------------------------------------------
@@ -1708,25 +1714,46 @@ def compute_oob_score[
     )
     var d_cnt = ctx.enqueue_create_buffer[DType.int32](n_rows)
     log_launch_ctx(ctx, "oob_rows")
-    ctx.enqueue_function[rf_oob_rows_kernel](
-        x.unsafe_ptr(),
-        d_masks.unsafe_ptr(),
-        store.d_off.unsafe_ptr(),
-        store.d_col.unsafe_ptr(),
-        store.d_q.unsafe_ptr(),
-        store.d_left.unsafe_ptr(),
-        store.d_leaf.unsafe_ptr(),
-        d_acc.unsafe_ptr(),
-        d_cnt.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        Int32(n_trees),
-        Int32(num_outputs),
-        Int32(1) if row_major else Int32(0),
-        Int32(1) if sabotage == 1 else Int32(0),
-        grid_dim=_ceildiv(n_rows, OOB_TPB),
-        block_dim=OOB_TPB,
-    )
+    comptime if T15:
+        ctx.enqueue_function[rf_oob_rows_outputs_kernel](
+            x.unsafe_ptr(),
+            d_masks.unsafe_ptr(),
+            store.d_off.unsafe_ptr(),
+            store.d_col.unsafe_ptr(),
+            store.d_q.unsafe_ptr(),
+            store.d_left.unsafe_ptr(),
+            store.d_leaf.unsafe_ptr(),
+            d_acc.unsafe_ptr(),
+            d_cnt.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(n_cols),
+            Int32(n_trees),
+            Int32(num_outputs),
+            Int32(1) if row_major else Int32(0),
+            Int32(1) if sabotage == 1 else Int32(0),
+            grid_dim=_ceildiv(n_rows*num_outputs, OOB_TPB),
+            block_dim=OOB_TPB,
+        )
+    else:
+        ctx.enqueue_function[rf_oob_rows_kernel](
+            x.unsafe_ptr(),
+            d_masks.unsafe_ptr(),
+            store.d_off.unsafe_ptr(),
+            store.d_col.unsafe_ptr(),
+            store.d_q.unsafe_ptr(),
+            store.d_left.unsafe_ptr(),
+            store.d_leaf.unsafe_ptr(),
+            d_acc.unsafe_ptr(),
+            d_cnt.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(n_cols),
+            Int32(n_trees),
+            Int32(num_outputs),
+            Int32(1) if row_major else Int32(0),
+            Int32(1) if sabotage == 1 else Int32(0),
+            grid_dim=_ceildiv(n_rows, OOB_TPB),
+            block_dim=OOB_TPB,
+        )
     var h_acc = ctx.enqueue_create_host_buffer[DType.uint64](
         n_rows * num_outputs
     )
@@ -2020,121 +2047,6 @@ def compute_feature_importances_host[
 # `detail::RowSampler`, `randomforest.cuh:62-226`, and the forest loop,
 # `RandomForest::fit`, `randomforest.cuh:286-370`.
 # ===========================================================================
-
-
-def sort_passes_for(n_rows_bound: Int) -> Int:
-    """DEVIATION 2010: the pass count, a pure host function so the check
-    can hold it. Just enough bits to cover keys in `[0, n_rows_bound)`,
-    rounded UP TO EVEN so the ping-pong parity leaves the answer in the
-    caller's buffer (the same argument `core/segmented_sort` records for
-    its fixed 32). Passes beyond the top live bit are stable identity
-    partitions (every key's bit is 0), so rounding up is correct by
-    construction, never just convenient."""
-    var nb = 1
-    while (1 << nb) < n_rows_bound:
-        nb += 1
-    if nb % 2 == 1:
-        nb += 1
-    return nb
-
-
-def sort_selected_rows[
-    sabotage: Int = 0
-](
-    ctx: DeviceContext,
-    mut rows: DeviceBuffer[DType.int32],
-    n: Int,
-    n_rows_bound: Int,
-    mut keys_scratch: DeviceBuffer[DType.uint32],
-    mut offsets: DeviceBuffer[DType.int32],
-    mut block_sums: DeviceBuffer[DType.int32],
-) raises:
-    """DEVIATION 2010's sort: LSD one-bit radix, ascending, on the first
-    `n` Int32 entries of `rows` (all in `[0, n_rows_bound)`, so no
-    twiddle: non-negative Int32 order raw-bit unsigned order).
-
-    The four pass kernels are `core/segmented_sort`'s, launched with ONE
-    segment -- the driver is duplicated here rather than calling
-    `segmented_sort_keys_f32` because that entry twiddles float keys and
-    runs all 32 bits; the kernels themselves are imported, not copied.
-    STABILITY per pass is what makes the LSD loop a sort (their
-    `seg_reorder_one_bit_kernel` docstring); the pass count is
-    `sort_passes_for` (even), so the sorted keys end in `rows` itself.
-
-    `sabotage` is a CHECK HOOK and 0 is the only value a caller may
-    pass; 1 drops the LAST TWO passes (parity kept even), so any two
-    keys differing in the top live bits keep their input order -- the
-    output is provably NOT ascending on a fixture that spans those bits,
-    which is how the check proves the sort is reached (the FOREST cannot
-    prove it: any row order yields the same forest, which is the whole
-    identity argument)."""
-    if n <= 1:
-        return
-    var n_passes = sort_passes_for(n_rows_bound)
-    comptime if sabotage == 1:
-        n_passes -= 2
-        if n_passes < 0:
-            n_passes = 0
-    var blocks_wide = _ceildiv(n, SORT_BLOCK)
-    # One origin type on both ping-pong sides, so the per-pass ternary
-    # below is well-typed; the kernels take MutAnyOrigin.
-    var rows_u32 = (
-        rows.unsafe_ptr()
-        .unsafe_origin_cast[MutAnyOrigin]()
-        .unsafe_bitcast[UInt32]()
-    )
-    var keys_u32 = keys_scratch.unsafe_ptr().unsafe_origin_cast[
-        MutAnyOrigin
-    ]()
-    var offsets_p = offsets.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var block_sums_p = block_sums.unsafe_ptr().unsafe_origin_cast[
-        MutAnyOrigin
-    ]()
-    var bit = 0
-    while bit < n_passes:
-        # Ping-pong: even bit reads `rows`, writes scratch; odd bit
-        # reads scratch, writes `rows`. Even pass count -> `rows` holds
-        # the answer.
-        var src = rows_u32 if bit % 2 == 0 else keys_u32
-        var dst = keys_u32 if bit % 2 == 0 else rows_u32
-        log_launch_ctx(ctx, "rows_sort_scan_bit")
-        ctx.enqueue_function[seg_scan_key_bit_kernel](
-            src,
-            Int32(bit),
-            Int32(n),
-            Int32(blocks_wide),
-            offsets_p,
-            block_sums_p,
-            grid_dim=(blocks_wide, 1, 1),
-            block_dim=(SORT_BLOCK, 1, 1),
-        )
-        log_launch_ctx(ctx, "rows_sort_block_sums")
-        enqueue_seg_scan_block_sums(ctx, block_sums_p, n, blocks_wide, 1)
-        log_launch_ctx(ctx, "rows_sort_carry")
-        ctx.enqueue_function[seg_add_block_carry_kernel](
-            offsets_p,
-            block_sums_p,
-            Int32(n),
-            Int32(blocks_wide),
-            grid_dim=(blocks_wide, 1, 1),
-            block_dim=(SORT_BLOCK, 1, 1),
-        )
-        log_launch_ctx(ctx, "rows_sort_reorder")
-        ctx.enqueue_function[seg_reorder_one_bit_kernel](
-            src,
-            offsets_p,
-            Int32(bit),
-            Int32(n),
-            dst,
-            grid_dim=(blocks_wide, 1, 1),
-            block_dim=(SORT_BLOCK, 1, 1),
-        )
-        bit += 1
-    # NO synchronize -- the pass kernels ride the in-order queue exactly
-    # as the sampler's own launches do, and every reader of
-    # `selected_rows_` is enqueued after this on the same queue. Mojo
-    # frees at LAST USE: the buffers are the CALLER's struct fields
-    # (RowSampler), alive past every launch by construction.
 
 
 def bootstrap_rows_labels_kernel[
@@ -2769,6 +2681,7 @@ def fit_forest[
     oob_score: Bool = False,
     host_x_addr: Int = 0,
     tree_start: Int = 0,
+    feature_importances: Bool = False,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
@@ -2779,7 +2692,7 @@ def fit_forest[
     return fit_forest_prepared[O, oob_sabotage](
         ctx, x, y, sample_weight, n_rows, n_cols, n_unique_labels,
         rf_params, prep, False, scales, sample_weight_host, row_major,
-        oob_score, host_x_addr, tree_start,
+        oob_score, host_x_addr, tree_start, feature_importances,
     )
 
 
@@ -2802,6 +2715,7 @@ def fit_forest_prepared[
     oob_score: Bool = False,
     host_x_addr: Int = 0,
     tree_start: Int = 0,
+    feature_importances: Bool = False,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
@@ -2959,7 +2873,7 @@ def fit_forest_prepared[
     # same data session left is used as it is (its quantile sample was
     # drawn with THAT fit's seed); otherwise the table is this fit's own.
     var t_stage = instr.times.start()
-    var use_bins = Int(rf_params.tree_params.max_n_bins) <= 256
+    var use_bins = Int(rf_params.tree_params.max_n_bins) <= (65536 if T08 and T08_BITS == 16 else 256)
     # RF_BINS_ROW_MAJOR (Apple): row-major bins when a row's bins fit one
     # 64-byte line, or (FAST only, RF_BINS_ROW_MAJOR_WIDE) the trees
     # sample at least half the features.
@@ -2973,6 +2887,10 @@ def fit_forest_prepared[
                     rf_params.tree_params.max_features, n_cols
                 ) >= n_cols
             )
+    comptime if T08:
+        # Existing uint8 quantile IDs are exact, including boundary behavior.
+        # A layout experiment never enables ET's lossy uint16 quantization.
+        bins_row_major = use_bins and T08_LAYOUT == 1
     var prep_kept = False
     if keep_prep and len(prep) == 1:
         if (
@@ -2999,9 +2917,13 @@ def fit_forest_prepared[
             rf_params.seed,
             row_major,
         )
-        var d_bins_new = ctx.enqueue_create_buffer[DType.uint8](
-            n_rows * n_cols if use_bins else 1
-        )
+        var bin_bytes = n_rows*n_cols
+        comptime if T08:
+            comptime if T08_LAYOUT == 3:
+                bin_bytes = ((n_rows+31)//32)*32*n_cols
+            comptime if T08_BITS == 16:
+                bin_bytes *= 2
+        var d_bins_new = ctx.enqueue_create_buffer[DType.uint8](bin_bytes if use_bins else 1)
         prep.append(
             ForestPrep(
                 qr_new^, d_bins_new^,
@@ -3090,6 +3012,13 @@ def fit_forest_prepared[
     if k_streams < 1:
         k_streams = 1
 
+    comptime if T12:
+        # A complete Builder arena plus its row streams per active tree.
+        # Capacity is a byte budget, stable logical tree IDs remain unchanged.
+        var hist_bytes = Int(rf_params.tree_params.max_batch_size) * Int(rf_params.tree_params.max_n_bins) * max(1,n_unique_labels) * 40 * size_of[O.BinT]()
+        var slot_bytes = max(1, hist_bytes + n_sampled * (16 + 2 * size_of[Scalar[O.LabelT]]()))
+        k_streams = max(1, min(Int(rf_params.n_trees), T12_BYTES // slot_bytes))
+
     var sampler = RowSampler(
         ctx,
         rf_params.bootstrap,
@@ -3099,7 +3028,7 @@ def fit_forest_prepared[
         has_sw,
         Int(rf_params.n_trees) if oob_score else 0,
         n_slots=k_streams,
-        sort_rows=is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
+        sort_rows=T09 or is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
         or n_cols >= ROWS_SORTED_MIN_COLS,
     )
     if has_sw:
@@ -3183,6 +3112,10 @@ def fit_forest_prepared[
     )
     # cpu4-forest: the OOB model is appended on the device as each tree
     # finishes (`OobForestStore`); nothing is allocated without OOB.
+    var importance_stores = List[ImportanceStore]()
+    comptime if T15:
+        if feature_importances:
+            importance_stores.append(ImportanceStore(ctx,Int(rf_params.n_trees),n_cols,True))
     var oob_store = OobForestStore(
         ctx,
         Int(rf_params.n_trees),
@@ -3318,6 +3251,10 @@ def fit_forest_prepared[
                     ctx, oob_store, builders[k],
                     len(ts.tree.sparsetree), next_tree,
                 )
+                if len(importance_stores) > 0:
+                    importance_stores[0].append[O.DataT](ctx,
+                        builders[k].leaf_d_tree.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]().unsafe_bitcast[SparseTreeNode[O.DataT]](),
+                        len(ts.tree.sparsetree), next_tree)
                 forest.trees[next_tree] = ts.tree.copy()
                 _record_tree(instr, forest.trees[next_tree], next_tree)
                 instr.times.stop_host("tree_copy", t_host)
@@ -3364,6 +3301,10 @@ def fit_forest_prepared[
                     ctx, oob_store, builders[k],
                     len(states[k].tree.sparsetree), slot_tree[k],
                 )
+                if len(importance_stores) > 0:
+                    importance_stores[0].append[O.DataT](ctx,
+                        builders[k].leaf_d_tree.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]().unsafe_bitcast[SparseTreeNode[O.DataT]](),
+                        len(states[k].tree.sparsetree), slot_tree[k])
                 forest.trees[slot_tree[k]] = states[k].tree.copy()
                 _record_tree(
                     instr, forest.trees[slot_tree[k]], slot_tree[k]
@@ -3486,6 +3427,20 @@ def fit_forest_prepared[
             host_x_addr,
         )
         instr.times.stop(ctx, "oob", t_stage)
+
+    # T15 requested importance: A consumes live builder statistics while each
+    # tree finishes; B is the incumbent native host fold of exported statistics.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    if feature_importances:
+        comptime if T15:
+            var values = importance_stores[0].finish(ctx)
+            for c in range(n_cols):
+                forest.feature_importances_.append(Scalar[O.DataT](values[c]))
+        else:
+            var importance_values = List[Scalar[O.DataT]](length=n_cols,fill=0)
+            compute_feature_importances_host(forest,importance_values)
+            forest.feature_importances_ = importance_values^
+    _ = importance_stores^
 
     # Mojo frees a value at its LAST USE, and every buffer above reached a
     # kernel as a raw pointer. These uses keep them alive past the final

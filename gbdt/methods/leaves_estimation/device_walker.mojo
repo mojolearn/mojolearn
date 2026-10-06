@@ -73,6 +73,7 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from gbdt.gpu_util.arena import BufferArena
+from gbdt.trees_identical_switches import T23
 from gbdt.methods.leaves_estimation.pointwise_oracle import BinOptimizedOracle
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
@@ -603,6 +604,29 @@ def _enqueue_eval_and_decide(
     )
 
 
+def _one_step_prepare_kernel(
+    stats: MutPointer[Float32, MutAnyOrigin],
+    cur: MutPointer[Float32, MutAnyOrigin],
+    direction: MutPointer[Float32, MutAnyOrigin],
+    optimum: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32, has_weights: Int32,
+):
+    """T23: exact device one-step preparation in one leaf pass.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    The three +0 fills and the constructor's exact weight copy keep their
+    incumbent values. No gradient, Hessian, regularizer or step is changed.
+    """
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        cur.unsafe_store(i, Float32(0.0))
+        direction.unsafe_store(i, Float32(0.0))
+        optimum.unsafe_store(i, Float32(0.0))
+        if has_weights != Int32(0):
+            weights.unsafe_store(i, stats.unsafe_load(i))
+
+
 def device_walk_begin(
     ctx: DeviceContext,
     mut oracle: BinOptimizedOracle,
@@ -617,22 +641,30 @@ def device_walk_begin(
     `oracle.d_part_stats` (the oracle was just made)."""
     var n = oracle.bin_count
     w.result_next = False
-    w.d_cur.enqueue_fill(Float32(0.0))
-    w.d_dir.enqueue_fill(Float32(0.0))
-    w.d_opt.enqueue_fill(Float32(0.0))
-    if oracle.has_weights:
-        # `WeightsCpu`: the constructor's per-leaf weight fold, before the
-        # evaluation below overwrites `d_part_stats`
-        ctx.enqueue_function[scaled_copy_kernel](
-            oracle.d_part_stats.unsafe_ptr(),
-            Int32(n),
-            Float32(1.0),
-            Int32(0),
-            w.d_w.unsafe_ptr(),
-            Int32(0),
-            grid_dim=(_leaf_grid(n), 1, 1),
-            block_dim=(WALK_BLOCK, 1, 1),
+    if T23 and iterations == 1:
+        ctx.enqueue_function[_one_step_prepare_kernel](
+            oracle.d_part_stats.unsafe_ptr(), w.d_cur.unsafe_ptr(),
+            w.d_dir.unsafe_ptr(), w.d_opt.unsafe_ptr(), w.d_w.unsafe_ptr(),
+            Int32(n), Int32(1) if oracle.has_weights else Int32(0),
+            grid_dim=(_leaf_grid(n), 1, 1), block_dim=(WALK_BLOCK, 1, 1),
         )
+    else:
+        w.d_cur.enqueue_fill(Float32(0.0))
+        w.d_dir.enqueue_fill(Float32(0.0))
+        w.d_opt.enqueue_fill(Float32(0.0))
+        if oracle.has_weights:
+            # `WeightsCpu`: the constructor's per-leaf weight fold, before the
+            # evaluation below overwrites `d_part_stats`
+            ctx.enqueue_function[scaled_copy_kernel](
+                oracle.d_part_stats.unsafe_ptr(),
+                Int32(n),
+                Float32(1.0),
+                Int32(0),
+                w.d_w.unsafe_ptr(),
+                Int32(0),
+                grid_dim=(_leaf_grid(n), 1, 1),
+                block_dim=(WALK_BLOCK, 1, 1),
+            )
     # `MoveTo(startPoint)` at the zero point: `fma(0, 0, +0) = +0`, kept
     # through the regularizer, shift +0.0 - +0.0 = +0.0, and the cursor add
     # runs as the host walker's did

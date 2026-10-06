@@ -35,6 +35,7 @@ The restatement is a prediction until measured. tools/forest_host_gate.py is
 the measurement.
 """
 from core.host_parallel import host_parallelize
+from core.forest_experiments import T34_CHUNK_FOLD, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish, chunk_add
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
@@ -250,13 +251,31 @@ def rf_host_predict(
                 # `:404-412`, one row at a time, every tree adds into it:
                 # `DecisionTree.predict` with `n_rows=1` is `predict_all`
                 # over one row is `predict_one` at that row's offset.
-                for i in range(n_trees):
-                    DecisionTree.predict_one(
-                        rp[], row_id * n_cols, tp[][i], row_prediction, 0, num_outputs
-                    )
+                comptime if T34_CHUNK_FOLD:
+                    var part = List[Float32](length=FOREST_CHUNK*num_outputs, fill=Float32(0))
+                    var values = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
+                    var first = 0
+                    while first < n_trees:
+                        for j in range(FOREST_CHUNK*num_outputs):
+                            part[j] = 0
+                        for i in range(min(FOREST_CHUNK, n_trees-first)):
+                            DecisionTree.predict_one(rp[], row_id*n_cols, tp[][first+i], part, i*num_outputs, num_outputs)
+                        for k in range(num_outputs):
+                            for i in range(FOREST_CHUNK):
+                                values[i] = part[i*num_outputs+k]
+                            row_prediction[k] = chunk_add(row_prediction[k], forest_chunk_sum(values))
+                        first += FOREST_CHUNK
+                else:
+                    for i in range(n_trees):
+                        DecisionTree.predict_one(
+                            rp[], row_id * n_cols, tp[][i], row_prediction, 0, num_outputs
+                        )
                 # `:414-416`, divide by n_trees, and stop.
                 for k in range(num_outputs):
-                    op.unsafe_store(row_id * num_outputs + k, row_prediction[k] / divisor)
+                    comptime if T34_CHUNK_FOLD:
+                        op.unsafe_store(row_id*num_outputs+k, forest_chunk_finish(row_prediction[k], n_trees))
+                    else:
+                        op.unsafe_store(row_id * num_outputs + k, row_prediction[k] / divisor)
         except:
             fp.unsafe_store(c, 1)
 
@@ -347,11 +366,29 @@ def et_host_predict(
                 for k in range(num_outputs):
                     acc[k] = Float32(0.0)
                 # `predict_one`'s `+=`, every tree in order (DEVIATION 147).
-                for i in range(n_trees):
-                    predict_one_accumulate(rp[], r * n_cols, tp[][i], acc, 0, num_outputs)
+                comptime if T34_CHUNK_FOLD:
+                    var part = List[Float32](length=FOREST_CHUNK*num_outputs, fill=Float32(0))
+                    var values = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
+                    var first = 0
+                    while first < n_trees:
+                        for j in range(FOREST_CHUNK*num_outputs):
+                            part[j] = 0
+                        for i in range(min(FOREST_CHUNK, n_trees-first)):
+                            predict_one_accumulate(rp[], r*n_cols, tp[][first+i], part, i*num_outputs, num_outputs)
+                        for k in range(num_outputs):
+                            for i in range(FOREST_CHUNK):
+                                values[i] = part[i*num_outputs+k]
+                            acc[k] = chunk_add(acc[k], forest_chunk_sum(values))
+                        first += FOREST_CHUNK
+                else:
+                    for i in range(n_trees):
+                        predict_one_accumulate(rp[], r * n_cols, tp[][i], acc, 0, num_outputs)
                 # `row_prediction[k] /= n_trees`.
                 for k in range(num_outputs):
-                    op.unsafe_store(r * num_outputs + k, acc[k] / divisor)
+                    comptime if T34_CHUNK_FOLD:
+                        op.unsafe_store(r*num_outputs+k, forest_chunk_finish(acc[k], n_trees))
+                    else:
+                        op.unsafe_store(r * num_outputs + k, acc[k] / divisor)
         except:
             fp.unsafe_store(c, 1)
 

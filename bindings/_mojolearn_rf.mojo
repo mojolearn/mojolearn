@@ -45,6 +45,7 @@ from forest_inference_binding import (
     forest_vector_groves_binding, forest_predict_resident_into_gpu_binding,
     forest_predict_resident_labels_gpu_binding,
     forest_resident_layout_binding, forest_ordered_resident_binding,
+    forest_identical_fused_labels_binding,
     forest_pool_available, forest_pool_fault_available,
 )
 from core.forest_inference import forest_predict_gpu
@@ -415,6 +416,9 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     criterion: PythonObject,
     weights_addr: Int = 0,
     tree_start: Int = 0,
+    oob_addr: Int = 0,
+    oob_score_addr: Int = 0,
+    importance_addr: Int = 0,
 ) raises -> PythonObject:
     """Fit the cuML-implementation RandomForest classifier. `x` is COLUMN-major
     float32 (n_rows * n_cols, the layout `fit_forest`'s default expects);
@@ -513,12 +517,12 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
             var scales = BinScales(Float32(1), Float32(scale))
             forest = fit_forest[WeightedClsObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-                scales, sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start,
+                scales, sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
             )
         else:
             forest = fit_forest[ClsObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-                sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start,
+                sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
             )
         t_s = bt.start()
         ctx.synchronize()
@@ -541,6 +545,19 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         _ = ctx^
         bt.stop_host("bind_release_ctx", t_s)
     _ = weights^
+    if oob_addr != 0:
+        if oob_score_addr == 0 or not forest.has_oob:
+            raise Error("RF OOB export requires output and score buffers")
+        # T15 native public output boundary: borrowed result buffers, no Python
+        # rows/labels/reductions. The forest owns state through this bulk copy.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        var oob_out = MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_addr)
+        memcpy(dest=oob_out,src=forest.oob_decision_function_.unsafe_ptr(),count=len(forest.oob_decision_function_))
+        MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_score_addr)[unsafe_offset=0] = forest.oob_score_
+    if importance_addr != 0:
+        if len(forest.feature_importances_) != n_cols:
+            raise Error("RF feature importance output does not match feature count")
+        memcpy(dest=_f32_ptr(importance_addr),src=forest.feature_importances_.unsafe_ptr(),count=n_cols)
     var t_x = bt.start()
     comptime if EXPORT:
         var export_trees = forest.trees^
@@ -556,6 +573,63 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         bt.stop_host("binding_total", t_bind)
         bt.report()
         return out
+
+
+def rf_classifier_fit_aux_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    criterion: PythonObject, weights_addr: PythonObject,
+    oob_addr: PythonObject, score_addr: PythonObject, importance_addr: PythonObject,
+) raises -> PythonObject:
+    """T15 optional outputs: Float64 OOB+score, Float32 importance[n_features].
+    Zero disables each output; OOB prediction and score must be requested together.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    if (Int(py=oob_addr) == 0) != (Int(py=score_addr) == 0):
+        raise Error("RF OOB output and score must be requested together")
+    return _rf_classifier_fit[True](x_addr,y_addr,params,criterion,
+        weights_addr=Int(py=weights_addr),oob_addr=Int(py=oob_addr),
+        oob_score_addr=Int(py=score_addr),importance_addr=Int(py=importance_addr))
+
+
+def rf_regressor_fit_aux_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    criterion: PythonObject, oob_addr: PythonObject, score_addr: PythonObject,
+    importance_addr: PythonObject,
+) raises -> PythonObject:
+    """T15 optional requested outputs; same status/ownership as classifier."""
+    if (Int(py=oob_addr) == 0) != (Int(py=score_addr) == 0):
+        raise Error("RF OOB output and score must be requested together")
+    return _rf_regressor_fit[True](x_addr,y_addr,params,criterion,
+        oob_addr=Int(py=oob_addr),oob_score_addr=Int(py=score_addr),
+        importance_addr=Int(py=importance_addr))
+
+
+def rf_classifier_fit_oob_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    criterion: PythonObject, weights_addr: PythonObject,
+    oob_addr: PythonObject, score_addr: PythonObject,
+) raises -> PythonObject:
+    """T15 public OOB: column-major X, Float64 row/output and score buffers.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    The compile-time T15 switch chooses A/B aggregation; output ownership and
+    bootstrap semantics are common to both arms. No OOB work unless requested.
+    """
+    if Int(py=oob_addr) == 0 or Int(py=score_addr) == 0:
+        raise Error("RF OOB requires nonzero output and score addresses")
+    return _rf_classifier_fit[True](x_addr,y_addr,params,criterion,
+        weights_addr=Int(py=weights_addr),oob_addr=Int(py=oob_addr),oob_score_addr=Int(py=score_addr))
+
+
+def rf_regressor_fit_oob_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    criterion: PythonObject, oob_addr: PythonObject, score_addr: PythonObject,
+) raises -> PythonObject:
+    """T15 native OOB output; same status and ownership as classifier twin."""
+    if Int(py=oob_addr) == 0 or Int(py=score_addr) == 0:
+        raise Error("RF OOB requires nonzero output and score addresses")
+    return _rf_regressor_fit[True](x_addr,y_addr,params,criterion,
+        oob_addr=Int(py=oob_addr),oob_score_addr=Int(py=score_addr))
 
 
 def rf_classifier_fit_binding[EXPORT: Bool = False](
@@ -1109,6 +1183,9 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     params: PythonObject,
     criterion: PythonObject,
     tree_start: Int = 0,
+    oob_addr: Int = 0,
+    oob_score_addr: Int = 0,
+    importance_addr: Int = 0,
 ) raises -> PythonObject:
     """Fit the cuML-implementation RandomForest regressor. Same contract; slot 2
     MUST be 0 and `y` is float32. `criterion` is MSE (2), POISSON (4),
@@ -1188,7 +1265,7 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         # `rf_regressor_fit`'s cuML counterpart passes.
         forest = fit_forest[RegObj](
             ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
-            host_x_addr=host_x, tree_start=tree_start,
+            host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
         )
         t_s = bt.start()
         ctx.synchronize()
@@ -1202,6 +1279,19 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         # outlives every buffer created on it.
         _ = ctx^
         bt.stop_host("bind_release_ctx", t_s)
+    if oob_addr != 0:
+        if oob_score_addr == 0 or not forest.has_oob:
+            raise Error("RF OOB export requires output and score buffers")
+        # T15 native public output boundary: borrowed result buffers, no Python
+        # rows/labels/reductions. The forest owns state through this bulk copy.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        var oob_out = MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_addr)
+        memcpy(dest=oob_out,src=forest.oob_prediction_.unsafe_ptr(),count=len(forest.oob_prediction_))
+        MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_score_addr)[unsafe_offset=0] = forest.oob_score_
+    if importance_addr != 0:
+        if len(forest.feature_importances_) != n_cols:
+            raise Error("RF feature importance output does not match feature count")
+        memcpy(dest=_f32_ptr(importance_addr),src=forest.feature_importances_.unsafe_ptr(),count=n_cols)
     var t_x = bt.start()
     comptime if EXPORT:
         var export_trees = forest.trees^
@@ -1549,6 +1639,10 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_fused_bootstrap_gather_binding](
             "rf_fused_bootstrap_gather"
         )
+        m.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
+        m.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
+        m.def_function[rf_classifier_fit_oob_export_binding]("rf_classifier_fit_oob_export")
+        m.def_function[rf_regressor_fit_oob_export_binding]("rf_regressor_fit_oob_export")
         m.def_function[rf_classifier_fit_binding[False]]("rf_classifier_fit")
         m.def_function[rf_classifier_fit_binding[True]]("rf_classifier_fit_export")
         m.def_function[rf_classifier_fit_rowmajor_binding[False]]("rf_classifier_fit_rowmajor")
@@ -1565,6 +1659,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_predict_reg_gpu_parallel_binding]("rf_predict_reg_gpu_parallel")
         m.def_function[forest_resident_layout_binding]("forest_resident_layout")
         m.def_function[forest_ordered_resident_binding]("forest_ordered_resident")
+        m.def_function[forest_identical_fused_labels_binding]("forest_identical_fused_labels")
         m.def_function[forest_pool_available]("forest_pool_available")
         m.def_function[forest_pool_fault_available]("forest_pool_fault_available")
         m.def_function[rf_forest_export_binding]("forest_export")
