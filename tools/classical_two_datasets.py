@@ -2244,6 +2244,9 @@ def worker(args):
                 if whole_requested:
                     # Recreate per operation so constructor-side fit/preparation
                     # (notably kNN/KDE) is included, on every scored arm equally.
+                    # Release the previous fitted device model before allocating
+                    # its replacement, avoiding a transient double allocation.
+                    runner = None
                     runner = BUILDERS[(args.lane, args.arm)](data, rec)
                     runner.sync()
                 preparation_ms = (time.perf_counter() - whole_start) * 1000.0
