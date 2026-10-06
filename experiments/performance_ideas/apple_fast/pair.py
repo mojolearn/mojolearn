@@ -2,7 +2,7 @@
 """Run a real-caller fixture in isolated packages from frozen verified A/B arms.
 
 No builds, installs in the source tree, opponent reraces, or implicit GPU route.
-Existing M2 build manifests must attest both FAST arms and exact defines. Every
+Frozen Apple build manifests must attest both FAST arms and exact defines. Every
 capture includes the loaded binding hash; a copied receipt cannot admit a run.
 """
 import argparse
@@ -28,7 +28,10 @@ def main():
     p.add_argument('--arms', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--variant', default='default')
+    p.add_argument('--correctness-only',action='store_true',help='Untimed public correctness verification; permits user-authorized local M4')
     args = p.parse_args()
+    correctness_only=args.correctness_only or os.environ.get('MOJOLEARN_EXPERIMENT_CORRECTNESS_ONLY')=='1'
+    if correctness_only:os.environ['MOJOLEARN_EXPERIMENT_CORRECTNESS_ONLY']='1'
     apple_fast(load_product=False)
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], cwd=ROOT, check=True)
@@ -111,7 +114,8 @@ def main():
     ok = all(item['ok'] for item in metrics.values())
     result = dict(schema=1, id=args.idea, status='PASS' if ok else 'HOLD_quality', source_sha=source,
                   hashes=hashes, variants=args.variant, records=records, metrics=metrics, rule=RULE,
-                  promotion_authorized=False, qualification='actual caller A/B; opponent admission and repeated-call speed review owed')
+                  promotion_authorized=False,correctness_only=correctness_only,performance='pending',
+                  qualification='untimed actual caller A/B correctness; performance/opponent gates pending' if correctness_only else 'actual caller A/B; opponent admission and repeated-call speed review owed')
     (args.output / 'receipt.json').write_text(json.dumps(result, indent=2, allow_nan=False))
     print('APPLE_FAST_PAIR status=' + result['status'] + ' metrics=' + str(len(metrics)) + ' receipt=' + str(args.output / 'receipt.json'))
     return 0 if ok else 1
