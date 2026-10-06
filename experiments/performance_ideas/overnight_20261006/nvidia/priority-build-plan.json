@@ -1,0 +1,48 @@
+[
+  {
+    "job": "nvidia-N06-paired",
+    "id": "N06",
+    "arm": "paired",
+    "vendor": "nvidia",
+    "accelerator": "sm_89",
+    "source": "experiments/performance_ideas/N06/time.mojo",
+    "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+    "defines": [],
+    "paired": true
+  },
+  {
+    "job": "nvidia-N07-baseline",
+    "id": "N07",
+    "arm": "baseline",
+    "vendor": "nvidia",
+    "accelerator": "sm_89",
+    "source": "experiments/performance_ideas/N07/time.mojo",
+    "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+    "defines": [],
+    "paired": false
+  },
+  {
+    "job": "nvidia-N07-candidate",
+    "id": "N07",
+    "arm": "candidate",
+    "vendor": "nvidia",
+    "accelerator": "sm_89",
+    "source": "experiments/performance_ideas/N07/time.mojo",
+    "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+    "defines": [
+      "MOJOLEARN_IDN_RF_STREAM_REPLICAS=1"
+    ],
+    "paired": false
+  },
+  {
+    "job": "nvidia-N08-paired",
+    "id": "N08",
+    "arm": "paired",
+    "vendor": "nvidia",
+    "accelerator": "sm_89",
+    "source": "experiments/performance_ideas/N08/time.mojo",
+    "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+    "defines": [],
+    "paired": true
+  }
+]
