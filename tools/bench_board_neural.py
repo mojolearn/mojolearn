@@ -485,9 +485,21 @@ def _sha(raw):
 
 def _load(name, alias=None):
     path = os.path.join(HERE, name + ".py")
-    spec = importlib.util.spec_from_file_location(alias or ("bbn_" + name), path)
+    alias = alias or ("bbn_" + name)
+    spec = importlib.util.spec_from_file_location(alias, path)
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # Dynamo resolves a model class through its defining module's name. Match
+    # normal Python imports before execution, including for the LM logits twin.
+    previous = sys.modules.get(alias)
+    sys.modules[alias] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        if previous is None:
+            sys.modules.pop(alias, None)
+        else:
+            sys.modules[alias] = previous
+        raise
     return mod
 
 
