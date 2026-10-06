@@ -9,7 +9,7 @@
     "apple",
     "host"
   ],
-  "status": "source_ready",
+  "status": "build_passed",
   "implementation_paths": [
     "experiments/performance_ideas/N07/streamed_histogram.mojo",
     "experiments/performance_ideas/N07/check.mojo"
@@ -43,8 +43,23 @@
   "quality_gates": [
     "same-version NVIDIA/AMD/Apple/host output bits",
     "exact intermediate outputs and poison control",
-    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower"
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Native harness instantiates explicit control and candidate; all compared cells and poison/failure gates required"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
-  "blocker": null
+  "blocker": null,
+  "baseline_build_argv": [
+    "pixi",
+    "run",
+    "mojo",
+    "build",
+    "-j1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-I",
+    "{repo}",
+    "{repo}/experiments/performance_ideas/N07/check.mojo",
+    "-o",
+    "{output}"
+  ]
 }
