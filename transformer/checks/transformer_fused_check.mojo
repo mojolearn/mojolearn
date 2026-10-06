@@ -92,6 +92,7 @@ from transformer.impl.llama.fused_attention import (
     ATTN_ARM_BWD_STASH,
     ATTN_ARM_BWD_TILED,
     ATTN_ARM_DEFAULT,
+    ATTN_ARM_ESTASH_BITS,
     ATTN_ARM_KV_BITS,
     ATTN_ARM_KVROWS32,
     ATTN_ARM_PREFLUSH,
@@ -99,6 +100,7 @@ from transformer.impl.llama.fused_attention import (
     ATTN_DEFAULT_KV_KEYS,
     ATTN_SHIPPED_BWD_KV,
     ATTN_STASH_HD,
+    ATTN_V1_RECOMPUTE_BACKWARD,
     FUSED_CORNER,
     FUSED_RAN,
     FUSED_REFUSED_REGIME,
@@ -351,6 +353,9 @@ def run_case(
             c.name + ": the fused forward reported " + status_name(st)
             + " and the case expects " + status_name(c.expect_fwd)
         )
+    comptime if ATTN_V1_RECOMPUTE_BACKWARD:
+        if kept_cells != 0:
+            raise Error(c.name + ": forced recomputation retained a direct exp stash")
     require_ran(c.name, "forward", ran_f, expected_ran(c.hd, st, fused_attention_arm_forward_resolved(arm)))
     if ran_f != ATTN_ARM_BASELINE:
         arm_launches += 1
@@ -367,6 +372,9 @@ def run_case(
     )
     print("    wrapper status: " + status_name(wst))
     print("    WRAPPER status=" + status_name(wst) + " estash_cells=" + String(stages.attn_estash_cells) + " cells=" + String(b * c.nh * l * s))
+    comptime if ATTN_V1_RECOMPUTE_BACKWARD:
+        if stages.attn_estash_cells != 0:
+            raise Error(c.name + ": forced recomputation retained a wrapper exp stash")
     moved += compare(c.name, "fwd ctx (wrapper)", e_ctx, _download(ctx, stages.ctxv, qn))
     moved += compare(c.name, "fwd amax (wrapper)", e_max, _download(ctx, stages.amax, b * c.nh * l))
     moved += compare(c.name, "fwd denom (wrapper)", e_den, _download(ctx, stages.denom, b * c.nh * l))
@@ -403,7 +411,14 @@ def run_case(
             c.name + ": the fused backward reported " + status_name(bs)
             + " and the case expects " + status_name(c.expect_bwd)
         )
-    require_ran(c.name, "backward", ran_b, expected_ran(c.hd, bs, fused_attention_arm_backward_resolved(arm)))
+    var expected_bwd_arm = arm
+    comptime if ATTN_V1_RECOMPUTE_BACKWARD:
+        # I07: this profile deliberately retained no forward exp stash. The
+        # estash wrapper therefore launches the plain backward, preserving
+        # the requested kv/zdot schedule but without estash/dres kernels.
+        # Still require its exact launch word and compare every eager cell.
+        expected_bwd_arm = arm & ~ATTN_ARM_ESTASH_BITS
+    require_ran(c.name, "backward", ran_b, expected_ran(c.hd, bs, fused_attention_arm_backward_resolved(expected_bwd_arm)))
     if ran_b != ATTN_ARM_BASELINE:
         arm_launches += 1
         bwd_launches += 1
