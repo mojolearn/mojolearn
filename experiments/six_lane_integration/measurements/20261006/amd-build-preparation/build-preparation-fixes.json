@@ -1,0 +1,28 @@
+{
+  "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+  "fixes": [
+    {
+      "failure": "CPU guard saw renderD128 on provider CPU Droplet",
+      "evidence": "do-attempt-01/remote/leg_out/cmd.log",
+      "diagnosis": "virtio-pci 1AF4:1050 display device, captured on same size replacement",
+      "fix": "systemd PrivateDevices=yes; frozen cpu_build_guard unchanged"
+    },
+    {
+      "failure": "Pinned pixi installer HOME unbound under systemd",
+      "evidence": "do-attempt-02/remote/leg_out/pixi_install.log",
+      "fix": "Explicit actual HOME=/root in service environment"
+    },
+    {
+      "failure": "Core A link error unable to find suitable C compiler",
+      "evidence": "do-attempt-03/remote/leg_out/amd-build/fbec258f1738d760f434/build.log",
+      "fix": "apt-get install --no-install-recommends build-essential; supported ordinary system linker dependency",
+      "install_exit": 0,
+      "install_log": "do-attempt-03/linker-dependency-install.log"
+    }
+  ],
+  "repair_policy": "Preserve original receipts; supported --reuse accepted artifacts; new output directory for failed/unfinished jobs; original160min build deadline retained",
+  "numerical_or_compiler_source_modified": false,
+  "model_verification_or_training_executed": false,
+  "provider_id": 606712726,
+  "active_owner_pid": 60319
+}
