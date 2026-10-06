@@ -30044,8 +30044,1382 @@
       "stored_arms": [],
       "stored_now": 1,
       "wall_s": 16.0
+    },
+    "algos/poly-features/istella/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 64.00055065751076
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "7a169311396e142a",
+          "hash_stable": null,
+          "lane": "poly-features",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 1.0063890367746353,
+          "median_ms": 1.0063890367746353,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 560.0,
+            "peak_host_mb": 1945.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 560.0,
+            "warmup_host_mb": 1829.9
+          },
+          "min_ms": 1.0063890367746353,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "degree": 2,
+              "order": "C",
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 560.0,
+          "peak_host_mb": 1945.9,
+          "quality": {
+            "output_shape": "100000x152"
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PolynomialFeatures",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw16",
+              "cuml": "cuml.preprocessing:PolynomialFeatures",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "the first 16 columns (PolynomialFeatures of Istella's 220 would be 24,000+ columns)"
+              ],
+              "ours_class": "mojolearn.PolynomialFeatures",
+              "params": {
+                "degree": 2,
+                "include_bias": false,
+                "interaction_only": false
+              },
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:PolynomialFeatures",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x16; Xq 100000x16; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1.0063890367746353
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 35.10403074324131
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "poly-features",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:48:20Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/poly-features/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-gpu",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "transform(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 64.00055065751076
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 64.00055065751076
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "7a169311396e142a",
+          "hash_stable": null,
+          "lane": "poly-features",
+          "library": "cuml",
+          "max_ms": 5.890591070055962,
+          "median_ms": 5.890591070055962,
+          "memory": {},
+          "min_ms": 5.890591070055962,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PolynomialFeatures",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw16",
+              "cuml": "cuml.preprocessing:PolynomialFeatures",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "the first 16 columns (PolynomialFeatures of Istella's 220 would be 24,000+ columns)"
+              ],
+              "ours_class": "mojolearn.PolynomialFeatures",
+              "params": {
+                "degree": 2,
+                "include_bias": false,
+                "interaction_only": false
+              },
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:PolynomialFeatures",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            5.890591070055962
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 217.88807399570942
+        }
+      ],
+      "lane": "poly-features",
+      "lane_config": {
+        "block": "raw16",
+        "cuml": "cuml.preprocessing:PolynomialFeatures",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [
+          "the first 16 columns (PolynomialFeatures of Istella's 220 would be 24,000+ columns)"
+        ],
+        "ours_class": "mojolearn.PolynomialFeatures",
+        "params": {
+          "degree": 2,
+          "include_bias": false,
+          "interaction_only": false
+        },
+        "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+        "sklearn": "sklearn.preprocessing:PolynomialFeatures",
+        "task": "transform",
+        "timed_fit": "fit(X)",
+        "timed_infer": "transform(Xq)"
+      },
+      "log": "logs/algos.poly-features.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "degree": 2,
+              "order": "C",
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/poly-features",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/poly-features-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:48:09Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 11.3
+    },
+    "algos/power-transformer/istella/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 714.9077262729406
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "power-transformer",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PowerTransformer",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw",
+              "cuml": "cuml.preprocessing:PowerTransformer",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [],
+              "ours_class": "mojolearn.PowerTransformer",
+              "params": {
+                "method": "yeo-johnson",
+                "standardize": true
+              },
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:PowerTransformer",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "REFUSED(error: {\"error\": \"BracketError('The algorithm terminated without finding a valid bracket. Consider trying different initial points.')\", \"event\": \"error\", \"stage\": \"round 0\"})",
+          "times_ms": [],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": null
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "power-transformer",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:48:31Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/power-transformer/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-gpu",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "transform(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 714.9077262729406
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 714.9077262729406
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "power-transformer",
+          "library": "cuml",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PowerTransformer",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw",
+              "cuml": "cuml.preprocessing:PowerTransformer",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [],
+              "ours_class": "mojolearn.PowerTransformer",
+              "params": {
+                "method": "yeo-johnson",
+                "standardize": true
+              },
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:PowerTransformer",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "REFUSED(error: {\"error\": \"BracketError('The algorithm terminated without finding a valid bracket. Consider trying different initial points.')\", \"event\": \"error\", \"stage\": \"round 0\"})",
+          "times_ms": [],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": null
+        }
+      ],
+      "lane": "power-transformer",
+      "lane_config": {
+        "block": "raw",
+        "cuml": "cuml.preprocessing:PowerTransformer",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [],
+        "ours_class": "mojolearn.PowerTransformer",
+        "params": {
+          "method": "yeo-johnson",
+          "standardize": true
+        },
+        "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+        "sklearn": "sklearn.preprocessing:PowerTransformer",
+        "task": "transform",
+        "timed_fit": "fit(X)",
+        "timed_infer": "transform(Xq)"
+      },
+      "log": "logs/algos.power-transformer.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/power-transformer",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/power-transformer-istella.json",
+      "rc": 1,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:48:20Z",
+      "status": "failed",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 10.3
+    },
+    "algos/qn-reg/istella/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 655.9745576232672
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "f2f88dd8de8b7da2",
+          "hash_stable": null,
+          "lane": "qn-reg",
+          "library": "cuml",
+          "library_version": "1.7.2",
+          "max_ms": 232.9116966575384,
+          "median_ms": 232.9116966575384,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 1282.0,
+            "peak_host_mb": 2976.8,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 1282.0,
+            "warmup_host_mb": 2975.7
+          },
+          "min_ms": 232.9116966575384,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "fit_intercept": true,
+              "loss": "l2",
+              "max_iter": 1000,
+              "seed": "none (deterministic)",
+              "tol": 0.0001
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 1282.0,
+          "peak_host_mb": 2976.8,
+          "quality": {
+            "finite": true,
+            "r2": 0.32756659987662706,
+            "rmse": 0.6849913166361391
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "reg",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "linear",
+              "kind": "extra",
+              "mismatches": [
+                "scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings"
+              ],
+              "notes": [
+                "ours and cuML: the quasi-Newton solver on the squared loss, no penalty (cuml.solvers.QN(loss='l2'), present in the pinned cuML 26.08); scikit-learn LinearRegression is the CPU estimator with the same loss and penalty"
+              ],
+              "ours_class": "mojolearn.QNRegressor",
+              "params": {
+                "fit_intercept": true,
+                "l1_strength": 0.0,
+                "l2_strength": 0.0,
+                "lbfgs_memory": 5,
+                "linesearch_max_iter": 50,
+                "loss": "squared_error",
+                "max_iter": 1000,
+                "penalty_normalized": true,
+                "tol": 0.0001
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "qn",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            232.9116966575384
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 380.60284219682217
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "qn-reg",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:48:40Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/qn-reg/istella/rows=full",
+      "infer_cells": [],
+      "lane": "qn-reg",
+      "lane_config": {
+        "block": "reg",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "linear",
+        "kind": "extra",
+        "mismatches": [
+          "scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings"
+        ],
+        "notes": [
+          "ours and cuML: the quasi-Newton solver on the squared loss, no penalty (cuml.solvers.QN(loss='l2'), present in the pinned cuML 26.08); scikit-learn LinearRegression is the CPU estimator with the same loss and penalty"
+        ],
+        "ours_class": "mojolearn.QNRegressor",
+        "params": {
+          "fit_intercept": true,
+          "l1_strength": 0.0,
+          "l2_strength": 0.0,
+          "lbfgs_memory": 5,
+          "linesearch_max_iter": 50,
+          "loss": "squared_error",
+          "max_iter": 1000,
+          "penalty_normalized": true,
+          "tol": 0.0001
+        },
+        "quality": "held-out R2 and RMSE",
+        "task": "qn",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": null
+      },
+      "log": "logs/algos.qn-reg.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "fit_intercept": true,
+              "loss": "l2",
+              "max_iter": 1000,
+              "seed": "none (deterministic)",
+              "tol": 0.0001
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/qn-reg",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/qn-reg-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:48:31Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 9.5
+    },
+    "algos/qr/istella/rows=full": {
+      "arms": [
+        "torch-gpu",
+        "cupy-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "QR (reduced)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "34bc59d4a69520c6",
+          "hash_stable": null,
+          "lane": "qr",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 227.11926698684692,
+          "median_ms": 227.11926698684692,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3008.9,
+            "peak_host_mb": 1703.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 2168.7,
+            "warmup_host_mb": 1693.8
+          },
+          "min_ms": 227.11926698684692,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3008.9,
+          "peak_host_mb": 1703.4,
+          "quality": {
+            "relative_gram_difference": 3.787402354725946e-07
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "reg",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "decomp",
+              "kind": "linalg",
+              "mismatches": [],
+              "notes": [
+                "qr(X, mode='reduced') of the reg block's fit rows (1,000,000 x d) on every arm (Householder, Q and R formed)"
+              ],
+              "ours_class": "mojolearn.linalg.qr",
+              "params": {
+                "mode": "reduced"
+              },
+              "quality": "relative difference of R^T R vs X^T X (float64) and max |diag R| / its float64 value",
+              "task": "qr",
+              "timed_fit": "QR (reduced)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            227.11926698684692
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 326.4569453895092
+        },
+        {
+          "arm": "cupy-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "QR (reduced)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "34bc59d4a69520c6",
+          "hash_stable": null,
+          "lane": "qr",
+          "library": "cupy",
+          "library_version": "14.2.0",
+          "max_ms": 230.54939322173595,
+          "median_ms": 230.54939322173595,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 5160.0,
+            "peak_host_mb": 2486.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3480.0,
+            "warmup_host_mb": 2484.0
+          },
+          "min_ms": 230.54939322173595,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cupy",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 5160.0,
+          "peak_host_mb": 2486.4,
+          "quality": {
+            "relative_gram_difference": 3.787402354725946e-07
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "reg",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "decomp",
+              "kind": "linalg",
+              "mismatches": [],
+              "notes": [
+                "qr(X, mode='reduced') of the reg block's fit rows (1,000,000 x d) on every arm (Householder, Q and R formed)"
+              ],
+              "ours_class": "mojolearn.linalg.qr",
+              "params": {
+                "mode": "reduced"
+              },
+              "quality": "relative difference of R^T R vs X^T X (float64) and max |diag R| / its float64 value",
+              "task": "qr",
+              "timed_fit": "QR (reduced)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            230.54939322173595
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 382.11870193481445
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "qr",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-gpu,cupy-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:48:54Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/qr/istella/rows=full",
+      "infer_cells": [],
+      "lane": "qr",
+      "lane_config": {
+        "block": "reg",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "decomp",
+        "kind": "linalg",
+        "mismatches": [],
+        "notes": [
+          "qr(X, mode='reduced') of the reg block's fit rows (1,000,000 x d) on every arm (Householder, Q and R formed)"
+        ],
+        "ours_class": "mojolearn.linalg.qr",
+        "params": {
+          "mode": "reduced"
+        },
+        "quality": "relative difference of R^T R vs X^T X (float64) and max |diag R| / its float64 value",
+        "task": "qr",
+        "timed_fit": "QR (reduced)",
+        "timed_infer": null
+      },
+      "log": "logs/algos.qr.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cupy-gpu": {
+            "library": "cupy",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/qr",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cupy-gpu",
+          "torch-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/qr-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:48:40Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 13.7
+    },
+    "algos/quantile-transformer/istella/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 705.6069299578667
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "e26f0182f9ec1850",
+          "hash_stable": null,
+          "lane": "quantile-transformer",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 6660.869320854545,
+          "median_ms": 6660.869320854545,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 1444.0,
+            "peak_host_mb": 3847.2,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 1442.0,
+            "warmup_host_mb": 3649.5
+          },
+          "min_ms": 6660.869320854545,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "seed": 7,
+              "subsample": 1000000000
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 1444.0,
+          "peak_host_mb": 3847.2,
+          "quality": {
+            "output_shape": "100000x220"
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "QuantileTransformer",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw",
+              "cuml": "cuml.preprocessing:QuantileTransformer",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [],
+              "ours_class": "mojolearn.QuantileTransformer",
+              "params": {
+                "ignore_implicit_zeros": false,
+                "n_quantiles": 1000,
+                "output_distribution": "uniform",
+                "random_state": 7,
+                "subsample": 1000000000
+              },
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:QuantileTransformer",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            6660.869320854545
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 6727.655045688152
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "quantile-transformer",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:49:21Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/quantile-transformer/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-gpu",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "transform(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 705.6069299578667
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 705.6069299578667
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "e26f0182f9ec1850",
+          "hash_stable": null,
+          "lane": "quantile-transformer",
+          "library": "cuml",
+          "max_ms": 282.0238582789898,
+          "median_ms": 282.0238582789898,
+          "memory": {},
+          "min_ms": 282.0238582789898,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "QuantileTransformer",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw",
+              "cuml": "cuml.preprocessing:QuantileTransformer",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [],
+              "ours_class": "mojolearn.QuantileTransformer",
+              "params": {
+                "ignore_implicit_zeros": false,
+                "n_quantiles": 1000,
+                "output_distribution": "uniform",
+                "random_state": 7,
+                "subsample": 1000000000
+              },
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:QuantileTransformer",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            282.0238582789898
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 869.1257238388062
+        }
+      ],
+      "lane": "quantile-transformer",
+      "lane_config": {
+        "block": "raw",
+        "cuml": "cuml.preprocessing:QuantileTransformer",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [],
+        "ours_class": "mojolearn.QuantileTransformer",
+        "params": {
+          "ignore_implicit_zeros": false,
+          "n_quantiles": 1000,
+          "output_distribution": "uniform",
+          "random_state": 7,
+          "subsample": 1000000000
+        },
+        "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+        "sklearn": "sklearn.preprocessing:QuantileTransformer",
+        "task": "transform",
+        "timed_fit": "fit(X)",
+        "timed_infer": "transform(Xq)"
+      },
+      "log": "logs/algos.quantile-transformer.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "seed": 7,
+              "subsample": 1000000000
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/quantile-transformer",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/quantile-transformer-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:48:54Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 26.7
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T07:48:09Z"
+  "updated": "2026-10-06T07:49:21Z"
 }

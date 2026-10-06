@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:48:09Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:49:21Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T07:48:09Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 51 done, 1 failed, 0 unsupported, 61 pending. Cells: 124 (REFUSED 1, ok 123).
+Races: 113 planned, 55 done, 2 failed, 0 unsupported, 56 pending. Cells: 130 (REFUSED 2, ok 128).
 
-Inference cells: 103 (REFUSED 1, ok 102).
+Inference cells: 106 (REFUSED 2, ok 104).
 
 ## Quality at a glance
 
@@ -112,6 +112,9 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | multinomial-nb | text | logloss (lower is better) | - | - | cuml-gpu 0.559524 |
 | algos | pagerank | istella | sum | - | - | cugraph-gpu 1.000000 |
 | algos | permutation-shap | istella | rel_error_vs_exact | - | - | cuml-gpu 1.483e-07 |
+| algos | qn-reg | istella | r2 (higher is better) | - | - | cuml-gpu 0.327567 |
+| algos | qn-reg | istella | rmse (lower is better) | - | - | cuml-gpu 0.684991 |
+| algos | qr | istella | relative_gram_difference | - | - | torch-gpu 3.787e-07; cupy-gpu 3.787e-07 |
 
 ## Inference at a glance
 
@@ -157,6 +160,9 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | multinomial-nb | text | Xq | - | - | - | - | cuml-gpu 2.4 ms (IDENTICAL/arm -) |
 | algos | normalizer | istella | Xq | - | - | - | - | cuml-gpu 1.6 ms (IDENTICAL/arm -) |
 | algos | onehot | istella | Xq | - | - | - | - | cuml-gpu 54.8 ms (IDENTICAL/arm -) |
+| algos | poly-features | istella | Xq | - | - | - | - | cuml-gpu 5.9 ms (IDENTICAL/arm -) |
+| algos | power-transformer | istella | Xq | - | - | - | - | cuml-gpu - ms (IDENTICAL/arm -) |
+| algos | quantile-transformer | istella | Xq | - | - | - | - | cuml-gpu 282.0 ms (IDENTICAL/arm -) |
 
 ## Algorithm expansion
 
@@ -2009,6 +2015,145 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 |---|---|
 | library (source) | cuml (declared) |
 | seed | 7 |
+
+### poly-features / istella (rows full, shape X 1000000x16; Xq 100000x16; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.poly-features.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 1.0 | 1.0..1.0 | 1 | - | - | 1945.9 | 560.0 | output_shape=100000x152 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'degree': 2, 'include_bias': False, 'interaction_only': False}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), PolynomialFeatures (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| degree | 2 |
+| order | "C" |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 5.9 | 5.9..5.9 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### power-transformer / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: failed, driver rc 1, log `logs/algos.power-transformer.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "BracketError('The algorithm terminated without finding a valid bracket. Consider trying different initial points.')", "event": "error", "stage": "round 0"}) (measured this run) |
+
+settings: {'method': 'yeo-johnson', 'standardize': True}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), PowerTransformer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | - | - | 0 | - | - | - | - | LIKE-FOR-LIKE-SPAN | REFUSED(error: {"error": "BracketError('The algorithm terminated without finding a valid bracket. Consider trying different initial points.')", "event": "error", "stage": "round 0"}) |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### qn-reg / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.qn-reg.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 232.9 | 232.9..232.9 | 1 | - | - | 2976.8 | 1282.0 | finite=True, r2=0.327567, rmse=0.684991 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'fit_intercept': True, 'l1_strength': 0.0, 'l2_strength': 0.0, 'lbfgs_memory': 5, 'linesearch_max_iter': 50, 'loss': 'squared_error', 'max_iter': 1000, 'penalty_normalized': True, 'tol': 0.0001}. Rows: None. Timed: None.
+
+mismatch: scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| fit_intercept | true |
+| loss | "l2" |
+| max_iter | 1000 |
+| seed | "none (deterministic)" |
+| tol | 0.0001 |
+
+### qr / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.qr.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 227.1 | 227.1..227.1 | 1 | - | - | 1703.4 | 3008.9 | relative_gram_difference=3.787e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| cupy-gpu | cupy | gpu | opponent | 230.5 | 230.5..230.5 | 1 | - | - | 2486.4 | 5160.0 | relative_gram_difference=3.787e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+memory, cupy-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'mode': 'reduced'}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | cupy-gpu | torch-gpu |
+|---|---||---|---|
+| library (source) | cupy (declared) | torch (declared) |
+| seed | "none (deterministic)" | "none (deterministic)" |
+
+### quantile-transformer / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.quantile-transformer.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 6660.9 | 6660.9..6660.9 | 1 | - | - | 3847.2 | 1444.0 | output_shape=100000x220 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'ignore_implicit_zeros': False, 'n_quantiles': 1000, 'output_distribution': 'uniform', 'random_state': 7, 'subsample': 1000000000}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), QuantileTransformer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | 7 |
+| subsample | 1000000000 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 282.0 | 282.0..282.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
 
 ## Not covered by this board
 
