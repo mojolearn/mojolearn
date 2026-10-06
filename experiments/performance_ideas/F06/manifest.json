@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "id": "F06",
+  "title": "Bound actual MCD candidate launch batches",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "x_decomp/mcd_bmma.mojo",
+    "bindings/_mojolearn_x_decomp.mojo",
+    "experiments/performance_ideas/F06/caller.py"
+  ],
+  "candidate_defines": [
+    "-D",
+    "MOJOLEARN_MCD_FAST_BOUND_BATCH"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "bash",
+    "bindings/build_x_decomp.sh"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F06",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F06/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "candidate counter positive at fitted MCD/EE callers",
+    "unchanged support/candidate/search settings",
+    "contaminated near-singular covariance and location quality",
+    "split products retain incumbent split path"
+  ],
+  "timing_contract": "Full robust fit through read of location/covariance/support; candidate launch count reported",
+  "blocker": null
+}
