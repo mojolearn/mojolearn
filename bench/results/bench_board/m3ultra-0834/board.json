@@ -357976,28 +357976,54 @@
      },
      "dataset": "bytes",
      "device": "gpu",
-     "device_name": null,
+     "device_name": "Apple MPS",
      "family": "neural",
      "hash": null,
      "hash_stable": null,
      "lane": "samba-train-step",
      "library": "torch",
-     "library_version": null,
-     "max_ms": null,
-     "median_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 103.4579579718411,
+     "median_ms": 103.4579579718411,
      "memory": {
-      "gpu_method": "not sampled",
-      "host_method": "not sampled"
+      "children_mb": 1.7,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 1322.8,
+      "peak_host_mb": 1947.0,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 1290.8,
+      "warmup_host_mb": 1903.8
      },
-     "min_ms": null,
+     "min_ms": 103.4579579718411,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
-     "quality": {},
+     "params": {
+      "library": "torch",
+      "params": {
+       "amsgrad": false,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "dropout": 0.0,
+       "eps": 1e-08,
+       "learning_rate": 0.001,
+       "seed": 7,
+       "weight_decay": 0.01
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 1322.8,
+     "peak_host_mb": 1947.0,
+     "quality": {
+      "loss_first_step": 5.635909557342529,
+      "loss_last_step": 4.833934307098389,
+      "steps": 2
+     },
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 3.2762849436667225,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -358042,16 +358068,17 @@
      },
      "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:26Z",
+      "opponent_snapshot_sha256": "c640a637532e8e5311c4c8d85e78006845e8cca303d4defc794b926e2bb0640c",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-samba-available.json",
+      "finished": "2026-10-06T05:19:18Z",
       "original_source": "measured this run"
      },
-     "status": "REFUSED(not_ready: {\"error\": \"FileNotFoundError(2, 'No such file or directory')\", \"event\": \"error\", \"stage\": \"ready\"})",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
+     "status": "ok",
+     "times_ms": [
+      103.4579579718411
+     ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": null,
+     "warmup_ms": 837.3611249844544,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -358078,13 +358105,13 @@
      },
      "dataset": "bytes",
      "device": "gpu",
-     "device_name": null,
+     "device_name": "Apple MPS",
      "family": "neural",
      "hash": null,
      "hash_stable": null,
      "lane": "samba-train-step",
      "library": "torch",
-     "library_version": null,
+     "library_version": "2.13.0",
      "max_ms": null,
      "median_ms": null,
      "memory": {
@@ -358094,6 +358121,22 @@
      "min_ms": null,
      "mode": "opponent",
      "neural_shape": "full",
+     "params": {
+      "library": "torch",
+      "params": {
+       "amsgrad": false,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "dropout": 0.0,
+       "eps": 1e-08,
+       "learning_rate": 0.001,
+       "seed": 7,
+       "weight_decay": 0.01
+      },
+      "source": "declared"
+     },
      "peak_gpu_mb": null,
      "peak_host_mb": null,
      "quality": {},
@@ -358144,13 +358187,12 @@
      },
      "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:26Z",
+      "opponent_snapshot_sha256": "c640a637532e8e5311c4c8d85e78006845e8cca303d4defc794b926e2bb0640c",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-samba-available.json",
+      "finished": "2026-10-06T05:19:18Z",
       "original_source": "measured this run"
      },
-     "status": "REFUSED(not_ready: {\"error\": \"FileNotFoundError(2, 'No such file or directory')\", \"event\": \"error\", \"stage\": \"ready\"})",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "status": "REFUSED(error: {\"error\": \"REFUSED: torch-compile-fp32 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/error.h>\\\\n#include <c10/metal/reduction_utils)",
      "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": null,
@@ -358180,28 +358222,54 @@
      },
      "dataset": "bytes",
      "device": "gpu",
-     "device_name": null,
+     "device_name": "Apple MPS",
      "family": "neural",
      "hash": null,
      "hash_stable": null,
      "lane": "samba-train-step",
      "library": "torch",
-     "library_version": null,
-     "max_ms": null,
-     "median_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 108.43129199929535,
+     "median_ms": 108.43129199929535,
      "memory": {
-      "gpu_method": "not sampled",
-      "host_method": "not sampled"
+      "children_mb": 1.7,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 1295.9,
+      "peak_host_mb": 1916.8,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 1263.9,
+      "warmup_host_mb": 1877.4
      },
-     "min_ms": null,
+     "min_ms": 108.43129199929535,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
-     "quality": {},
+     "params": {
+      "library": "torch",
+      "params": {
+       "amsgrad": false,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "dropout": 0.0,
+       "eps": 1e-08,
+       "learning_rate": 0.001,
+       "seed": 7,
+       "weight_decay": 0.01
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 1295.9,
+     "peak_host_mb": 1916.8,
+     "quality": {
+      "loss_first_step": 5.6360063552856445,
+      "loss_last_step": 4.833772659301758,
+      "steps": 2
+     },
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 3.1260141215309902,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -358246,16 +358314,17 @@
      },
      "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:26Z",
+      "opponent_snapshot_sha256": "c640a637532e8e5311c4c8d85e78006845e8cca303d4defc794b926e2bb0640c",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-samba-available.json",
+      "finished": "2026-10-06T05:19:18Z",
       "original_source": "measured this run"
      },
-     "status": "REFUSED(not_ready: {\"error\": \"FileNotFoundError(2, 'No such file or directory')\", \"event\": \"error\", \"stage\": \"ready\"})",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
+     "status": "ok",
+     "times_ms": [
+      108.43129199929535
+     ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": null,
+     "warmup_ms": 250.94708299729973,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -358282,13 +358351,13 @@
      },
      "dataset": "bytes",
      "device": "gpu",
-     "device_name": null,
+     "device_name": "Apple MPS",
      "family": "neural",
      "hash": null,
      "hash_stable": null,
      "lane": "samba-train-step",
      "library": "torch",
-     "library_version": null,
+     "library_version": "2.13.0",
      "max_ms": null,
      "median_ms": null,
      "memory": {
@@ -358298,6 +358367,22 @@
      "min_ms": null,
      "mode": "opponent",
      "neural_shape": "full",
+     "params": {
+      "library": "torch",
+      "params": {
+       "amsgrad": false,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "dropout": 0.0,
+       "eps": 1e-08,
+       "learning_rate": 0.001,
+       "seed": 7,
+       "weight_decay": 0.01
+      },
+      "source": "declared"
+     },
      "peak_gpu_mb": null,
      "peak_host_mb": null,
      "quality": {},
@@ -358348,13 +358433,12 @@
      },
      "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:26Z",
+      "opponent_snapshot_sha256": "c640a637532e8e5311c4c8d85e78006845e8cca303d4defc794b926e2bb0640c",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-samba-available.json",
+      "finished": "2026-10-06T05:19:18Z",
       "original_source": "measured this run"
      },
-     "status": "REFUSED(not_ready: {\"error\": \"FileNotFoundError(2, 'No such file or directory')\", \"event\": \"error\", \"stage\": \"ready\"})",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "status": "REFUSED(error: {\"error\": \"REFUSED: torch-compile-bf16 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/error.h>\\\\n#include <c10/metal/reduction_utils)",
      "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": null,
@@ -359213,6 +359297,414 @@
      "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": null
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "bytes",
+     "device": "gpu",
+     "device_name": null,
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "samba-train-step",
+     "library": "torch",
+     "library_version": null,
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {
+      "gpu_method": "not sampled",
+      "host_method": "not sampled"
+     },
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized; training state device-resident on both sides; round r is step r+1",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {
+       "amsgrad": false,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "dropout": 0.0,
+       "eps": 1e-08,
+       "lr": 0.001,
+       "max_grad_norm": null,
+       "weight_decay": 0.01
+      },
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "optimizer": "AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01, no amsgrad, passed explicitly on both, no clipping (max_norm=None)",
+      "ours_call": "mojolearn.SambaStack(config, weights).train_step(inputs, targets)",
+      "ours_device": "gpu",
+      "quality": "loss_first_step, loss_last_step (same init, same batches), loss_first_abs_diff_vs_ours, loss_last_abs_diff_vs_ours",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+      "torch_call": "embedding + m3_forward / LlamaEager.block layers + RMSNorm + tied head; mean CE; backward; torch.optim.AdamW step; loss.item()",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:26Z",
+      "original_source": "measured this run"
+     },
+     "status": "REFUSED(not_ready: {\"error\": \"FileNotFoundError(2, 'No such file or directory')\", \"event\": \"error\", \"stage\": \"ready\"})",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "bytes",
+     "device": "gpu",
+     "device_name": null,
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "samba-train-step",
+     "library": "torch",
+     "library_version": null,
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {
+      "gpu_method": "not sampled",
+      "host_method": "not sampled"
+     },
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized; training state device-resident on both sides; round r is step r+1",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {
+       "amsgrad": false,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "dropout": 0.0,
+       "eps": 1e-08,
+       "lr": 0.001,
+       "max_grad_norm": null,
+       "weight_decay": 0.01
+      },
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "optimizer": "AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01, no amsgrad, passed explicitly on both, no clipping (max_norm=None)",
+      "ours_call": "mojolearn.SambaStack(config, weights).train_step(inputs, targets)",
+      "ours_device": "gpu",
+      "quality": "loss_first_step, loss_last_step (same init, same batches), loss_first_abs_diff_vs_ours, loss_last_abs_diff_vs_ours",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+      "torch_call": "embedding + m3_forward / LlamaEager.block layers + RMSNorm + tied head; mean CE; backward; torch.optim.AdamW step; loss.item()",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:26Z",
+      "original_source": "measured this run"
+     },
+     "status": "REFUSED(not_ready: {\"error\": \"FileNotFoundError(2, 'No such file or directory')\", \"event\": \"error\", \"stage\": \"ready\"})",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "bytes",
+     "device": "gpu",
+     "device_name": null,
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "samba-train-step",
+     "library": "torch",
+     "library_version": null,
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {
+      "gpu_method": "not sampled",
+      "host_method": "not sampled"
+     },
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized; training state device-resident on both sides; round r is step r+1",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {
+       "amsgrad": false,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "dropout": 0.0,
+       "eps": 1e-08,
+       "lr": 0.001,
+       "max_grad_norm": null,
+       "weight_decay": 0.01
+      },
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "optimizer": "AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01, no amsgrad, passed explicitly on both, no clipping (max_norm=None)",
+      "ours_call": "mojolearn.SambaStack(config, weights).train_step(inputs, targets)",
+      "ours_device": "gpu",
+      "quality": "loss_first_step, loss_last_step (same init, same batches), loss_first_abs_diff_vs_ours, loss_last_abs_diff_vs_ours",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+      "torch_call": "embedding + m3_forward / LlamaEager.block layers + RMSNorm + tied head; mean CE; backward; torch.optim.AdamW step; loss.item()",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:26Z",
+      "original_source": "measured this run"
+     },
+     "status": "REFUSED(not_ready: {\"error\": \"FileNotFoundError(2, 'No such file or directory')\", \"event\": \"error\", \"stage\": \"ready\"})",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
+    },
+    {
+     "arm": "torch-compile-bf16",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "bytes",
+     "device": "gpu",
+     "device_name": null,
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "samba-train-step",
+     "library": "torch",
+     "library_version": null,
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {
+      "gpu_method": "not sampled",
+      "host_method": "not sampled"
+     },
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized; training state device-resident on both sides; round r is step r+1",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {
+       "amsgrad": false,
+       "betas": [
+        0.9,
+        0.999
+       ],
+       "dropout": 0.0,
+       "eps": 1e-08,
+       "lr": 0.001,
+       "max_grad_norm": null,
+       "weight_decay": 0.01
+      },
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "optimizer": "AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01, no amsgrad, passed explicitly on both, no clipping (max_norm=None)",
+      "ours_call": "mojolearn.SambaStack(config, weights).train_step(inputs, targets)",
+      "ours_device": "gpu",
+      "quality": "loss_first_step, loss_last_step (same init, same batches), loss_first_abs_diff_vs_ours, loss_last_abs_diff_vs_ours",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+      "torch_call": "embedding + m3_forward / LlamaEager.block layers + RMSNorm + tied head; mean CE; backward; torch.optim.AdamW step; loss.item()",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:26Z",
+      "original_source": "measured this run"
+     },
+     "status": "REFUSED(not_ready: {\"error\": \"FileNotFoundError(2, 'No such file or directory')\", \"event\": \"error\", \"stage\": \"ready\"})",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
     }
    ]
   },
@@ -389709,9 +390201,63 @@
     "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71",
     "measurement_note": "Completed metric tensors moved CPU before float64 export; training semantics unchanged."
    }
+  },
+  "c640a637532e8e5311c4c8d85e78006845e8cca303d4defc794b926e2bb0640c": {
+   "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-samba-available.json",
+   "counts": {
+    "imported": 4,
+    "successful": 2,
+    "failed": 2,
+    "stored_skipped": 0,
+    "already_current": 0
+   },
+   "resource_policy": {
+    "cpu_count": 28,
+    "hardware": "Mac15,14",
+    "thread_caps": {
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "MKL_NUM_THREADS": null,
+     "NUMEXPR_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null
+    },
+    "policy": "Serial races and arms; n_jobs=-1/default full resources; no imposed opponent CPU core cap",
+    "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71",
+    "measurement_note": "Completed metric tensors moved CPU before float64 export; training semantics unchanged."
+   }
   }
  },
  "opponent_interruptions": [
+  {
+   "at": 1791260543.4751139,
+   "status": "INTERRUPTED_BY_USER",
+   "reason": "Prioritize candidate A/B measurements; missing GPU opponents follow candidate queue",
+   "active_race": "bench_board: [35/402] algos/gamma/istella/rows=full arms=sklearn-cpu",
+   "interrupted_processes": {
+    "23858": {
+     "ppid": 1,
+     "stat": "Ss",
+     "command": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/owner-missing-only.py"
+    },
+    "23863": {
+     "ppid": 23858,
+     "stat": "Ss",
+     "command": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python -u /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/source/tools/bench_board.py --vendor apple --modes identical --families trees,classical,classical2,algos,neural --rows full --neural-shape full --rounds 1 --python-env /Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python --skip-install --verify-data --no-smoke-gate --opponents-only --skip-failed --cache /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/cache --ctd-data /Users/ec2-user/mojolearn-full-f867b50e8/cache/ctd-data --more-data /Users/ec2-user/mojolearn-full-f867b50e8/cache/more-data --algos-data /Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data --data-root /Users/ec2-user/datasets/gbm-bench --opponent-store /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/opponent-store.jsonl --out /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/board"
+    },
+    "28888": {
+     "ppid": 23863,
+     "stat": "Ss",
+     "command": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python -u /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/source/tools/bench_board_algos.py race --lane gamma --dataset istella --data /Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full --arms sklearn-cpu --rounds 1 --out /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/board/raw/algos/rows-full --work /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/board/work --ours-python /Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python --theirs-python /Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600"
+    },
+    "28890": {
+     "ppid": 28888,
+     "stat": "Rs",
+     "command": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/source/tools/bench_board_algos.py worker --arm sklearn-cpu --lane gamma --dataset istella --data /Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full"
+    }
+   },
+   "timing_admitted": false,
+   "resume_command": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/owner-missing-only.py"
+  },
   {
    "at": 1791260543.4751139,
    "status": "INTERRUPTED_BY_USER",

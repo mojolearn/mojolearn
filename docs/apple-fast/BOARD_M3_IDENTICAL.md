@@ -11,7 +11,7 @@ Our IDENTICAL arm on the M3 Ultra Metal GPU at head cf94a6be6, 1 unscored warm-u
 
 Quality (2026-10-04, computed): of 459 lane/dataset rows, IDENTICAL quality is WORSE than an opponent on 69 (49 by more than 1%) and IDENTICAL after is WORSE than IDENTICAL before on 0 (0 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 111 have no parseable IDENTICAL quality. Tolerance rel 1e-3, abs 1e-6.
 
-Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 412 eligible opponent comparisons, 272 faster, geometric-mean ratio 0.478. Eligible = a ratio after and a status without HOLD or "excluded"; faster = ratio below 1. Ratio = IDENTICAL ms / best opponent ms.
+Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 413 eligible opponent comparisons, 272 faster, geometric-mean ratio 0.480. Eligible = a ratio after and a status without HOLD or "excluded"; faster = ratio below 1. Ratio = IDENTICAL ms / best opponent ms.
 
 - Hand-made headline, last before the page was generated: Summary: 350 rows, 329 with a ratio, 203 faster than the best opponent after, geometric-mean ratio 0.48. Flips to faster: ard taxi, svd taxi, select-r-regression istella, gpr taxi, svd istella, enet-cv taxi, bisecting-kmeans taxi, connected-components istella, label-encoder istella, perceptron istella, multinomial-nb istella, complement-nb istella, lasso-cv taxi, minmax-scaler taxi, maxabs-scaler taxi, robust-scaler taxi, tree-shap istella, nearest-centroid istella, meanshift istella, isotonic taxi, pa-clf istella, ridge-clf istella, dict-learning istella, mb-sparse-pca istella, complement-nb taxi, multinomial-nb taxi, label-encoder taxi, gaussian-nb istella, lasso-cv istella, qr taxi, pa-reg istella, tree-shap taxi, enet-cv istella, lstsq istella, gaussian-nb taxi, categorical-nb taxi, categorical-nb istella, bernoulli-nb taxi, lda taxi-zones, huber taxi, bayesian-ridge istella, ard istella, huber istella. Flips to slower: pagerank taxi, pagerank istella, umap istella, rbf-sampler taxi, ridge taxi, permutation-shap taxi, kernel-shap taxi, louvain istella, spectral taxi, ols taxi, ivf istella, select-f-regression istella.
 
@@ -73,6 +73,7 @@ Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 412 eligible oppo
 | cagra | taxi | algos | 3532 | 3507 | faiss-cpu | 1016 | 3.48 | 3.45 |  | recall_at_10=0.4838 | - | recall_at_10=0.9277 | ok |
 | minibatch-kmeans | istella | algos | 405 | 412 | sklearn-cpu | 123 | 3.28 | 3.34 |  | n_clusters=8, silhouette=0.116696 | - | ari_vs_ours=0.6224, n_clusters=8, silhouette=0.1119 | ok |
 | calibrated | taxi | algos | 1422 | 1839 | sklearn-cpu | 556 | 2.56 | 3.31 |  | accuracy=0.75533, logloss=0.550718 | - | accuracy=0.7553, logloss=0.5507 | ok |
+| samba-train-step | bytes | neural | 339 | 339 | torch-eager-fp32 | 103 | 3.28 | 3.28 |  | loss_first_step=5.636, loss_last_step=4.834, steps=2 | loss_first_step=5.636, loss_last_step=4.834, steps=2 | loss_first_step=5.636, loss_last_step=4.834, steps=2 | ok |
 | global-maxpool | synthetic | algos | 4.3 | 4.3 | torch-eager-bf16 | 1.3 | 3.27 | 3.27 |  | - | - | max_rel_diff_vs_torch_eager_fp32=0, rel_fro_vs_torch_eager_fp32=0 | ok |
 | kernel-shap | istella | algos | 27059 | 24469 | shap-cpu | 7695 | 3.52 | 3.18 |  | rel_error_vs_exact=4.37806e-09 | - | rel_error_vs_exact=1.405e-14 | ok |
 | additive-chi2 | istella | algos | 11.0 | 11.3 | sklearn-cpu | 3.8 | 2.89 | 2.96 |  | kernel_rel_error=0.0877304 | - | kernel_rel_error=0.08773 | ok |
@@ -470,7 +471,6 @@ Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 412 eligible oppo
 | rf | istella | trees | - | - | lightgbm-cpu | 67953 | - | - |  | - | - | auc=0.9454, logloss=0.1954 | Opponent full measurement; no matching own cell |
 | rf | taxi | trees | - | - | lightgbm-cpu | 54952 | - | - |  | - | - | auc=0.617, logloss=0.5264 | Opponent full measurement; no matching own cell |
 | samba-forward | bytes | neural | 55.8 | 55.8 | - | - | - | - |  | mean_nll=5.636 | mean_nll=5.636 | - | ok |
-| samba-train-step | bytes | neural | 339 | 339 | - | - | - | - |  | loss_first_step=5.636, loss_last_step=4.834, steps=2 | loss_first_step=5.636, loss_last_step=4.834, steps=2 | - | ok |
 | sgd | synthetic | algos | - | - | torch-eager-fp32 | 17.9 | - | - |  | - | - | - | MODE-MISMATCH(requested identical, read back unknown) |
 | sgd-clf | istella | algos | - | - | sklearn-cpu | 28859 | - | - |  | - | - | accuracy=0.9102 | Opponent full measurement; no matching own cell |
 | sgd-clf | taxi | algos | - | - | sklearn-cpu | 5439 | - | - |  | - | - | accuracy=0.7525 | Opponent full measurement; no matching own cell |
