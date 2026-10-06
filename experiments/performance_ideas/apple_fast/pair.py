@@ -29,7 +29,7 @@ def main():
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--variant', default='default')
     args = p.parse_args()
-    apple_fast()
+    apple_fast(load_product=False)
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], cwd=ROOT, check=True)
     card = json.loads((ROOT / 'experiments/performance_ideas' / args.idea / 'manifest.json').read_text())
@@ -92,6 +92,9 @@ def main():
     for case in A['cases']:
         left, right = A['cases'][case], B['cases'][case]
         assert left['contract'] == right['contract']
+        for field in card.get('variant_semantic_equal_fields',{}).get(args.variant,card.get('semantic_equal_fields',[])):
+            assert field in left and field in right, 'missing semantic field '+field
+            assert left[field] == right[field], 'semantic contract changed: '+case+'/'+field
         for name, spec in left['metrics'].items():
             other = right['metrics'][name]
             assert spec['rtol'] == other['rtol'] and spec['atol'] == other['atol']

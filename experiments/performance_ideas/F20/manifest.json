@@ -68,5 +68,11 @@
   "variant_bindings": {
     "normalization": "x_sequence"
   },
-  "paired_build": true
+  "paired_build": true,
+  "variant_prerequisite_bindings": {
+    "normalization": [
+      "core",
+      "training"
+    ]
+  }
 }

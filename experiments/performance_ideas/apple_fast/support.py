@@ -16,14 +16,17 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'tools'))
 
 
-def apple_fast():
+def apple_fast(load_product=True):
+    if not __debug__:raise RuntimeError('quality qualification requires Python assertions enabled')
     if os.environ.get('MOJOLEARN_NUMERIC_MODE') != 'fast' or os.environ.get('MOJOLEARN_VENDOR') != 'apple':
         raise RuntimeError('requires explicit Apple FAST mode')
     chip = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).strip()
     if 'Apple M3 Ultra' not in chip:
         raise RuntimeError('qualification is restricted to the existing M3 Ultra queue')
-    import mojolearn
-    return mojolearn
+    if load_product:
+        import mojolearn
+        return mojolearn
+    return None
 
 
 def binding_check(binding, family):

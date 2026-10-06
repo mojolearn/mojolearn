@@ -73,5 +73,10 @@
       "core"
     ]
   },
-  "paired_build": true
+  "paired_build": true,
+  "variant_semantic_equal_fields": {
+    "ann": [
+      "candidate_counts"
+    ]
+  }
 }
