@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "id": "I08",
+  "title": "attribute SSD tile reuse on multiple state cases and chunk tails",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/I08/check.mojo"
+  ],
+  "candidate_defines": [],
+  "baseline_defines": [
+    "MOJOLEARN_IDN_M2_SSD_TILES_OFF=1",
+    "MOJOLEARN_IDN_M2_CB_LOWER_OFF=1"
+  ],
+  "build_argv": [
+    "mojo",
+    "build",
+    "-j1",
+    "-I",
+    "{repo}",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "experiments/performance_ideas/I08/check.mojo",
+    "-o",
+    "{output}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/I08/check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "public semantics and canonical tie order retained",
+    "NVIDIA+AMD combined faster and neither materially slower"
+  ],
+  "timing_contract": "Frozen source; compile once on cheap boxes; device runs only; full public-operation timing includes all scratch/preparation/readback. Apple IDENTICAL bit check only.",
+  "blocker": null
+}
