@@ -67,5 +67,8 @@
     "{output}",
     "--define",
     "MOJOLEARN_RBC_CANON_MERGE=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
