@@ -28,7 +28,9 @@
     "--idea",
     "F02",
     "--output",
-    "{output}/arms"
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
   ],
   "run_argv": [
     "{python}",
@@ -102,5 +104,8 @@
     "mcd": [
       "MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"
     ]
+  },
+  "variant_prerequisite_bindings": {
+    "sdk": []
   }
 }

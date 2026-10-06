@@ -21,7 +21,9 @@
     "--idea",
     "F14",
     "--output",
-    "{output}/arms"
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
   ],
   "run_argv": [
     "{python}",
@@ -51,13 +53,13 @@
   "build_uses_compile_slot": true,
   "variants": {
     "ann": [
-      "MOJOLEARN_IVF_FAST_BALANCED_TASKS",
-      "MOJOLEARN_IVF_FAST_BALANCED_AUDIT"
+      "MOJOLEARN_IVF_FAST_BALANCED_TASKS=1",
+      "MOJOLEARN_IVF_FAST_BALANCED_AUDIT=1"
     ]
   },
   "variant_baseline_defines": {
     "ann": [
-      "MOJOLEARN_IVF_FAST_BALANCED_AUDIT"
+      "MOJOLEARN_IVF_FAST_BALANCED_AUDIT=1"
     ]
   },
   "variant_bindings": {
