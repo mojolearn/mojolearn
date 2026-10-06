@@ -33,3 +33,23 @@ for already_done in [False,True]:
    assert sum('git apply --check' in command for command in commands)==1
    assert 'OPPONENTS_DONE' in commands[-1]
 print('PASS waits for full tail, exact failed ETS only, preserves other publisher entries, completed ETS never replayed')
+
+# Execute the exact generated remote provenance code against isolated files.
+assignment=next(n for n in ast.walk(tree) if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='provenance' for t in n.targets))
+remote_code=ast.literal_eval(assignment.value)
+with tempfile.TemporaryDirectory() as folder:
+ root=pathlib.Path(folder)
+ paths={
+  '/root/campaign-results/gpu-opponents/harness-repair.json':root/'provenance.json',
+  '/root/overnight-nvidia/ets-host-repair-ready.json':root/'marker.json',
+  '/root/opponent-harness/tools/bench_board_more.py':root/'driver.py',
+ }
+ paths['/root/campaign-results/gpu-opponents/harness-repair.json'].write_text(json.dumps({'base':'preserved'}))
+ paths['/root/overnight-nvidia/ets-host-repair-ready.json'].write_text(json.dumps({'commit':'scoped-fix'}))
+ paths['/root/opponent-harness/tools/bench_board_more.py'].write_bytes(b'driver source')
+ for original,replacement in paths.items():remote_code=remote_code.replace(original,str(replacement))
+ exec(compile(remote_code,'generated-provenance-code','exec'),{})
+ result=json.loads(paths['/root/campaign-results/gpu-opponents/harness-repair.json'].read_text())
+ assert result['base']=='preserved'
+ assert result['additional_repairs']==[{'commit':'scoped-fix','file_sha256':hashlib.sha256(b'driver source').hexdigest()}]
+print('PASS generated remote provenance writes parseable JSON, preserving base and repair hash')

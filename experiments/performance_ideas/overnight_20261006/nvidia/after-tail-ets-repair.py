@@ -55,7 +55,7 @@ print(json.dumps(dict(worker=s,done=(O/'repairs/OPPONENTS_DONE').exists(),sealed
         marker=dict(commit=PLAN['commit'],patch_sha256=PLAN['patch_sha256'],purpose='Explicit cuDF forecast host capture after fit timing; model/settings unchanged',installed=time.time())
         ssh('cat > /root/overnight-nvidia/ets-host-repair-ready.json',input=json.dumps(marker).encode())
         provenance="""import json,pathlib,hashlib
-p=pathlib.Path('/root/campaign-results/gpu-opponents/harness-repair.json');d=json.loads(p.read_text());m=json.loads(pathlib.Path('/root/overnight-nvidia/ets-host-repair-ready.json').read_text());m['file_sha256']=hashlib.sha256(pathlib.Path('/root/opponent-harness/tools/bench_board_more.py').read_bytes()).hexdigest();d.setdefault('additional_repairs',[]).append(m);p.write_text(json.dumps(d,indent=2)+'\\n')
+p=pathlib.Path('/root/campaign-results/gpu-opponents/harness-repair.json');d=json.loads(p.read_text());m=json.loads(pathlib.Path('/root/overnight-nvidia/ets-host-repair-ready.json').read_text());m['file_sha256']=hashlib.sha256(pathlib.Path('/root/opponent-harness/tools/bench_board_more.py').read_bytes()).hexdigest();d.setdefault('additional_repairs',[]).append(m);p.write_text(json.dumps(d,indent=2))
 """
         ssh('python3 -c '+shlex.quote(provenance))
         selection={'prefixes':['classical2/ets/synthetic/rows=full'],'before':datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),'time':time.time()}
