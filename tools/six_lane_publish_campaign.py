@@ -121,12 +121,12 @@ def main():
            'These are combined-configuration full workloads, not completed individual constituent experiments.',
            'Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.',
            'One excluded warmup and one scored sample per arm. Original failed attempts are retained.',
-           'AMD GPU measurements use accepted artifacts as they become available; missing artifacts are built separately on the owned CPU builder. NVIDIA PTX still awaits compatible artifacts.',
+           'AMD GPU measurements use accepted retained artifacts. Latest owner instruction forbids further compilation; unavailable paired artifacts remain blocked. NVIDIA PTX still awaits compatible artifacts.',
            'IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.',
            'Scored output and partial/public-save model hashes are retained separately; partial hashes do not prove complete state identity.',
            'Apple first four PCA/OLS pairs overlapped shared workspace storage data transfer; KMeans overlap unestablished. No quiet-storage or promotion claim.',
            'Apple teardown preservation failed: the workspace was on the internal SSD, not retained EBS. Logs, timings, metrics and hash receipts survive; some raw array bytes remain unrecovered. See artifact-retention.json for exact recovery coverage and provenance. Original receipts are unchanged.',
-           'Races reuse accepted binaries without separate numerical verification reruns; the separately authorized AMD missing-artifact build is not a measurement. Full provider and worker logs remain under '+str(ROOT)]
+           'Races reuse accepted binaries without separate numerical verification reruns. Earlier separately authorized AMD builds are historical artifact evidence, not measurements. Full provider and worker logs remain under '+str(ROOT)]
     retention={}
     for label,relative in [('apple_incident','apple/emergency-preservation-correction.json'),
                            ('apple_recovery','apple/incident-offbox-audit/recovery-summary.json')]:
@@ -135,6 +135,14 @@ def main():
             raw=source.read_bytes()
             retention[label]=dict(source=str(source),sha256=hashlib.sha256(raw).hexdigest(),record=json.loads(raw))
     write(OUT/'artifact-retention.json',retention)
+    stop=ROOT/'amd-missing-build/owner-stop-compilation/final-status.json'
+    if stop.exists():
+        shutil.copyfile(stop,OUT/'compilation-stopped.json')
+        notes.append('The AMD missing-artifact compiler was stopped under the latest owner instruction; see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready.')
+    hashes=ROOT/'quality-review/scored-hash-coverage.json'
+    if hashes.exists():
+        shutil.copyfile(hashes,OUT/'scored-hash-coverage.json')
+        notes.append('scored-hash-coverage.json is a dated, hash-bound metadata audit of captured scored outputs and model states. Complete output hashes do not establish complete fitted-model identity; missing model state remains pending.')
     for assessment in review['rows']+next_review['rows']:
         assessment['original_review_receipt_path']=assessment['receipt']
         assessment['receipt']=receipt_paths.get(assessment['receipt_sha256'],assessment['receipt'])

@@ -1,6 +1,6 @@
 {
   "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
-  "key": "32ff4d6baa4a82afb94f",
+  "key": "c130d9fdd62e762ff9c9",
   "mode": "identical",
   "workload": {
     "arms": {
@@ -9,7 +9,7 @@
           "/root/six-lane-full-ab-20261006/source-cf442dae/.pixi/envs/bench/bin/python",
           "/root/six-lane-full-ab-20261006/source-cf442dae/tools/six_lane_ab_worker.py",
           "--recipe",
-          "/root/campaign-results/amd-expanded-reg-target-repair02/registration/queue-workers/32ff4d6baa4a82afb94f.json",
+          "/root/campaign-results/amd-expanded-reg-target-repair02/registration/queue-workers/c130d9fdd62e762ff9c9.json",
           "--arm",
           "A",
           "--phase",
@@ -227,7 +227,7 @@
           "/root/six-lane-full-ab-20261006/source-cf442dae/.pixi/envs/bench/bin/python",
           "/root/six-lane-full-ab-20261006/source-cf442dae/tools/six_lane_ab_worker.py",
           "--recipe",
-          "/root/campaign-results/amd-expanded-reg-target-repair02/registration/queue-workers/32ff4d6baa4a82afb94f.json",
+          "/root/campaign-results/amd-expanded-reg-target-repair02/registration/queue-workers/c130d9fdd62e762ff9c9.json",
           "--arm",
           "B",
           "--phase",
@@ -678,18 +678,18 @@
       ]
     },
     "blocked": [],
-    "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+    "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
     "dimensions": {
       "X": [
-        5250086,
-        11
+        2043304,
+        220
       ],
       "Xq": [
         500000,
-        11
+        220
       ],
       "y": [
-        5250086
+        2043304
       ],
       "yq": [
         500000
@@ -896,7 +896,7 @@
       "I.N.NI59"
     ],
     "intrinsic_caps": [],
-    "key": "32ff4d6baa4a82afb94f",
+    "key": "c130d9fdd62e762ff9c9",
     "master_selection": {
       "A": {
         "defines": [
@@ -3017,19 +3017,19 @@
     ],
     "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
     "timeout_seconds": 86400,
-    "workload_id": "expanded:pa-reg@dataset=taxi"
+    "workload_id": "expanded:pa-reg@dataset=istella"
   },
-  "started": 1791316346.3411334,
+  "started": 1791316446.2928083,
   "runs": [
     {
       "phase": "warmup",
       "arm": "A",
       "excluded": true,
       "returncode": 0,
-      "process_wall_seconds": 24.881853342056274,
-      "log": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-A.log",
-      "output": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-A.json",
-      "result_sha256": "494f7db2c357bca5182510777a8529e5b0481a5ae347d164dbb5d3cfb5bfd1bd",
+      "process_wall_seconds": 43.132938385009766,
+      "log": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/warmup-A.log",
+      "output": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/warmup-A.json",
+      "result_sha256": "0fc4d7a4779d0ade6d064d69f48e9bf63b290681c498446d19f3bf4fb7ac8140",
       "result": {
         "arm": "A",
         "compiler": [
@@ -3235,12 +3235,12 @@
           },
           "runtime": {}
         },
-        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
         "dataset_split": {
           "evaluation_rows": 500000,
           "fit": [
             0,
-            5250086
+            2043304
           ]
         },
         "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
@@ -3250,15 +3250,15 @@
         },
         "dimensions": {
           "X": [
-            5250086,
-            11
+            2043304,
+            220
           ],
           "Xq": [
             500000,
-            11
+            220
           ],
           "y": [
-            5250086
+            2043304
           ],
           "yq": [
             500000
@@ -3541,7 +3541,7 @@
           "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+        "output_sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
@@ -3558,7 +3558,7 @@
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+          "sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
           "status": "CAPTURED"
         },
         "phase": "warmup",
@@ -3594,14 +3594,14 @@
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+              "sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 0.0005317300001479452,
-              "fit_or_training_seconds": 11.696064763999857,
-              "inference_seconds": 0.0012307669999245263,
-              "repeated_seconds": 11.697828510999898
+              "consumed_output_seconds": 0.0005411899996943248,
+              "fit_or_training_seconds": 20.01594014500006,
+              "inference_seconds": 0.0102184950001174,
+              "repeated_seconds": 20.0267010499997
             }
           }
         ],
@@ -3613,7 +3613,7 @@
           "quota_source": null,
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-A.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/warmup-A.values.json",
         "runtime_reach": {
           "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
           "device": "gpu",
@@ -3738,8 +3738,8 @@
           "metrics": {
             "ours": {
               "finite": true,
-              "r2": 0.9003800254969431,
-              "rmse": 4.909474697616844
+              "r2": 0.3103594526778115,
+              "rmse": 0.6929575267364185
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -3755,15 +3755,15 @@
         },
         "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
         "timings": {
-          "cold_seconds": 12.340674301000035,
-          "consumed_output_seconds": 0.013929707999977836,
-          "fit_or_training_seconds": 11.878902033000031,
-          "full_operation_seconds": 12.340674301000035,
-          "inference_seconds": 0.0017568670000400743,
-          "preparation_seconds": 0.44608452299962664
+          "cold_seconds": 21.339512740999908,
+          "consumed_output_seconds": 0.013902216000133194,
+          "fit_or_training_seconds": 20.177731769000275,
+          "full_operation_seconds": 21.339512740999908,
+          "inference_seconds": 0.012814997999612388,
+          "preparation_seconds": 1.135062557999845
         },
         "vendor": "amd",
-        "workload_id": "expanded:pa-reg@dataset=taxi",
+        "workload_id": "expanded:pa-reg@dataset=istella",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -3773,7 +3773,7 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+      "output_sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
       "model_state": {
         "missing_state": [
           "reviewed complete typed fitted-state export"
@@ -3788,12 +3788,12 @@
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 12.340674301000035,
-        "consumed_output_seconds": 0.013929707999977836,
-        "fit_or_training_seconds": 11.878902033000031,
-        "full_operation_seconds": 12.340674301000035,
-        "inference_seconds": 0.0017568670000400743,
-        "preparation_seconds": 0.44608452299962664
+        "cold_seconds": 21.339512740999908,
+        "consumed_output_seconds": 0.013902216000133194,
+        "fit_or_training_seconds": 20.177731769000275,
+        "full_operation_seconds": 21.339512740999908,
+        "inference_seconds": 0.012814997999612388,
+        "preparation_seconds": 1.135062557999845
       },
       "model_identity_available": false
     },
@@ -3802,10 +3802,10 @@
       "arm": "B",
       "excluded": true,
       "returncode": 0,
-      "process_wall_seconds": 24.878111362457275,
-      "log": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-B.log",
-      "output": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-B.json",
-      "result_sha256": "00f3494efbdbef945c08a0c74f644d90fd341176ef5ac284862496acc3d54ce6",
+      "process_wall_seconds": 43.18292737007141,
+      "log": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/warmup-B.log",
+      "output": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/warmup-B.json",
+      "result_sha256": "a4eda8ef101aca3c28d131d6bde4c74d52e524f8e5d059217c098bf3770df902",
       "result": {
         "arm": "B",
         "compiler": [
@@ -3817,12 +3817,12 @@
           "environment": {},
           "runtime": {}
         },
-        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
         "dataset_split": {
           "evaluation_rows": 500000,
           "fit": [
             0,
-            5250086
+            2043304
           ]
         },
         "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
@@ -3832,15 +3832,15 @@
         },
         "dimensions": {
           "X": [
-            5250086,
-            11
+            2043304,
+            220
           ],
           "Xq": [
             500000,
-            11
+            220
           ],
           "y": [
-            5250086
+            2043304
           ],
           "yq": [
             500000
@@ -4123,7 +4123,7 @@
           "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+        "output_sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
@@ -4140,7 +4140,7 @@
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+          "sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
           "status": "CAPTURED"
         },
         "phase": "warmup",
@@ -4176,14 +4176,14 @@
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+              "sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 0.0005046609999226348,
-              "fit_or_training_seconds": 11.70806224800026,
-              "inference_seconds": 0.0011786879999817756,
-              "repeated_seconds": 11.709746616999837
+              "consumed_output_seconds": 0.0005169220003153896,
+              "fit_or_training_seconds": 20.022940996000216,
+              "inference_seconds": 0.010211685999820475,
+              "repeated_seconds": 20.03367074400012
             }
           }
         ],
@@ -4195,7 +4195,7 @@
           "quota_source": null,
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-B.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/warmup-B.values.json",
         "runtime_reach": {
           "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
           "device": "gpu",
@@ -4320,8 +4320,8 @@
           "metrics": {
             "ours": {
               "finite": true,
-              "r2": 0.9003800254969431,
-              "rmse": 4.909474697616844
+              "r2": 0.3103594526778115,
+              "rmse": 0.6929575267364185
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -4337,15 +4337,15 @@
         },
         "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
         "timings": {
-          "cold_seconds": 12.32970148100003,
-          "consumed_output_seconds": 0.013760553999873082,
-          "fit_or_training_seconds": 11.871367033000297,
-          "full_operation_seconds": 12.32970148100003,
-          "inference_seconds": 0.0017148980000456504,
-          "preparation_seconds": 0.44285765599988736
+          "cold_seconds": 21.354999274999955,
+          "consumed_output_seconds": 0.013595604999864008,
+          "fit_or_training_seconds": 20.203545098000177,
+          "full_operation_seconds": 21.354999274999955,
+          "inference_seconds": 0.013117114000124275,
+          "preparation_seconds": 1.1247404579999056
         },
         "vendor": "amd",
-        "workload_id": "expanded:pa-reg@dataset=taxi",
+        "workload_id": "expanded:pa-reg@dataset=istella",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -4355,7 +4355,7 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+      "output_sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
       "model_state": {
         "missing_state": [
           "reviewed complete typed fitted-state export"
@@ -4370,12 +4370,12 @@
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 12.32970148100003,
-        "consumed_output_seconds": 0.013760553999873082,
-        "fit_or_training_seconds": 11.871367033000297,
-        "full_operation_seconds": 12.32970148100003,
-        "inference_seconds": 0.0017148980000456504,
-        "preparation_seconds": 0.44285765599988736
+        "cold_seconds": 21.354999274999955,
+        "consumed_output_seconds": 0.013595604999864008,
+        "fit_or_training_seconds": 20.203545098000177,
+        "full_operation_seconds": 21.354999274999955,
+        "inference_seconds": 0.013117114000124275,
+        "preparation_seconds": 1.1247404579999056
       },
       "model_identity_available": false
     },
@@ -4384,10 +4384,10 @@
       "arm": "A",
       "excluded": false,
       "returncode": 0,
-      "process_wall_seconds": 24.878326177597046,
-      "log": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-A.log",
-      "output": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-A.json",
-      "result_sha256": "73fffc1c985f59eceff549be7af8693b7bf8d338b5eae7970bb1bf38e6f449f6",
+      "process_wall_seconds": 43.18272352218628,
+      "log": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/scored-A.log",
+      "output": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/scored-A.json",
+      "result_sha256": "4761159886bc735265d59d23b308e5a209f6abdbd1b36b19a6c5a5db2a7ea5b3",
       "result": {
         "arm": "A",
         "compiler": [
@@ -4593,12 +4593,12 @@
           },
           "runtime": {}
         },
-        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
         "dataset_split": {
           "evaluation_rows": 500000,
           "fit": [
             0,
-            5250086
+            2043304
           ]
         },
         "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
@@ -4608,15 +4608,15 @@
         },
         "dimensions": {
           "X": [
-            5250086,
-            11
+            2043304,
+            220
           ],
           "Xq": [
             500000,
-            11
+            220
           ],
           "y": [
-            5250086
+            2043304
           ],
           "yq": [
             500000
@@ -4899,7 +4899,7 @@
           "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+        "output_sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
@@ -4916,7 +4916,7 @@
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+          "sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
           "status": "CAPTURED"
         },
         "phase": "scored",
@@ -4952,14 +4952,14 @@
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+              "sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 0.0005096899999443849,
-              "fit_or_training_seconds": 11.700543480000306,
-              "inference_seconds": 0.0012652369996430934,
-              "repeated_seconds": 11.702319566999904
+              "consumed_output_seconds": 0.0005189610001252731,
+              "fit_or_training_seconds": 20.01758959400013,
+              "inference_seconds": 0.010229208000055223,
+              "repeated_seconds": 20.028338962999896
             }
           }
         ],
@@ -4971,7 +4971,7 @@
           "quota_source": null,
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-A.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/scored-A.values.json",
         "runtime_reach": {
           "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
           "device": "gpu",
@@ -5096,8 +5096,8 @@
           "metrics": {
             "ours": {
               "finite": true,
-              "r2": 0.9003800254969431,
-              "rmse": 4.909474697616844
+              "r2": 0.3103594526778115,
+              "rmse": 0.6929575267364185
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -5113,15 +5113,15 @@
         },
         "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
         "timings": {
-          "cold_seconds": 12.332727795999745,
-          "consumed_output_seconds": 0.01359250899986364,
-          "fit_or_training_seconds": 11.877766784999949,
-          "full_operation_seconds": 12.332727795999745,
-          "inference_seconds": 0.001880405000065366,
-          "preparation_seconds": 0.4394870460000675
+          "cold_seconds": 21.363395588999992,
+          "consumed_output_seconds": 0.01446582100015803,
+          "fit_or_training_seconds": 20.20659542200019,
+          "full_operation_seconds": 21.363395588999992,
+          "inference_seconds": 0.01299000899962266,
+          "preparation_seconds": 1.129343105999851
         },
         "vendor": "amd",
-        "workload_id": "expanded:pa-reg@dataset=taxi",
+        "workload_id": "expanded:pa-reg@dataset=istella",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -5131,7 +5131,7 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+      "output_sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
       "model_state": {
         "missing_state": [
           "reviewed complete typed fitted-state export"
@@ -5146,12 +5146,12 @@
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 12.332727795999745,
-        "consumed_output_seconds": 0.01359250899986364,
-        "fit_or_training_seconds": 11.877766784999949,
-        "full_operation_seconds": 12.332727795999745,
-        "inference_seconds": 0.001880405000065366,
-        "preparation_seconds": 0.4394870460000675
+        "cold_seconds": 21.363395588999992,
+        "consumed_output_seconds": 0.01446582100015803,
+        "fit_or_training_seconds": 20.20659542200019,
+        "full_operation_seconds": 21.363395588999992,
+        "inference_seconds": 0.01299000899962266,
+        "preparation_seconds": 1.129343105999851
       },
       "model_identity_available": false
     },
@@ -5160,10 +5160,10 @@
       "arm": "B",
       "excluded": false,
       "returncode": 0,
-      "process_wall_seconds": 24.877931118011475,
-      "log": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-B.log",
-      "output": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-B.json",
-      "result_sha256": "2cff5d7e5fb37c0da738d669f653f9db2fa51a072ba25f552c480e6755c7fdd0",
+      "process_wall_seconds": 43.133564710617065,
+      "log": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/scored-B.log",
+      "output": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/scored-B.json",
+      "result_sha256": "134e240323f1a10a9bffebde45d1c63cc3a2fd527b8f6bf6e21b6b8cdeb93a1e",
       "result": {
         "arm": "B",
         "compiler": [
@@ -5175,12 +5175,12 @@
           "environment": {},
           "runtime": {}
         },
-        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
         "dataset_split": {
           "evaluation_rows": 500000,
           "fit": [
             0,
-            5250086
+            2043304
           ]
         },
         "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
@@ -5190,15 +5190,15 @@
         },
         "dimensions": {
           "X": [
-            5250086,
-            11
+            2043304,
+            220
           ],
           "Xq": [
             500000,
-            11
+            220
           ],
           "y": [
-            5250086
+            2043304
           ],
           "yq": [
             500000
@@ -5481,7 +5481,7 @@
           "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+        "output_sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
@@ -5498,7 +5498,7 @@
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+          "sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
           "status": "CAPTURED"
         },
         "phase": "scored",
@@ -5534,14 +5534,14 @@
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+              "sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 0.0005117109999446257,
-              "fit_or_training_seconds": 11.694108330999825,
-              "inference_seconds": 0.0012496360000113782,
-              "repeated_seconds": 11.695870688000014
+              "consumed_output_seconds": 0.000488840000343771,
+              "fit_or_training_seconds": 20.015477576000194,
+              "inference_seconds": 0.0102230999996209,
+              "repeated_seconds": 20.02619073599999
             }
           }
         ],
@@ -5553,7 +5553,7 @@
           "quota_source": null,
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-B.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/scored-B.values.json",
         "runtime_reach": {
           "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
           "device": "gpu",
@@ -5678,8 +5678,8 @@
           "metrics": {
             "ours": {
               "finite": true,
-              "r2": 0.9003800254969431,
-              "rmse": 4.909474697616844
+              "r2": 0.3103594526778115,
+              "rmse": 0.6929575267364185
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -5695,15 +5695,15 @@
         },
         "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
         "timings": {
-          "cold_seconds": 12.328429771000174,
-          "consumed_output_seconds": 0.013897255000301811,
-          "fit_or_training_seconds": 11.869069353000214,
-          "full_operation_seconds": 12.328429771000174,
-          "inference_seconds": 0.0017933669996637036,
-          "preparation_seconds": 0.44366903599984653
+          "cold_seconds": 21.337000587999682,
+          "consumed_output_seconds": 0.014194887999565253,
+          "fit_or_training_seconds": 20.188542193999638,
+          "full_operation_seconds": 21.337000587999682,
+          "inference_seconds": 0.015470587000436353,
+          "preparation_seconds": 1.1187919489998421
         },
         "vendor": "amd",
-        "workload_id": "expanded:pa-reg@dataset=taxi",
+        "workload_id": "expanded:pa-reg@dataset=istella",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -5713,7 +5713,7 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+      "output_sha256": "62597856c2e4d8c3ad0580d5fba665d8945b068c2716146424770e02eb2884f2",
       "model_state": {
         "missing_state": [
           "reviewed complete typed fitted-state export"
@@ -5728,21 +5728,21 @@
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 12.328429771000174,
-        "consumed_output_seconds": 0.013897255000301811,
-        "fit_or_training_seconds": 11.869069353000214,
-        "full_operation_seconds": 12.328429771000174,
-        "inference_seconds": 0.0017933669996637036,
-        "preparation_seconds": 0.44366903599984653
+        "cold_seconds": 21.337000587999682,
+        "consumed_output_seconds": 0.014194887999565253,
+        "fit_or_training_seconds": 20.188542193999638,
+        "full_operation_seconds": 21.337000587999682,
+        "inference_seconds": 0.015470587000436353,
+        "preparation_seconds": 1.1187919489998421
       },
       "model_identity_available": false
     }
   ],
-  "receipt": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/receipt.json",
+  "receipt": "/root/campaign-results/measurements-expanded-reg/c130d9fdd62e762ff9c9/attempts/attempt-0001/receipt.json",
   "previous_receipt": null,
   "warmup_scope": "separate_process",
   "steady_state_claim": false,
-  "finished": 1791316446.2411575,
+  "finished": 1791316619.3065596,
   "status": "MEASURED_FULL",
   "model_identity_available": false
 }

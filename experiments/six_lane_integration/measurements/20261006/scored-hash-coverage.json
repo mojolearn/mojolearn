@@ -1,0 +1,3510 @@
+{
+  "created_at": "2026-10-06T19:56:01.412124+00:00",
+  "source": "experiments/six_lane_integration/measurements/20261006/retained-pairs.json",
+  "source_sha256": "927624bd70008aa6fd5acdc357e7e6ad3f4e7dc2aa30620b04af15e00d0c9db4",
+  "scope": "Metadata audit only. No model rerun. Declared complete capture is not cross-vendor identity admission or proof of byte retention.",
+  "summary": {
+    "apple": {
+      "retained_attempts": 89,
+      "completed_pairs": 86,
+      "scored_arms": 172,
+      "scored_output_hashes": 172,
+      "incomplete_model_states": 172,
+      "MEASUREMENT_FAILED": 3
+    },
+    "nvidia": {
+      "retained_attempts": 93,
+      "MEASUREMENT_FAILED": 2,
+      "completed_pairs": 91,
+      "scored_arms": 182,
+      "scored_output_hashes": 182,
+      "incomplete_model_states": 182
+    },
+    "amd": {
+      "retained_attempts": 22,
+      "MEASUREMENT_FAILED": 1,
+      "completed_pairs": 20,
+      "scored_arms": 40,
+      "scored_output_hashes": 40,
+      "declared_complete_model_states": 8,
+      "incomplete_model_states": 32,
+      "IN_PROGRESS": 1
+    }
+  },
+  "incomplete_model_states": [
+    {
+      "vendor": "apple",
+      "workload": "classical/ols@dataset=taxi",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/440956ba5f3a721465b8/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/ols@dataset=taxi",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/440956ba5f3a721465b8/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/ols@dataset=istella",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/4a650353219f94bd483f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/ols@dataset=istella",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/4a650353219f94bd483f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/pca@dataset=taxi",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/75455971e66712016083/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/pca@dataset=taxi",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/75455971e66712016083/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/pca@dataset=istella",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/918eace39f801d37fc21/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/pca@dataset=istella",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/918eace39f801d37fc21/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/kmeans@dataset=taxi",
+      "source_sha": "51a3eb11bd99b921e775fa5fc6f6dbedca125382",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/449522fb6bd97f700c04/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/kmeans@dataset=taxi",
+      "source_sha": "51a3eb11bd99b921e775fa5fc6f6dbedca125382",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/449522fb6bd97f700c04/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/kmeans@dataset=istella",
+      "source_sha": "51a3eb11bd99b921e775fa5fc6f6dbedca125382",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical/kmeans@dataset=istella",
+      "source_sha": "51a3eb11bd99b921e775fa5fc6f6dbedca125382",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/resample@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/resample@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/resample@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/661a766183dd2fb07d65/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/resample@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/661a766183dd2fb07d65/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/linearsvr@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/05207b357bcbe067ca6a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/linearsvr@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/05207b357bcbe067ca6a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/ridge@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/6d77306d88d72aab7b44/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/ridge@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/6d77306d88d72aab7b44/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/linearsvr@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/71dfc119e59c074352bb/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/linearsvr@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/71dfc119e59c074352bb/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/ridge@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/94c802682d07720f1572/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/ridge@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/94c802682d07720f1572/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/gmm@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/d4f24411b4f604c84997/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/gmm@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/d4f24411b4f604c84997/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/bayesian-ridge@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/11f34b0bacc6a216cbf5/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/bayesian-ridge@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/11f34b0bacc6a216cbf5/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/bayesian-ridge@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/121d2bf7022b542e4d6e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/bayesian-ridge@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/121d2bf7022b542e4d6e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lars@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/1ffab8882758257c9f23/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lars@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/1ffab8882758257c9f23/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-reg@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/22c62826ae044e079978/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-reg@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/22c62826ae044e079978/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lasso-lars@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/3a40940bae1961555f78/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lasso-lars@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/3a40940bae1961555f78/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lasso-cv@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/3cfd7d59ee9c8efa1497/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lasso-cv@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/3cfd7d59ee9c8efa1497/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/huber@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/huber@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pa-reg@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/6fcf310a716926c2d853/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pa-reg@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/6fcf310a716926c2d853/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lasso-lars@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/791dbcdb69bd137c8ef4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lasso-lars@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/791dbcdb69bd137c8ef4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/ridge-cv@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/805874e87463199882f2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/ridge-cv@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/805874e87463199882f2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lars@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/980247052f23e672228d/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lars@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/980247052f23e672228d/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/enet-cv@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/9f64ff019913cdb9b802/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/enet-cv@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/9f64ff019913cdb9b802/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/enet-cv@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/b1e39171e9fbf74e3e34/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/enet-cv@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/b1e39171e9fbf74e3e34/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/ridge-cv@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/ba6202e41915aa8b651c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/ridge-cv@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/ba6202e41915aa8b651c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-reg@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d3adb34325456bfba29c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-reg@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d3adb34325456bfba29c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pa-reg@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d74a68acdb33bdd77426/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pa-reg@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/d74a68acdb33bdd77426/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/huber@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/f0c4179bfa4fda6936f2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/huber@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/f0c4179bfa4fda6936f2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lasso-cv@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/f2b21063131028aae994/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lasso-cv@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/f2b21063131028aae994/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/gmm@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--gmm-istella-full--runs/e54f3cfdf88e2e305a71/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/gmm@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--gmm-istella-full--runs/e54f3cfdf88e2e305a71/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qn-reg@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/177e591a0085ff705250/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qn-reg@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/177e591a0085ff705250/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pls@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/1f0fc8e14b88c7e0588c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pls@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/1f0fc8e14b88c7e0588c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pls@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/258012ade2a00a9645a9/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pls@dataset=taxi",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/258012ade2a00a9645a9/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qn-reg@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/e93854e1cf11c7c7adfb/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qn-reg@dataset=istella",
+      "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/e93854e1cf11c7c7adfb/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/randomized-svd@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--tsvd-full-v1--runs/aad81edca8ccf47b9ecc/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/randomized-svd@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--tsvd-full-v1--runs/aad81edca8ccf47b9ecc/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/randomized-svd@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--tsvd-full-v1--runs/c8188af9b06dceb11c17/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/randomized-svd@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--tsvd-full-v1--runs/c8188af9b06dceb11c17/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-f-regression@dataset=taxi",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--selectors-full--runs/3bb7fcd8cc23a07afee7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-f-regression@dataset=taxi",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--selectors-full--runs/3bb7fcd8cc23a07afee7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-r-regression@dataset=istella",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--selectors-full--runs/ab68cf756738987139b1/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-r-regression@dataset=istella",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--selectors-full--runs/ab68cf756738987139b1/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-r-regression@dataset=taxi",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--selectors-full--runs/b9e816c552496edb13ef/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-r-regression@dataset=taxi",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--selectors-full--runs/b9e816c552496edb13ef/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-f-regression@dataset=istella",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--selectors-full--runs/bceac841eda6c1e6cc53/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-f-regression@dataset=istella",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--selectors-full--runs/bceac841eda6c1e6cc53/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/power-transformer@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/0f6d07d5f7a9fa8e86ec/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/power-transformer@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/0f6d07d5f7a9fa8e86ec/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/simple-imputer@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/10caf828bd0b75b5e3ca/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/simple-imputer@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/10caf828bd0b75b5e3ca/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/ridge-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/186156f500974335532d/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/ridge-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/186156f500974335532d/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/nmf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/1e141f7a4b0c299d303b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/nmf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/1e141f7a4b0c299d303b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/21217534b9ec24fdec13/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/21217534b9ec24fdec13/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/ridge-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/2da7ce7cebbe7ae16fd0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/ridge-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/2da7ce7cebbe7ae16fd0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/factor-analysis@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/31a029c7a61734cee829/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/factor-analysis@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/31a029c7a61734cee829/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pls-canonical@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/366d7ef45f2e1ab38840/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pls-canonical@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/366d7ef45f2e1ab38840/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/cca@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/43f0120c502ae1170075/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/cca@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/43f0120c502ae1170075/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/power-transformer@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/50e1b5764b66cafe829d/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/power-transformer@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/50e1b5764b66cafe829d/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-ocsvm@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/5b496fffda8d73e5cc95/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-ocsvm@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/5b496fffda8d73e5cc95/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/maxabs-scaler@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/7012c5ed73f2ea3883ad/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/maxabs-scaler@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/7012c5ed73f2ea3883ad/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pa-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/706c6c218583c2556f05/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pa-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/706c6c218583c2556f05/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qda@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/83311ee493aec7159caa/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qda@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/83311ee493aec7159caa/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pa-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/871ec7c64114eeac953f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pa-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/871ec7c64114eeac953f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/factor-analysis@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/8aced037a81f1cc42846/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/factor-analysis@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/8aced037a81f1cc42846/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/maxabs-scaler@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/95058e058d6c35a7f5aa/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/maxabs-scaler@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/95058e058d6c35a7f5aa/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/nmf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/9c048f5b19f91cda3a34/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/nmf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/9c048f5b19f91cda3a34/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lda-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ac6458a148bfb4f9c011/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lda-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ac6458a148bfb4f9c011/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/categorical-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/acff99fbeb6c301c3fc0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/categorical-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/acff99fbeb6c301c3fc0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/minibatch-kmeans@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ad3d45e08cb8ab6c00e7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/minibatch-kmeans@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ad3d45e08cb8ab6c00e7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pls-canonical@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/b0667caada66668f51aa/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/pls-canonical@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/b0667caada66668f51aa/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/cca@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/b17b6e514c1006f88c5f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/cca@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/b17b6e514c1006f88c5f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/minibatch-kmeans@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ba1006a727002dda6a90/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/minibatch-kmeans@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ba1006a727002dda6a90/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/perceptron@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/bcdd603c81cc1f7814d2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/perceptron@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/bcdd603c81cc1f7814d2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/categorical-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/de43e5d216cb8ccb8197/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/categorical-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/de43e5d216cb8ccb8197/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/perceptron@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/df871bd8e0d9c37c890f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/perceptron@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/df871bd8e0d9c37c890f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lda-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/e9508d14d3370dfade6c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lda-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/e9508d14d3370dfade6c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qda@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fa0b1575c2b165e284aa/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qda@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fa0b1575c2b165e284aa/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fad0e0840b7714d0907f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fad0e0840b7714d0907f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/simple-imputer@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fbe0df53cb628d25849b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/simple-imputer@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fbe0df53cb628d25849b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-ocsvm@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fd25410fa324ee1d2da7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/sgd-ocsvm@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fd25410fa324ee1d2da7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/gaussian-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/0d1e6d8e4700016071f0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/gaussian-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/0d1e6d8e4700016071f0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/target-encoder@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/27ef5795de5e53b035e7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/target-encoder@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/27ef5795de5e53b035e7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-f-classif@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/6fc9ae71c2c1506ffb73/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-f-classif@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/6fc9ae71c2c1506ffb73/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/random-trees-embedding@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/786c65354ed40e98b838/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/random-trees-embedding@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/786c65354ed40e98b838/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/gaussian-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/93e940c30f835c0f74ce/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/gaussian-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/93e940c30f835c0f74ce/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/random-trees-embedding@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/b18d2fcc10233c33faf1/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/random-trees-embedding@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/b18d2fcc10233c33faf1/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/target-encoder@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/be8c92995859ff28b0ea/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/target-encoder@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/be8c92995859ff28b0ea/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-f-classif@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/d1c0ff06e93ce2c5d6e4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/select-f-classif@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/d1c0ff06e93ce2c5d6e4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qr@dataset=istella",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/2268b1fe4abee7294d5e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qr@dataset=istella",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/2268b1fe4abee7294d5e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qr@dataset=taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qr@dataset=taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/svd@dataset=istella",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/92b2b8e22831f6a2b014/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/svd@dataset=istella",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/92b2b8e22831f6a2b014/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/svd@dataset=taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/cd159d14eb49f9042c45/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/svd@dataset=taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/cd159d14eb49f9042c45/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:elasticnet@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/14941dbe10b9bd78a1e4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:elasticnet@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/14941dbe10b9bd78a1e4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:lasso@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1b07971bfe465c3ca93f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:lasso@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1b07971bfe465c3ca93f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:lasso@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1e17ae43f1c2de4a7171/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:lasso@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1e17ae43f1c2de4a7171/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:ridge@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/4238c569b4eada2d0199/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:ridge@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/4238c569b4eada2d0199/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:linearsvr@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/49c28f55539ef700a59f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:linearsvr@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/49c28f55539ef700a59f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:linearsvr@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/55b2b5ab6491c0d7e9fe/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:linearsvr@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/55b2b5ab6491c0d7e9fe/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:elasticnet@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/71d06cebb7470b76364a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:elasticnet@dataset=istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/71d06cebb7470b76364a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:ridge@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/80deb286d318651dcdf8/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:ridge@dataset=taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/80deb286d318651dcdf8/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:ridge-cv@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/02c09435593c9525da9b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:ridge-cv@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/02c09435593c9525da9b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:poisson@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/0898a3822c64a6e4b5f5/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:poisson@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/0898a3822c64a6e4b5f5/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gamma@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/165cf7faa6706b7ec7e7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gamma@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/165cf7faa6706b7ec7e7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:ridge-cv@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/232a328ed5fdd06e4c08/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:ridge-cv@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/232a328ed5fdd06e4c08/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:enet-cv@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:enet-cv@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:enet-cv@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3dd9972e3d0f5ac10a3b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:enet-cv@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3dd9972e3d0f5ac10a3b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pa-reg@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/4f3241f1e19ae885bc04/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pa-reg@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/4f3241f1e19ae885bc04/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:tweedie@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c653b5ce77f0c5b421f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:tweedie@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c653b5ce77f0c5b421f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-reg@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c9e1357590bfdcd9481/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-reg@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5c9e1357590bfdcd9481/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-reg@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5ebcebb03580bebc2e0b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-reg@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/5ebcebb03580bebc2e0b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pa-reg@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/7362b2683eb55fce4826/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pa-reg@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/7362b2683eb55fce4826/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gamma@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/8b94af90079b45be7f51/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gamma@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/8b94af90079b45be7f51/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:tweedie@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/8dc79988b03268bfe3f9/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:tweedie@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/8dc79988b03268bfe3f9/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:lasso-cv@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:lasso-cv@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:bayesian-ridge@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/9a4596da96b758f8bfcc/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:bayesian-ridge@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/9a4596da96b758f8bfcc/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:bayesian-ridge@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/bb87a95b60730a62b9b0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:bayesian-ridge@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/bb87a95b60730a62b9b0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:poisson@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/f3338c86505a1c49367a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:poisson@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/f3338c86505a1c49367a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:lasso-cv@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/ffcd41dde6ea522c48e3/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:lasso-cv@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/ffcd41dde6ea522c48e3/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:gmm@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-gmm-istella/f579c55ac28cfd6fb99a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:gmm@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-gmm-istella/f579c55ac28cfd6fb99a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pls@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/2f8b608f6ae23ccbef94/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pls@dataset=istella",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/2f8b608f6ae23ccbef94/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pls@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/53a58fdcb7a34a48e102/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pls@dataset=taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/53a58fdcb7a34a48e102/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:tsvd@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/23a6a15473a435c3d0bc/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:tsvd@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/23a6a15473a435c3d0bc/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:tsvd@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/7d663b8a073eb568e6c2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:tsvd@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1/7d663b8a073eb568e6c2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/2e86e210874fc70e8089/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/2e86e210874fc70e8089/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gaussian-rp@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/558553fad93edb103bb0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gaussian-rp@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/558553fad93edb103bb0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sparse-rp@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/74cf9f90c9322b0e8dfb/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sparse-rp@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/74cf9f90c9322b0e8dfb/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:fastica@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/7a4fa0ba4b22d86c69f6/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:fastica@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/7a4fa0ba4b22d86c69f6/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gaussian-rp@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/7bb70a7fa1aee4e6b601/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gaussian-rp@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/7bb70a7fa1aee4e6b601/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:incremental-pca@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/bc13a842a218b5d36548/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:incremental-pca@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/bc13a842a218b5d36548/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:fastica@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ce1bd77cb0829daa8a5f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:fastica@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ce1bd77cb0829daa8a5f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:randomized-svd@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/e5b2d774f15e52b0faac/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:randomized-svd@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/e5b2d774f15e52b0faac/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:randomized-svd@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ef64104419669a66a6c4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:randomized-svd@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-tsvd-full-v1-repair1/ef64104419669a66a6c4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:cross-val-score@dataset=taxi",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/3f0bb433239eba4eb84a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:cross-val-score@dataset=taxi",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/3f0bb433239eba4eb84a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:isotonic@dataset=taxi",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:isotonic@dataset=taxi",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:isotonic@dataset=istella",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/8098b815ba2f70d2d83e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:isotonic@dataset=istella",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/8098b815ba2f70d2d83e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:cross-val-score@dataset=istella",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/ac705e553ce95e6d7c85/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:cross-val-score@dataset=istella",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-isotonic-cv/ac705e553ce95e6d7c85/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:multinomial-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:multinomial-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/1a2fd8fe185bb3f4831a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/1a2fd8fe185bb3f4831a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:cca@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/1e60b30fd5d06709dbd8/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:cca@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/1e60b30fd5d06709dbd8/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:nmf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/203265618a2ec3b9cf54/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:nmf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/203265618a2ec3b9cf54/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:nmf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/28a95c96e40d533552b6/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:nmf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/28a95c96e40d533552b6/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:factor-analysis@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/2987d88e0b208c1a309e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:factor-analysis@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/2987d88e0b208c1a309e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:qda@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/33aeb0153b3f880efede/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:qda@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/33aeb0153b3f880efede/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:standard-scaler@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/37e8dac2dc36700f0a79/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:standard-scaler@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/37e8dac2dc36700f0a79/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:target-encoder@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3c4e16a32a0bde28c8b2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:target-encoder@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3c4e16a32a0bde28c8b2/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pls-canonical@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3fb9a1d72f63cad550da/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pls-canonical@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3fb9a1d72f63cad550da/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:perceptron@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/427f089dccc31312df6e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:perceptron@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/427f089dccc31312df6e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:multinomial-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/544180a6a68f814041d1/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:multinomial-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/544180a6a68f814041d1/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:perceptron@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/56ec902fd5742bb6a8d4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:perceptron@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/56ec902fd5742bb6a8d4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:target-encoder@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/6ff694323765b5e01044/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:target-encoder@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/6ff694323765b5e01044/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-ocsvm@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7190c2762992d986a679/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-ocsvm@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7190c2762992d986a679/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:categorical-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/72433aef2997b99228ca/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:categorical-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/72433aef2997b99228ca/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:ridge-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/744c225f65f592f226eb/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:ridge-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/744c225f65f592f226eb/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:complement-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7eea2881505888665bbc/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:complement-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7eea2881505888665bbc/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:minibatch-kmeans@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7f2d85c194475302e867/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:minibatch-kmeans@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/7f2d85c194475302e867/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:minibatch-kmeans@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/823d3c6f2b84e29dc172/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:minibatch-kmeans@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/823d3c6f2b84e29dc172/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/82bb645731713ca0427f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/82bb645731713ca0427f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:cca@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/8627ad6c4094e07a060d/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:cca@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/8627ad6c4094e07a060d/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:ridge-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/913d0db7a411d7dfa5c7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:ridge-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/913d0db7a411d7dfa5c7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pa-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/9b7c81efc3ea984c5124/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pa-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/9b7c81efc3ea984c5124/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:maxabs-scaler@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/9e3654bc4994eb6559fd/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:maxabs-scaler@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/9e3654bc4994eb6559fd/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:complement-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/a130a015c2dd50764eec/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:complement-nb@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/a130a015c2dd50764eec/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:minmax-scaler@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/a3949cbfd5c89074b638/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:minmax-scaler@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/a3949cbfd5c89074b638/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/b151644ffaf019e1d46b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/b151644ffaf019e1d46b/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pls-canonical@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/b30ff22e3a212cfdfc6f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pls-canonical@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/b30ff22e3a212cfdfc6f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:qda@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/bd96f6301d2a48cd4d44/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:qda@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/bd96f6301d2a48cd4d44/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pa-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/bdb6d74ec2df7f0f981a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:pa-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/bdb6d74ec2df7f0f981a/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:categorical-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/c366ae5c82e1fb3858ad/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:categorical-nb@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/c366ae5c82e1fb3858ad/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:maxabs-scaler@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/d5201c24647176641677/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:maxabs-scaler@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/d5201c24647176641677/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/e45284c67428eb18d1e8/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/e45284c67428eb18d1e8/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:factor-analysis@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/ea67f7807d5f024ee41c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:factor-analysis@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/ea67f7807d5f024ee41c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:standard-scaler@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f032fb902df53bb60773/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:standard-scaler@dataset=istella@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f032fb902df53bb60773/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-ocsvm@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f1fd154b7e7101ee1bc0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:sgd-ocsvm@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f1fd154b7e7101ee1bc0/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:minmax-scaler@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f6f713795d0ce17722d7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:minmax-scaler@dataset=taxi@input=classification-full-v1",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f6f713795d0ce17722d7/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "classical:ols@dataset=istella",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/6950ad15bec5c24b3768/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "classical:ols@dataset=istella",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/6950ad15bec5c24b3768/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "classical:ols@dataset=taxi",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/d7530cd1a38627b906b5/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "classical:ols@dataset=taxi",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/d7530cd1a38627b906b5/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/5e768b8bdd530ddd41d4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/5e768b8bdd530ddd41d4/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:randomized-svd@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/6528f2c1c2754988aeb5/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:randomized-svd@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/6528f2c1c2754988aeb5/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "more:tsvd@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/74b5978a5d91ef8fb4e6/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "more:tsvd@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/74b5978a5d91ef8fb4e6/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:fastica@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/8abfd9642dfcb07cca52/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:fastica@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/8abfd9642dfcb07cca52/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/9046a46366afb52bfc7d/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/9046a46366afb52bfc7d/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:fastica@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/b02c17db845dca5b6644/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:fastica@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/b02c17db845dca5b6644/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:randomized-svd@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/d279bcd5524acb17d5df/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:randomized-svd@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Runner exposes no public model owner",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/d279bcd5524acb17d5df/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:incremental-pca@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/da2f62caeddd521c6dc8/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:incremental-pca@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/da2f62caeddd521c6dc8/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:gaussian-rp@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/e5c9cea3a0170db0eb8f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:gaussian-rp@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/e5c9cea3a0170db0eb8f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "more:tsvd@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/ed1bec1b201a6ebca708/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "more:tsvd@dataset=istella@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/ed1bec1b201a6ebca708/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:gaussian-rp@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/ef9be537e4b11a951b3f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:gaussian-rp@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/ef9be537e4b11a951b3f/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:sparse-rp@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/f37d091aaee41a06760c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:sparse-rp@dataset=taxi@input=tsvd-full-v1",
+      "source_sha": "9ef261bc214073b0de0d4c64bf40f608f0b024f2",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/f37d091aaee41a06760c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:sgd-reg@dataset=istella",
+      "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/e216b15b54d86dd00567/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:sgd-reg@dataset=istella",
+      "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/e216b15b54d86dd00567/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:sgd-reg@dataset=taxi",
+      "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/eec39beef6127fe89824/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "amd",
+      "workload": "expanded:sgd-reg@dataset=taxi",
+      "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "Public export is not a reviewed complete fitted-state contract",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/eec39beef6127fe89824/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:ols@dataset=taxi",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/201c5234acc7b0ac4689/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:ols@dataset=taxi",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/201c5234acc7b0ac4689/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:ols@dataset=istella",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/5df5c5720c0d6d872c16/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:ols@dataset=istella",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/5df5c5720c0d6d872c16/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:kmeans@dataset=istella",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/8af58db47601e372485e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:kmeans@dataset=istella",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/8af58db47601e372485e/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:pca@dataset=istella",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/aaee5fbb8a39edad255c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:pca@dataset=istella",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/aaee5fbb8a39edad255c/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:pca@dataset=taxi",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/d93173a97b8d0e0dd273/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:pca@dataset=taxi",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/d93173a97b8d0e0dd273/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:kmeans@dataset=taxi",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "A",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/fb6aa398a4fe2f787945/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "classical:kmeans@dataset=taxi",
+      "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+      "arm": "B",
+      "status": "UNAVAILABLE",
+      "reason": "No typed complete public state_dict capture; retained partial export is separate",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/fb6aa398a4fe2f787945/attempt-0001/receipt.json"
+    }
+  ]
+}

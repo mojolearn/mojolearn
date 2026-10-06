@@ -6,7 +6,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | Candidate | Mode | Measurement status | Captured pairs |
 |---|---|---|---:|
 | AF.X.complete-proposed | fast | FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED | 86 |
-| I.X.complete-proposed | identical | FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION, QUALITY_FAILED | 111 |
+| I.X.complete-proposed | identical | FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION, QUALITY_FAILED | 114 |
 
 ## Captured evidence
 
@@ -209,8 +209,11 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 | I.X.complete-proposed | amd/amd-native-gfx942 | more:tsvd@dataset=istella@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | — | 2.8702 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/ed1bec1b201a6ebca708/attempt-0001/receipt.json |
 | I.X.complete-proposed | amd/amd-native-gfx942 | expanded:gaussian-rp@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | — | 0.9831 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/ef9be537e4b11a951b3f/attempt-0001/receipt.json |
 | I.X.complete-proposed | amd/amd-native-gfx942 | expanded:sparse-rp@dataset=taxi@input=tsvd-full-v1/attempt-0001 | full_workload | PENDING_ADMISSION | — | 0.9877 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-tsvd-full-v1/f37d091aaee41a06760c/attempt-0001/receipt.json |
-| I.X.complete-proposed | amd/amd-native-gfx942 | expanded:pa-reg@dataset=taxi/attempt-0001 | full_workload | IN_PROGRESS | — | — | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/32ff4d6baa4a82afb94f/attempt-0001/receipt.json |
+| I.X.complete-proposed | amd/amd-native-gfx942 | expanded:pa-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | 1.0003 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/32ff4d6baa4a82afb94f/attempt-0001/receipt.json |
+| I.X.complete-proposed | amd/amd-native-gfx942 | expanded:pa-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | 1.0012 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/c130d9fdd62e762ff9c9/attempt-0001/receipt.json |
+| I.X.complete-proposed | amd/amd-native-gfx942 | expanded:bayesian-ridge@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | 1.0107 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempt-0001/receipt.json |
 | I.X.complete-proposed | amd/amd-native-gfx942 | expanded:sgd-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | 0.9985 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/e216b15b54d86dd00567/attempt-0001/receipt.json |
+| I.X.complete-proposed | amd/amd-native-gfx942 | expanded:bayesian-ridge@dataset=istella/attempt-0001 | full_workload | IN_PROGRESS | — | — | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/e9ae4554feb91d89971f/attempt-0001/receipt.json |
 | I.X.complete-proposed | amd/amd-native-gfx942 | expanded:sgd-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | 0.9997 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/eec39beef6127fe89824/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | classical:ols@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | 0.9963 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/201c5234acc7b0ac4689/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | classical:ols@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | 1.1021 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/5df5c5720c0d6d872c16/attempt-0001/receipt.json |
@@ -225,12 +228,14 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 - These are combined-configuration full workloads, not completed individual constituent experiments.
 - Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.
 - One excluded warmup and one scored sample per arm. Original failed attempts are retained.
-- AMD GPU measurements use accepted artifacts as they become available; missing artifacts are built separately on the owned CPU builder. NVIDIA PTX still awaits compatible artifacts.
+- AMD GPU measurements use accepted retained artifacts. Latest owner instruction forbids further compilation; unavailable paired artifacts remain blocked. NVIDIA PTX still awaits compatible artifacts.
 - IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.
 - Scored output and partial/public-save model hashes are retained separately; partial hashes do not prove complete state identity.
 - Apple first four PCA/OLS pairs overlapped shared workspace storage data transfer; KMeans overlap unestablished. No quiet-storage or promotion claim.
 - Apple teardown preservation failed: the workspace was on the internal SSD, not retained EBS. Logs, timings, metrics and hash receipts survive; some raw array bytes remain unrecovered. See artifact-retention.json for exact recovery coverage and provenance. Original receipts are unchanged.
-- Races reuse accepted binaries without separate numerical verification reruns; the separately authorized AMD missing-artifact build is not a measurement. Full provider and worker logs remain under /Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006
+- Races reuse accepted binaries without separate numerical verification reruns. Earlier separately authorized AMD builds are historical artifact evidence, not measurements. Full provider and worker logs remain under /Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006
+- The AMD missing-artifact compiler was stopped under the latest owner instruction; see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready.
+- scored-hash-coverage.json is a dated, hash-bound metadata audit of captured scored outputs and model states. Complete output hashes do not establish complete fitted-model identity; missing model state remains pending.
 
 ## Recorded source decisions
 

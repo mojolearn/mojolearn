@@ -1,6 +1,6 @@
 {
   "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
-  "key": "32ff4d6baa4a82afb94f",
+  "key": "d3dc9419fea52dd9dc5a",
   "mode": "identical",
   "workload": {
     "arms": {
@@ -9,7 +9,7 @@
           "/root/six-lane-full-ab-20261006/source-cf442dae/.pixi/envs/bench/bin/python",
           "/root/six-lane-full-ab-20261006/source-cf442dae/tools/six_lane_ab_worker.py",
           "--recipe",
-          "/root/campaign-results/amd-expanded-reg-target-repair02/registration/queue-workers/32ff4d6baa4a82afb94f.json",
+          "/root/campaign-results/amd-expanded-reg-target-repair02/registration/queue-workers/d3dc9419fea52dd9dc5a.json",
           "--arm",
           "A",
           "--phase",
@@ -227,7 +227,7 @@
           "/root/six-lane-full-ab-20261006/source-cf442dae/.pixi/envs/bench/bin/python",
           "/root/six-lane-full-ab-20261006/source-cf442dae/tools/six_lane_ab_worker.py",
           "--recipe",
-          "/root/campaign-results/amd-expanded-reg-target-repair02/registration/queue-workers/32ff4d6baa4a82afb94f.json",
+          "/root/campaign-results/amd-expanded-reg-target-repair02/registration/queue-workers/d3dc9419fea52dd9dc5a.json",
           "--arm",
           "B",
           "--phase",
@@ -699,19 +699,16 @@
       "__record__": true,
       "library": "mojolearn",
       "params": {
-        "C": 1.0,
-        "average": false,
-        "batch_size": 256,
-        "early_stopping": false,
-        "epsilon": 0.1,
+        "alpha_1": 1e-06,
+        "alpha_2": 1e-06,
+        "alpha_init": null,
+        "compute_score": false,
         "fit_intercept": true,
-        "loss": "epsilon_insensitive",
-        "max_iter": 20,
-        "n_iter_no_change": 5,
-        "random_state": 7,
-        "shuffle": true,
-        "tol": null,
-        "validation_fraction": 0.1
+        "lambda_1": 1e-06,
+        "lambda_2": 1e-06,
+        "lambda_init": null,
+        "max_iter": 300,
+        "tol": 0.001
       },
       "source": "get_params"
     },
@@ -896,7 +893,7 @@
       "I.N.NI59"
     ],
     "intrinsic_caps": [],
-    "key": "32ff4d6baa4a82afb94f",
+    "key": "d3dc9419fea52dd9dc5a",
     "master_selection": {
       "A": {
         "defines": [
@@ -3017,19 +3014,19 @@
     ],
     "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
     "timeout_seconds": 86400,
-    "workload_id": "expanded:pa-reg@dataset=taxi"
+    "workload_id": "expanded:bayesian-ridge@dataset=taxi"
   },
-  "started": 1791316346.3411334,
+  "started": 1791316619.3560627,
   "runs": [
     {
       "phase": "warmup",
       "arm": "A",
       "excluded": true,
       "returncode": 0,
-      "process_wall_seconds": 24.881853342056274,
-      "log": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-A.log",
-      "output": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-A.json",
-      "result_sha256": "494f7db2c357bca5182510777a8529e5b0481a5ae347d164dbb5d3cfb5bfd1bd",
+      "process_wall_seconds": 4.272747278213501,
+      "log": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/warmup-A.log",
+      "output": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/warmup-A.json",
+      "result_sha256": "de1871fc9e6a7cafad1ea0ef70253812cd23a0801c784cd8fca97b70361820fc",
       "result": {
         "arm": "A",
         "compiler": [
@@ -3280,19 +3277,16 @@
           "__record__": true,
           "library": "mojolearn",
           "params": {
-            "C": 1.0,
-            "average": false,
-            "batch_size": 256,
-            "early_stopping": false,
-            "epsilon": 0.1,
+            "alpha_1": 1e-06,
+            "alpha_2": 1e-06,
+            "alpha_init": null,
+            "compute_score": false,
             "fit_intercept": true,
-            "loss": "epsilon_insensitive",
-            "max_iter": 20,
-            "n_iter_no_change": 5,
-            "random_state": 7,
-            "shuffle": true,
-            "tol": null,
-            "validation_fraction": 0.1
+            "lambda_1": 1e-06,
+            "lambda_2": 1e-06,
+            "lambda_init": null,
+            "max_iter": 300,
+            "tol": 0.001
           },
           "source": "get_params"
         },
@@ -3326,7 +3320,7 @@
           "cpu_count": 20,
           "machine": "x86_64",
           "native_readback": {
-            "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+            "config": "mojolearn.BayesianRidge(alpha_1=1e-06, alpha_2=1e-06, fit_intercept=True, lambda_1=1e-06, lambda_2=1e-06, max_iter=300, tol=0.001)",
             "device": "gpu",
             "input_home": "host",
             "library": "mojolearn",
@@ -3533,7 +3527,7 @@
             "reviewed complete typed fitted-state export"
           ],
           "partial_export": {
-            "class": "PassiveAggressiveRegressor",
+            "class": "BayesianRidge",
             "reason": "no public state_dict or save export",
             "schema": "mojolearn-benchmark-state-v1",
             "status": "unavailable"
@@ -3541,7 +3535,7 @@
           "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+        "output_sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
@@ -3558,7 +3552,7 @@
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+          "sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
           "status": "CAPTURED"
         },
         "phase": "warmup",
@@ -3570,7 +3564,7 @@
                 "reviewed complete typed fitted-state export"
               ],
               "partial_export": {
-                "class": "PassiveAggressiveRegressor",
+                "class": "BayesianRidge",
                 "reason": "no public state_dict or save export",
                 "schema": "mojolearn-benchmark-state-v1",
                 "status": "unavailable"
@@ -3594,14 +3588,14 @@
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+              "sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 0.0005317300001479452,
-              "fit_or_training_seconds": 11.696064763999857,
-              "inference_seconds": 0.0012307669999245263,
-              "repeated_seconds": 11.697828510999898
+              "consumed_output_seconds": 0.0005171409998183663,
+              "fit_or_training_seconds": 1.400937587000044,
+              "inference_seconds": 0.001230758000019705,
+              "repeated_seconds": 1.402686605999861
             }
           }
         ],
@@ -3613,9 +3607,9 @@
           "quota_source": null,
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-A.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/warmup-A.values.json",
         "runtime_reach": {
-          "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+          "config": "mojolearn.BayesianRidge(alpha_1=1e-06, alpha_2=1e-06, fit_intercept=True, lambda_1=1e-06, lambda_2=1e-06, max_iter=300, tol=0.001)",
           "device": "gpu",
           "input_home": "host",
           "library": "mojolearn",
@@ -3734,12 +3728,12 @@
         "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
         "status": "PASS",
         "task_quality": {
-          "gate_source": "tools/bench_board_algos.py:quality(pa-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "gate_source": "tools/bench_board_algos.py:quality(bayesian-ridge); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
           "metrics": {
             "ours": {
               "finite": true,
-              "r2": 0.9003800254969431,
-              "rmse": 4.909474697616844
+              "r2": 0.9089862046567663,
+              "rmse": 4.692620414036894
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -3755,15 +3749,15 @@
         },
         "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
         "timings": {
-          "cold_seconds": 12.340674301000035,
-          "consumed_output_seconds": 0.013929707999977836,
-          "fit_or_training_seconds": 11.878902033000031,
-          "full_operation_seconds": 12.340674301000035,
-          "inference_seconds": 0.0017568670000400743,
-          "preparation_seconds": 0.44608452299962664
+          "cold_seconds": 2.033065247000195,
+          "consumed_output_seconds": 0.013596320000033302,
+          "fit_or_training_seconds": 1.5663780959998803,
+          "full_operation_seconds": 2.033065247000195,
+          "inference_seconds": 0.001980236000235891,
+          "preparation_seconds": 0.45110957499991855
         },
         "vendor": "amd",
-        "workload_id": "expanded:pa-reg@dataset=taxi",
+        "workload_id": "expanded:bayesian-ridge@dataset=taxi",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -3773,13 +3767,13 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+      "output_sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
       "model_state": {
         "missing_state": [
           "reviewed complete typed fitted-state export"
         ],
         "partial_export": {
-          "class": "PassiveAggressiveRegressor",
+          "class": "BayesianRidge",
           "reason": "no public state_dict or save export",
           "schema": "mojolearn-benchmark-state-v1",
           "status": "unavailable"
@@ -3788,12 +3782,12 @@
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 12.340674301000035,
-        "consumed_output_seconds": 0.013929707999977836,
-        "fit_or_training_seconds": 11.878902033000031,
-        "full_operation_seconds": 12.340674301000035,
-        "inference_seconds": 0.0017568670000400743,
-        "preparation_seconds": 0.44608452299962664
+        "cold_seconds": 2.033065247000195,
+        "consumed_output_seconds": 0.013596320000033302,
+        "fit_or_training_seconds": 1.5663780959998803,
+        "full_operation_seconds": 2.033065247000195,
+        "inference_seconds": 0.001980236000235891,
+        "preparation_seconds": 0.45110957499991855
       },
       "model_identity_available": false
     },
@@ -3802,10 +3796,10 @@
       "arm": "B",
       "excluded": true,
       "returncode": 0,
-      "process_wall_seconds": 24.878111362457275,
-      "log": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-B.log",
-      "output": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-B.json",
-      "result_sha256": "00f3494efbdbef945c08a0c74f644d90fd341176ef5ac284862496acc3d54ce6",
+      "process_wall_seconds": 4.271842956542969,
+      "log": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/warmup-B.log",
+      "output": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/warmup-B.json",
+      "result_sha256": "e188e5e90f65db419fe7777b898a6f3ffbac2a3ddc725a947f5f13f21563ebe6",
       "result": {
         "arm": "B",
         "compiler": [
@@ -3862,19 +3856,16 @@
           "__record__": true,
           "library": "mojolearn",
           "params": {
-            "C": 1.0,
-            "average": false,
-            "batch_size": 256,
-            "early_stopping": false,
-            "epsilon": 0.1,
+            "alpha_1": 1e-06,
+            "alpha_2": 1e-06,
+            "alpha_init": null,
+            "compute_score": false,
             "fit_intercept": true,
-            "loss": "epsilon_insensitive",
-            "max_iter": 20,
-            "n_iter_no_change": 5,
-            "random_state": 7,
-            "shuffle": true,
-            "tol": null,
-            "validation_fraction": 0.1
+            "lambda_1": 1e-06,
+            "lambda_2": 1e-06,
+            "lambda_init": null,
+            "max_iter": 300,
+            "tol": 0.001
           },
           "source": "get_params"
         },
@@ -3908,7 +3899,7 @@
           "cpu_count": 20,
           "machine": "x86_64",
           "native_readback": {
-            "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+            "config": "mojolearn.BayesianRidge(alpha_1=1e-06, alpha_2=1e-06, fit_intercept=True, lambda_1=1e-06, lambda_2=1e-06, max_iter=300, tol=0.001)",
             "device": "gpu",
             "input_home": "host",
             "library": "mojolearn",
@@ -4115,7 +4106,7 @@
             "reviewed complete typed fitted-state export"
           ],
           "partial_export": {
-            "class": "PassiveAggressiveRegressor",
+            "class": "BayesianRidge",
             "reason": "no public state_dict or save export",
             "schema": "mojolearn-benchmark-state-v1",
             "status": "unavailable"
@@ -4123,7 +4114,7 @@
           "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+        "output_sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
@@ -4140,7 +4131,7 @@
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+          "sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
           "status": "CAPTURED"
         },
         "phase": "warmup",
@@ -4152,7 +4143,7 @@
                 "reviewed complete typed fitted-state export"
               ],
               "partial_export": {
-                "class": "PassiveAggressiveRegressor",
+                "class": "BayesianRidge",
                 "reason": "no public state_dict or save export",
                 "schema": "mojolearn-benchmark-state-v1",
                 "status": "unavailable"
@@ -4176,14 +4167,14 @@
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+              "sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 0.0005046609999226348,
-              "fit_or_training_seconds": 11.70806224800026,
-              "inference_seconds": 0.0011786879999817756,
-              "repeated_seconds": 11.709746616999837
+              "consumed_output_seconds": 0.0005278109997561842,
+              "fit_or_training_seconds": 1.3954167929996402,
+              "inference_seconds": 0.0012793180003427551,
+              "repeated_seconds": 1.3972250219999296
             }
           }
         ],
@@ -4195,9 +4186,9 @@
           "quota_source": null,
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/warmup-B.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/warmup-B.values.json",
         "runtime_reach": {
-          "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+          "config": "mojolearn.BayesianRidge(alpha_1=1e-06, alpha_2=1e-06, fit_intercept=True, lambda_1=1e-06, lambda_2=1e-06, max_iter=300, tol=0.001)",
           "device": "gpu",
           "input_home": "host",
           "library": "mojolearn",
@@ -4316,12 +4307,12 @@
         "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
         "status": "PASS",
         "task_quality": {
-          "gate_source": "tools/bench_board_algos.py:quality(pa-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "gate_source": "tools/bench_board_algos.py:quality(bayesian-ridge); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
           "metrics": {
             "ours": {
               "finite": true,
-              "r2": 0.9003800254969431,
-              "rmse": 4.909474697616844
+              "r2": 0.9089862046567663,
+              "rmse": 4.692620414036894
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -4337,15 +4328,15 @@
         },
         "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
         "timings": {
-          "cold_seconds": 12.32970148100003,
-          "consumed_output_seconds": 0.013760553999873082,
-          "fit_or_training_seconds": 11.871367033000297,
-          "full_operation_seconds": 12.32970148100003,
-          "inference_seconds": 0.0017148980000456504,
-          "preparation_seconds": 0.44285765599988736
+          "cold_seconds": 2.03596777499979,
+          "consumed_output_seconds": 0.013857724999979837,
+          "fit_or_training_seconds": 1.568286566000097,
+          "full_operation_seconds": 2.03596777499979,
+          "inference_seconds": 0.0019034379997719952,
+          "preparation_seconds": 0.4519189259999621
         },
         "vendor": "amd",
-        "workload_id": "expanded:pa-reg@dataset=taxi",
+        "workload_id": "expanded:bayesian-ridge@dataset=taxi",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -4355,13 +4346,13 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+      "output_sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
       "model_state": {
         "missing_state": [
           "reviewed complete typed fitted-state export"
         ],
         "partial_export": {
-          "class": "PassiveAggressiveRegressor",
+          "class": "BayesianRidge",
           "reason": "no public state_dict or save export",
           "schema": "mojolearn-benchmark-state-v1",
           "status": "unavailable"
@@ -4370,12 +4361,12 @@
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 12.32970148100003,
-        "consumed_output_seconds": 0.013760553999873082,
-        "fit_or_training_seconds": 11.871367033000297,
-        "full_operation_seconds": 12.32970148100003,
-        "inference_seconds": 0.0017148980000456504,
-        "preparation_seconds": 0.44285765599988736
+        "cold_seconds": 2.03596777499979,
+        "consumed_output_seconds": 0.013857724999979837,
+        "fit_or_training_seconds": 1.568286566000097,
+        "full_operation_seconds": 2.03596777499979,
+        "inference_seconds": 0.0019034379997719952,
+        "preparation_seconds": 0.4519189259999621
       },
       "model_identity_available": false
     },
@@ -4384,10 +4375,10 @@
       "arm": "A",
       "excluded": false,
       "returncode": 0,
-      "process_wall_seconds": 24.878326177597046,
-      "log": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-A.log",
-      "output": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-A.json",
-      "result_sha256": "73fffc1c985f59eceff549be7af8693b7bf8d338b5eae7970bb1bf38e6f449f6",
+      "process_wall_seconds": 4.27076268196106,
+      "log": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/scored-A.log",
+      "output": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/scored-A.json",
+      "result_sha256": "ee5c2bd428d0c444e21694ca67587270c330432f18b18d09de5e35757558f3a1",
       "result": {
         "arm": "A",
         "compiler": [
@@ -4638,19 +4629,16 @@
           "__record__": true,
           "library": "mojolearn",
           "params": {
-            "C": 1.0,
-            "average": false,
-            "batch_size": 256,
-            "early_stopping": false,
-            "epsilon": 0.1,
+            "alpha_1": 1e-06,
+            "alpha_2": 1e-06,
+            "alpha_init": null,
+            "compute_score": false,
             "fit_intercept": true,
-            "loss": "epsilon_insensitive",
-            "max_iter": 20,
-            "n_iter_no_change": 5,
-            "random_state": 7,
-            "shuffle": true,
-            "tol": null,
-            "validation_fraction": 0.1
+            "lambda_1": 1e-06,
+            "lambda_2": 1e-06,
+            "lambda_init": null,
+            "max_iter": 300,
+            "tol": 0.001
           },
           "source": "get_params"
         },
@@ -4684,7 +4672,7 @@
           "cpu_count": 20,
           "machine": "x86_64",
           "native_readback": {
-            "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+            "config": "mojolearn.BayesianRidge(alpha_1=1e-06, alpha_2=1e-06, fit_intercept=True, lambda_1=1e-06, lambda_2=1e-06, max_iter=300, tol=0.001)",
             "device": "gpu",
             "input_home": "host",
             "library": "mojolearn",
@@ -4891,7 +4879,7 @@
             "reviewed complete typed fitted-state export"
           ],
           "partial_export": {
-            "class": "PassiveAggressiveRegressor",
+            "class": "BayesianRidge",
             "reason": "no public state_dict or save export",
             "schema": "mojolearn-benchmark-state-v1",
             "status": "unavailable"
@@ -4899,7 +4887,7 @@
           "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+        "output_sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
@@ -4916,7 +4904,7 @@
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+          "sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
           "status": "CAPTURED"
         },
         "phase": "scored",
@@ -4928,7 +4916,7 @@
                 "reviewed complete typed fitted-state export"
               ],
               "partial_export": {
-                "class": "PassiveAggressiveRegressor",
+                "class": "BayesianRidge",
                 "reason": "no public state_dict or save export",
                 "schema": "mojolearn-benchmark-state-v1",
                 "status": "unavailable"
@@ -4952,14 +4940,14 @@
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+              "sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 0.0005096899999443849,
-              "fit_or_training_seconds": 11.700543480000306,
-              "inference_seconds": 0.0012652369996430934,
-              "repeated_seconds": 11.702319566999904
+              "consumed_output_seconds": 0.000575838999793632,
+              "fit_or_training_seconds": 1.3922046010002305,
+              "inference_seconds": 0.0012526589998742566,
+              "repeated_seconds": 1.3940344279999408
             }
           }
         ],
@@ -4971,9 +4959,9 @@
           "quota_source": null,
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-A.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/scored-A.values.json",
         "runtime_reach": {
-          "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+          "config": "mojolearn.BayesianRidge(alpha_1=1e-06, alpha_2=1e-06, fit_intercept=True, lambda_1=1e-06, lambda_2=1e-06, max_iter=300, tol=0.001)",
           "device": "gpu",
           "input_home": "host",
           "library": "mojolearn",
@@ -5092,12 +5080,12 @@
         "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
         "status": "PASS",
         "task_quality": {
-          "gate_source": "tools/bench_board_algos.py:quality(pa-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "gate_source": "tools/bench_board_algos.py:quality(bayesian-ridge); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
           "metrics": {
             "ours": {
               "finite": true,
-              "r2": 0.9003800254969431,
-              "rmse": 4.909474697616844
+              "r2": 0.9089862046567663,
+              "rmse": 4.692620414036894
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -5113,15 +5101,15 @@
         },
         "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
         "timings": {
-          "cold_seconds": 12.332727795999745,
-          "consumed_output_seconds": 0.01359250899986364,
-          "fit_or_training_seconds": 11.877766784999949,
-          "full_operation_seconds": 12.332727795999745,
-          "inference_seconds": 0.001880405000065366,
-          "preparation_seconds": 0.4394870460000675
+          "cold_seconds": 2.0372530720001123,
+          "consumed_output_seconds": 0.01380485800018505,
+          "fit_or_training_seconds": 1.5637931760002175,
+          "full_operation_seconds": 2.0372530720001123,
+          "inference_seconds": 0.0019216669998058933,
+          "preparation_seconds": 0.45773201100018923
         },
         "vendor": "amd",
-        "workload_id": "expanded:pa-reg@dataset=taxi",
+        "workload_id": "expanded:bayesian-ridge@dataset=taxi",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -5131,13 +5119,13 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+      "output_sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
       "model_state": {
         "missing_state": [
           "reviewed complete typed fitted-state export"
         ],
         "partial_export": {
-          "class": "PassiveAggressiveRegressor",
+          "class": "BayesianRidge",
           "reason": "no public state_dict or save export",
           "schema": "mojolearn-benchmark-state-v1",
           "status": "unavailable"
@@ -5146,12 +5134,12 @@
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 12.332727795999745,
-        "consumed_output_seconds": 0.01359250899986364,
-        "fit_or_training_seconds": 11.877766784999949,
-        "full_operation_seconds": 12.332727795999745,
-        "inference_seconds": 0.001880405000065366,
-        "preparation_seconds": 0.4394870460000675
+        "cold_seconds": 2.0372530720001123,
+        "consumed_output_seconds": 0.01380485800018505,
+        "fit_or_training_seconds": 1.5637931760002175,
+        "full_operation_seconds": 2.0372530720001123,
+        "inference_seconds": 0.0019216669998058933,
+        "preparation_seconds": 0.45773201100018923
       },
       "model_identity_available": false
     },
@@ -5160,10 +5148,10 @@
       "arm": "B",
       "excluded": false,
       "returncode": 0,
-      "process_wall_seconds": 24.877931118011475,
-      "log": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-B.log",
-      "output": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-B.json",
-      "result_sha256": "2cff5d7e5fb37c0da738d669f653f9db2fa51a072ba25f552c480e6755c7fdd0",
+      "process_wall_seconds": 4.273255348205566,
+      "log": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/scored-B.log",
+      "output": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/scored-B.json",
+      "result_sha256": "22f61e7121605ff7f1a32ba515141827c388c308f4df1353973037d2760cc1c1",
       "result": {
         "arm": "B",
         "compiler": [
@@ -5220,19 +5208,16 @@
           "__record__": true,
           "library": "mojolearn",
           "params": {
-            "C": 1.0,
-            "average": false,
-            "batch_size": 256,
-            "early_stopping": false,
-            "epsilon": 0.1,
+            "alpha_1": 1e-06,
+            "alpha_2": 1e-06,
+            "alpha_init": null,
+            "compute_score": false,
             "fit_intercept": true,
-            "loss": "epsilon_insensitive",
-            "max_iter": 20,
-            "n_iter_no_change": 5,
-            "random_state": 7,
-            "shuffle": true,
-            "tol": null,
-            "validation_fraction": 0.1
+            "lambda_1": 1e-06,
+            "lambda_2": 1e-06,
+            "lambda_init": null,
+            "max_iter": 300,
+            "tol": 0.001
           },
           "source": "get_params"
         },
@@ -5266,7 +5251,7 @@
           "cpu_count": 20,
           "machine": "x86_64",
           "native_readback": {
-            "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+            "config": "mojolearn.BayesianRidge(alpha_1=1e-06, alpha_2=1e-06, fit_intercept=True, lambda_1=1e-06, lambda_2=1e-06, max_iter=300, tol=0.001)",
             "device": "gpu",
             "input_home": "host",
             "library": "mojolearn",
@@ -5473,7 +5458,7 @@
             "reviewed complete typed fitted-state export"
           ],
           "partial_export": {
-            "class": "PassiveAggressiveRegressor",
+            "class": "BayesianRidge",
             "reason": "no public state_dict or save export",
             "schema": "mojolearn-benchmark-state-v1",
             "status": "unavailable"
@@ -5481,7 +5466,7 @@
           "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+        "output_sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
@@ -5498,7 +5483,7 @@
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+          "sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
           "status": "CAPTURED"
         },
         "phase": "scored",
@@ -5510,7 +5495,7 @@
                 "reviewed complete typed fitted-state export"
               ],
               "partial_export": {
-                "class": "PassiveAggressiveRegressor",
+                "class": "BayesianRidge",
                 "reason": "no public state_dict or save export",
                 "schema": "mojolearn-benchmark-state-v1",
                 "status": "unavailable"
@@ -5534,14 +5519,14 @@
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+              "sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 0.0005117109999446257,
-              "fit_or_training_seconds": 11.694108330999825,
-              "inference_seconds": 0.0012496360000113782,
-              "repeated_seconds": 11.695870688000014
+              "consumed_output_seconds": 0.0005380210000112129,
+              "fit_or_training_seconds": 1.3951353389998076,
+              "inference_seconds": 0.0012436480001269956,
+              "repeated_seconds": 1.3969180590001997
             }
           }
         ],
@@ -5553,9 +5538,9 @@
           "quota_source": null,
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/scored-B.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/scored-B.values.json",
         "runtime_reach": {
-          "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+          "config": "mojolearn.BayesianRidge(alpha_1=1e-06, alpha_2=1e-06, fit_intercept=True, lambda_1=1e-06, lambda_2=1e-06, max_iter=300, tol=0.001)",
           "device": "gpu",
           "input_home": "host",
           "library": "mojolearn",
@@ -5674,12 +5659,12 @@
         "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
         "status": "PASS",
         "task_quality": {
-          "gate_source": "tools/bench_board_algos.py:quality(pa-reg); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "gate_source": "tools/bench_board_algos.py:quality(bayesian-ridge); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
           "metrics": {
             "ours": {
               "finite": true,
-              "r2": 0.9003800254969431,
-              "rmse": 4.909474697616844
+              "r2": 0.9089862046567663,
+              "rmse": 4.692620414036894
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -5695,15 +5680,15 @@
         },
         "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
         "timings": {
-          "cold_seconds": 12.328429771000174,
-          "consumed_output_seconds": 0.013897255000301811,
-          "fit_or_training_seconds": 11.869069353000214,
-          "full_operation_seconds": 12.328429771000174,
-          "inference_seconds": 0.0017933669996637036,
-          "preparation_seconds": 0.44366903599984653
+          "cold_seconds": 2.015761969000323,
+          "consumed_output_seconds": 0.0143018580001808,
+          "fit_or_training_seconds": 1.55548849600018,
+          "full_operation_seconds": 2.015761969000323,
+          "inference_seconds": 0.0017865889999484352,
+          "preparation_seconds": 0.44418398600009823
         },
         "vendor": "amd",
-        "workload_id": "expanded:pa-reg@dataset=taxi",
+        "workload_id": "expanded:bayesian-ridge@dataset=taxi",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -5713,13 +5698,13 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "8fe7cc3678c475c3012317b04289142d1b0e4922cef20340adea84111569898a",
+      "output_sha256": "825ff6a931c5bd1c7ec332d5bf290f03e3c464daddd8294cbd65e41a8d97c7eb",
       "model_state": {
         "missing_state": [
           "reviewed complete typed fitted-state export"
         ],
         "partial_export": {
-          "class": "PassiveAggressiveRegressor",
+          "class": "BayesianRidge",
           "reason": "no public state_dict or save export",
           "schema": "mojolearn-benchmark-state-v1",
           "status": "unavailable"
@@ -5728,21 +5713,21 @@
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 12.328429771000174,
-        "consumed_output_seconds": 0.013897255000301811,
-        "fit_or_training_seconds": 11.869069353000214,
-        "full_operation_seconds": 12.328429771000174,
-        "inference_seconds": 0.0017933669996637036,
-        "preparation_seconds": 0.44366903599984653
+        "cold_seconds": 2.015761969000323,
+        "consumed_output_seconds": 0.0143018580001808,
+        "fit_or_training_seconds": 1.55548849600018,
+        "full_operation_seconds": 2.015761969000323,
+        "inference_seconds": 0.0017865889999484352,
+        "preparation_seconds": 0.44418398600009823
       },
       "model_identity_available": false
     }
   ],
-  "receipt": "/root/campaign-results/measurements-expanded-reg/32ff4d6baa4a82afb94f/attempts/attempt-0001/receipt.json",
+  "receipt": "/root/campaign-results/measurements-expanded-reg/d3dc9419fea52dd9dc5a/attempts/attempt-0001/receipt.json",
   "previous_receipt": null,
   "warmup_scope": "separate_process",
   "steady_state_claim": false,
-  "finished": 1791316446.2411575,
+  "finished": 1791316636.8221972,
   "status": "MEASURED_FULL",
   "model_identity_available": false
 }

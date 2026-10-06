@@ -7352,12 +7352,14 @@
     "These are combined-configuration full workloads, not completed individual constituent experiments.",
     "Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.",
     "One excluded warmup and one scored sample per arm. Original failed attempts are retained.",
-    "AMD GPU measurements use accepted artifacts as they become available; missing artifacts are built separately on the owned CPU builder. NVIDIA PTX still awaits compatible artifacts.",
+    "AMD GPU measurements use accepted retained artifacts. Latest owner instruction forbids further compilation; unavailable paired artifacts remain blocked. NVIDIA PTX still awaits compatible artifacts.",
     "IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.",
     "Scored output and partial/public-save model hashes are retained separately; partial hashes do not prove complete state identity.",
     "Apple first four PCA/OLS pairs overlapped shared workspace storage data transfer; KMeans overlap unestablished. No quiet-storage or promotion claim.",
     "Apple teardown preservation failed: the workspace was on the internal SSD, not retained EBS. Logs, timings, metrics and hash receipts survive; some raw array bytes remain unrecovered. See artifact-retention.json for exact recovery coverage and provenance. Original receipts are unchanged.",
-    "Races reuse accepted binaries without separate numerical verification reruns; the separately authorized AMD missing-artifact build is not a measurement. Full provider and worker logs remain under /Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006"
+    "Races reuse accepted binaries without separate numerical verification reruns. Earlier separately authorized AMD builds are historical artifact evidence, not measurements. Full provider and worker logs remain under /Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006",
+    "The AMD missing-artifact compiler was stopped under the latest owner instruction; see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready.",
+    "scored-hash-coverage.json is a dated, hash-bound metadata audit of captured scored outputs and model states. Complete output hashes do not establish complete fitted-model identity; missing model state remains pending."
   ],
   "decisions": [
     {
