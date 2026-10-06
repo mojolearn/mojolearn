@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "id": "I08",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "GPU DeviceContext fixture; host qualification is an independent owed gate, not this executable.",
+  "default_policy": "New candidates default off; existing promoted controls unchanged.",
+  "arms": [
+    {
+      "name": "incumbent",
+      "source": "experiments/performance_ideas/I08/check.mojo",
+      "defines": []
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I08/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_M2_RETAIN_GL=1"
+      ]
+    },
+    {
+      "name": "tiles_off",
+      "source": "experiments/performance_ideas/I08/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_M2_SSD_TILES_OFF=1"
+      ]
+    },
+    {
+      "name": "lower_off",
+      "source": "experiments/performance_ideas/I08/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_M2_CB_LOWER_OFF=1"
+      ]
+    },
+    {
+      "name": "legacy_both_off",
+      "source": "experiments/performance_ideas/I08/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_M2_SSD_TILES_OFF=1",
+        "MOJOLEARN_IDN_M2_CB_LOWER_OFF=1"
+      ]
+    }
+  ]
+}
