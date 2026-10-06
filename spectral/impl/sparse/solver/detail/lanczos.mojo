@@ -1,6 +1,3 @@
-from checks.numerics import identical_mul
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`raft/sparse/solver/detail/lanczos.cuh`: the thick-restart Lanczos
 eigensolver cuVS's spectral embedding calls, function for function.
 
@@ -155,6 +152,10 @@ the re-orthogonalization, which no fixture here produces; the clamp at
 `1e-6` makes it reachable for a graph whose residual is tiny but nonzero.
 ======================================================================
 """
+from checks.numerics import identical_mul
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import sum as _fl_warp_sum

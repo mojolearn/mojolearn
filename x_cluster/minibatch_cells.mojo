@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS, C37_PANEL_ROWS
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MiniBatchKMeans' center update as cells (lane/neural-pass133, 2026-10-02).
 
 `x_cluster/minibatch.mojo::minibatch_step`'s unit-weight `update_center_dense`
@@ -8,6 +5,10 @@ for one center (the host ops' loop) and for one (center, feature) word (the
 device kernel's thread), the same statements: wsum counts the center's rows
 in batch order; a center with rows gets `c * w`, then `+ x` for its rows in
 batch order, then `* (1 / (w + wsum))`; its count becomes `w + wsum`."""
+from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS, C37_PANEL_ROWS
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from checks.numerics import ftz, identical_div, identical_mul
 
 comptime FPtr = MutPointer[Float32, MutAnyOrigin]

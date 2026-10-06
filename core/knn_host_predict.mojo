@@ -1,7 +1,3 @@
-from core.classical_distance import direct_squared_distance, direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Brute-force k-NN inference on the host, for a box with no GPU (the knn
 host inference lane, 2026-09-14).
 
@@ -149,6 +145,11 @@ The restatement is a prediction until measured. tools/classical_host_gate.py
 (lanes knn, knn-clf, knn-reg) is the measurement, and the brief records
 what it has shown.
 """
+from core.classical_distance import direct_squared_distance, direct_distance_step
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.memory import bitcast
 from std.sys.compile import is_defined
 

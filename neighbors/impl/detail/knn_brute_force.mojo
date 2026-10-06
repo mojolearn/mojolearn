@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.shared_controls import C06_ROWS2, C06_ROWS4
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Brute-force k-nearest-neighbors: their DISPATCH, and their FALLBACK.
 
 Reference: `cuvs/src/neighbors/detail/knn_brute_force.cuh` (cuVS `94c2819`):
@@ -66,6 +63,10 @@ Their `DistanceEpilogue` template, the bitmap/bitset filters at `:229-256`,
 the sparse and non-expanded metrics, `haversine_knn`, and the multi-index
 merge (`knn_merge_parts`). See `neighbors/NOT_IMPLEMENTED.tsv`.
 """
+from experiments.classical_identical_ideas.shared_controls import C06_ROWS2, C06_ROWS4
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined

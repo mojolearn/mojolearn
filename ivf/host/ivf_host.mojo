@@ -1,8 +1,3 @@
-from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
 """IVF-FLAT's build and search on the host, for a box with no GPU
 (lane/cpu-training-embedding-ivf, 2026-09-15; the ivf and ivf-euclidean
 lanes of tools/identity_break.py).
@@ -78,6 +73,12 @@ The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the ivf and ivf-euclidean lanes is the
 measurement.
 """
+from core.classical_distance import direct_squared_distance
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
+
 from std.memory import bitcast
 from std.sys.compile import is_defined
 

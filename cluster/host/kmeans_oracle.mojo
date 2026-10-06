@@ -1,10 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS
-from core.classical_centroid import classical_centroid_cell
-from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
 """k-means TRAINING on the host, for a box with no GPU (workstream E batch 2,
 the kmeans lane, 2026-09-14).
 
@@ -155,6 +148,14 @@ of its own.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the kmeans lane is the measurement.
 """
+from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS
+from core.classical_centroid import classical_centroid_cell
+from core.classical_distance import direct_squared_distance
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
+
 from std.math import fma
 from std.math import ceil, log
 from std.memory import bitcast, stack_allocation

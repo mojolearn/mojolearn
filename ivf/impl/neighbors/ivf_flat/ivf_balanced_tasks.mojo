@@ -1,7 +1,3 @@
-from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS, C35_TASK_ROWS
-# SPDX-License-Identifier: Apache-2.0
 """I16 compact exact query/list chunks. Eight logical warp-width batches
 per task bounds serial candidate visits while amortizing task descriptors.
 The 256-row work unit is independent of vendor wave width and board rows.
@@ -11,6 +7,11 @@ cancellation for nearby vectors. Task top-k and
 query merge compare the same total (distance,index) keys. Partial lists are
 exact: any globally selected point must occur in its task's KM best.
 One integer task-total readback sizes scratch; no input arithmetic on host."""
+from core.classical_distance import direct_squared_distance
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS, C35_TASK_ROWS
+# SPDX-License-Identifier: Apache-2.0
+
 from std.gpu import block_idx,thread_idx,lane_id
 from std.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceBuffer,DeviceContext

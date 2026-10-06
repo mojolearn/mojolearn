@@ -1,9 +1,10 @@
-from experiments.classical_identical_ideas.graph_controls import C38_REUSE_NEAREST
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Helpers every cluster-lane driver shares (lane/algos-cluster), compiled
 from this one source into both bindings; the n-sized work goes through
 `ClusterOps`."""
+from experiments.classical_identical_ideas.graph_controls import C38_REUSE_NEAREST
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from checks.numerics import ftz, identical_mul
 from x_cluster.bodies import SplitMix64
 from x_cluster.ops import ClusterOps

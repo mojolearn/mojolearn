@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS, C33_CHUNK
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Weakly connected components by label propagation.
 
 Reference: `raft/sparse/detail/csr.cuh::weak_cc_label_device` and
@@ -59,6 +56,10 @@ the one case where DBSCAN's labels are not a function of its input, so the
 mode that promises they are may not hand one back. Under `FAST` the
 reference behaviour is unchanged, cap and all.
 """
+from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS, C33_CHUNK
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,

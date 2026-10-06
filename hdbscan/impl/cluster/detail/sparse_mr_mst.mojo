@@ -1,10 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-from core.classical_distance import direct_distance_step
-from checks.numerics import identical_sqrt
-from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
-from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The mutual reachability MST without the m x m graph, on the device.
 
 DEVIATION 1620 (`hdbscan/impl/detail/sparse_mr.mojo` has the block): past
@@ -49,6 +42,14 @@ NON-FINITE WEIGHTS. Round 1 searches every point against every other, so
 every edge weight is computed at least once; a NaN or infinite weight is
 reported by its point and refused by name (DEVIATION 1607's rule).
 """
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from core.classical_distance import direct_distance_step
+from checks.numerics import identical_sqrt
+from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
+from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx

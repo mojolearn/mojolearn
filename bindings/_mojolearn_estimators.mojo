@@ -1,12 +1,13 @@
-from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPython boundary for the verified DBSCAN, PCA, tSVD, OLS, Ridge and logistic kernels.
 
 Kept in a separate extension so the independently changing primary binding
 does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
+from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 # DEVIATION 2486: shared byte-preserving host copies.
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32

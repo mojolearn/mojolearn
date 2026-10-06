@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IVF-FLAT's search: coarse select, probe, select again.
 
 Reference: `search_impl` (`:40-306`) and `search_with_filtering`
@@ -76,6 +73,10 @@ which is why `n_probe == n_lists` reduces to brute force exactly rather
 than approximately. Read `ivf/checks/list_layout.mojo`'s header before
 changing anything about that order.
 """
+from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 

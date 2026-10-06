@@ -16,3 +16,6 @@
 
 - D012: Restore the incumbent neural LANES/LANE_TEXT/MODEL_OF/NOT_COVERED assignments verbatim from frozen main. Newly authored supplemental operations remain source-only and cannot expand the existing race roster. Disable --full-tree-workload and its environment bypass: removing saved lane caps would change benchmark sizes. These candidates retain explicit missing-coverage cells.
 - D013: Master B uses the frozen incumbent defaults (plus its numeric mode/column), never blanket ALL_OFF. Original lane-authored B controls remain in each arm as authored_B. A includes its prerequisites as part of the candidate. A runtime-setting change requires an already existing matching saved race; otherwise coverage is blocked.
+
+- D014: Freeze 22b983d first build failed: the borrowed main .pixi compiler configuration pointed to a removed worktree and could not find std. Preserve all diagnostics. Install the repository's frozen Pixi lock into the integration worktree using supported `pixi install --frozen`; do not edit compiler configuration or toolchain internals. Opponent installations remain untouched.
+- D015: The first compiler diagnostics also exposed source-added imports before module docstrings. Move affected module docstrings before imports as a syntax repair, without changing computation. This starts a new freeze.

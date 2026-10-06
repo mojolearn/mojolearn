@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Boruvka's kernels, from RAFT.
 
 Reference: `raft/cpp/include/raft/sparse/solver/detail/mst_kernels.cuh`
@@ -29,6 +26,10 @@ in threadgroup memory (`:76-85`). Under a total order the minimum is the
 same whatever the lane count or fold shape, so this kernel is launched at
 their 32 on every vendor and no `kernel_matrix` row is needed for it.
 """
+from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx

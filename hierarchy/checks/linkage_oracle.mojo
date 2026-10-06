@@ -1,7 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-from core.classical_distance import direct_distance_step
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host oracle for single linkage, and the fixtures it is gated on.
 
 NO REFERENCE FILE. cuVS ships one GPU backend and checks it against scikit-learn
@@ -50,6 +46,11 @@ exists to separate one thing:
     FIX_BLOBS_DUPS the blobs with a few exact duplicates: the card's
                    fixture, one input that exercises both regimes
 """
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from core.classical_distance import direct_distance_step
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.math import fma, sqrt
 from std.sys.compile import is_defined

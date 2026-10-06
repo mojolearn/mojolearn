@@ -1,9 +1,10 @@
+"""The CPU column of `x_neighbors/iter_device.mojo`: the same loop over the
+same items. HOST ONLY."""
 from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
 from x_neighbors.classical_graph import classical_graph_degree, classical_graph_product
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The CPU column of `x_neighbors/iter_device.mojo`: the same loop over the
-same items. HOST ONLY."""
+
 from x_neighbors.svgp_ff import matmul_tn_acc_ff_item, svgp_ff_solve
 from std.memory import bitcast
 from std.sys.compile import is_defined

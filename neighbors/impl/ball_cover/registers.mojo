@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C32_COUNT_FUSION, C32_EMIT_FUSION
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The eps-neighborhood query kernels of the random ball cover.
 
 Reference: `cuvs/src/neighbors/ball_cover/registers.cuh` (cuVS `94c2819`):
@@ -120,6 +117,10 @@ query row copied into a `local_x_ptr[MAX_COL_Q]` register array and used when
 register array needs the dimension at compile time. Recorded in the lane file
 as unimplemented with that reason.
 """
+from experiments.classical_identical_ideas.graph_controls import C32_COUNT_FUSION, C32_EMIT_FUSION
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.bit import count_trailing_zeros, pop_count
 from std.gpu import block_dim, block_idx, thread_idx

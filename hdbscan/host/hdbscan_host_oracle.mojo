@@ -1,8 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-from core.classical_distance import direct_distance_step
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
 """HDBSCAN on the HOST: `hdbscan/estimator.mojo::hdbscan_fit_host` and
 `hdbscan/impl/runner.mojo::fit_hdbscan` restated without a device (CPU
 training for the workstream D estimators, 2026-09-15).
@@ -57,6 +52,12 @@ THE SABOTAGE. `-D MOJOLEARN_HOST_SABOTAGE=1` reads the core distance one
 slot early (the (k - 1)-th neighbor instead of the k-th), so every core
 distance, and with it the whole graph, differs.
 """
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from core.classical_distance import direct_distance_step
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
+
 
 from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize

@@ -1,8 +1,3 @@
-from core.classical_distance import direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
 """DBSCAN TRAINING on the host, for a box with no GPU (workstream E, the
 lane dbscan, 2026-09-14). A census found NO host oracle for this fit; this
 file is that oracle, written as a second spelling of the device path.
@@ -124,6 +119,12 @@ The restatement is a prediction until measured. The CPU identity gate
 (`tools/identity_break.py --diff <3 GPU columns> <cpu json> --lanes dbscan
 --require-columns 4`) is the measurement.
 """
+from core.classical_distance import direct_distance_step
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
+
 from std.math import sqrt
 from std.sys.compile import is_defined
 from std.builtin.sort import sort

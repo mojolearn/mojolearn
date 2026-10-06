@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`raft/sparse/linalg/detail/laplacian.cuh`: `compute_graph_laplacian`
 (the COO overload, `:119-234` -- the one the 26.08 cuVS path reaches, since
 both `create_connectivity_graph` and the precomputed-graph `transform` hand
@@ -41,6 +38,10 @@ MEASURED: `check_spectral_launch_invariance` runs it at two block widths;
 the hashed-weight fixture is what separates this fold from a split one.
 ======================================================================
 """
+from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx

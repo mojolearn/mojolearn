@@ -1,12 +1,3 @@
-from experiments.classical_identical_ideas.shared_controls import C01_LEAF64, C01_LEAF128
-from core.classical_stats import classical_column_mean
-from experiments.classical_identical_ideas.linear_controls import C23_CENTERED_PANELS
-from x_decomp.classical_cells import centered_gram_cell as c23_centered_gram_cell
-from experiments.classical_identical_ideas.shared_controls import C04_LOAD_CENTER
-from core.classical_centered import centered_gram_v1_cell
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
 """PCA and truncated SVD TRAINING on the host, for a box with no GPU
 (workstream E, the lanes pca, pca-whiten and tsvd, 2026-09-14).
 
@@ -147,6 +138,16 @@ The restatement is a prediction until measured. The CPU identity gate
 pca,pca-whiten,tsvd --require-columns 4`) is the measurement, and the
 brief records what it has shown.
 """
+from experiments.classical_identical_ideas.shared_controls import C01_LEAF64, C01_LEAF128
+from core.classical_stats import classical_column_mean
+from experiments.classical_identical_ideas.linear_controls import C23_CENTERED_PANELS
+from x_decomp.classical_cells import centered_gram_cell as c23_centered_gram_cell
+from experiments.classical_identical_ideas.shared_controls import C04_LOAD_CENTER
+from core.classical_centered import centered_gram_v1_cell
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
+
 from std.math import fma
 from std.math import sqrt
 from std.sys.compile import is_defined

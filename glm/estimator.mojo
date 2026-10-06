@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.shared_controls import C05_OLS_PHASE
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host-pointer surfaces for the GLM section: OLS, Ridge, logistic regression.
 
 **THIS IS THE ENTRY THE PYTHON PACKAGE USES.** `bindings/
@@ -34,6 +31,10 @@ those shapes raise; it is that the host surface takes the same DISPATCH --
 that a wide fit through this door lands on the min-norm route and leaves the
 min-norm card, which a bypass to `lstsq_eig` cannot do.
 """
+from experiments.classical_identical_ideas.shared_controls import C05_OLS_PHASE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext

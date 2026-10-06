@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.shared_controls import C08_GROUPED_OUTPUT, C55_CLASS_GROUP
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The prep lane's host runner: the same program as x_prep/device.mojo, on
 the caller's arena, in place. No accelerator import, so the CPU-only host
 binding compiles it.
@@ -16,6 +13,10 @@ before the next stage. Which thread runs a unit never changes what the unit
 computes, so the bits are the serial walk's at every task count
 (MOJOLEARN_CPU_THREADS = 1, 3 or the default; `core/host_predict_threads.mojo`
 holds the one count policy). THIS IS NOT A NUMERIC ROW."""
+from experiments.classical_identical_ideas.shared_controls import C08_GROUPED_OUTPUT, C55_CLASS_GROUP
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_prep.common import FP, IP, STAGE_INTS

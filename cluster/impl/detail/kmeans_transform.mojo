@@ -1,7 +1,3 @@
-from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The `n x k` distance matrix of `KMeans.transform` (2026-09-15).
 
 Reference: `cuvs::cluster::kmeans::detail::kmeans_transform`
@@ -33,6 +29,11 @@ on every column, the order the fused kernel already pins. No reduction runs
 across cells, so the launch geometry below is scheduling only and moves no
 bit.
 """
+from core.classical_distance import direct_squared_distance
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.gpu import block_dim, block_idx, thread_idx
 

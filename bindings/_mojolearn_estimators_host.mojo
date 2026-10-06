@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_estimators` family: KernelDensity (the
 CPU training lane, phase 1, 2026-09-13) and, since the classical host
 inference lane the same day, the INFERENCE entries of LinearRegression,
@@ -53,6 +50,10 @@ function of the GPU binding (inverse_transform, ...) is
 deliberately absent, so those surfaces refuse BY NAME through
 `_HostBinding` and never hash something else.
 """
+from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from glm.host.center_host import col_sums_on_cpu, center_on_cpu, scale_rows_on_cpu
 from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from decomposition.impl.pca_rank import pca_rank_finish

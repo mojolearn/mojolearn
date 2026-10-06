@@ -1,10 +1,11 @@
+"""PCA by covariance eigendecomposition. The `input`-unchanged CONTRACT is the one to not drop: `input` is an in-out parameter that must end the call unchanged, and a fit that leaves the caller's matrix centered is wrong in a way nothing in the fit itself will reveal."""
 from experiments.classical_identical_ideas.linear_controls import C23_CENTERED_PANELS
 from x_decomp.classical_device import centered_gram_kernel as c23_centered_gram_kernel
 from experiments.classical_identical_ideas.shared_controls import C04_LOAD_CENTER
 from core.classical_centered import centered_gram_v1_cell
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""PCA by covariance eigendecomposition. The `input`-unchanged CONTRACT is the one to not drop: `input` is an in-out parameter that must end the call unchanged, and a fit that leaves the caller's matrix centered is wrong in a way nothing in the fit itself will reveal."""
+
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt

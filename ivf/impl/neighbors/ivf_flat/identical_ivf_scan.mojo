@@ -1,5 +1,3 @@
-from core.classical_distance import direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
 """IDENTICAL batched IVF-Flat list scan (Apple; lane/apple-identical-neural,
 2026-09-26).
 
@@ -23,6 +21,9 @@ the same order:
     the 32 lane lists, so the selected set and its order do not depend on
     which lane saw a candidate or in what probe order.
 """
+from core.classical_distance import direct_distance_step
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+
 
 from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
 from std.gpu.primitives.warp import shuffle_xor

@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C40_SEED_TILES, C40_ACTIVE_SEEDS
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MeanShift, IDENTICAL on every vendor: every shift of every seed on a grid
 of (seed, row chunk) blocks (K6, lane ml-cluster-nbrs 2026-10-04). Switch:
 `IDN_MEANSHIFT_GRID` (x_cluster/bodies.mojo), taken by
@@ -28,6 +25,10 @@ a done seed's blocks return at once. Shared pages are gated by
 fit) the caller runs the one-thread `_meanshift_kernel`, whose body is the
 same blocked fold.
 """
+from experiments.classical_identical_ideas.graph_controls import C40_SEED_TILES, C40_ACTIVE_SEEDS
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceContext

@@ -1,7 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS, C37_PANEL_ROWS
-from experiments.classical_identical_ideas.graph_controls import C39_RETAIN_STATE
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MiniBatchKMeans (lane/algos-cluster). Reference: scikit-learn
 `sklearn/cluster/_kmeans.py` (MiniBatchKMeans.fit :2056-2210,
 `_mini_batch_step` :1566-1684, `_mini_batch_convergence`) and
@@ -18,6 +14,11 @@ rows, then per init the init rows and the k-means++ picks, then per step the
 batch rows (uniform with replacement, unit weights) and any reassignment.
 Not scikit-learn's Mersenne Twister stream, so a fit agrees with sklearn's
 at a tolerance, never bit for bit (NOT_IMPLEMENTED.tsv)."""
+from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS, C37_PANEL_ROWS
+from experiments.classical_identical_ideas.graph_controls import C39_RETAIN_STATE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64

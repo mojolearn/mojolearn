@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C44_SAMPLING_DESCRIPTORS
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTICAL UMAP layout optimizer on the device: one thread per vertex, one
 epoch snapshot, every vertex's update a fixed-order fold.
 
@@ -44,6 +41,10 @@ was removed (hr-optin-flags).
 FAST keeps `umap/optimizer_fast.mojo` untouched (one attractive move per
 edge, SplitMix64 negatives, stdlib pow); it is not compared to this.
 """
+from experiments.classical_identical_ideas.graph_controls import C44_SAMPLING_DESCRIPTORS
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import memcpy
 from dbscan.impl.adjgraph.algo import exclusive_scan, scan_blocks_needed

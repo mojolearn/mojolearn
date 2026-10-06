@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """PageRank and Louvain as parallel items in a fixed order (lane hr-graph,
 2026-10-02, docs/plans/HOST_ROUTE_REMOVAL.md).
 
@@ -47,6 +44,10 @@ its self-loop). Levels, the renumbering by ascending old id and the
 `louvain_partitions`. NEW BITS versus the sequential sweep (labels,
 modularity and level count).
 """
+from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 from x_neighbors.items import FP, IP, _add, _sub
 

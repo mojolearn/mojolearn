@@ -1,7 +1,3 @@
-from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random ball cover: the distance functors and the sort comparator.
 
 Reference: `cuvs/src/neighbors/ball_cover/registers_types.cuh` (the `DistFunc`
@@ -44,6 +40,11 @@ by a rank-by-counting on the distance inside each group, with the tie broken
 by the original point index. See DEVIATION 3 there, including the measured
 reason `nn.argsort` is not an option.
 """
+from core.classical_distance import direct_squared_distance
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 
 from std.memory import bitcast

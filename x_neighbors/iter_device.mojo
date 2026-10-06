@@ -1,10 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
-from x_neighbors.classical_graph import classical_graph_degree, classical_graph_product
-from experiments.classical_identical_ideas.stats_controls import C54_PREDICT_TILES
-from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS, C33_CHUNK
-from x_neighbors.items import matmul_item
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Resident GPU drivers of the lane's iterations (lane neighbors-apple2).
 
 `op_lp_iterate`: LabelPropagation / LabelSpreading's fit loop
@@ -18,6 +11,14 @@ same values; only the stopping sum crosses back, one float per iteration,
 compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
+from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
+from x_neighbors.classical_graph import classical_graph_degree, classical_graph_product
+from experiments.classical_identical_ideas.stats_controls import C54_PREDICT_TILES
+from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS, C33_CHUNK
+from x_neighbors.items import matmul_item
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
 from x_neighbors.svgp_ff import (
     matmul_tn_acc_ff_item, svgp_ff_init_item, svgp_ff_chol_item, svgp_ff_chol_s_item, svgp_ff_column_item,

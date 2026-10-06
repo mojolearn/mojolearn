@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C39_RETAIN_STATE
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """BisectingKMeans (lane/algos-cluster). Reference: scikit-learn
 `sklearn/cluster/_bisect_k_means.py` (`_BisectingTree` :20-80, `_bisect`
 :300-360, `fit` :362-450, `_predict_recursive` :490-540).
@@ -17,6 +14,10 @@ next draw of the lane's splitmix64 stream. The scores are the per-child
 inertia ('biggest_inertia') or size ('largest_cluster'). Leaves in
 depth-first order are the labels; `predict` descends the tree on the device
 (`bodies.tree_descend`)."""
+from experiments.classical_identical_ideas.graph_controls import C39_RETAIN_STATE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz

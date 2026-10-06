@@ -1,3 +1,7 @@
+"""THE CLUSTER LANE'S DEVICE COLUMN (lane/algos-cluster): `ClusterOps` on a
+GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
+bodies.mojo` body for index `t`; nothing is folded across threads, so no
+launch shape can move a bit. Only the GPU binding imports this file."""
 from experiments.classical_identical_ideas.stats_controls import C53_BGMM_STATS
 from mixture.checks.mstep import center_pair_kernel
 from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS
@@ -5,10 +9,7 @@ from experiments.classical_identical_ideas.graph_controls import C36_CENTROID_TI
 from experiments.classical_identical_ideas.graph_controls import C42_ACTIVE_TRIANGLE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""THE CLUSTER LANE'S DEVICE COLUMN (lane/algos-cluster): `ClusterOps` on a
-GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
-bodies.mojo` body for index `t`; nothing is folded across threads, so no
-launch shape can move a bit. Only the GPU binding imports this file."""
+
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv

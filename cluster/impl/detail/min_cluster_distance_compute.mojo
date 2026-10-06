@@ -1,7 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C36_CENTROID_TILES, C30_DIRECT_DISTANCE
-from cluster.impl.detail.classical_assignment import ASSIGN_ROWS, classical_assign_kernel, classical_assign_gated_kernel
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Assign every sample to its nearest centroid, tiled to bound memory.
 
 Reference: `minClusterAndDistanceCompute`,
@@ -50,6 +46,11 @@ One departure of theirs is copied even though it looks like a bug guard:
 The tile is indexed with `IndexT`, so the tile itself, not the dataset, is
 what must fit the index type.
 """
+from experiments.classical_identical_ideas.graph_controls import C36_CENTROID_TILES, C30_DIRECT_DISTANCE
+from cluster.impl.detail.classical_assignment import ASSIGN_ROWS, classical_assign_kernel, classical_assign_gated_kernel
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from cluster.multi_gpu import assignment_device_count, assignment_parallel

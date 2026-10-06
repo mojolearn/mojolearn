@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C41_FUSED_MINIMA
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE CLUSTER LANE'S POST-PROCESSING KERNELS (lane cgr2-cluster,
 2026-10-03): the n-sized parts of agglomerative-with-connectivity, OPTICS,
 MeanShift, AffinityPropagation, the mixtures and k-means++ that ran on the
@@ -11,6 +8,10 @@ host between device calls (`ClusterOps` primitives, `DeviceOps` in
 sum the fixed blocked-then-tree float-float fold of `post_bodies`, so no
 launch shape moves a bit and the host column's loops give the same words.
 Only the GPU binding imports this file."""
+from experiments.classical_identical_ideas.graph_controls import C41_FUSED_MINIMA
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation

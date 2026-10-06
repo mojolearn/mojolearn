@@ -1,6 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C31_DEVICE_BUCKETS
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 551. The ball cover's CSR, in one canonical intra-row order.
 
 NO CUVS COUNTERPART. cuVS has no such pass because cuVS makes no cross-vendor
@@ -85,6 +82,10 @@ bit-exact BY CONSTRUCTION rather than by measurement. That is a claim about
 this file only; whether the CSR it is handed is identical across vendors is
 what the AMD leg owes.
 """
+from experiments.classical_identical_ideas.graph_controls import C31_DEVICE_BUCKETS
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_idx, thread_idx

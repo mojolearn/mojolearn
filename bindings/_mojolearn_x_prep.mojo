@@ -1,9 +1,10 @@
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C55_CLASS_GROUP, C04_LOAD_CENTER, C56_LDA_INPUT
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE PREP LANE'S GPU BINDING (preprocessing additions, naive Bayes and
 discriminant analysis). One entry runs a program of units on the device
 (x_prep/common.mojo); the host binding runs the same units on the CPU."""
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C55_CLASS_GROUP, C04_LOAD_CENTER, C56_LDA_INPUT
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from x_prep.cat_cls2 import CAT_CLS2_PACK, CAT_CLS2_PRESENT
 from std.os import abort
 from std.python import Python, PythonObject

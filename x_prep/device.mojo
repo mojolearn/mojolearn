@@ -1,9 +1,10 @@
-from experiments.classical_identical_ideas.shared_controls import C07_KEYS1024, C07_KEYS4096, C08_GROUPED_OUTPUT
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The prep lane's device runner: the arena goes up once, every stage of the
 program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
+from experiments.classical_identical_ideas.shared_controls import C07_KEYS1024, C07_KEYS4096, C08_GROUPED_OUTPUT
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from std.memory import bitcast

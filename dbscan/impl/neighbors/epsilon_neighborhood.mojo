@@ -1,7 +1,3 @@
-from core.classical_distance import direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The epsilon neighborhood, FUSED: no distance matrix is ever written.
 
 Reference: `raft/spatial/knn/detail/epsilon_neighborhood.cuh` (RAFT `661a3b8`):
@@ -170,6 +166,11 @@ into. It is called out because the kernel ACCUMULATES into `vd` and produces
 garbage without it -- the old unfused kernel ASSIGNED, so this is a new
 precondition, not an inherited one.
 """
+from core.classical_distance import direct_distance_step
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from checks.numerics import ftz_simd, identical_mul_add_simd
 from std.atomic import Atomic

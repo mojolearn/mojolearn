@@ -1,9 +1,3 @@
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
-from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS, C38_REUSE_NEAREST, C38_DEVICE_POTENTIAL
-from cluster.impl.detail.classical_centroid import classical_centroid_kernel
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Initialization and the Lloyd iteration.
 
 Reference: `cuvs/src/cluster/detail/kmeans.cuh` (cuVS `94c2819`). Partial.
@@ -58,6 +52,13 @@ about restarts is inherently serial, and they are the most obviously
 parallel thing in k-means, so this is the first place to look when the
 control plane becomes the cost. Copied as-is because it is theirs.
 """
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from core.classical_distance import direct_squared_distance
+from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS, C38_REUSE_NEAREST, C38_DEVICE_POTENTIAL
+from cluster.impl.detail.classical_centroid import classical_centroid_kernel
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.math import fma
 from std.math import ceil, log

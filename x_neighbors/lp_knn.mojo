@@ -1,11 +1,12 @@
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Compact k-NN connectivity graph, with the dense graph's exact cell order.
 
 Rows contain k slots, sorted by column. Duplicates and missing neighbors
 become -1 padding. No n-by-m storage or scan, including graph normalization.
 """
+from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn.
+
 from std.memory import bitcast
 from checks.numerics import ftz, identical_div, identical_sqrt, identical_mul_add
 from x_neighbors.items import FP, IP, _add

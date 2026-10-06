@@ -1,7 +1,3 @@
-from experiments.classical_identical_ideas.shared_controls import C01_LEAF64, C01_LEAF128
-from core.classical_stats import classical_column_mean
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`X^T dZ` with the pinned fold of `xty_kernel` / `xtdz_multi_kernel`, read
 row-coalesced (lane apple-identical-steps, 2026-09-26). Apple, IDENTICAL.
 
@@ -28,6 +24,11 @@ chain's value. Same chains, same fold, same bits.
 `-D MOJOLEARN_APPLE_STEP_UNROLL_OFF` turns this off with the unroll; the
 caller then launches the one-block-per-cell kernel.
 """
+from experiments.classical_identical_ideas.shared_controls import C01_LEAF64, C01_LEAF128
+from core.classical_stats import classical_column_mean
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
