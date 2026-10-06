@@ -21,11 +21,11 @@ def check(ctx: DeviceContext,m: Int,d: Int) raises:
     var n=d+1
     var expected = List[Float32](length=n*n,fill=Float32(0))
     var actual = List[Float32](length=n*n,fill=Float32(0))
-    ts_factor_host(x.unsafe_ptr(),b.unsafe_ptr(),expected.unsafe_ptr(),m,d,1,True)
+    ts_factor_host(x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),expected.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m,d,1,True)
     var dx=upload_f32(ctx,x)
     var db=upload_f32(ctx,b)
     var packed=ts_pack_device(ctx,dx,db,m,d,1)
-    ts_factor_device(ctx,packed,m,n,actual.unsafe_ptr(),True)
+    ts_factor_device(ctx,packed,m,n,actual.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),True)
     for i in range(n*n):
         if bitcast[DType.uint32](actual[i])!=bitcast[DType.uint32](expected[i]):
             raise Error("I22 TSQR R differs from host replay")
@@ -33,8 +33,8 @@ def check(ctx: DeviceContext,m: Int,d: Int) raises:
     for i in range(len(c)):
         c[i]=Float32(i%11-5)/Float32(16)
     var q=List[Float32](length=m*3,fill=Float32(0))
-    ts_apply_host(c.unsafe_ptr(),q.unsafe_ptr(),m,n,3)
-    var dq=ts_apply_device(ctx,c.unsafe_ptr(),m,n,3)
+    ts_apply_host(c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m,n,3)
+    var dq=ts_apply_device(ctx,c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m,n,3)
     var got=download_f32(ctx,dq,m*3)
     for i in range(m*3):
         if bitcast[DType.uint32](got[i])!=bitcast[DType.uint32](q[i]):
