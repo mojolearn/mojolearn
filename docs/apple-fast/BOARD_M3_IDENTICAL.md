@@ -11,7 +11,7 @@ Our IDENTICAL arm on the M3 Ultra Metal GPU at head cf94a6be6, 1 unscored warm-u
 
 Quality (2026-10-04, computed): of 459 lane/dataset rows, IDENTICAL quality is WORSE than an opponent on 69 (49 by more than 1%) and IDENTICAL after is WORSE than IDENTICAL before on 0 (0 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 111 have no parseable IDENTICAL quality. Tolerance rel 1e-3, abs 1e-6.
 
-Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 411 eligible opponent comparisons, 271 faster, geometric-mean ratio 0.478. Eligible = a ratio after and a status without HOLD or "excluded"; faster = ratio below 1. Ratio = IDENTICAL ms / best opponent ms.
+Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 412 eligible opponent comparisons, 272 faster, geometric-mean ratio 0.478. Eligible = a ratio after and a status without HOLD or "excluded"; faster = ratio below 1. Ratio = IDENTICAL ms / best opponent ms.
 
 - Hand-made headline, last before the page was generated: Summary: 350 rows, 329 with a ratio, 203 faster than the best opponent after, geometric-mean ratio 0.48. Flips to faster: ard taxi, svd taxi, select-r-regression istella, gpr taxi, svd istella, enet-cv taxi, bisecting-kmeans taxi, connected-components istella, label-encoder istella, perceptron istella, multinomial-nb istella, complement-nb istella, lasso-cv taxi, minmax-scaler taxi, maxabs-scaler taxi, robust-scaler taxi, tree-shap istella, nearest-centroid istella, meanshift istella, isotonic taxi, pa-clf istella, ridge-clf istella, dict-learning istella, mb-sparse-pca istella, complement-nb taxi, multinomial-nb taxi, label-encoder taxi, gaussian-nb istella, lasso-cv istella, qr taxi, pa-reg istella, tree-shap taxi, enet-cv istella, lstsq istella, gaussian-nb taxi, categorical-nb taxi, categorical-nb istella, bernoulli-nb taxi, lda taxi-zones, huber taxi, bayesian-ridge istella, ard istella, huber istella. Flips to slower: pagerank taxi, pagerank istella, umap istella, rbf-sampler taxi, ridge taxi, permutation-shap taxi, kernel-shap taxi, louvain istella, spectral taxi, ols taxi, ivf istella, select-f-regression istella.
 
@@ -255,6 +255,7 @@ Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 411 eligible oppo
 | pls-canonical | taxi | algos | 123 | 100 | sklearn-cpu | 269 | 0.46 | 0.37 |  | mean_canonical_corr=0.559206 | - | mean_canonical_corr=0.5592 | ok |
 | tsne | istella | algos | 3214 | 7076 | sklearn-cpu | 19429 | 0.17 | 0.36 |  | trustworthiness_k15=0.992206 | - | trustworthiness_k15=0.992 | ok |
 | pa-reg | istella | algos | 4406 | 4443 | sklearn-cpu | 12345 | 0.36 | 0.36 |  | finite=1, r2=0.294299, rmse=0.701731 | - | r2=-0.1282, rmse=0.8872 | ok |
+| mamba3-forward | gaussian | neural | 29.0 | 29.0 | torch-eager-fp32 | 80.7 | 0.36 | 0.36 |  | - | - | - | ok |
 | tsne | taxi | algos | 2340 | 6162 | sklearn-cpu | 17507 | 0.13 | 0.35 |  | trustworthiness_k15=0.99889 | - | trustworthiness_k15=0.9989 | ok |
 | ivf-refine | taxi | algos | 1535 | 1535 | faiss-cpu | 4363 | 0.35 | 0.35 |  | recall_at_10=0.9997 | recall_at_10=0.9997 | recall_at_10=0.9992 | ok |
 | nystroem | istella | classical2 | 610 | 178 | sklearn-cpu | 509 | 1.20 | 0.35 | FLIP faster | kernel_rel_error=0.0334304 | - | kernel_rel_error=0.03896 | ok |
@@ -460,7 +461,6 @@ Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 411 eligible oppo
 | lamb | synthetic | algos | - | - | - | - | - | - |  | - | - | - | REFUSED(error: {"error": "Exception('lamb_step: offsets must rise strictly from 0, below 2^24')", "event": "error", "sta |
 | lars | istella | algos | 442 | 380 | - | - | - | - |  | finite=1, r2=0.309043, rmse=0.694362 | - | - | ok |
 | lion | synthetic | algos | 135 | 135 | - | - | - | - |  | - | - | - | ok |
-| mamba3-forward | gaussian | neural | 29.0 | 29.0 | - | - | - | - |  | - | - | - | ok |
 | min-cov-det | istella | algos | - | - | sklearn-cpu | 43632 | - | - |  | - | - | n_features=220 | REFUSED(timeout: null) |
 | poisson | istella | algos | - | - | sklearn-cpu | 112432 | - | - |  | - | - | r2=0.2513, rmse=0.7228 | Opponent full measurement; no matching own cell |
 | poisson | taxi | algos | - | - | sklearn-cpu | 430 | - | - |  | - | - | r2=0.03621, rmse=15.64 | Opponent full measurement; no matching own cell |

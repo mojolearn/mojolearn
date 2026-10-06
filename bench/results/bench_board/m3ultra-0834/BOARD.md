@@ -42,7 +42,7 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 1 planned, 422 done, 29 failed, 0 unsupported, 0 pending. Cells: 1540 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 30, UNKNOWN 4, ok 1500).
+Races: 1 planned, 422 done, 29 failed, 0 unsupported, 0 pending. Cells: 1540 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 32, ok 1502).
 
 Inference cells: 920 (REFUSED 48, ok 872).
 
@@ -5155,14 +5155,16 @@ race: done, driver rc 0, log `logs/neural.mamba3-forward.gaussian.shape-full.log
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 29.0 | 29.0..29.0 | 1 | - | - | 478.5 | - | - | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-eager-fp32 | torch | gpu | opponent | 80.7 | 80.7..80.7 | 1 | 0.359 | - | 1631.6 | 1096.8 | - | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '9e94345484416f97c7b318b9360f7c86af79803dff750d632de10263b09920be', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-mamba3.json', 'finished': '2026-10-06T05:16:55Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "REFUSED: torch-compile-fp32 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/reduction_utils.h>\\n#include <c10/metal/utils) ({'opponent_snapshot_sha256': '9e94345484416f97c7b318b9360f7c86af79803dff750d632de10263b09920be', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-mamba3.json', 'finished': '2026-10-06T05:16:55Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 81.0 | 81.0..81.0 | 1 | 0.358 | - | 1642.3 | 1096.8 | - | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '9e94345484416f97c7b318b9360f7c86af79803dff750d632de10263b09920be', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-mamba3.json', 'finished': '2026-10-06T05:16:55Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "REFUSED: torch-compile-bf16 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/reduction_utils.h>\\n#include <c10/metal/utils) ({'opponent_snapshot_sha256': '9e94345484416f97c7b318b9360f7c86af79803dff750d632de10263b09920be', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-mamba3.json', 'finished': '2026-10-06T05:16:55Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-eager-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
+
+memory, torch-compile-fp32, torch-compile-bf16: host not sampled; GPU not sampled
 
 config: the board's own settings (no NVIDIA harness entry)
 
