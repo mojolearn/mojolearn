@@ -651,7 +651,8 @@ def _leaf_at(t: Int, p_count: Int) -> Int:
 # ===========================================================================
 
 
-def identical_gemm_flat_kernel(
+@always_inline
+def _flat_cell_body(
     c: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
@@ -664,6 +665,7 @@ def identical_gemm_flat_kernel(
     a_sp_in: Int32,
     b_sp_in: Int32,
     b_sj_in: Int32,
+    cell_in: Int32,
 ):
     """`C[i, j]` for one thread: every leaf, then the tree, all in registers.
 
@@ -694,7 +696,7 @@ def identical_gemm_flat_kernel(
         if k <= 0:
             p_count = 0
 
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var cell = Int(cell_in)
     if cell >= m * n:
         return
     var i = cell // n
@@ -740,6 +742,26 @@ def identical_gemm_flat_kernel(
     # between the leaf partial and memory (contract 7.3); at `P == 0` it
     # stores the `+0.0` section 8 requires to be written rather than skipped.
     c.unsafe_store(cell, ftz(out))
+
+
+def identical_gemm_flat_kernel(
+    c: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    leaf_in: Int32,
+    p_in: Int32,
+    a_si_in: Int32,
+    a_sp_in: Int32,
+    b_sp_in: Int32,
+    b_sj_in: Int32,
+):
+    # Shared per-cell arithmetic; grid changes only select a cell/job.
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    _flat_cell_body(c,a,b,m_in,n_in,k_in,leaf_in,p_in,a_si_in,a_sp_in,
+                    b_sp_in,b_sj_in,Int32(cell))
 
 
 # ===========================================================================
