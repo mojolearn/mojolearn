@@ -576,6 +576,11 @@ for _slug, _cls, _kw, _blk, _cu in (
              and not (_cls == "KBinsDiscretizer" and k == "random_state")}
     if _cls == "QuantileTransformer":
         _cukw["subsample"] = _kw["subsample"]      # the same 10**9 (every row) as ours and scikit-learn
+    if _cls == "MinMaxScaler" and _kw.get("clip") is False:
+        # cuML 26.08 has no clip argument and always extrapolates outside the
+        # fitted range, matching clip=False. Keep True unsupported, and retain
+        # this fixed behavior in bench_board_params' estimator read-back.
+        _cukw.pop("clip")
     _add(_slug, xlane="prep", ours=_cls, task="transform", block=_blk, quality="vs-sklearn",
          sk=("sklearn.feature_selection:" if _cls == "VarianceThreshold" else "sklearn.preprocessing:")
          + _cls, params=_kw, cuml=(_CUP + _cls) if _cu else None, cuml_params=_cukw,
@@ -583,7 +588,10 @@ for _slug, _cls, _kw, _blk, _cu in (
                  "columns)"] if _blk == "raw16" else [])
          + (["quantile_method='linear' on ours and scikit-learn: the pinned scikit-learn 1.7.2's "
              "default, and cuML's np.percentile edges (ours defaults to 1.9's "
-             "'averaged_inverted_cdf')"] if _slug == "kbins" else []))
+             "'averaged_inverted_cdf')"] if _slug == "kbins" else [])
+         + (["cuML 26.08 MinMaxScaler has fixed unclipped transform behavior, equivalent to "
+             "clip=False; the unsupported constructor keyword is omitted"]
+            if _slug == "minmax-scaler" else []))
 _add("target-encoder", xlane="prep", ours="TargetEncoder", task="transform", block="cat", supervised=True,
      quality="vs-sklearn", sk="sklearn.preprocessing:TargetEncoder",
      # cuML benchmark TargetEncoder: shared smooth=0.0; cpu_args cv=4, random_state=42;

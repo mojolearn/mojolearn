@@ -152,6 +152,7 @@ ALIASES = {
         "C": "C", "alpha": "alpha", "l1_ratio": "l1_ratio", "kernel": "kernel",
         "degree": "degree", "coef0": "coef0", "epsilon": "epsilon",
         "fit_intercept": "fit_intercept", "penalty": "penalty", "loss": "loss",
+        "feature_range": "feature_range", "clip": "clip",
         "solver": "solver", "whiten": "whiten", "svd_solver": "svd_solver",
         "n_neighbors": "n_neighbors", "metric": "metric", "p": "p", "weights": "weights",
         "min_dist": "min_dist", "spread": "spread", "n_epochs": "n_epochs",
@@ -467,6 +468,13 @@ def read_params(obj):
             kw = got.pop("kwargs", None)
             if isinstance(kw, dict):
                 got.update(kw)
+        if lib == "cuml" and type(obj).__name__ == "MinMaxScaler" and "clip" not in got:
+            # The pinned cuML 26.08 transform only scales and translates. Its
+            # documented out-of-range example returns 1.5, not 1.0:
+            # https://docs.rapids.ai/api/cuml/nightly/api/generated/cuml.preprocessing.minmaxscaler/
+            # Report the fixed semantic value, not an unsupported constructor
+            # option. A future cuML read-back that includes clip takes priority.
+            return lib, "get_params + fixed unclipped MinMaxScaler behavior", dict(got, clip=False)
         return lib, "get_params", dict(got)
     if lib == "torch":
         return lib, "module attributes", {

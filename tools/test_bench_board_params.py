@@ -36,6 +36,24 @@ def _est(library, cls_name, **params):
     return obj
 
 
+def test_cuml_minmax_fixed_behavior_remains_parameter_checked():
+    ours = _est("mojolearn.preprocessing", "MinMaxScaler", feature_range=(0, 1), clip=False)
+    theirs = _est("cuml.preprocessing", "MinMaxScaler", feature_range=(0, 1))
+    record = BP.arm_record(theirs)
+    assert record["params"]["clip"] is False
+    assert "fixed unclipped" in record["source"]
+    arms = {"ours": ours, "cuml-gpu": record}
+    assert BP.check("algos/minmax-scaler", arms)["verdict"] == "MATCHED"
+    ours._p["clip"] = True
+    assert BP.check("algos/minmax-scaler", arms)["verdict"] == "REFUSED"
+    ours._p["clip"] = False
+    ours._p["feature_range"] = (-1, 1)
+    assert BP.check("algos/minmax-scaler", arms)["verdict"] == "REFUSED"
+    # If a future cuML exposes the option, preserve its actual read-back.
+    theirs._p["clip"] = True
+    assert BP.arm_record(theirs)["params"]["clip"] is True
+
+
 def _matched():
     ours = _est("mojolearn.ensemble", "GradientBoosting", n_estimators=100, max_depth=6,
                 learning_rate=0.1, l2_leaf_reg=1.0, border_count=254, random_state=7,
