@@ -90,7 +90,7 @@
       "base_sha256": "cf11311ca8bf966e99eef2a28cb4973f827b40ef5cbd19fb7860c487ebd3c168",
       "changed": true,
       "changed_incumbent_module_assignments": {},
-      "integrated_sha256": "aeb5dd246e8d4c243b6f8268cf39de110bc8379c9b61571da24a9220e76cfeb3",
+      "integrated_sha256": "e7125792915ebb07aab692bc37eae6dbc138b9a687e47ab59cdc53dccce48971",
       "path": "tools/bench_board_state.py"
     },
     {

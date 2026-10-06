@@ -62,9 +62,98 @@ _PUBLIC_FITTED_TYPES = {
 }
 
 
+# These exact classes expose their entire supported fitted state as public
+# attributes. Reviewed at cf442daed63f8d2c9d99947c3a7a4e50fb442319; see the
+# retained source audit. This is evidence glue after clocks stop, never a new
+# estimator save/load API, runtime route, or training-resumption checkpoint.
+PUBLIC_ATTRIBUTE_FITTED_STATE_CONTRACTS = {
+    'SGDRegressor': {
+        'id': 'mojolearn.public-fitted-attributes/sgd-regressor-1',
+        'attributes': ('coef_', 'intercept_', 'n_features_in_', 'n_iter_', 't_'),
+        'source': 'python/mojolearn/_expansion_linear.py:SGDRegressor.fit/_sgd_fit/_LinearRegressorMixin.predict',
+        'excluded': {'constructor_settings': 'separately pinned recipe; warm_start, average and early_stopping are refused',
+                     'optimizer_workspace': 'temporary native fit workspace, not retained; no supported partial_fit or resume API'},
+    },
+    'PassiveAggressiveRegressor': {
+        'id': 'mojolearn.public-fitted-attributes/passive-aggressive-regressor-1',
+        'attributes': ('coef_', 'intercept_', 'n_features_in_', 'n_iter_', 't_'),
+        'source': 'python/mojolearn/_expansion_linear.py:PassiveAggressiveRegressor.fit/_sgd_fit/_LinearRegressorMixin.predict',
+        'excluded': {'constructor_settings': 'separately pinned recipe; warm_start, average and early_stopping are refused',
+                     'optimizer_workspace': 'temporary native fit workspace, not retained; no supported partial_fit or resume API'},
+    },
+    'BayesianRidge': {
+        'id': 'mojolearn.public-fitted-attributes/bayesian-ridge-1',
+        'attributes': ('coef_', 'intercept_', 'n_features_in_', 'n_iter_', 'alpha_', 'lambda_'),
+        'source': 'python/mojolearn/_expansion_linear.py:BayesianRidge.fit/predict/_bayes_refuse; x_linear/bayes.mojo:bayes_finish',
+        'excluded': {'constructor_settings': 'separately pinned recipe; compute_score and return_std are refused',
+                     'posterior_covariance_and_training_statistics': 'temporary native workspace, not retained or exposed by any supported fitted operation'},
+    },
+}
+_PUBLIC_ATTRIBUTE_SOURCE = {
+    'module': 'mojolearn._expansion_linear',
+    'path': 'python/mojolearn/_expansion_linear.py',
+    'sha256': '06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957',
+    'audit': 'experiments/six_lane_integration/public_linear_fitted_state_audit.json',
+}
+
+
+def _public_attribute_fitted_state(model, estimator):
+    """Copy only allowlisted public attributes via the public Array protocol.
+
+    The loaded API source must match the reviewed implementation. New source,
+    subclasses, missing fields and schema changes remain explicitly unavailable.
+    No private attributes, device handles, predictions, or fitting are read/run.
+    """
+    import sys
+    import numpy as np
+    contract = PUBLIC_ATTRIBUTE_FITTED_STATE_CONTRACTS[estimator]
+    metadata = dict(contract=contract['id'], contract_source=contract['source'],
+                    contract_paths=public_fitted_state_paths(estimator),
+                    capture_source='reviewed public fitted attributes',
+                    model_class=type(model).__module__ + '.' + type(model).__name__,
+                    reviewed_api_source=dict(_PUBLIC_ATTRIBUTE_SOURCE),
+                    excluded_non_fitted_state=dict(contract['excluded']))
+    try:
+        module = sys.modules.get(_PUBLIC_ATTRIBUTE_SOURCE['module'])
+        source = getattr(module, '__file__', None)
+        if not source or hashlib.sha256(Path(source).read_bytes()).hexdigest() != _PUBLIC_ATTRIBUTE_SOURCE['sha256']:
+            raise ValueError('Loaded estimator API differs from the reviewed public-attribute source')
+        state = {name: getattr(model, name) for name in contract['attributes']}
+        for name in ('n_features_in_', 'n_iter_'):
+            if type(state[name]) is not int:
+                raise ValueError(name + ': expected public Python int')
+        nf = state['n_features_in_']
+        if nf < 1 or state['n_iter_'] < 0:
+            raise ValueError('Invalid fitted feature/iteration count')
+        coef = np.asarray(state['coef_'])
+        if coef.dtype.str != '<f4' or coef.shape != (nf,):
+            raise ValueError('coef_: expected exact float32 public coefficient vector')
+        state['coef_'] = coef.copy(order='C')
+        if estimator == 'BayesianRidge':
+            for name in ('intercept_', 'alpha_', 'lambda_'):
+                if type(state[name]) is not float:
+                    raise ValueError(name + ': expected public Python float')
+        else:
+            intercept = np.asarray(state['intercept_'])
+            if intercept.dtype.str != '<f4' or intercept.shape != (1,):
+                raise ValueError('intercept_: expected exact one-element float32 public array')
+            state['intercept_'] = intercept.copy(order='C')
+            if type(state['t_']) is not float:
+                raise ValueError('t_: expected public Python float')
+        state.update(estimator=estimator, format=contract['id'], prediction_link='identity')
+        return state, metadata
+    except Exception as exc:
+        return None, dict(metadata, status='UNAVAILABLE', missing_state=['validated complete public fitted attributes'],
+                          reason=type(exc).__name__ + ': ' + str(exc))
+
+
 def public_fitted_state_paths(estimator):
     """The reviewed complete path set for a future frozen worker recipe."""
-    return ['$.%s' % name for name in PUBLIC_FITTED_STATE_CONTRACTS[estimator]['fields']]
+    if estimator in PUBLIC_ATTRIBUTE_FITTED_STATE_CONTRACTS:
+        fields = (*PUBLIC_ATTRIBUTE_FITTED_STATE_CONTRACTS[estimator]['attributes'], 'estimator', 'format', 'prediction_link')
+    else:
+        fields = PUBLIC_FITTED_STATE_CONTRACTS[estimator]['fields']
+    return ['$.%s' % name for name in fields]
 
 
 def _saved_text(arrays, name):
@@ -132,12 +221,14 @@ def normalize_public_fitted_state(arrays, estimator, saved_estimator):
 
 
 def public_fitted_state(model, *, retain_directory=None):
-    """Read one public save export after clocks stop; never inspect handles.
+    """Read a reviewed public export/attributes after clocks stop; never inspect handles.
 
     Returns (typed state, provenance), or (None, explicit unavailable evidence).
     No existing receipt is upgraded, and incomplete exports remain partial.
     """
     key = (type(model).__module__, type(model).__name__)
+    if key[0] == _PUBLIC_ATTRIBUTE_SOURCE['module'] and key[1] in PUBLIC_ATTRIBUTE_FITTED_STATE_CONTRACTS:
+        return _public_attribute_fitted_state(model, key[1])
     estimator = _PUBLIC_FITTED_TYPES.get(key)
     if estimator is None:
         missing = ['reviewed complete typed fitted-state export']
