@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# F19: qualification pending. Build every independent variant; device quality,
+# complete-call speed, peak scratch and opponent admission remain separate gates.
+# New experiment mechanisms remain opt-in; existing promoted defaults are retained.
 """Actual all-Mojo gather fixtures include wide tails and public refusals."""
 import sys
 from pathlib import Path

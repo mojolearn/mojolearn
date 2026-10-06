@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# F16: qualification pending. Build every independent variant; device quality,
+# complete-call speed, peak scratch and opponent admission remain separate gates.
+# New experiment mechanisms remain opt-in; existing promoted defaults are retained.
 """Full estimator prerequisite fixture; never treats private K3 probe as dispatch."""
 import sys
 from pathlib import Path

@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "id": "F12",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "gbdt/methods/sym_iter_fast.mojo",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": "Rollback arms for previously promoted schedules retain existing production defaults.",
+  "variants": [
+    {
+      "name": "arena",
+      "binding": "gbdt",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_SYM_BUF_ARENA"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "categorical",
+      "binding": "gbdt",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_SYM_REUSE_PARTITION"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "default",
+      "binding": "gbdt",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_SYM_REUSE_PARTITION"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "depthwise",
+      "binding": "gbdt",
+      "baseline_defines": [
+        "MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF"
+      ],
+      "candidate_defines": [],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "leaf-inputs",
+      "binding": "gbdt",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_SYM_LEAF_FROM_STATS"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "lossguide",
+      "binding": "gbdt",
+      "baseline_defines": [
+        "MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF"
+      ],
+      "candidate_defines": [],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "ranking",
+      "binding": "gbdt",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_SYM_REUSE_PARTITION"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [
+    "No new ordered doc-ID coalesced permutation store or categorical winner-residency kernel is claimed."
+  ],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "F03",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "experiments/performance_ideas/apple_fast/lm_task.py"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": "Runtime/API comparison only; no new compiler mechanism or production default.",
+  "variants": [
+    {
+      "name": "default",
+      "binding": "byte_lm",
+      "baseline_defines": [],
+      "candidate_defines": [],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}

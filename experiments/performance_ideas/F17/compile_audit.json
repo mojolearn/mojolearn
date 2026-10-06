@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "id": "F17",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "arima/impl/batched_arima.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": "Rollback arms for previously promoted schedules retain existing production defaults.",
+  "variants": [
+    {
+      "name": "default",
+      "binding": "arima",
+      "baseline_defines": [
+        "MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"
+      ],
+      "candidate_defines": [],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "tsa"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [
+    "Spatial/seasonal search and broader optimizer first-refusal contracts need additional supported-profile qualification."
+  ],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}

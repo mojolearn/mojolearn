@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "id": "F10",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "mamba/impl/modules/afn_defines.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": null,
+  "variants": [
+    {
+      "name": "arena",
+      "binding": "mamba",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA_ARENA"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "training"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "chunk-scan",
+      "binding": "mamba",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "training"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "default",
+      "binding": "mamba",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA2_SSD_MMA"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "training"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "mamba1-input",
+      "binding": "mamba",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA1_FUSE_IN"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "training"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "mamba3-elementwise",
+      "binding": "mamba",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA3_SISO_FUSED"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "training"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [
+    "Stateful/decode backward is not exposed by the public API; the implemented training fixture uses supported zero-state prefill only."
+  ],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}

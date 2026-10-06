@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# F10: qualification pending. Build every independent variant; device quality,
+# complete-call speed, peak scratch and opponent admission remain separate gates.
+# New experiment mechanisms remain opt-in; existing promoted defaults are retained.
 """Individual Mamba fusion arms at actual full forward callers and references."""
 import json
 import sys

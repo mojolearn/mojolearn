@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# F06: qualification pending. Build every independent variant; device quality,
+# complete-call speed, peak scratch and opponent admission remain separate gates.
+# New experiment mechanisms remain opt-in; existing promoted defaults are retained.
 """Bounded batched MCD: contamination, near singularity and fitted consumers."""
 import sys
 from pathlib import Path

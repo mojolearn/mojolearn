@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# F05: qualification pending. Build every independent variant; device quality,
+# complete-call speed, peak scratch and opponent admission remain separate gates.
+# New experiment mechanisms remain opt-in; existing promoted defaults are retained.
 """Actual softmax full optimizer, line-search reach, imbalance and conditioning."""
 import sys
 from pathlib import Path

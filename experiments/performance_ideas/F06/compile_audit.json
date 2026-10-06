@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "id": "F06",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "x_decomp/mcd_bmma.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": null,
+  "variants": [
+    {
+      "name": "default",
+      "binding": "x_decomp",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_MCD_FAST_BOUND_BATCH"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [
+    "Active-candidate compaction and covariance-reuse independent variants are not supplied by the bounded-batch flag. Prediction/score consumers require additional caller fixtures."
+  ],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}

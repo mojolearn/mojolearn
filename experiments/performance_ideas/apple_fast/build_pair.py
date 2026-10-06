@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Frozen M2-only compilation of complete attested FAST caller prerequisites.
+"""Frozen Apple compilation of complete attested FAST caller prerequisites.
 
-Run under lq M2. Never launches kernels/imports a binding. Each compile uses the
+Run under the existing lq Apple build queue. Never launches kernels/imports a binding. Each compile uses the
 repo build script's binary validation with its kernel smoke disabled and the
 machine compile-slot semaphore. Manifest attests exact source/mode/defines.
 """
@@ -25,7 +25,8 @@ def main():
     p.add_argument('--idea',required=True);p.add_argument('--output',type=Path,required=True)
     p.add_argument('--variant',default='default');p.add_argument('--source-sha',required=True);a=p.parse_args()
     chip=subprocess.check_output(['sysctl','-n','machdep.cpu.brand_string'],text=True)
-    if 'Apple M2 Pro' not in chip:raise RuntimeError('build on existing cheap M2 queue only')
+    if 'Apple M3 Ultra' not in chip and 'Apple M2 Pro' not in chip:
+        raise RuntimeError('build on existing Apple M3 Ultra queue (M2 permitted only while retained)')
     subprocess.run(['git','diff','--quiet','HEAD','--'],cwd=ROOT,check=True)
     source=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     if source!=a.source_sha:raise RuntimeError('source drift: expected '+a.source_sha+' got '+source)
@@ -35,7 +36,7 @@ def main():
     binding=card.get('variant_bindings',{}).get(a.variant,card['binding']);candidate=card.get('variants',{}).get(a.variant,card['candidate_defines'])
     env=dict(os.environ,MOJOLEARN_NUMERIC_MODE='fast',MOJOLEARN_VENDOR='apple',MOJOLEARN_TARGET_COLUMN='apple',MOJOLEARN_COMPILE_JOBS='1',MOJOLEARN_SKIP_BUILD_GATE='1')
     slot=Path.home()/'mojolearn-evidence/compile_slot.sh'
-    if not slot.is_file():raise RuntimeError('existing M2 compile-slot script missing: '+str(slot))
+    if not slot.is_file():raise RuntimeError('existing Apple compile-slot script missing: '+str(slot))
     dependencies={}
     def build(name,defines,destination,numeric_mode="fast"):
         script='bindings/build.sh' if name=='core' else 'bindings/build_'+name+'.sh'
@@ -81,7 +82,7 @@ def main():
             sha256=hashlib.sha256(destination.read_bytes()).hexdigest(),source=check['source'])
     manifest=dict(source_sha=source,binding=binding,numeric_mode='fast',vendor='apple',
         defines_A=flags(baseline),defines_B=flags(candidate),hashes=hashes,
-        dependencies=dependencies,native_checks=native_checks,target_column='apple',builder='existing M2 Pro',status='OK')
+        dependencies=dependencies,native_checks=native_checks,target_column='apple',builder=chip.strip(),status='OK')
     (a.output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print('APPLE_FAST_BUILD status=OK source='+source+' binding='+binding+' artifacts='+str(a.output))
 if __name__=='__main__':main()

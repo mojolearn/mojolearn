@@ -20,6 +20,7 @@ from x_cluster.bisect_fast import BISECT_FAST_ZEROCOPY, bisect_entry_ptr
 from x_cluster.entries import ENTRY_BISECT, ENTRY_MINIBATCH, run_entry
 from x_cluster.minibatch_ptr import MBK_FAST_DEVSCAN, MBK_NONFINITE_MSG, MBK_ZEROCOPY, minibatch_entry_ptr
 from x_cluster.out import ClusterOut, py_floats, py_ints
+from x_cluster.minibatch_fast import MBK_CLS2_POOL, MBK_W2_SUMCMP
 from x_cluster.tree_cut import PY2MOJO_CLUSTER
 
 
@@ -95,6 +96,15 @@ def mbk_devscan_binding() raises -> PythonObject:
     return PythonObject(1 if MBK_FAST_DEVSCAN else 0)
 
 
+def mbk_policy_binding() raises -> PythonObject:
+    """Compiled promoted policies: bit 0 compact center sums, bit 1 input pool.
+
+    F15 qualification is pending. This getter attests compilation only;
+    actual public full-fit fixtures must independently establish route reach.
+    """
+    return PythonObject(Int(MBK_W2_SUMCMP) + 2 * Int(MBK_CLS2_POOL))
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -117,6 +127,7 @@ def PyInit__mojolearn_x_cluster() abi("C") -> PythonObject:
         m.def_function[call_binding]("x_cluster_call")
         m.def_function[numeric_mode_binding]("x_cluster_numeric_mode")
         m.def_function[mbk_devscan_binding]("x_cluster_mbk_devscan")
+        m.def_function[mbk_policy_binding]("x_cluster_mbk_policy")
         m.def_function[vendor_binding]("x_cluster_vendor")
         m.def_function[py2mojo_binding]("x_cluster_py2mojo")
         return m.finalize()

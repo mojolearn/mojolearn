@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "id": "F19",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "resample/estimator.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": null,
+  "variants": [
+    {
+      "name": "default",
+      "binding": "resample",
+      "baseline_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+        "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "permutation",
+      "binding": "resample",
+      "baseline_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+        "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [
+    "Weighted sample_weight draws are refused by the public API and need a pinned GPU weighted-draw definition before implementation."
+  ],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}

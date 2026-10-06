@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# F15: qualification pending. Build every independent variant; device quality,
+# complete-call speed, peak scratch and opponent admission remain separate gates.
+# New experiment mechanisms remain opt-in; existing promoted defaults are retained.
 """Separate mini-batch label, stopping and retained scratch A/B fit fixtures."""
 import sys
 from pathlib import Path
@@ -11,19 +14,26 @@ def exercise(args):
         return graphs(args)
     from mojolearn import MiniBatchKMeans
     from mojolearn import _mojolearn_x_cluster as binding
+    policy=int(binding.x_cluster_mbk_policy())
+    bit={'center-accumulation':1,'scratch-reuse':2}.get(args.variant)
+    if bit:assert bool(policy&bit)==(args.arm=='B'),'wrong compiled mini-batch policy'
     cases={}
     for rows,d,k in ((2017,11,5),(2053,13,7),(4093,19,11)):
         rng=np.random.default_rng(319);centers=rng.normal(0,4,size=(k,d))
         labels=np.arange(rows)%k;x=np.asarray(centers[labels]+rng.normal(0,.3,size=(rows,d)),'float32')
         model=MiniBatchKMeans(n_clusters=k,batch_size=127,n_init=3,max_iter=30,random_state=17,numeric_mode='fast')
         def fit():model.fit(x);return model.cluster_centers_,model.labels_
-        _,cold=consumed(fit);_,repeat=consumed(fit)
+        first,cold=consumed(fit)
+        saved=tuple(np.asarray(value).copy() for value in first)
+        second,repeat=consumed(fit)
+        assert all(np.array_equal(value,original) for value,original in zip(first,saved)),'previous fit outputs overwritten by pool reuse'
+        assert all(np.array_equal(value,original) for value,original in zip(second,saved)),'fixed-seed repeated fit differs'
         assignments=np.asarray(model.labels_).astype(int);chosen=np.asarray(model.cluster_centers_,float)[assignments]
         inertia=float(np.sum((x.astype(float)-chosen)**2))
         assert int(model.n_iter_)<=30
         cases[f'{rows}-{d}-{k}']=dict(contract=dict(rows=rows,d=d,k=k,seed=17,n_init=3,max_iter=30,batch=127),
             metrics=dict(inertia=dict(value=inertia,rtol=.001,atol=1e-4)),cold_fit_ms=cold,repeated_fit_ms=repeat,
-            iterations=int(model.n_iter_),centers=np.asarray(model.cluster_centers_).shape)
+            iterations=int(model.n_iter_),centers=np.asarray(model.cluster_centers_).shape,compiled_policy=policy,retained_output_bytes=sum(value.nbytes for value in saved))
     return dict(binding=binding_check(binding,'x_cluster'),cases=cases)
 def graphs(args):
     import os
