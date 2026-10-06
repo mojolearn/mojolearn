@@ -9,7 +9,7 @@ def exercise(args):
     import numpy as np
     cases={}
     if args.variant=='normalization':
-        from mojolearn import LayerNorm
+        from mojolearn import LayerNorm,linear_forward,cross_entropy
         from mojolearn import _mojolearn_x_sequence as binding
         identity=binding_check(binding,'x_sequence')
         for rows,d,scale,offset in ((131,17,1.,0.),(137,65,.01,1e5),(257,129,1e3,0.)):
@@ -28,8 +28,16 @@ def exercise(args):
             dwref=(gg*ref).sum(axis=0);dbref=gg.sum(axis=0)
             dxerror=float(np.max(np.abs(np.asarray(dx)-dxref))/max(np.max(np.abs(dxref)),1e-9))
             affine_error=float(max(np.max(np.abs(np.asarray(dw)-dwref)),np.max(np.abs(np.asarray(db)-dbref)))/max(np.max(np.abs(dwref)),np.max(np.abs(dbref)),1e-9))
+            head=rng.normal(0,.05,size=(7,d)).astype('float32')
+            target=np.argmax(ref@rng.normal(size=(d,7)),axis=1).astype('int32')
+            logits,model_ms=consumed(lambda:linear_forward(y,head,numeric_mode='fast'))
+            loss=float(cross_entropy(logits,target,numeric_mode='fast'))
+            reference_logits=ref@head.astype(float).T
+            reference_logits-=reference_logits.max(axis=1,keepdims=True)
+            reference_loss=float(np.mean(np.log(np.exp(reference_logits).sum(axis=1))-reference_logits[np.arange(rows),target]))
+            model_error=abs(loss-reference_loss)
             cases[f'{rows}-{d}-{scale}']=dict(contract=dict(rows=rows,d=d,scale=scale,offset=offset,seed=197),
-                metrics=dict(normalization_error=dict(value=error,rtol=.1,atol=1e-5),input_gradient_error=dict(value=dxerror,rtol=.1,atol=1e-5),affine_gradient_error=dict(value=affine_error,rtol=.1,atol=1e-5)),forward_ms=forward,backward_ms=backward)
+                metrics=dict(normalization_error=dict(value=error,rtol=.1,atol=1e-5),input_gradient_error=dict(value=dxerror,rtol=.1,atol=1e-5),affine_gradient_error=dict(value=affine_error,rtol=.1,atol=1e-5),downstream_loss_error=dict(value=model_error,rtol=.1,atol=1e-5)),forward_ms=forward,backward_ms=backward,downstream_ms=model_ms)
     else:
         from mojolearn import SGD,linear_forward,linear_backward,cross_entropy
         from mojolearn import _mojolearn_training as binding
