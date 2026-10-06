@@ -1,0 +1,83 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  mojolearn.identical.gemm.fp32.v1
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  speed
+   family:   classical
+   lanes:    kmeans dbscan pca ols knn cd kde linkage svm metrics ivf hdbscan cholesky gmm gp krr nystroem rbfsampler resample spectral holtwinters kpss
+   rounds:   1 timed per arm, size=shipped, per-arm budget 600s
+   MODE:     FAST. No -D MOJOLEARN_NUMERIC_IDENTICAL anywhere in this
+             payload. This leg measures the arm a user gets and makes
+             NO identity claim about it.
+   mode:     rent
+   gpu:      NVIDIA RTX A6000
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/mojolearn-evidence/e1g/2026-09-18_151841-nvidia-speed-classical
+
+   commit:   3af18eab8 parent bd1f36f4b
+
+== step 1: THERE IS NO APPLE REFERENCE, AND THAT IS THE POINT ==
+   This payload builds NOTHING on this Mac and compares nothing to it.
+   A wall-clock number is a property of ONE box, and the comparison
+   that matters is made ON the rented box, in one hour, between our
+   FAST arm and the vendor's own library running on the same silicon
+   under the same thermal conditions. Carrying an M4 millisecond into
+   that table would be comparing two machines and calling it a
+   comparison of two libraries.
+
+   What comes home is FSPEED lines. The verdict is
+   tools/fast_speed_table.py, run HERE, over the fetched logs.
+
+== step 2: pre-flight ==
+  pre-flight: this machine's uplink
+    uplink up on all three probes
+  pre-flight: existing leases on this machine
+    3aoz6k8bdxhhju   EXPIRED 10070 min ago
+    44j9e1zik7r8qr   EXPIRED 10038 min ago
+    gdkumy79olopt6   EXPIRED 12114 min ago
+    kpq865uami33s3   EXPIRED 11983 min ago
+    m4gh2e66ikwihq   EXPIRED 12563 min ago
+    o8q8dklahstpoz   EXPIRED 12533 min ago
+    td6w0v7xzqcxeh   EXPIRED 12025 min ago
+    ujlg5ytky38cvv   EXPIRED 12073 min ago
+  pre-flight: pods already up on this account
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[15:18:57 nvidia] dead-man ARMED before the create: pid 84552, fires in 4500s, keyed by name mojolearn-gemm-nvidia-2026-09-18_151841-84343
+[15:18:57 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 84552; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-84343
+[15:18:57 nvidia] creating mojolearn-gemm-nvidia-2026-09-18_151841-84343 (NVIDIA RTX A6000, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[15:18:57 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[15:18:59 nvidia] pod ik9982jxrsm5uv created
+[15:19:21 nvidia] ssh target: -p 22179 root@194.68.245.94
+[15:19:23 nvidia] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[15:19:23 nvidia] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod ik9982jxrsm5uv ...
+    ARMED. Pod ik9982jxrsm5uv is TERMINATED through the API in 60 minutes.
+      lease: /Users/andrewhendel/CascadeProjects/mojolearn/tools/../bench/results/runpod_leases/ik9982jxrsm5uv.lease
+      extend with: tools/runpod_guard.sh extend ik9982jxrsm5uv '-p 22179 root@194.68.245.94' <minutes>
+    ik9982jxrsm5uv: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep 18 19:19 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[15:19:31 nvidia] shipping the COMMIT (3af18eab843099fc99b0a10c9d84d04c56e0a673), not the working tree
+[15:19:34 nvidia]   archive source sha256: c32e94469831dad6e2e8d603209d5d59
+[15:20:05 nvidia] R2 STAGED 2 key(s) in 12s, 2 linked into /root/mojolearn
+[15:20:08 nvidia] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=312
+[15:20:10 nvidia]   remote pid 312; polling every 30s, giving up after 3240s
+
+== teardown (exit 0) ==
+  lease at exit:
+    ik9982jxrsm5uv: 56 minutes left of a 60-minute lease
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-84343/gemm_remote_leg.sh: line 1119: 86028 Hangup: 1               sleep 30
+  terminating ik9982jxrsm5uv (layer two, from this machine)
+    DELETE /v1/pods/ik9982jxrsm5uv -> HTTP 204
+  VERIFIED: ik9982jxrsm5uv is gone (HTTP 404).
+  dead-man cancelled (pid 84552)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-84343/gemm_remote_leg.sh: line 2538: 84552 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null
