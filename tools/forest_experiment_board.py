@@ -62,9 +62,9 @@ def evaluate(rows):
   for profile in profiles[1:]:
    result={'family':family,'profile':profile,'baseline':baseline,'status':'PENDING_REQUIRED_CELLS','promoted':False,'ratios':{},'checks':[]};needed=[(v,d,p) for v in ['nvidia','amd'] for d in DATASETS[family] for p in [baseline,profile]]
    result['missing']=[list(k) for k in needed if k not in idx]
-   if result['missing']:decisions.append(result);continue
    try:
     for dataset in DATASETS[family]:
+     if any((v,dataset,p) not in idx for v in ['nvidia','amd'] for p in [baseline,profile]):continue
      for p in [baseline,profile]:
       a,b=idx['nvidia',dataset,p],idx['amd',dataset,p];compatible(a,b);assert bits(a,b),('cross-vendor bits',dataset,p)
      for vendor in ['nvidia','amd']:
@@ -72,6 +72,7 @@ def evaluate(rows):
       if family=='rf':assert bits(a,b),('RF profile bits',vendor,dataset)
       result['ratios'][vendor+'/'+dataset]=b['scored_ms']/a['scored_ms']
       result['checks'].append({'vendor':vendor,'dataset':dataset,'baseline_metrics':a['state']['metrics'],'candidate_metrics':b['state']['metrics'],'baseline_candidate_bits_equal':bits(a,b)})
+    if result['missing']:decisions.append(result);continue
     result['status']='CROSS_VENDOR_COMPARABLE_REQUIRES_DECISION';result['combined_ratio']=math.exp(sum(math.log(x) for x in result['ratios'].values())/len(result['ratios']))
     result['vendor_ratios']={v:math.exp(sum(math.log(x) for k,x in result['ratios'].items() if k.startswith(v+'/'))/len(DATASETS[family])) for v in ['nvidia','amd']}
     result['limitations']='One warmup/sample; Apple/host identity and ET quality decision must be linked before promotion; no automatic material-regression threshold.'
