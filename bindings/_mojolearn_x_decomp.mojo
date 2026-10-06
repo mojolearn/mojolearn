@@ -99,8 +99,8 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         comptime if MCD_G1_AUDIT:
             m.def_function[x_decomp_shared_sub_count_py]("x_decomp_shared_sub_count")
         m.def_function[mcd_g1_gram_on_py]("mcd_g1_gram_on")
-            m.def_function[mcd_g1_gram_count_py]("mcd_g1_gram_count")
-            m.def_function[mcd_g1_gram_last_py]("mcd_g1_gram_last")
+        m.def_function[mcd_g1_gram_count_py]("mcd_g1_gram_count")
+        m.def_function[mcd_g1_gram_last_py]("mcd_g1_gram_last")
         m.def_function[gemm_py[DevExec]]("x_decomp_gemm")
         m.def_function[ew_py[DevExec]]("x_decomp_ew")
         m.def_function[colsum_py[DevExec]]("x_decomp_colsum")
