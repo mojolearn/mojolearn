@@ -82,7 +82,7 @@ def enqueue_ragged_select(ctx: DeviceContext,mut src: DeviceBuffer[DType.float32
         if offsets[s]<0 or offsets[s+1]<offsets[s]:
             raise Error("ragged select: offsets not monotone")
     var tasks=len(segments)
-    if offsets[len(offsets)-1]>len(src) or len(values)<tasks or len(positions)<tasks or len(descriptors)<tasks*3:
+    if Int(offsets[len(offsets)-1])>len(src) or len(values)<tasks or len(positions)<tasks or len(descriptors)<tasks*3:
         raise Error("ragged select: caller storage too short")
     if tasks==0:
         return
