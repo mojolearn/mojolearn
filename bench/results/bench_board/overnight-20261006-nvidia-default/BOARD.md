@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:43:28Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:44:37Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T07:43:28Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 31 done, 1 failed, 0 unsupported, 81 pending. Cells: 82 (REFUSED 1, ok 81).
+Races: 113 planned, 35 done, 1 failed, 0 unsupported, 77 pending. Cells: 86 (REFUSED 1, ok 85).
 
-Inference cells: 69 (REFUSED 1, ok 68).
+Inference cells: 72 (REFUSED 1, ok 71).
 
 ## Quality at a glance
 
@@ -92,6 +92,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | ivf-pq | istella | recall_at_10 (higher is better) | - | - | cuvs-gpu 0.791300 |
 | algos | ivf-refine | istella | recall_at_10 (higher is better) | - | - | cuvs-gpu 0.993625 |
 | algos | ivf-sq | istella | recall_at_10 (higher is better) | - | - | cuvs-gpu 0.469725 |
+| algos | kernel-shap | istella | rel_error_vs_exact | - | - | cuml-gpu 0.032177 |
 
 ## Inference at a glance
 
@@ -123,6 +124,9 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | ivf-pq | istella | Xq | - | - | - | - | cuvs-gpu 11.8 ms (IDENTICAL/arm -) |
 | algos | ivf-refine | istella | Xq | - | - | - | - | cuvs-gpu 82.4 ms (IDENTICAL/arm -) |
 | algos | ivf-sq | istella | Xq | - | - | - | - | cuvs-gpu 6.0 ms (IDENTICAL/arm -) |
+| algos | kbins | istella | Xq | - | - | - | - | cuml-gpu 26.0 ms (IDENTICAL/arm -) |
+| algos | label-binarizer | istella | Xq | - | - | - | - | cuml-gpu 6.8 ms (IDENTICAL/arm -) |
+| algos | label-encoder | istella | Xq | - | - | - | - | cuml-gpu 3.2 ms (IDENTICAL/arm -) |
 
 ## Algorithm expansion
 
@@ -1321,6 +1325,115 @@ Inference (each arm predicts with its own model from the fit rounds above):
 | cuvs-gpu | Xq | - | 6.0 | 6.0..6.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, cuvs-gpu: search(queries)(Xq)
+
+### kbins / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.kbins.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 739.0 | 739.0..739.0 | 1 | - | - | 3068.2 | 1442.0 | output_shape=100000x220 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'encode': 'ordinal', 'n_bins': 16, 'quantile_method': 'linear', 'random_state': 7, 'strategy': 'quantile', 'subsample': None}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), KBinsDiscretizer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| max_bin | 16 |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 26.0 | 26.0..26.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### kernel-shap / istella (rows full, shape X 100000x220; Xq 100x220; y 100000; yq 100)
+
+race: done, driver rc 0, log `logs/algos.kernel-shap.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 15329.7 | 15329.7..15329.7 | 1 | - | - | 2042.9 | 438.0 | rel_error_vs_exact=0.032177 | - | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'l1_reg': False, 'link': 'identity', 'n_background': 100, 'nsamples': 2048}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (declared) |
+| seed | 7 |
+
+### label-binarizer / istella (rows full, shape X 1000000x8; Xq 100000x8; lab 1000000; labq 100000; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.label-binarizer.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 18.9 | 18.9..18.9 | 1 | - | - | 1423.1 | 558.0 | output_shape=100000x16 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'neg_label': 0, 'pos_label': 1}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), LabelBinarizer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 6.8 | 6.8..6.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### label-encoder / istella (rows full, shape X 1000000x8; Xq 100000x8; lab 1000000; labq 100000; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.label-encoder.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 7.9 | 7.9..7.9 | 1 | - | - | 1022.1 | 490.0 | output_shape=100000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), LabelEncoder (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 3.2 | 3.2..3.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
 
 ## Not covered by this board
 
