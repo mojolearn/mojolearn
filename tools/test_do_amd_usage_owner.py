@@ -56,6 +56,27 @@ class Owner(unittest.TestCase):
         with patch.object(O,'steward',return_value=json.dumps({'deadline':99999999999})) as cmd:
             O.probe(self.c)
             self.assertIn('queue/held',cmd.call_args.args[-1])
+    def test_full_probe_reports_work_resumed_without_remote_error(self):
+        for done,busy in [(False,False),(True,True)]:
+            observed=dict(done=done,shared_queue_busy=busy,deadline=99999999999,progress='new')
+            with patch.object(O,'steward',return_value=json.dumps(observed)):
+                with self.assertRaises(O.WorkResumed) as caught:O.probe(self.c,full=True)
+                self.assertEqual(caught.exception.observed,observed)
+    def test_resumed_work_before_or_after_copy_never_arms_idle_or_alerts(self):
+        finished=dict(done=True,shared_queue_busy=False,progress='old',command_exit='0',rows=[])
+        active=dict(done=False,shared_queue_busy=False,progress='new',command_exit=None)
+        for after_copy in (False,True):
+            with self.subTest(after_copy=after_copy):
+                seq=[finished,finished,O.WorkResumed(active)] if after_copy else [finished,O.WorkResumed(active)]
+                with patch.object(O.fcntl,'flock'),patch.object(O,'probe',side_effect=seq),patch.object(O,'steward') as control,patch.object(O,'command'),patch.object(O,'notify') as notify:
+                    O.manage(self.c,once=True)
+                    self.assertFalse(any('down' in call.args for call in control.call_args_list))
+                    notify.assert_not_called()
+                state=json.loads((self.root/'evidence/owner-status.json').read_text())
+                self.assertEqual(state['status'],'MANAGING');self.assertEqual(state['last_probe'],active)
+                self.assertIsNone(state['idle_since']);self.assertIsNone(state['capture_digest'])
+                self.assertNotIn('failed_polls',state)
+                self.assertFalse((self.root/'evidence/capture-receipt.json').exists())
     def test_existing_foreign_owner_blocks_control(self):
         (self.state/'usage-owner.json').write_text(json.dumps({'owner_id':'other'}))
         with patch.object(O,'steward') as call,patch.object(O,'probe') as probe:
