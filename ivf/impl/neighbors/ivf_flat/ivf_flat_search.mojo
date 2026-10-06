@@ -98,6 +98,7 @@ from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     fast_ivf_scan_kernel,
 )
 from std.sys.compile import is_defined
+from std.ffi import _Global
 from std.os import getenv
 from x_ann.io import upload_i32
 from core.device_fold import device_count_less_i32
@@ -247,6 +248,21 @@ comptime IVF_FAST_SCAN = (
 )
 """FAST on Apple: steps 3-5 for every query in one launch
 (`fast_ivf_scan.mojo`) instead of a host round trip per query."""
+# F14 keeps IVF's chosen centroids/probes and filter semantics. The separate
+# Apple FAST flag changes only compact list-task buffering and arithmetic;
+# it needs approximate recall and actual caller quality qualification.
+comptime IVF_APPLE_FAST_BALANCED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_IVF_FAST_BALANCED_TASKS"]()
+
+struct _BalancedAudit(Defaultable, Movable):
+    var hits: Int
+
+    def __init__(out self):
+        self.hits=0
+
+comptime _BALANCED_AUDIT=_Global[StorageType=_BalancedAudit,name="MojoIvfBalancedAudit",init_fn=_BalancedAudit.__init__]
+
+def ivf_fast_balanced_hits() raises -> Int:
+    return _BALANCED_AUDIT.get_or_create_ptr()[].hits
 
 
 
@@ -884,8 +900,10 @@ def ivf_flat_search_prepared(
                 var grid = (n_queries + FIVF_QPB - 1) // FIVF_QPB
                 comptime for KM in [8, 16, 32]:
                     if k <= KM and (KM == 8 or k > KM // 2):
-                        comptime if IVF_IDENTICAL_SCAN:
-                            if is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1":
+                        comptime if IVF_IDENTICAL_SCAN or IVF_APPLE_FAST_BALANCED:
+                            if IVF_APPLE_FAST_BALANCED or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
+                                comptime if IVF_APPLE_FAST_BALANCED and is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
+                                    _BALANCED_AUDIT.get_or_create_ptr()[].hits += 1
                                 ivf_balanced_scan[KM](ctx,dq,dq_norm,dev.dlist_data,dev.dlist_norm,dev.d_off,dev.d_ind,dprobe_idx,d_keep,keep_len,d_od,d_oi,n_queries,n_probes,dim,k)
                             elif _ivf_scan_grouped():
                                 # lane neural-pass42: the (query, probe) pairs grouped by

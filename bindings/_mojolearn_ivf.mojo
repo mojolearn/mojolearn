@@ -57,6 +57,7 @@ from ivf.estimator import (
     ivf_flat_search_host,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndex
+from ivf.impl.neighbors.ivf_flat.ivf_flat_search import ivf_fast_balanced_hits
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import ANN3_PREPARE
 from ivf.resident import (
@@ -483,6 +484,8 @@ def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_ivf")
         m.def_function[ivf_vendor_binding]("ivf_vendor")
         m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
+        comptime if is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
+            m.def_function[ivf_fast_balanced_hits_binding]("ivf_fast_balanced_hits")
         m.def_function[ivf_flat_build_and_search_binding](
             "ivf_flat_build_and_search"
         )
@@ -499,3 +502,6 @@ def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_ivf: ", e))
+
+def ivf_fast_balanced_hits_binding() raises -> PythonObject:
+    return PythonObject(ivf_fast_balanced_hits())
