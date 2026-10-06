@@ -30,9 +30,13 @@ print(json.dumps(dict(groups=groups,claims=claims)))
     blockers=list(claims);expected={'I02','I03','I04','I05','I06','I07','I08','I09','I10','I11','I12','I13','I14','I15','I16','I17','I18','I19','I20','I21','I22','I23','I24','A04','A07','A08'}
    bad_builds=[x['_meta_path'] for x in meta if x['returncode']!=0 and (route=='default' or x.get('id','').startswith('N') or x.get('name')=='paired')]
    build_ready=build_ready and not bad_builds
+   local_claims=E/'repair-claims';local_claims.mkdir(exist_ok=True)
+   blockers += [p.name for p in local_claims.glob(route+'-*') if time.time()-p.stat().st_mtime<1800]
    seen={x['candidate_id'] for x in q};eligible=build_ready and not blockers and not missing and not failed and expected<=seen
-   remote="python3 - <<'X'\nimport pathlib,json\nr=pathlib.Path('/root/overnight-nvidia');o=pathlib.Path('/root/campaign-results');ready=r/'opponents-ready.json';tail=o/'gpu-opponents/status.json';print(json.dumps(dict(ready=json.loads(ready.read_text()) if ready.exists() else {},tail=json.loads(tail.read_text()) if tail.exists() else {},worker=json.loads((o/'status.json').read_text()))))\nX"
-   actual=json.loads(run([*ssh,remote]).stdout);eligible=eligible and actual['ready'].get('failed')==0
+   remote="python3 - <<'X'\nimport pathlib,json\nr=pathlib.Path('/root/overnight-nvidia');o=pathlib.Path('/root/campaign-results');ready=r/'opponents-ready.json';tail=o/'gpu-opponents/status.json';print(json.dumps(dict(implicit=json.loads((r/'implicit-env-ready.json').read_text()) if (r/'implicit-env-ready.json').exists() else {},ready=json.loads(ready.read_text()) if ready.exists() else {},tail=json.loads(tail.read_text()) if tail.exists() else {},worker=json.loads((o/'status.json').read_text()))))\nX"
+   actual=json.loads(run([*ssh,remote]).stdout)
+   if actual.get('implicit'):(local_claims/(route+'-implicit-env')).unlink(missing_ok=True)
+   eligible=eligible and actual['ready'].get('failed')==0
    if eligible:
     receipt=dict(time=time.time(),route=route,groups=groups,claims=claims,completed=len(results),queue_total=len(q),policy='All applicable candidate jobs captured; candidate arrivals preempt opponent tail between races')
     run([*ssh,'cat > /root/overnight-nvidia/CANDIDATES_SEALED'],input=json.dumps(receipt).encode())

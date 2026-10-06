@@ -1,0 +1,56 @@
+[
+  {
+    "job": "nvidia-I07-baseline-47ff63bb31",
+    "id": "I07",
+    "arm": "baseline",
+    "vendor": "nvidia",
+    "accelerator": "sm_89",
+    "source": "experiments/performance_ideas/attention_time.mojo",
+    "source_sha": "47ff63bb319d52ab7416ee2edf1e45a69727b0bd",
+    "defines": [
+      "MOJOLEARN_ATTN_ARM_TRIAL=1",
+      "MOJOLEARN_MEASURE_I07_LIFETIME=1",
+      "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+    ]
+  },
+  {
+    "job": "nvidia-I07-candidate-47ff63bb31",
+    "id": "I07",
+    "arm": "candidate",
+    "vendor": "nvidia",
+    "accelerator": "sm_89",
+    "source": "experiments/performance_ideas/attention_time.mojo",
+    "source_sha": "47ff63bb319d52ab7416ee2edf1e45a69727b0bd",
+    "defines": [
+      "MOJOLEARN_ATTN_ARM_TRIAL=1",
+      "MOJOLEARN_MEASURE_I07_LIFETIME=1"
+    ]
+  },
+  {
+    "job": "amd-I07-baseline-47ff63bb31",
+    "id": "I07",
+    "arm": "baseline",
+    "vendor": "amd",
+    "accelerator": "gfx942",
+    "source": "experiments/performance_ideas/attention_time.mojo",
+    "source_sha": "47ff63bb319d52ab7416ee2edf1e45a69727b0bd",
+    "defines": [
+      "MOJOLEARN_ATTN_ARM_TRIAL=1",
+      "MOJOLEARN_MEASURE_I07_LIFETIME=1",
+      "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+    ]
+  },
+  {
+    "job": "amd-I07-candidate-47ff63bb31",
+    "id": "I07",
+    "arm": "candidate",
+    "vendor": "amd",
+    "accelerator": "gfx942",
+    "source": "experiments/performance_ideas/attention_time.mojo",
+    "source_sha": "47ff63bb319d52ab7416ee2edf1e45a69727b0bd",
+    "defines": [
+      "MOJOLEARN_ATTN_ARM_TRIAL=1",
+      "MOJOLEARN_MEASURE_I07_LIFETIME=1"
+    ]
+  }
+]
