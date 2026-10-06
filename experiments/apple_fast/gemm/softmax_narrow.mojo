@@ -76,7 +76,7 @@ def softmax_gemm_nt(ctx: DeviceContext, mut dst: DeviceBuffer[DType.float32],
         if selected:
             ctx.enqueue_function[scoped_kernel[32, 32, False]](
                 dst.unsafe_ptr(), x.unsafe_ptr(), weights.unsafe_ptr(),
-                Int32(m), Int32(n), Int32(k), Int32(k), Int32(1), Int32(1), Int32(k), Int32(k),
+                Int32(m), Int32(n), Int32(k), Int32(k), Int32(1), Int32(1), Int32(k), Int32(k), Int32(n),
                 grid_dim=(((m + 31) // 32) * ((n + 31) // 32), 1, 1), block_dim=(128, 1, 1),
             )
             return
