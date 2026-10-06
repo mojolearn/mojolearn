@@ -7,6 +7,7 @@ Only the device call and its completion are timed; fixture upload, reference
 and output verification are outside that interval. No CPU timing is reported.
 """
 from std.time import perf_counter_ns
+from checks.kernel_matrix import TARGET_COLUMN,COLUMN_APPLE,COLUMN_NVIDIA,COLUMN_AMD
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_identical import (
@@ -60,10 +61,14 @@ def main() raises:
             pipeline_gemm[False](ctx,control,a,b,m,n,k,op)
             gemm_step_readback(ctx,control,expected)
             gemm_step_poison(ctx,out,host,m*n)
-            var start = perf_counter_ns()
+            var start = Int(0)
+            comptime if TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD:
+                start = perf_counter_ns()
             pipeline_gemm[True](ctx,out,a,b,m,n,k,op)
             ctx.synchronize()
-            var elapsed = perf_counter_ns()-start
+            var elapsed = Int(0)
+            comptime if TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD:
+                elapsed = perf_counter_ns()-start
             gemm_step_readback(ctx,out,host)
             var cmp = gemm_step_compare(host,expected,m*n)
             print("PROFILE fixture="+String(fixture)+" op="+String(op)
@@ -71,7 +76,7 @@ def main() raises:
                   +" leaves="+String(contract_partition(k)[1])
                   +" group="+String(gemm_default_ksplit_leaves(m,n,k))
                   +" scratch_bytes="+String(scratch*4)
-                  +" completion_ns="+String(elapsed)
+                  +" nv_amd_completion_ns="+String(elapsed)
                   +" route="+gemm_shipped_dispatch_name(m,n,k)
                   +" digest="+hex(gemm_step_digest(host,m*n)))
             if cmp[0] != 0 or cmp[1] != 0:
