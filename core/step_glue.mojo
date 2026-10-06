@@ -59,6 +59,7 @@ from checks.kernel_matrix import (
     step_glue_default_arm_for,
 )
 
+# NEVER RUN — PENDING VALIDATION
 comptime STEP_GLUE_TRIAL = is_defined["MOJOLEARN_STEP_GLUE_TRIAL"]()
 
 comptime STEP_GLUE_SHIPPED = 0
