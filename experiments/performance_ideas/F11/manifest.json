@@ -45,7 +45,8 @@
     "actual TSQR least-squares fit on ill-conditioned neighbors",
     "residual and coefficient error no material loss",
     "rank/singular values retained",
-    "Selective compensated covariance: independent PCA reconstruction/singular/noise errors; fit and transform times separate"
+    "Selective compensated covariance: independent PCA reconstruction/singular/noise errors; fit and transform times separate",
+    "Downstream LLE neighbor overlap at unchanged dimensions/settings; failures stop qualification"
   ],
   "timing_contract": "Actual least-squares through read of coefficients/rank/singular values",
   "blocker": null,
@@ -68,5 +69,12 @@
   "build_uses_compile_slot": true,
   "variant_bindings": {
     "compensated-pca": "estimators"
+  },
+  "paired_build": true,
+  "variant_prerequisite_bindings": {
+    "compensated-pca": [
+      "core",
+      "x_decomp"
+    ]
   }
 }

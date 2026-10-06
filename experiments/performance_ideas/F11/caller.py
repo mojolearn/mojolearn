@@ -41,7 +41,7 @@ def exercise(args):
 def pca(args):
     import numpy as np
     import time
-    from mojolearn import PCA
+    from mojolearn import PCA,LocallyLinearEmbedding
     from mojolearn import _mojolearn_estimators as binding
     cases={}
     for kind in ('collinear','low-rank','clustered'):
@@ -67,9 +67,20 @@ def pca(args):
         singular_error=float(np.linalg.norm(singular-truth[:rank])/np.linalg.norm(truth[:rank]))
         noise_truth=float(np.sum(truth[rank:]**2)/((rows-1)*(cols-rank)))
         noise_error=abs(float(model.noise_variance_)-noise_truth)
-        cases[kind]=dict(contract=dict(rows=rows,cols=cols,rank=rank,seed=981,kind=kind),
+        # Downstream embedding uses the same requested neighbors/dimensions.
+        # Do not turn a PCA transform gain into permission to change fit.
+        downstream=LocallyLinearEmbedding(n_neighbors=11,n_components=3,method='standard',numeric_mode='fast')
+        embedding_input=np.asarray(projected)[:127]
+        embedding,embedding_ms=consumed(lambda:downstream.fit_transform(embedding_input))
+        original_dist=np.sum((np.asarray(embedding_input,float)[:,None,:]-np.asarray(embedding_input,float)[None,:,:])**2,axis=2)
+        embedded_dist=np.sum((np.asarray(embedding,float)[:,None,:]-np.asarray(embedding,float)[None,:,:])**2,axis=2)
+        original_neigh=np.argsort(original_dist,axis=1)[:,1:12]
+        embedded_neigh=np.argsort(embedded_dist,axis=1)[:,1:12]
+        overlap=sum(len(set(a)&set(b)) for a,b in zip(original_neigh,embedded_neigh))/(len(embedding_input)*11)
+        embedding_error=float(1-overlap)
+        cases[kind]=dict(contract=dict(rows=rows,cols=cols,rank=rank,seed=981,kind=kind,embedding_rows=127),
             metrics=dict(excess_reconstruction=dict(value=max(0,recon-optimal),rtol=.1,atol=2e-6),
-                singular_error=dict(value=singular_error,rtol=.1,atol=2e-6),noise_error=dict(value=noise_error,rtol=.1,atol=1e-9)),
-            fit_ms=fit_ms,transform_ms=transform_ms,inverse_ms=inverse_ms,compensated_products=reached)
+                singular_error=dict(value=singular_error,rtol=.1,atol=2e-6),noise_error=dict(value=noise_error,rtol=.1,atol=1e-9),embedding_error=dict(value=embedding_error,rtol=0,atol=.005)),
+            fit_ms=fit_ms,transform_ms=transform_ms,inverse_ms=inverse_ms,embedding_ms=embedding_ms,compensated_products=reached)
     return dict(binding=binding_check(binding,'estimators'),cases=cases)
 if __name__=='__main__':capture_main(exercise)
