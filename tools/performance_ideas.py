@@ -342,7 +342,10 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
 
 
 def parser() -> argparse.ArgumentParser:
-    argument = argparse.ArgumentParser(description=__doc__)
+    argument = argparse.ArgumentParser(
+        description=__doc__,
+        epilog="Neural source ideas: performance_ideas.py neural list|show|plan|build-plan|queue-template ...",
+    )
     argument.add_argument("--root", type=Path, default=ROOT)
     commands = argument.add_subparsers(dest="command", required=True)
     listing = commands.add_parser("list", help="List every idea and its honest implementation state")
@@ -366,7 +369,14 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parser().parse_args(argv)
+    # The neural catalog keeps its per-lane source records, numerical-version
+    # rules and full-operation queue adapter. Share that implementation instead
+    # of copying 60 manifests and letting their controls drift from the kernels.
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments and arguments[0] == "neural":
+        from neural_identical_ideas import main as neural_main
+        return neural_main(arguments[1:])
+    args = parser().parse_args(arguments)
     root = args.root.resolve()
     records, errors = catalog(root)
     errors.extend(validate_dependencies(records))

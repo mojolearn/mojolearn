@@ -18,11 +18,26 @@ pick order), so the words do not. The products' grids are the upper bound
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from sequence.ops import FP
 from sequence.moe_tiled import TILE_P
 
 comptime MOE_GROUP_TPB = 256
+
+# NI53: independent stable-packing A/B, default OFF. One expert owns its pair
+# list; it scans pair IDs ascending, writes every routed pair once, and never
+# changes capacity or drops a token. Counts/offsets retain exact integer sums.
+# This removes scatter atomics and makes packing reproducible; it trades O(E P)
+# cheap expert comparisons for atomics, so whole-workload benefit is unproven.
+# Host item execution is unaffected because it consumes original pair IDs.
+# This S subarm does not claim a MoE backward/training path that does not exist.
+comptime MOE_STABLE_PACK = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_MOE_STABLE_PACK"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 
 def moe_group_blocks(n_pairs: Int, n_experts: Int, n_tiles: Int) -> Int:
@@ -73,3 +88,15 @@ def moe_group_scatter_all_kernel(sel: FP, cnt: FP, poff: FP, order: FP, n_pairs:
         var e = Int(sel.unsafe_load(i))
         var slot = Atomic.fetch_add(cnt.bitcast[Int32]() + Int(n_experts) + e, Int32(1))
         order.unsafe_store(Int(poff.unsafe_load(e)) + Int(slot), Float32(i))
+
+
+def moe_group_stable_scatter_kernel(sel: FP, poff: FP, order: FP, n_pairs: Int32, n_experts: Int32):
+    """Stable counting-sort scatter: token/pick pair ID is the integer key."""
+    var expert = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if expert >= Int(n_experts):
+        return
+    var slot = Int(poff.unsafe_load(expert))
+    for pair in range(Int(n_pairs)):
+        if Int(sel.unsafe_load(pair)) == expert:
+            order.unsafe_store(slot, Float32(pair))
+            slot += 1

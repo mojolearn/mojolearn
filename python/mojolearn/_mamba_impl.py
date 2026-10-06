@@ -1782,6 +1782,46 @@ class Mamba3Block(_MambaBase):
                                           x, state, lengths, "<f4", what)[0]
         return self._call(x, state, step=False)
 
+    def _forward_with_tape(self, x):
+        """NI48 API shell: actual forward plus an owned native snapshot."""
+        extension = self._extension()
+        enabled = (getattr(extension, "mamba3_forward_tape_enabled")
+                   if _exports(extension, "mamba3_forward_tape_enabled") else None)
+        if enabled is None or not bool(enabled()):
+            return self.forward(x), None
+        what = type(self).__name__ + "._forward_with_tape"
+        x = _batch_tokens(x, what, self.d_model, False)
+        b, l, _ = x.shape
+        if b < 1 or l < 1:
+            raise ValueError(f"mojolearn {what}: B and L must be positive")
+        y = _buffers.empty(x.shape, "<f4")
+        # Glue only: one address/shape per parameter, no tensor data work.
+        weights = self._w
+        addresses = ([addr_ro(x, name="x")]
+                     + [addr_ro(w, name="weight") for w in weights]
+                     + [addr(y, name="output")])
+        handle = extension.mamba3_forward_tape(addresses, [b, l, self.d_model])
+        tape = (extension, handle, x.shape, tuple(w.shape for w in weights))
+        return y, tape
+
+    def _backward_from_tape(self, tape, grad_output):
+        """Consume the original immutable native input/weight/stage snapshot."""
+        extension, handle, input_shape, weight_shapes = tape
+        what = type(self).__name__ + "._backward_from_tape"
+        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
+                         what, "grad_output", input_shape)
+        gradients = ([_buffers.empty(input_shape, "<f4")]
+                     + [_buffers.empty(shape, "<f4") for shape in weight_shapes])
+        # Native code checks dy and tape validity before it executes the VJP.
+        extension.mamba3_backward_tape(
+            handle, [addr_ro(dy, name="grad_output")]
+            + [addr(g, name="gradient") for g in gradients])
+        return dict(zip(("x",) + self._W_NAMES, gradients))
+
+    def _close_forward_tape(self, tape):
+        if tape is not None:
+            tape[0].mamba3_close_tape(tape[1])
+
     def backward(self, x, grad_output):
         """Return the zero-state prefill VJP for x and all nine weights.
 

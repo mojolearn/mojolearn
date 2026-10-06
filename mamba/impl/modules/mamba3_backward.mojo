@@ -10,7 +10,7 @@ from max.gpu.sync import barrier
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 
 from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf, identical_mul
@@ -1305,6 +1305,17 @@ comptime IDN_M3_ANGLE_DT_SUFFIX = (
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime M3_ANGLE_SUFFIX_CHUNK = 64
+# NI43: default-OFF linear-work scheduling of the existing versioned suffix.
+# Each chain folds chunk totals descending exactly once, storing the exclusive
+# carry before adding this chunk. In-place scratch is safe: one owner per chain,
+# one launch boundary before consumers. No token/angle fold or gradient changes.
+# A/B and quality: NOT RUN; host, NVIDIA, AMD and Apple remain unqualified.
+comptime IDN_M3_ANGLE_CARRY_CACHE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and IDN_M3_ANGLE_DT_SUFFIX
+    and is_defined["MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 
 def mamba3_angle_suffix_sums_cells(b: Int, l: Int, nh: Int) -> Int:
@@ -1338,6 +1349,26 @@ def mamba3_angle_chunk_sum_kernel(
     sums.unsafe_store(cell,s)
 
 
+def mamba3_angle_carry_cache_kernel(
+    sums: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32,
+):
+    """Replace per-chunk totals with their exact descending exclusive suffix."""
+    var chain = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var chains = Int(b_in) * Int(nh_in) * M3_NUM_ROPE_ANGLES
+    if chain >= chains:
+        return
+    var nk = (Int(l_in) + M3_ANGLE_SUFFIX_CHUNK - 1) // M3_ANGLE_SUFFIX_CHUNK
+    var carry = Float32(0.0)
+    var k = nk - 1
+    while k >= 0:
+        var index = chain * nk + k
+        var total = ftz(sums.unsafe_load(index))
+        sums.unsafe_store(index, carry)
+        carry = ftz(carry + total)
+        k -= 1
+
+
 def mamba3_angle_suffix_kernel(
     carry_out: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
     sums: MutPointer[Float32, MutAnyOrigin], b_in:Int32,l_in:Int32,nh_in:Int32,
@@ -1353,10 +1384,13 @@ def mamba3_angle_suffix_kernel(
     var r=chain%M3_NUM_ROPE_ANGLES;var bh=chain//M3_NUM_ROPE_ANGLES
     var h=bh%nh;var bb=bh//nh
     var carry=Float32(0.0)
-    var kk=nk-1
-    while kk>k:
-        carry=ftz(carry+ftz(sums.unsafe_load(chain*nk+kk)))
-        kk-=1
+    comptime if IDN_M3_ANGLE_CARRY_CACHE:
+        carry = ftz(sums.unsafe_load(chain * nk + k))
+    else:
+        var kk=nk-1
+        while kk>k:
+            carry=ftz(carry+ftz(sums.unsafe_load(chain*nk+kk)))
+            kk-=1
     var t0=k*M3_ANGLE_SUFFIX_CHUNK;var t1=t0+M3_ANGLE_SUFFIX_CHUNK
     if t1>l:t1=l
     var t=t1-1
@@ -1400,6 +1434,12 @@ def mamba3_backward_angle_into(
         var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
         var work=b*dims.nheads*M3_NUM_ROPE_ANGLES*nk
         ctx.enqueue_function[mamba3_angle_chunk_sum_kernel](sums.unsafe_ptr(),d_theta.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
+        comptime if IDN_M3_ANGLE_CARRY_CACHE:
+            ctx.enqueue_function[mamba3_angle_carry_cache_kernel](
+                sums.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads),
+                grid_dim=(_grid(b * dims.nheads * M3_NUM_ROPE_ANGLES), 1, 1),
+                block_dim=(M3_BWD_TPB, 1, 1),
+            )
         ctx.enqueue_function[mamba3_angle_suffix_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),sums.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
         var m=b*l
         ctx.enqueue_function[mamba3_angle_suffix_dt_kernel](d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(_grid(m*dims.nheads),1,1),block_dim=(M3_BWD_TPB,1,1))

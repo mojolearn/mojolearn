@@ -68,7 +68,17 @@ comptime IDN_M2_BWD_CELL = (
 comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
     "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
 ]()
-comptime M2_BWD_FOLD_ROWS = 256
+# NI44 V subarm: halve each logical gradient leaf to expose twice the
+# independent token work before the same ascending tile merge. 128 is a fixed
+# reduction granularity, not a benchmark shape; all host/GPU columns change
+# the graph together. Existing allocation uses m2_fold_tiles, including tails.
+# Default OFF. No gradient/trajectory quality or performance claim is made.
+comptime IDN_M2_GRAD_LEAF128 = (
+    IDN_M2_BWD_FOLD_TILED
+    and is_defined["MOJOLEARN_IDN_M2_GRAD_LEAF128"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime M2_BWD_FOLD_ROWS = 128 if IDN_M2_GRAD_LEAF128 else 256
 
 
 def m2_fold_rows_per_tile(rows: Int) -> Int:

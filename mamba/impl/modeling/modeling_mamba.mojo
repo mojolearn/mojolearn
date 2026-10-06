@@ -224,6 +224,7 @@ from mamba.impl.ops.selective_scan_interface import (
     selective_scan_fn,
 )
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL,
     identical_mul,
     ftz,
     identical_div,
@@ -389,6 +390,19 @@ comptime BLOCK_ANY_SABOTAGE = (
     or SAB_S12_MUL_SIGMOID
     or SAB_S17_OP_NUMBERING
     or SAB_BATCHINV_NORM_CHUNK_FROM_M
+)
+
+
+# NI46: existing elementwise fusion exposed as an independent IDENTICAL A/B.
+# The serial host remains the S counterpart: bias seed/tap order, split copies,
+# portable exp and all saved stages are the same. Sabotage uses original kernels.
+# Default OFF; no compilation, identity, quality or timing run in this lane.
+comptime MAMBA1_ELEMENTWISE_FUSED = AFN_MAMBA1_FUSE_IN or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and not BLOCK_ANY_SABOTAGE
 )
 
 
@@ -1808,7 +1822,7 @@ def mamba_mixer_forward(
     #      lane afn-mamba (MOJOLEARN_AFN_MAMBA1_FUSE_IN): computed in the
     #      split launch below instead (same arithmetic, one launch fewer);
     #      `A.out` is then recorded there.
-    comptime if not AFN_MAMBA1_FUSE_IN:
+    comptime if not MAMBA1_ELEMENTWISE_FUSED:
         ctx.enqueue_function[mamba_a_from_a_log_kernel](
             stages.a_out.unsafe_ptr(),
             w.a_log.unsafe_ptr(),
@@ -1823,7 +1837,7 @@ def mamba_mixer_forward(
 
     # ---- chunk(2, dim=1) (:396): DEVIATION 730, a column offset, no copy.
     # ---- causal_conv1d_fn (:410-416) + the window update (:415). S13.
-    comptime if AFN_MAMBA1_FUSE_IN:
+    comptime if MAMBA1_ELEMENTWISE_FUSED:
         # ONE token-parallel launch: conv + SiLU + the window update.
         afn_m1_conv_token(
             ctx,
@@ -1878,7 +1892,7 @@ def mamba_mixer_forward(
     )
 
     # ---- torch.split (:437-441). DEVIATION 728: materialized. Copies.
-    comptime if AFN_MAMBA1_FUSE_IN:
+    comptime if MAMBA1_ELEMENTWISE_FUSED:
         # ONE launch: the split per element and A = -exp(A_log) (S15).
         afn_m1_split_a(
             ctx,

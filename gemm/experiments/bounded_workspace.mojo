@@ -6,7 +6,7 @@ for its last consumer before release. This intentionally charges the wait to
 the call instead of disguising it as asynchronous lifetime management.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
-from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm_workspace_max_floats
+from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm_workspace_max_floats, NI01_GEOMETRIC_WORKSPACE
 
 # I02 2026-10-06 L40S retained-scratch GEMM component WIN: 0.265 vs
 # 0.287 ms and 0.246 vs 0.267 ms (~1.084x), one same-process warmup/score.
@@ -34,7 +34,15 @@ struct BoundedGemmWorkspace(Movable):
     def run[allow_vendor: Bool = True](mut self, ctx: DeviceContext,
         mut c: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
         mut b: DeviceBuffer[DType.float32], m: Int,n: Int,k: Int,op: Int) raises:
-        if identical_gemm_workspace_max_floats(m,n,k) > self.max_retained_floats:
+        var retained = identical_gemm_workspace_max_floats(m,n,k)
+        comptime if NI01_GEOMETRIC_WORKSPACE:
+            # Enforce the owner budget on capacity, not just live words:
+            # power-of-two growth must not quietly retain more than allowed.
+            var capacity = max(1, len(self.workspace.buffer))
+            while capacity < retained:
+                capacity *= 2
+            retained = capacity
+        if retained > self.max_retained_floats:
             self.oversized_calls += 1
             var temporary = GemmWorkspace(ctx)
             temporary.run[allow_vendor](ctx,c,a,b,m,n,k,op)

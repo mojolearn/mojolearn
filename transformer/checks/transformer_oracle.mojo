@@ -825,6 +825,10 @@ def stage_tag(i: Int) raises -> String:
     )
 
 
+from training.neural_identical_experiments import IDN_ATTENTION_V2
+from transformer.impl.llama.attention_v2_model_host import attention_v2_host_forward
+
+
 struct TransformerStages(Movable):
     """Every recorded stage of one block call, in the card's order.
 
@@ -888,6 +892,7 @@ struct TransformerStages(Movable):
     var k_rope_out: List[Float32]
     var kv_k_cache: List[Float32]
     var kv_v_cache: List[Float32]
+    var attn_v2: Bool
     var attn_scores: List[Float32]
     var attn_masked: List[Float32]
     var attn_max: List[Float32]
@@ -920,6 +925,7 @@ struct TransformerStages(Movable):
         self.k_rope_out = List[Float32]()
         self.kv_k_cache = List[Float32]()
         self.kv_v_cache = List[Float32]()
+        self.attn_v2 = False
         self.attn_scores = List[Float32]()
         self.attn_masked = List[Float32]()
         self.attn_max = List[Float32]()
@@ -2028,7 +2034,21 @@ def transformer_block_oracle(
 
     var scale = attention_scale(hd)
     var fused_attn = ATTN_HOST_FUSED and not int15 and not opts.has_softcap()
-    if fused_attn:
+    if IDN_ATTENTION_V2 and not int15 and not opts.has_softcap() and plant.is_empty():
+        var av2 = attention_v2_host_forward(
+            st.q_rope_out, st.kv_k_cache, st.kv_v_cache,
+            b, l, nh, nkv, s, hd, own0, window, scale,
+        )
+        st.attn_v2 = True
+        scores = av2.scores.copy()
+        masked = av2.masked.copy()
+        amax = av2.maxima.copy()
+        aexp = av2.exps.copy()
+        adenom = av2.denominators.copy()
+        aweights = av2.weights.copy()
+        actx = av2.output.copy()
+        host_tick(hton, htk, "fwd.attention_v2")
+    elif fused_attn:
         _plant_refuse(len(scores), plant, PLANT_AT_SCORES)
         _plant_refuse(len(masked), plant, PLANT_AT_MASKED)
         var pidx = plant.idx.copy()

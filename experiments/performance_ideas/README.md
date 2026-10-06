@@ -15,6 +15,16 @@ for the public callers and transport dependency attestations.
 | A01–A08 | IDENTICAL | AMD experiments with the complete identity contract |
 | N01–N08 | IDENTICAL | NVIDIA experiments with the complete identity contract |
 | F01–F20 | FAST | Apple M3 Ultra task quality and completion timing |
+| NI01–NI60 | IDENTICAL | [Neural source catalog](../neural_identical_20261006/README.md); default-OFF new arms, qualification pending |
+
+The neural ideas share their lane records with the existing tools through
+`python3 tools/performance_ideas.py neural list` (also
+`python3 tools/neural_experiments.py ideas list`). `neural plan` selects source
+controls, `neural build-plan` targets the frozen native binding builder, and
+`neural queue-template` maps those arms into the full-operation A/B queue.
+These commands describe work; they do not compile, execute or establish quality.
+The original `check --require-all` continues to cover the original 60 manifests.
+NI cards use their own source ledger, including partial and rejected ideas.
 
 IDENTICAL compares all columns within a compiled arithmetic version. A candidate
 may change that version's arithmetic contract only when all columns change

@@ -99,6 +99,14 @@ from ._bufcheck import dtype_name, is_native_f32, nelems, probe
 PROFILE_FAMILY = "mojolearn.identical.gemm.fp32"
 PROFILE_VERSION = 1
 PROFILE = f"{PROFILE_FAMILY}.v{PROFILE_VERSION}"
+# API-shell metadata only. Unknown or accidentally installed numerical versions
+# still refuse; an experimental binary also needs its exact expected profile.
+# This opt-in does not turn a source experiment into accepted identity evidence.
+_EXPERIMENT_PROFILES = {
+    2: "mojolearn.identical.gemm.fp32.i04-leaf64",
+    3: "mojolearn.identical.gemm.fp32.ni08-leaf256",
+}
+_EXPECTED_PROFILE_ENV = "MOJOLEARN_EXPERIMENT_GEMM_PROFILE"
 
 #: The two low-bit profiles (gemm/IDENTICAL_LOWBIT_CONTRACT.md,
 #: lane/identical-lowbit-inference, 2026-09-17). Same version discipline.
@@ -125,6 +133,7 @@ _MODULE_NAME = "_mojolearn_linalg"
 _BUILD_SCRIPT = "bindings/build_linalg.sh"
 _binding_cache = None
 _mode_cache = None
+_profile_cache = None
 
 
 def _load():
@@ -155,11 +164,11 @@ def numeric_mode():
     cross-checked against the directory the loader chose. A `.so` in the wrong
     directory is caught here; nothing else in the process can see it.
 
-    Also checks the binary's profile version against `PROFILE_VERSION`, so a
-    stale extension beside a newer wrapper is an error rather than a
-    mislabeled answer.
+    Also checks the exact binary profile. The default accepts v1; an experimental
+    profile needs its exact name in MOJOLEARN_EXPERIMENT_GEMM_PROFILE. Unknown
+    versions and stale extensions refuse rather than return mislabeled answers.
     """
-    global _mode_cache
+    global _mode_cache, _profile_cache
     if _mode_cache is not None:
         return _mode_cache
     binding = _load()
@@ -178,14 +187,21 @@ def numeric_mode():
             f"both sets with {_BUILD_SCRIPT}"
         )
     version = int(binding.linalg_profile_version())
-    if version != PROFILE_VERSION:
+    getter = getattr(binding, "linalg_numerical_profile", None)
+    actual = str(getter()) if getter is not None else (PROFILE if version == PROFILE_VERSION else None)
+    known = PROFILE if version == PROFILE_VERSION else _EXPERIMENT_PROFILES.get(version)
+    expected = os.environ.get(_EXPECTED_PROFILE_ENV, PROFILE)
+    if known is None or actual != known or actual != expected:
         raise RuntimeError(
-            f"mojolearn.linalg: the loaded binary implements profile "
-            f"{PROFILE_FAMILY}.v{version} but this wrapper describes "
-            f"{PROFILE}. The version names the ARITHMETIC (contract 7.1 and "
-            f"7.2), so this is two different answers, not a packaging "
-            f"detail. Rebuild with {_BUILD_SCRIPT}."
+            f"mojolearn.linalg: binary numerical profile {actual!r} "
+            f"(version {version}) does not match the supported expected profile "
+            f"{expected!r}. The version names the arithmetic; unknown or stale "
+            f"profiles cannot be substituted. Experimental arms require their "
+            f"exact {_EXPECTED_PROFILE_ENV} value and remain unqualified."
         )
+    if version != PROFILE_VERSION and compiled != "identical":
+        raise RuntimeError("Experimental neural GEMM profiles require IDENTICAL mode")
+    _profile_cache = (actual, version)
     _mode_cache = compiled
     return compiled
 
@@ -200,9 +216,10 @@ def profile():
     the shape of the computation and NONE of them is a guarantee about bits.
     """
     mode = numeric_mode()
-    return {
-        "profile": PROFILE,
-        "profile_version": PROFILE_VERSION,
+    actual, version = _profile_cache or (PROFILE, PROFILE_VERSION)
+    result = {
+        "profile": actual,
+        "profile_version": version,
         "numeric_mode": mode,
         "identity_claimed": mode == "identical",
         "dtype": "float32",
@@ -218,6 +235,20 @@ def profile():
         "certification_source": "gemm/README.md",
         "binary": _load().__file__,
     }
+    if version != PROFILE_VERSION:
+        # v1's evidence does not establish this different graph. Identity is
+        # the intended per-version contract; qualification remains outstanding.
+        result.update(
+            contract="gemm/contract.mojo",
+            identity_claimed=False,
+            identity_required=True,
+            certified_shapes=0,
+            certified_vendors=(),
+            certification_source=None,
+            qualification="UNVERIFIED_EXPERIMENT",
+            experiment_source="experiments/neural_identical_20261006/gemm_cnn.json",
+        )
+    return result
 
 
 def require_identical():

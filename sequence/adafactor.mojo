@@ -14,7 +14,35 @@ norms are sqrt(sum of squares), squared back where the reference squares
 them, and its lerp is torch's two-branch formula."""
 from sequence.ops import FP, Args, add, fma3, ld, lerp, mul, st, sub, sumsq_fold
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul_add, identical_rsqrt, identical_sqrt
+
+
+# NI54 V subarm, default OFF: column second moments use consecutive absolute
+# 64-row fma leaves, then ascending add of live leaf totals from +0.0. The
+# sqrt/square/division/lerp remain outside the fold exactly as before. Host
+# and all GPU columns share this graph; launch slab width cannot change it.
+# Rows <=64 still go through the explicit +0 leaf merge in this version.
+# This is not a quality claim: full neural optimizer trajectories are pending.
+comptime AF_COL_CHUNK_FOLD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_AF_COL_CHUNK_FOLD"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime AF_COL_LEAF = 64
+
+
+def af_col_canonical_sumsq(p: FP, col: Int, rows: Int, stride: Int) -> Float32:
+    var total = Float32(0.0)
+    var lo = 0
+    while lo < rows:
+        var leaf = Float32(0.0)
+        for row in range(lo, min(rows, lo + AF_COL_LEAF)):
+            var g = ld(p, row * stride + col)
+            leaf = fma3(g, g, leaf)
+        total = add(total, leaf)
+        lo += AF_COL_LEAF
+    return total
 
 
 @always_inline
@@ -154,7 +182,12 @@ def af_row_tail(a: Args, t: Int, ss: Float32):
 def op_af_col(t: Int, a: Args):
     """Column t: p1[t] = lerp(p1[t], ||g_:,t||^2 / R, f0); i0 R, i1 C."""
     var R = a.i0
-    var nrm = ftz(identical_sqrt(_sumsq(a.p0, t, R, a.i1)))
+    var ss: Float32
+    comptime if AF_COL_CHUNK_FOLD:
+        ss = af_col_canonical_sumsq(a.p0, t, R, a.i1)
+    else:
+        ss = _sumsq(a.p0, t, R, a.i1)
+    var nrm = ftz(identical_sqrt(ss))
     st(a.p1, t, lerp(ld(a.p1, t), div(mul(nrm, nrm), Float32(R)), a.f0))
 
 

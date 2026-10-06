@@ -99,6 +99,9 @@ HOST_OPT_MODULE = OUT_PKG + ".device_optimizations"
 HOST_OPT_FUNCTIONS = {
     "core/device_arena.mojo": ("arena_active", "arena_begin", "arena_end", "arena_release", "arena_take"),
     "mamba/impl/ops/afn_selective_scan.mojo": ("afn_selective_scan_chunked",),
+    # NI38 S changes device scheduling only. The host keeps the original
+    # serial recurrence, so its import must be a disabled host-safe signature.
+    "mamba/impl/ops/identical_scan_window.mojo": ("identical_selective_scan_window",),
     "mamba/impl/modeling/afn_mamba1_fused.mojo": ("afn_m1_conv_token", "afn_m1_split_a"),
     "mamba/impl/modules/afn_ssd_mma.mojo": (
         "afn_ssd_mma_applies", "afn_m2_cb_g_mma", "afn_m2_ydiag_mma", "afn_m2_cstate_mma"),
@@ -122,6 +125,9 @@ for _src in (*HOST_OPT_FUNCTIONS, *HOST_OPT_STRUCTS, HOST_OPT_DEFINES):
 #: The shared-memory kernels those arms bypass are stubbed (rule 4 of the
 #: module docstring) and abort by name if ever reached.
 SUBSTITUTIONS = (
+    ("mamba/impl/ops/selective_scan_interface.mojo",
+     r"comptime IDN_M1_STATE_WINDOW = \([\s\S]*?\n\)",
+     "comptime IDN_M1_STATE_WINDOW = False"),
     ("mamba/impl/ops/mamba3_siso.mojo",
      r"lib_smem_page_fits_for\[TARGET_COLUMN, \d+\]\(\)", "False"),
     ("mamba/impl/modules/mamba3_backward.mojo",

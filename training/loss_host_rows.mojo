@@ -23,7 +23,8 @@ SCHEDULE only:
     `i`. No task starts a parallel region: the denominators are folded between
     the two row passes, on the calling thread;
   - the cross-row fold, the total, is `ce_fold` over the row losses, the
-    oracle's own call;
+    oracle's own call (or the shared NI35 token-total V2 tree when explicitly
+    selected in both the host and device build);
   - the stage lists the oracle appends (`shift`, `expo`, `weights`, ...) are not
     materialized except `expo`, which the backward reads; `shift[base + y]` is
     recomputed by the statement that produced it;
@@ -65,6 +66,8 @@ from training.checks.loss_contract import (
 )
 from training.checks.loss_contract import ce_ones
 from training.checks.loss_oracle import _row_max, ce_fold
+from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2
+from training.loss_reduction_v2 import loss_token_tree_v2_host
 
 
 def ce_host_rows(
@@ -145,7 +148,11 @@ def ce_host_rows(
     if n > wide:
         wide = n
     var ones = ce_ones(wide)
-    var total = ce_fold(row, 0, n, ones)
+    var total: Float32
+    comptime if IDN_LOSS_TOKEN_TREE_V2:
+        total = loss_token_tree_v2_host(row, 0, n)
+    else:
+        total = ce_fold(row, 0, n, ones)
     var divisor = ce_divisor(cfg.reduction, count, cfg.num_items)
     var loss = ftz(identical_div(ftz(total), divisor))
 

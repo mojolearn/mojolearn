@@ -154,6 +154,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from training.neural_identical_experiments import IDN_SAMBA_FORWARD_TAPE
 from core.neural_context import neural_ctx
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralTransformerContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTransformerContextFast"
@@ -424,6 +425,15 @@ def _btick(on: Bool, mut t: Int, name: String):
 
 def transformer_flash_call_count_binding(grouped: PythonObject) raises -> PythonObject:
     return PythonObject(afn_flash_call_count(Bool(py=grouped)))
+
+
+from training.neural_identical_experiments import IDN_ATTENTION_V2
+from transformer.impl.llama.attention_v2_model_contract import ATTENTION_MODEL_V2_PROFILE
+
+
+def transformer_attention_profile_binding() -> PythonObject:
+    """Exact attention graph for this native binary's ordinary fp32 model path."""
+    return PythonObject(String(ATTENTION_MODEL_V2_PROFILE) if IDN_ATTENTION_V2 else String("attention-eager.fp32.v1"))
 
 
 def transformer_numeric_mode_binding() raises -> PythonObject:
@@ -977,7 +987,7 @@ def _session_weights(
     session.weight_uploads += 1
 
 
-def _transformer_run_session[discard_cache: Bool = False](
+def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = False](
     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
     smax: Int, s0: Int, window: Int, opts: BlockOptions,
@@ -1045,7 +1055,7 @@ def _transformer_run_session[discard_cache: Bool = False](
     var trace = IdentityTrace.disabled()
     # forward_only: no backward reads this entry's stages.
     llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
-                                b, l, s0, trace, String("py"), forward_only=True)
+                                b, l, s0, trace, String("py"), forward_only=not retain_tape)
     _btick(ton, tk, "surface.forward")
     # One wait for the downloads (the fresh entry's pattern): every owner
     # stays alive through it.
@@ -1058,12 +1068,147 @@ def _transformer_run_session[discard_cache: Bool = False](
     var result = ws.kv.s
     # Bound retained device-buffer storage per model. Large legal calls still
     # run, but release their workspace after completion rather than pinning it.
-    var retain = ws.retained_bytes() <= _session_retain_cap_bytes()
+    var retain = retain_tape or ws.retained_bytes() <= _session_retain_cap_bytes()
     if not retain:
         session.workspace = None
         ctx.synchronize()
     return result
 
+
+
+struct TransformerForwardTape(Movable, Writable):
+    """NI36/48 single-use owner of input, weight snapshots and saved stages.
+
+    The session is private to this tape: no future model call can overwrite
+    it, so pointer equality is never used as a content-generation guarantee.
+    It is retained through backward or close, including calls over the normal
+    inference cache-retention budget. Peak tape memory belongs to the caller.
+    """
+    var session: TransformerSession
+    var shape: List[Int]
+    var consumed: Bool
+    var busy: Bool
+
+    def __init__(out self, shape: List[Int]):
+        self.session = TransformerSession()
+        self.shape = shape.copy()
+        self.consumed = False
+        self.busy = False
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("TransformerForwardTape")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("TransformerForwardTape")
+
+    def close(mut self) raises:
+        self.consumed = True
+        self.session.clear()
+        self.session.ctx = None
+
+
+def transformer_forward_tape_enabled_binding() -> PythonObject:
+    return PythonObject(IDN_SAMBA_FORWARD_TAPE)
+
+
+def transformer_forward_tape_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """[x, nine weights, y], [B,L,dm,nh,nkv,hd,it,window] -> owned tape."""
+    comptime if not IDN_SAMBA_FORWARD_TAPE:
+        raise Error("transformer forward tape: IDENTICAL opt-in is disabled")
+    var incoming = _read_addrs_tail(addrs, 11, String("transformer_forward_tape"))
+    if len(incoming) != 11:
+        raise Error("transformer forward tape: default options require 11 addresses")
+    var p = _read_params(params, 8, String("transformer_forward_tape"))
+    if len(p) != 8:
+        raise Error("transformer forward tape: expected 8 shape scalars")
+    for i in range(11):  # metadata: fixed input/output pointer list
+        if incoming[i] == 0:
+            raise Error("transformer forward tape: null address at slot " + String(i))
+    var a = List[Int]()
+    for i in range(10):  # metadata: x and the nine weights
+        a.append(incoming[i])
+    a.append(0)
+    a.append(0)
+    a.append(incoming[10])
+    var tape = TransformerForwardTape(p)
+    with GILReleased(Python()):
+        try:
+            _ = _transformer_run_session[True, True](tape.session, a,
+                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], BlockOptions())
+        except error:
+            tape.close()
+            raise error
+    return PythonObject(alloc=tape^)
+
+
+def _transformer_saved_backward(mut tape: TransformerForwardTape, a: List[Int]) raises:
+    ref p = tape.shape
+    var b = p[0]
+    var l = p[1]
+    var dm = p[2]
+    var dims = LlamaDims(dm, p[3], p[4], p[5], p[6])
+    ref session = tape.session
+    if not session.ctx or not session.workspace or not session.weights:
+        raise Error("transformer forward tape: saved owner is unavailable")
+    ref ctx = session.ctx.value()
+    ref ws = session.workspace.value()
+    ref w = session.weights.value()
+    var bw = TransformerBackwardWorkspace(ctx, dims, b, l, p[7], transformer_lean_stages(p[5]))
+    ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[0]))
+    ctx.synchronize()
+    var off = IdentityTrace.disabled()
+    # Reuse the real saved forward; no weight upload or forward recompute.
+    llama_decoder_layer_backward_device(ctx, bw.bst, ws.stages, w,
+        ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
+    _download_addr[False](ctx, bw.bst.d_x, b * l * dm, a[1])
+    _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[2])
+    _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[3])
+    _download_addr[False](ctx, bw.bst.dw_q, dims.q_width() * dm, a[4])
+    _download_addr[False](ctx, bw.bst.dw_k, dims.kv_width() * dm, a[5])
+    _download_addr[False](ctx, bw.bst.dw_v, dims.kv_width() * dm, a[6])
+    _download_addr[False](ctx, bw.bst.dw_o, dm * dims.q_width(), a[7])
+    _download_addr[False](ctx, bw.bst.dw_gate, p[6] * dm, a[8])
+    _download_addr[False](ctx, bw.bst.dw_up, p[6] * dm, a[9])
+    _download_addr[False](ctx, bw.bst.dw_down, dm * p[6], a[10])
+    ctx.synchronize()
+
+
+def transformer_backward_tape_binding(tape: PythonObject, addrs: PythonObject) raises -> PythonObject:
+    comptime if not IDN_SAMBA_FORWARD_TAPE:
+        raise Error("transformer backward tape: IDENTICAL opt-in is disabled")
+    var owner = tape.downcast_value_ptr[TransformerForwardTape]()
+    if owner[].busy or owner[].consumed:
+        raise Error("transformer forward tape: busy, closed or already consumed")
+    var a = _read_addrs_tail(addrs, 11, String("transformer_backward_tape"))
+    if len(a) != 11:
+        raise Error("transformer backward tape: expected dy and ten outputs")
+    for i in range(11):
+        if a[i] == 0:
+            raise Error("transformer backward tape: null address at slot " + String(i))
+    owner[].busy = True
+    owner[].consumed = True
+    try:
+        with GILReleased(Python()):
+            try:
+                _transformer_saved_backward(owner[], a)
+            except error:
+                owner[].close()
+                raise error
+            owner[].close()
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    return PythonObject(0)
+
+
+def transformer_close_tape_binding(tape: PythonObject) raises -> PythonObject:
+    var owner = tape.downcast_value_ptr[TransformerForwardTape]()
+    if owner[].busy:
+        raise Error("transformer forward tape: busy")
+    with GILReleased(Python()):
+        owner[].close()
+    return PythonObject(0)
 
 def transformer_session_forward_fresh_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
@@ -3091,6 +3236,7 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         m.def_function[transformer_numeric_mode_binding](
             "transformer_numeric_mode"
         )
+        m.def_function[transformer_attention_profile_binding]("transformer_attention_profile")
         m.def_function[transformer_forward_binding]("transformer_forward")
         _ = m.add_type[TransformerSession]("_TransformerSession")
         m.def_function[transformer_session_create_binding]("transformer_session_create")
@@ -3111,6 +3257,11 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
             "transformer_decode_step"
         )
         m.def_function[transformer_backward_binding]("transformer_backward")
+        _ = m.add_type[TransformerForwardTape]("_TransformerForwardTape")
+        m.def_function[transformer_forward_tape_enabled_binding]("transformer_forward_tape_enabled")
+        m.def_function[transformer_forward_tape_binding]("transformer_forward_tape")
+        m.def_function[transformer_backward_tape_binding]("transformer_backward_tape")
+        m.def_function[transformer_close_tape_binding]("transformer_close_tape")
         # DEVIATION 2940: the resident decode session.
         _ = m.add_type[TransformerDecodeSession]("_TransformerDecodeSession")
         m.def_function[transformer_decode_session_create_binding]("transformer_decode_session_create")

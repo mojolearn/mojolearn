@@ -36,6 +36,10 @@ from gemm.checks.gemm_backward import (
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
 from training.estimator import identical_ce_loss_dev
+from training.neural_identical_experiments import IDN_TRAIN_BACKWARD_SCRATCH
+from training.neural_gemm_workspace import (
+    IDN_TRAINING_GEMM_WORKSPACE, training_gemm_cached_into, training_gemm_cached_close,
+)
 
 comptime IDN_TRAIN_DEV_TENSORS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -96,6 +100,12 @@ def train_dev_free(ctx: DeviceContext, h: Int) raises:
     var pool = _DEV_POOL.get_or_create_ptr()
     pool[].b[h] = ctx.enqueue_create_buffer[DType.float32](1)
     pool[].n[h] = 0
+    comptime if IDN_TRAINING_GEMM_WORKSPACE:
+        var any_live = False
+        for i in range(len(pool[].n)):  # metadata only: owned tensor handles
+            any_live = any_live or pool[].n[i] > 0
+        if not any_live:
+            training_gemm_cached_close(ctx)
 
 
 def train_dev_view(ctx: DeviceContext, h: Int, n: Int, name: String) raises -> DeviceBuffer[DType.float32]:
@@ -145,13 +155,17 @@ def train_linear_forward_dev(ctx: DeviceContext, c_h: Int, a_h: Int, w_h: Int, m
     var c = train_dev_view(ctx, c_h, m * n, "linear output")
     _refuse_dev(ctx, "linear input", a, m * k)
     _refuse_dev(ctx, "linear weight", w, n * k)
-    var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, n, k))
-    identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
-    ctx.synchronize()
+    comptime if IDN_TRAINING_GEMM_WORKSPACE:
+        training_gemm_cached_into(ctx, c, a, w, m, n, k, OP_NT)
+        ctx.synchronize()
+    else:
+        var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, n, k))
+        identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
+        ctx.synchronize()
+        _ = ws^
     _ = a^
     _ = w^
     _ = c^
-    _ = ws^
     return m * n
 
 
@@ -171,12 +185,16 @@ def train_linear_backward_dev(
     _refuse_dev(ctx, "linear input", a, m * k)
     _refuse_dev(ctx, "linear weight", w, n * k)
     _refuse_dev(ctx, "linear upstream gradient", dc, m * n)
-    var ws_a = ctx.enqueue_create_buffer[DType.float32](
-        identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
-    )
-    var ws_b = ctx.enqueue_create_buffer[DType.float32](
-        identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
-    )
+    var na = identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
+    var nb = identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
+    var ws_a = ctx.enqueue_create_buffer[DType.float32](max(na, nb) if IDN_TRAIN_BACKWARD_SCRATCH else na)
+    var ws_b: DeviceBuffer[DType.float32]
+    comptime if IDN_TRAIN_BACKWARD_SCRATCH:
+        # NI36: both GEMMs enqueue onto this SAME in-order context and the
+        # final wait precedes release; dA/dW themselves remain distinct.
+        ws_b = ws_a.create_sub_buffer[DType.float32](0, nb)
+    else:
+        ws_b = ctx.enqueue_create_buffer[DType.float32](nb)
     identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
     identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
     ctx.synchronize()

@@ -1866,6 +1866,7 @@ struct Mamba3DecodeSession(Movable, Writable):
     var w: Optional[Mamba3DeviceWeights]
     var state: Optional[Mamba3DeviceState]
     var dx: Optional[DeviceBuffer[DType.float32]]
+    var decode_stages: Optional[Mamba3DeviceStages]
     var b: Int
     var dm: Int
     var busy: Bool
@@ -1876,6 +1877,7 @@ struct Mamba3DecodeSession(Movable, Writable):
         self.w = None
         self.state = None
         self.dx = None
+        self.decode_stages = None
         self.b = 0
         self.dm = 0
         self.busy = False
@@ -1886,6 +1888,7 @@ struct Mamba3DecodeSession(Movable, Writable):
     def is_open(self) -> Bool: return Bool(self.ctx) and Bool(self.state)
 
     def release(mut self):
+        self.decode_stages = None
         self.dx = None
         self.state = None
         self.w = None
@@ -1955,11 +1958,32 @@ def _m3_session_open_run(mut s: Mamba3DecodeSession, a: List[Int], b: Int,
     s.dx = mamba_zeros(s.ctx.value(), b * dm)
 
 
+# NI47 same-graph boundary scheduling: retained capacity for one physical
+# open chunk plus a new token; extent comes from the model state contract,
+# never a board row. Default OFF. Cold allocation, repeated decode and maximum
+# zero-fill traffic must all be included in later A/B. Existing host state and
+# arithmetic remain the S counterpart. All validation/quality/timing NOT RUN.
+comptime IDN_M3_DECODE_WINDOW_REUSE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and MAMBA_GUARD == 0
+)
+
+
 def _m3_session_step_run(mut s: Mamba3DecodeSession, a: List[Int]) raises -> Int:
     ref ctx = s.ctx.value()
     ref st = s.state.value()
     var dims = Mamba3Dims.of(s.dm)
-    var stages = Mamba3DeviceStages(ctx, s.b, 1, st.buf_len, dims)
+    var stages: Mamba3DeviceStages
+    comptime if IDN_M3_DECODE_WINDOW_REUSE:
+        if s.decode_stages:
+            stages = s.decode_stages.take()
+        else:
+            stages = Mamba3DeviceStages(ctx, s.b, 1, M3_CHUNK_SIZE, dims)
+        stages.reuse_decode_window(st.buf_len)
+    else:
+        stages = Mamba3DeviceStages(ctx, s.b, 1, st.buf_len, dims)
     mamba_copy_in(ctx, s.dx.value(), f32_ptr(a[0]), s.b * s.dm)
     var trace = IdentityTrace.disabled()
     mamba3_block_forward(ctx, stages, st, s.w.value(), s.dx.value(), s.b, 1,
@@ -1970,6 +1994,9 @@ def _m3_session_step_run(mut s: Mamba3DecodeSession, a: List[Int]) raises -> Int
     _write_f32(a[3], mamba_download(ctx, stages.k_last, s.b * nh * M3_D_STATE))
     _write_f32(a[4], mamba_download(ctx, stages.v_last, s.b * nh * M3_HEADDIM))
     _write_f32(a[5], mamba_download(ctx, stages.theta_last, s.b * nh * M3_NUM_ROPE_ANGLES))
+    comptime if IDN_M3_DECODE_WINDOW_REUSE:
+        # Every report download above completes before capacity is retained.
+        s.decode_stages = stages^
     return st.buf_len
 
 
@@ -2203,7 +2230,7 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
     s.weight_uploads += 1
 
 
-def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int) raises -> Int:
+def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, force_retain: Bool = False) raises -> Int:
     """`_mamba3_run[True]` on the session: `a` is the fresh entry's 25-slot
     list (state slots zero, never read)."""
     var dims = Mamba3Dims.of(dm)
@@ -2287,7 +2314,7 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
     var out_len = dstate.buf_len
     ctx.synchronize()
-    if _m3_retain_stages():
+    if force_retain or _m3_retain_stages():
         s.stages = dstages^
         s.state = dstate^
         s.stages_b = b
@@ -2425,6 +2452,147 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     ctx.synchronize()
     _ = g^
     _ = d_output^
+
+
+
+# NI48: default-OFF owned forward tape. A tape has exactly one fresh session;
+# input, weights and stages are native owned copies from the actual forward.
+# There is no mutable external generation to compare: this tape's generation
+# is its immutable snapshot and it can be consumed once. Future forwards use
+# other owners. Native close/failure invalidates this owner before release.
+# This removes both forward recomputation and device-to-host input comparison.
+# Arithmetic is unchanged; CPU retains its equivalent recompute path. No
+# compilation, identity, quality or end-to-end measurements have been run.
+comptime IDN_SAMBA_M3_FORWARD_TAPE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_SAMBA_FORWARD_TAPE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+struct Mamba3ForwardTape(Movable, Writable):
+    var owner: Mamba3PrefillSession
+    var consumed: Bool
+
+    def __init__(out self, var owner: Mamba3PrefillSession):
+        self.owner = owner^
+        self.consumed = False
+
+    def write_to(self, mut writer: Some[Writer]): writer.write("Mamba3ForwardTape")
+    def write_repr_to(self, mut writer: Some[Writer]): writer.write("Mamba3ForwardTape")
+
+
+def mamba3_forward_tape_enabled_binding() raises -> PythonObject:
+    return PythonObject(IDN_SAMBA_M3_FORWARD_TAPE)
+
+
+def mamba3_forward_tape_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """11 addresses: x, nine immutable-at-call weights, y. Params B,L,DM.
+    Returns an opaque single-use native snapshot; reports are not requested."""
+    comptime if not IDN_SAMBA_M3_FORWARD_TAPE:
+        raise Error("mamba3 forward tape: experiment disabled")
+    if len(addrs) != 11 or len(params) != 3:
+        raise Error("mamba3 forward tape: expected 11 addresses and 3 shape scalars")
+    var b = Int(py=params[0]); var l = Int(py=params[1]); var dm = Int(py=params[2])
+    if b < 1 or l < 1 or dm < 1:
+        raise Error("mamba3 forward tape: positive B, L and d_model required")
+    var a = List[Int]()
+    for i in range(10):
+        var address = Int(py=addrs[i])
+        if address == 0: raise Error("mamba3 forward tape: null input or weight")
+        a.append(address)
+    for i in range(10): a.append(0)
+    var output = Int(py=addrs[10])
+    if output == 0: raise Error("mamba3 forward tape: null output")
+    a.append(output)
+    for i in range(4): a.append(0)
+    var owner = Mamba3PrefillSession()
+    owner.busy = True
+    try:
+        with GILReleased(Python()):
+            _ = _m3_prefill_run(owner, a, b, l, dm, True)
+    except error:
+        owner.busy = False
+        owner.usable = False
+        owner.release()
+        raise error
+    owner.busy = False
+    return PythonObject(alloc=Mamba3ForwardTape(owner^))
+
+
+def _m3_backward_tape_run(mut s: Mamba3PrefillSession, a: List[Int]) raises:
+    var b = s.stages_b; var l = s.stages_l
+    var dims = s.stages.value().dims.copy()
+    var dm = dims.d_model
+    var n_x = b * l * dm
+    ref ctx = s.ctx.value()
+    var d_output = _m3_upload_addr(ctx, a[0], n_x)
+    var bad_dy = device_first_nonfinite(ctx, d_output, n_x)
+    if bad_dy >= 0:
+        raise Error(String(_M3_BWD_NONFINITE_DY) + String(bad_dy))
+    ref dw = s.w.value()
+    ref stages = s.stages.value()
+    ref dx = s.dx.value()
+    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var tk = Int(perf_counter_ns())
+    var g = mamba3_prefill_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton, tk)
+    _m3_download_addr[False](ctx, g.x, n_x, a[1])
+    _m3_download_addr[False](ctx, g.block_norm_weight, dm, a[2])
+    _m3_download_addr[False](ctx, g.in_proj_weight, dims.d_in_proj() * dm, a[3])
+    _m3_download_addr[False](ctx, g.dt_bias, dims.nheads, a[4])
+    _m3_download_addr[False](ctx, g.B_norm_weight, M3_D_STATE, a[5])
+    _m3_download_addr[False](ctx, g.C_norm_weight, M3_D_STATE, a[6])
+    _m3_download_addr[False](ctx, g.B_bias, dims.nheads * M3_D_STATE, a[7])
+    _m3_download_addr[False](ctx, g.C_bias, dims.nheads * M3_D_STATE, a[8])
+    _m3_download_addr[False](ctx, g.D, dims.nheads, a[9])
+    _m3_download_addr[False](ctx, g.out_proj_weight, dm * dims.d_inner, a[10])
+    ctx.synchronize()
+    s.backward_reuses += 1
+    _ = g^
+    _ = d_output^
+
+
+def mamba3_backward_tape_binding(tape: PythonObject, addrs: PythonObject) raises -> PythonObject:
+    """11 addresses: dy, dx and nine forward-order parameter gradients."""
+    comptime if not IDN_SAMBA_M3_FORWARD_TAPE:
+        raise Error("mamba3 backward tape: experiment disabled")
+    var handle = tape.downcast_value_ptr[Mamba3ForwardTape]()
+    if handle[].consumed: raise Error("mamba3 backward tape: consumed or closed")
+    if handle[].owner.busy: raise Error("mamba3 backward tape: busy")
+    if not handle[].owner.usable or not handle[].owner.stages_valid:
+        raise Error("mamba3 backward tape: invalid forward snapshot")
+    if len(addrs) != 11:
+        raise Error("mamba3 backward tape: expected 11 addresses")
+    var a = List[Int]()
+    for i in range(11):
+        var address = Int(py=addrs[i])
+        if address == 0: raise Error("mamba3 backward tape: null gradient buffer")
+        a.append(address)
+    handle[].owner.busy = True
+    # A failed backward also consumes the tape: no retry can accidentally use
+    # a partially mutated stage. The caller may repeat the original forward.
+    handle[].consumed = True
+    try:
+        with GILReleased(Python()):
+            _m3_backward_tape_run(handle[].owner, a)
+    except error:
+        handle[].owner.busy = False
+        handle[].owner.usable = False
+        handle[].owner.release()
+        raise error
+    handle[].owner.busy = False
+    handle[].owner.usable = False
+    handle[].owner.release()
+    return PythonObject(0)
+
+
+def mamba3_close_tape_binding(tape: PythonObject) raises -> PythonObject:
+    var handle = tape.downcast_value_ptr[Mamba3ForwardTape]()
+    if handle[].owner.busy: raise Error("mamba3 close tape: busy")
+    handle[].consumed = True
+    handle[].owner.usable = False
+    handle[].owner.release()
+    return PythonObject(0)
 
 
 def mamba3_prefill_session_create_binding() raises -> PythonObject:
@@ -2823,6 +2991,11 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
         m.def_function[mamba2_session_load_state_binding]("mamba2_session_load_state")
         m.def_function[mamba2_session_close_binding]("mamba2_session_close")
         m.def_function[mamba3_backward_binding]("mamba3_backward")
+        _ = m.add_type[Mamba3ForwardTape]("_Mamba3ForwardTape")
+        m.def_function[mamba3_forward_tape_enabled_binding]("mamba3_forward_tape_enabled")
+        m.def_function[mamba3_forward_tape_binding]("mamba3_forward_tape")
+        m.def_function[mamba3_backward_tape_binding]("mamba3_backward_tape")
+        m.def_function[mamba3_close_tape_binding]("mamba3_close_tape")
         m.def_function[mamba3_forward_binding]("mamba3_forward")
         comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL"]():
             m.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")

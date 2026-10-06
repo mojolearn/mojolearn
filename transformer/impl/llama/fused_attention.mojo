@@ -1404,8 +1404,14 @@ of the trial tree (the sabotage copies stay trial-only, like
 # tradeoff qualification remain required. Preserve defaults and old exclusions.
 # Evidence: overnight-ab-20261006/amd/normalized-measurements.json and
 # overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json, I07.
-comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
-comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
+comptime ATTN_V1_RECOMPUTE_BACKWARD = (
+    is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime ATTN_V1_PACKED_ESTASH = (
+    is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime ATTN_V1_ALIAS_Y_ESTASH = (
     is_defined["MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH"]()
     or (

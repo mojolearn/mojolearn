@@ -562,6 +562,12 @@ def mamba3_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
 
 
 @export
+def mamba3_forward_tape_enabled_binding() raises -> PythonObject:
+    # NI48 is scheduling-only. The host uses its unchanged forward/recompute
+    # arithmetic; it must not advertise a native retained-stage API it lacks.
+    return PythonObject(False)
+
+
 def PyInit__mojolearn_mamba_host() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_mamba_host")
@@ -581,6 +587,7 @@ def PyInit__mojolearn_mamba_host() abi("C") -> PythonObject:
         m.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
         m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         m.def_function[mamba3_backward_binding]("mamba3_backward")
+        m.def_function[mamba3_forward_tape_enabled_binding]("mamba3_forward_tape_enabled")
         return m.finalize()
     except error:
         abort(String("failed to create _mojolearn_mamba_host: ", error))

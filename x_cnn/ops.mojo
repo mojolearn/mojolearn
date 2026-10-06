@@ -26,10 +26,29 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 from core.philox import philox4x32_10
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
+from x_cnn.neural_aux_contract import NI57_GRAPH_TREE64, graph_reduce_tree64
+from gemm.contract import GEMM_NUMERICAL_PROFILE
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
 comptime ElemFn = def(Int, FP, FP, FP, FP, IP, IP) thin -> None
+
+
+def neural_tape_budget_bytes() -> Int:
+    """NI10 explicit A/B lifetime policy, shared by CPU and GPU bindings.
+
+    -1 keeps the incumbent unbounded tape policy. Candidate A has a
+    64-MiB total retained-tape budget, a memory policy independent of model
+    dimensions. B recomputes. ALL_OFF restores the incumbent. Selection
+    affects buffer allocation only, never values or training sample count.
+    """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        comptime assert not (is_defined["MOJOLEARN_NI10_BUDGETED_CNN_TAPE"]() and is_defined["MOJOLEARN_NI10_RECOMPUTE_CNN_TAPE"]()), "select one CNN tape arm"
+        comptime if is_defined["MOJOLEARN_NI10_BUDGETED_CNN_TAPE"]():
+            return 64 * 1024 * 1024
+        comptime if is_defined["MOJOLEARN_NI10_RECOMPUTE_CNN_TAPE"]():
+            return 0
+    return -1
 
 
 # lane fam-neural (2026-10-04): three backward gathers visited every window
@@ -138,6 +157,16 @@ def im2col_at(i: Int, x: FP, cols: FP, f2: FP, f3: FP, q: IP, p: IP):
     """cols[r, qq], r = (n*OH + oh)*OW + ow, qq = (c*KH + kh)*KW + kw: the
     input pixel under that tap, or +0.0 in the zero padding. A copy, no
     arithmetic."""
+    cols.unsafe_store(i, im2col_val(i, x, p))
+
+
+@always_inline
+def im2col_val(i: Int, x: FP, p: IP) -> Float32:
+    """NI12 load seam: materialized and implicit columns use the same word.
+
+    An out-of-image tap is positive zero and remains an operand in the
+    canonical FMA chain; skipping its product would change IEEE behavior.
+    """
     var C = _g(p, CP_C); var H = _g(p, CP_H); var W = _g(p, CP_W)
     var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
     var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
@@ -157,7 +186,7 @@ def im2col_at(i: Int, x: FP, cols: FP, f2: FP, f3: FP, q: IP, p: IP):
     var v = Float32(0)
     if h >= 0 and h < H and w >= 0 and w < W:
         v = ftz(x.unsafe_load(((n * C + c) * H + h) * W + w))
-    cols.unsafe_store(i, v)
+    return v
 
 
 @always_inline
@@ -259,6 +288,48 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
             var ow = _ud(tw, SW)
             if ow >= OW:
                 continue
+            var r = (n * OH + oh) * OW + ow
+            acc = ftz(acc + ftz(dcols.unsafe_load(r * ckk + (c * KH + kh) * KW + kw)))
+    dx.unsafe_store(i, acc)
+
+
+@always_inline
+def col2im_bounded_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """NI14 address-schedule arm: exclude taps outside the output image.
+
+    The bounds solve 0 <= h+PH-kh*DH <= (OH-1)*SH, and likewise for
+    width. Congruence checks and the surviving (kh,kw) contribution order
+    are unchanged, including CP_REV. No scatter atomics or new reduction.
+    This is also the resource/boundary fallback for NI14's cooperative tap
+    pages in x_cnn/neural_col2im.mojo; it introduces no partial sums.
+    """
+    var C = _g(p, CP_C); var H = _g(p, CP_H); var W = _g(p, CP_W)
+    var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
+    var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
+    var SH = _g(p, CP_SH); var SW = _g(p, CP_SW)
+    var PH = _g(p, CP_PH); var PW = _g(p, CP_PW)
+    var DH = _g(p, CP_DH); var DW = _g(p, CP_DW)
+    var w = _um(i, W); var t = _ud(i, W)
+    var h = _um(t, H)
+    t = _ud(t, H)
+    var c = _um(t, C); var n = _ud(t, C)
+    var hlo = max(0, h + PH - (OH - 1) * SH + DH - 1) // DH
+    var hhi = min(KH, (h + PH) // DH + 1)
+    var wlo = max(0, w + PW - (OW - 1) * SW + DW - 1) // DW
+    var whi = min(KW, (w + PW) // DW + 1)
+    var acc = Float32(0)
+    var ckk = C * KH * KW
+    for a in range(max(0, hhi - hlo)):
+        var kh = hhi - 1 - a if _g(p, CP_REV) != 0 else hlo + a
+        var th = h + PH - kh * DH
+        if _um(th, SH) != 0:
+            continue
+        var oh = _ud(th, SH)
+        for kw in range(wlo, whi):
+            var tw = w + PW - kw * DW
+            if _um(tw, SW) != 0:
+                continue
+            var ow = _ud(tw, SW)
             var r = (n * OH + oh) * OW + ow
             acc = ftz(acc + ftz(dcols.unsafe_load(r * ckk + (c * KH + kh) * KW + kw)))
     dx.unsafe_store(i, acc)
@@ -585,6 +656,29 @@ def relu_bwd_at(i: Int, x: FP, g: FP, dx: FP, f3: FP, q: IP, p: IP):
 
 
 @always_inline
+def conv_relu_out_at(i: Int, y2: FP, bias: FP, yconv: FP, dst: FP, q: IP, p: IP):
+    """NI16: preserve the rounded preactivation and apply its exact ReLU."""
+    var OC = _g(p, CP_OC)
+    var S = _g(p, CP_OH) * _g(p, CP_OW)
+    var nc = _ud(i, S); var rem = i - nc * S
+    var oc = _um(nc, OC); var n = _ud(nc, OC)
+    var v = conv_out_val(y2.unsafe_load((n * S + rem) * OC + oc), bias, oc, p)
+    yconv.unsafe_store(i, v)
+    dst.unsafe_store(i, relu_val(ftz(v)))
+
+
+@always_inline
+def relu_rows_bwd_at(i: Int, dout: FP, yconv: FP, grow: FP, f3: FP, q: IP, p: IP):
+    """NI16: no-pool ReLU VJP plus NCHW-to-rows, retaining both FTZ seams."""
+    var OC = _g(p, CP_OC)
+    var S = _g(p, CP_OH) * _g(p, CP_OW)
+    var r = _ud(i, OC); var oc = i - r * OC
+    var n = _ud(r, S); var rem = r - n * S
+    var j = (n * OC + oc) * S + rem
+    grow.unsafe_store(i, ftz(relu_bwd_val(yconv.unsafe_load(j), dout.unsafe_load(j))))
+
+
+@always_inline
 def pool_relu_rows_bwd_at(i: Int, dpool: FP, yconv: FP, grow: FP, f3: FP, idx: IP, p: IP):
     """The conv block's backward from the pool's output gradient to the
     GEMM's rows in one pass (DEVIATION 5720): grow[r, oc] = dout_rows of
@@ -618,7 +712,13 @@ def add_at(i: Int, a: FP, b: FP, dst: FP, f3: FP, q: IP, p: IP):
 def bias_rows_at(i: Int, y: FP, bias: FP, dst: FP, f3: FP, q: IP, p: IP):
     """dst[r, j] = y[r, j] + bias[j]; p[2] is the row width."""
     var cols = _g(p, 2)
-    dst.unsafe_store(i, canon(ftz(ftz(y.unsafe_load(i)) + ftz(bias.unsafe_load(i % cols)))))
+    dst.unsafe_store(i, linear_bias_val(y.unsafe_load(i), bias.unsafe_load(i % cols)))
+
+
+@always_inline
+def linear_bias_val(product: Float32, bias: Float32) -> Float32:
+    """Shared NI09 post-GEMM seam; host, separate GPU pass and fused store."""
+    return canon(ftz(ftz(product) + ftz(bias)))
 
 
 @always_inline
@@ -897,6 +997,13 @@ def bn_bwd_red_at(c: Int, x: FP, g: FP, aux: FP, f3: FP, q: IP, p: IP):
 # `-D MOJOLEARN_BN_FOLD_BLOCK_OFF` restores the single chain.
 comptime BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
+# NI17 V arm, source-only and default OFF: halve each logical chain and
+# use a balanced fold of its block sums. Both host and all GPUs call these
+# functions, including adaptive-average pooling which shares this schedule.
+# No precision/objective/epsilon change; running statistics and gradients
+# require new-version all-column identity and full training-quality evidence.
+comptime NI17_BALANCED_NORM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NI17_BALANCED_NORM"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+
 
 @always_inline
 def bn_fold_block(count: Int) -> Int:
@@ -904,6 +1011,11 @@ def bn_fold_block(count: Int) -> Int:
     var b = 64
     while b * b < count:
         b *= 2
+    comptime if NI17_BALANCED_NORM:
+        # The square-root schedule balances leaf work against number of
+        # partials. Halving trades shorter dependency chains for more nodes;
+        # no hardware lane width or exact workload dimension is consulted.
+        b = max(32, b // 2)
     return b
 
 
@@ -965,6 +1077,28 @@ def _bn_blk_fold[MODE: Int](t: Int, x: FP, g: FP, aux: FP, p: IP) -> Tuple[Float
 @always_inline
 def _bn_blk_total(c: Int, part: FP, NB: Int) -> Float32:
     """The NB block partials of channel c added ascending from +0.0."""
+    comptime if NI17_BALANCED_NORM:
+        # NB is bounded by the Int32 parameter domain. A 32-level register
+        # stack carries odd tails without zero padding; no scratch mutation
+        # occurs, so concurrent channels cannot affect one another.
+        var stack = InlineArray[Float32, 32](fill=Float32(0))
+        var occ = 0
+        for b in range(NB):
+            var value = ftz(part.unsafe_load(c * NB + b))
+            var level = 0
+            while ((occ >> level) & 1) != 0:
+                value = ftz(ftz(stack[level]) + ftz(value))
+                occ -= 1 << level
+                level += 1
+            stack[level] = value
+            occ += 1 << level
+        var have = False
+        var result = Float32(0)
+        for level in range(32):
+            if ((occ >> level) & 1) != 0:
+                result = ftz(ftz(stack[level]) + ftz(result)) if have else stack[level]
+                have = True
+        return result
     var acc = Float32(0)
     for b in range(NB):
         acc = ftz(acc + part.unsafe_load(c * NB + b))
@@ -1131,6 +1265,11 @@ def spmm_at(i: Int, vals: FP, h: FP, dst: FP, f3: FP, q: IP, p: IP):
         if hi > lo:
             d = ftz(identical_div(ftz(h.unsafe_load(i)), Float32(hi - lo)))
         dst.unsafe_store(i, d)
+        return
+    comptime if NI57_GRAPH_TREE64:
+        # NI57 V arm: this common element function is called by every GPU
+        # and the host. Only the logical edge reduction graph changes.
+        dst.unsafe_store(i, graph_reduce_tree64(r, f, n, F, mode, vals, h, q))
         return
     var acc = Float32(0)
     for e in range(lo, hi):
@@ -1712,11 +1851,20 @@ def epoch_rows_at(i: Int, f0: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
     repeated until the image is below n (cycle walking: the image of a
     permutation of the 2^(2 half) words restricted to [0, n) is a
     permutation of [0, n)). Integers only: the same row on every column."""
+    q.unsafe_store(i, epoch_row_val(i, p))
+
+
+@always_inline
+def epoch_row_val(i: Int, p: IP) -> Int32:
+    """NI18 shared integer permutation, also used by the fused device gather.
+
+    Logical position, epoch key, Feistel rounds and cycle walk are exactly
+    the existing epoch_rows_at contract. This is not a new shuffle/RNG.
+    """
     var n = UInt32(_g(p, EP_N))
     var pos = _g(p, EP_POS) + i
     if _g(p, EP_SHUFFLE) == 0:
-        q.unsafe_store(i, Int32(pos))
-        return
+        return Int32(pos)
     var h = UInt32(_g(p, EP_HALF))
     var mask = (UInt32(1) << h) - UInt32(1)
     var k0 = UInt32(_g(p, EP_KEY)) | (UInt32(_g(p, EP_KEY + 1)) << UInt32(16))
@@ -1734,7 +1882,7 @@ def epoch_rows_at(i: Int, f0: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
         x = (l << h) | r
         if x < n:
             break
-    q.unsafe_store(i, Int32(Int(x)))
+    return Int32(Int(x))
 
 
 # ---- Adam's step scalars in double-float32
@@ -1875,6 +2023,26 @@ def adam_hyper_base(lr: Float64, b1: Float64, b2: Float64, eps: Float64, wd: Flo
     out.append(Float32(wd - Float64(wdh)))
     out.append(Float32(dec))
     return out^
+
+
+def neural_numerical_profile() -> String:
+    """Shared compiled arithmetic descriptor for layer/state provenance.
+
+    Physical scheduling arms intentionally do not change this descriptor.
+    NI08 GEMM, NI17 normalization/pooling and NI57 graph changes do, as do
+    the existing alternate loss/normalization fold versions. This is
+    metadata, not a claim of compiled or measured cross-vendor identity.
+    """
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return "mojolearn.x_cnn.fast"
+    var result = String("mojolearn.x_cnn.identical.v1;gemm=") + String(GEMM_NUMERICAL_PROFILE)
+    result += ";bn-block=" + String(Int(BN_FOLD_BLOCK))
+    result += ";norm-ni17=" + String(Int(NI17_BALANCED_NORM))
+    result += ";gap-block=" + String(Int(IDN_GAP_BLOCK_FOLD))
+    result += ";graph-ni57=" + String(Int(NI57_GRAPH_TREE64))
+    result += ";loss-device=" + String(Int(IDN_XENT_DEV_FOLD))
+    result += ";loss-leaf=" + String(LOSS_FOLD_BLOCK)
+    return result
 
 
 def idn2_flags() -> Int:

@@ -40,6 +40,10 @@ from training.checks.loss_contract import (
 
 
 
+from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2
+from training.loss_reduction_v2 import loss_token_tree_v2_host
+
+
 def ce_fold(
     values: List[Float32], base: Int, count: Int, ones: List[Float32]
 ) -> Float32:
@@ -133,7 +137,11 @@ def _row_combine(
 def ce_forward_oracle(
     logits: List[Float32], targets: List[Int32], cfg: CeConfig
 ) raises -> CeStages:
-    """**THE NORMATIVE FORWARD ANSWER of `mojolearn.identical.loss.ce.fp32.v1`.** Scalar, single threaded, host. That is deterministic, the same on every vendor, and admitted."""
+    """Native host forward under CE_NUMERICAL_PROFILE.
+
+    The default retains v1; NI35 selects its separate L12 token-total tree.
+    NI35's source has not been compiled or checked for cross-column identity.
+    """
     var n = ce_refuse_inputs(logits, targets, cfg)
     var v = cfg.vocab
     var smoothing = cfg.smoothing_is_spelled()
@@ -198,7 +206,13 @@ def ce_forward_oracle(
     if cfg.reduction == REDUCTION_NONE:
         return st^
 
-    var total = ce_fold(st.row, 0, n, ones)
+    var total: Float32
+    comptime if IDN_LOSS_TOKEN_TREE_V2:
+        # NI35 native host counterpart of the GPU's independent L12 tree.
+        # ce_fold remains unchanged for L4/L9 vocabulary reductions.
+        total = loss_token_tree_v2_host(st.row, 0, n)
+    else:
+        total = ce_fold(st.row, 0, n, ones)
     st.total.append(total)
 
     var divisor = ce_divisor(cfg.reduction, st.count, cfg.num_items)

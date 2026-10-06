@@ -117,10 +117,28 @@ def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
 # versus leaf128 0.280/0.255 ms, M,N,K=1024,1024,2048 and1023,1025,2049.
 # One warmup/score; no full-workload promotion.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
-comptime CONTRACT_K_LEAF_MIN = (
-    64 if (is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
-           and is_defined["MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"]()) else 128
+# NI08 source-only profile arms (2026-10-06), NOT COMPILED OR QUALIFIED.
+# The larger leaf trades twice the serial FMA dependency for approximately
+# half as many partials/fold nodes. These are logical numerical profiles,
+# shared by the host and every GPU, never hardware-specific tile choices.
+# Both defines together are refused rather than silently picking a version.
+comptime _NEURAL_GEMM_PROFILE_ARM = (
+    is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+comptime _NEURAL_GEMM_LEAF64 = _NEURAL_GEMM_PROFILE_ARM and is_defined["MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"]()
+comptime _NEURAL_GEMM_LEAF256 = _NEURAL_GEMM_PROFILE_ARM and is_defined["MOJOLEARN_NI08_GEMM_LEAF_256"]()
+comptime assert not (_NEURAL_GEMM_LEAF64 and _NEURAL_GEMM_LEAF256), "select one GEMM numerical profile"
+comptime CONTRACT_K_LEAF_MIN = 64 if _NEURAL_GEMM_LEAF64 else (256 if _NEURAL_GEMM_LEAF256 else 128)
+comptime GEMM_NUMERICAL_PROFILE = (
+    "mojolearn.identical.gemm.fp32.ni08-leaf256" if _NEURAL_GEMM_LEAF256
+    else ("mojolearn.identical.gemm.fp32.i04-leaf64" if _NEURAL_GEMM_LEAF64
+          else "mojolearn.identical.gemm.fp32.v1")
+)
+# Numerical-version metadata follows this shared host/device contract. These
+# experiment versions are not qualification claims and cannot borrow v1's
+# historical certification. Exact names distinguish the independent profiles.
+comptime GEMM_NUMERICAL_PROFILE_VERSION = 3 if _NEURAL_GEMM_LEAF256 else (2 if _NEURAL_GEMM_LEAF64 else 1)
 
 #: The cap on the number of leaves.
 #:

@@ -102,6 +102,7 @@ from gemm.checks.gemm_lowbit import (
     quantize_rows_int8_device,
 )
 from gemm.contract import INT8_MAX_K, LOWBIT_PROFILE_VERSION
+from gemm.contract import GEMM_NUMERICAL_PROFILE, GEMM_NUMERICAL_PROFILE_VERSION
 from gemm.afn_apple_fast import (
     AFN_EPI_BIAS,
     AFN_EPI_BIAS_GELU,
@@ -149,23 +150,13 @@ def linalg_numeric_mode_binding() raises -> PythonObject:
 
 
 def linalg_profile_version_binding() raises -> PythonObject:
-    """The MAJOR VERSION of the GEMM profile this binary implements: 1, for
-    `mojolearn.identical.gemm.fp32.v1`.
+    """The actual shared arithmetic version, including opt-in leaf experiments."""
+    return PythonObject(GEMM_NUMERICAL_PROFILE_VERSION)
 
-    An Int and not the profile string, because the profile name has no Mojo
-    constant anywhere in this tree today -- it lives in
-    `gemm/IDENTICAL_FP32_CONTRACT.md` and in docstrings -- so a string
-    returned here would be a literal typed twice rather than a fact read
-    once, and Int is a conversion the other bindings already prove.
 
-    **The version is part of the claim**, contract preamble: *"a bit-identity
-    claim with no version on it is a claim about whichever revision the
-    reader happens to be holding."* The leaf rule of section 7.1 and the fold
-    topology of section 7.2 are what this number is about. Changing either
-    creates v2 and this returns 2; it does not amend v1. The wrapper
-    cross-checks it against its own constant, so a stale `.so` beside a newer
-    wrapper is a loud error rather than a mislabeled answer."""
-    return PythonObject(1)
+def linalg_numerical_profile_binding() raises -> PythonObject:
+    """Exact contract name; an experimental profile is not certified v1."""
+    return PythonObject(String(GEMM_NUMERICAL_PROFILE))
 
 
 def gemm_binding(
@@ -998,6 +989,7 @@ def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
         m.def_function[linalg_profile_version_binding](
             "linalg_profile_version"
         )
+        m.def_function[linalg_numerical_profile_binding]("linalg_numerical_profile")
         m.def_function[lowbit_profile_version_binding]("lowbit_profile_version")
         m.def_function[gemm_bf16_binding]("gemm_bf16")
         m.def_function[gemm_int8_binding]("gemm_int8")

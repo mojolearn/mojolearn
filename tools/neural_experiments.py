@@ -19,6 +19,8 @@ baseline, and whether the output DIGEST equals the baseline's (`same` /
     python tools/neural_experiments.py --gemm-arms shipped,tuned128,half,quarter,kpack
     python tools/neural_experiments.py --only speculative_attn,swiglu_fused
     python tools/neural_experiments.py --json results.json
+    python tools/neural_experiments.py ideas list             # versioned neural catalog
+    python tools/neural_experiments.py ideas plan NI20 --arm A
 
 A configuration whose digest MOVED is not a speed result; it is a bug
 report against that toggle (or a stage the toggle legitimately drops from
@@ -127,6 +129,12 @@ def run_one(name, env_delta, lanes, calls, shape):
 
 
 def main(argv=None):
+    # Versioned neural candidates use the frozen builder/full-workload queue.
+    # The older stage diagnostic below retains its stricter same-bits A/B rule.
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments and arguments[0] == "ideas":
+        from neural_identical_ideas import main as ideas_main
+        return ideas_main(arguments[1:])
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--lane", action="append", choices=LANES)
     ap.add_argument("--shape", default="full")
@@ -135,7 +143,7 @@ def main(argv=None):
     ap.add_argument("--only", help="comma-separated experiment names (baseline is always run)")
     ap.add_argument("--gemm-arms", help="comma-separated MOJOLEARN_GEMM_ARM names to add as experiments")
     ap.add_argument("--json")
-    args = ap.parse_args(argv)
+    args = ap.parse_args(arguments)
     lanes = args.lane or list(LANES)
     names = SETS[args.set]
     if args.only:

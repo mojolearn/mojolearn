@@ -17,6 +17,19 @@ from checks.numerics import (
     identical_log,
     identical_mul,
 )
+from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2
+from training.loss_reduction_v2 import LOSS_TOKEN_TREE_V2_PROFILE
+
+# NI35 explicitly changes the loss profile; cross-version equality is not
+# required. Every column must choose the same profile within one version.
+comptime CE_NUMERICAL_PROFILE = (
+    LOSS_TOKEN_TREE_V2_PROFILE if IDN_LOSS_TOKEN_TREE_V2
+    else "mojolearn.identical.loss.ce.fp32.v1"
+)
+
+
+def ce_numerical_profile() -> String:
+    return String(CE_NUMERICAL_PROFILE)
 
 
 comptime REDUCTION_NONE = 0
