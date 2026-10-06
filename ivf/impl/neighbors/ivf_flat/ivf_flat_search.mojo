@@ -904,6 +904,7 @@ def ivf_flat_search_prepared(
                         comptime if IVF_IDENTICAL_SCAN or IVF_APPLE_FAST_BALANCED:
                             # I16 new candidate remains default off. Qualification is pending: native
                             # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
+                            # NEVER RUN — PENDING VALIDATION
                             if IVF_APPLE_FAST_BALANCED or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
                                 # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
                                 comptime if IVF_APPLE_FAST_BALANCED and is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
