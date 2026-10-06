@@ -75,9 +75,10 @@ comptime GMM_IDN_CHOL_MAX_D = GMM_IDN_CHOL_TPB
 # I21 legacy_both_off additionally restores the late mean-likelihood copy:
 # same frozen source/cases, both-OFF/incumbent ratios AMD 2.051/1.913/1.471
 # and NVIDIA L40S 2.140/2.221/1.705 (all LOSS). All six converged=True,
-# rc=0, one warmup/one score. This bundle does not isolate the drain control;
-# isolated one_drain_off remains pending. Retain both existing ON defaults
-# and the full-board limitation.
+# rc=0, one warmup/one score. This bundle does not isolate the drain control.
+# Isolated one_drain_off now measured, same cases: AMD 0.987/1.000/1.010
+# (mixed near-neutral), NVIDIA 1.010/1.020/1.532 (losses); see estimator.mojo.
+# Retain both existing ON defaults and the full-board limitation.
 comptime IDN_GMM_FUSED_CHOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
