@@ -513,7 +513,8 @@ def gemm_nt_gram(
         )
         return
     # True alias Gram retains its original lifetime and plain NT epilogue.
-    var xp = xt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var scoped_xt = xt  # mutable view; shared buffer remains caller-owned
+    var xp = scoped_xt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     if try_scoped_gemm[False, 0](
         ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xp, xp,
         m, n, k, k, 1, 1, k, 1, k,
