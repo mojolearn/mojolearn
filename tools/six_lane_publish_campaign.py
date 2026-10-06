@@ -25,6 +25,7 @@ SOURCES=[('apple',ROOT/'apple/captured/runs'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-gmm-istella'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-pls'),
+         ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements')]
 
 
