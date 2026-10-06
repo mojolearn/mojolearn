@@ -1,0 +1,27 @@
+{
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia",
+  "deploy_role": "Frozen scripts for already-owned campaign. Local controllers resolve evidence root from their deployed file directory; deploy there, do not run from this archive.",
+  "local_processes": {
+    "stream": 59834,
+    "tail_monitor": 59836,
+    "health_watch": 32311,
+    "normalizer": 34273,
+    "hold_release": 39421
+  },
+  "remote": {
+    "specific": {
+      "pod": "2d23dop8rf473d",
+      "worker_pid": 9615,
+      "opponent_tail_pid": 9743,
+      "opponent_board_pid": 9744
+    },
+    "default": {
+      "pod": "jph124vcqjtlws",
+      "worker_pid": 9805
+    }
+  },
+  "idle_seconds": 1800,
+  "hold_expires_utc": "2026-10-06T05:15:00Z",
+  "opponent_policy": "GPU-only shards; candidate arrivals preempt between races; default tail waits completed builds and no fresh claims; exact hardware/runtime provenance; no old RTX4090 timings reused",
+  "measurement_policy": "Existing identity accepted. Missing timing entrypoints only are built. Driver warmup+score runs once."
+}
