@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T05:52:39Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T05:56:46Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T05:52:39Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 114 planned, 106 done, 8 failed, 0 unsupported, 0 pending. Cells: 255 (REFUSED 21, UNKNOWN 12, ok 222).
+Races: 114 planned, 107 done, 7 failed, 0 unsupported, 0 pending. Cells: 255 (REFUSED 21, UNKNOWN 6, ok 228).
 
 Inference cells: 172 (REFUSED 2, UNKNOWN 8, ok 162).
 
@@ -183,6 +183,9 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | umap | istella | trustworthiness_k15 (higher is better, 1 at most) | - | - | cuml-gpu 0.979912 |
 | neural | gemm-bf16 | gaussian | max_rel_err_vs_fp64 (lower is better) | - | - | torch-eager-bf16 0.002764; torch-compile-bf16 0.002764 |
 | neural | gemm | gaussian | max_rel_err_vs_fp64 (lower is better) | - | - | torch-eager-fp32 1.401e-06; torch-eager-tf32 0.0002784; torch-compile-fp32 1.401e-06; torch-compile-tf32 0.0002784; torch-eager-bf16 0.003752; torch-compile-bf16 0.003752 |
+| neural | lm-train-step | bytes | loss_first_step (same init and batches on every arm) | - | - | torch-eager-fp32 9.018733; torch-eager-tf32 9.018732; torch-compile-fp32 9.018734; torch-compile-tf32 9.018732; torch-eager-bf16 9.018402; torch-compile-bf16 9.018669 |
+| neural | lm-train-step | bytes | loss_last_step (same init and batches on every arm) | - | - | torch-eager-fp32 8.418449; torch-eager-tf32 8.418548; torch-compile-fp32 8.418448; torch-compile-tf32 8.418557; torch-eager-bf16 8.417328; torch-compile-bf16 8.417006 |
+| neural | lm-train-step | bytes | steps | - | - | torch-eager-fp32 2; torch-eager-tf32 2; torch-compile-fp32 2; torch-compile-tf32 2; torch-eager-bf16 2; torch-compile-bf16 2 |
 | neural | mlp-train-step | gaussian | loss_first_step (same init and batches on every arm) | - | - | torch-eager-fp32 1.160401; torch-eager-tf32 1.160392; torch-compile-fp32 1.160401; torch-compile-tf32 1.160392; torch-eager-bf16 1.160498; torch-compile-bf16 1.160498 |
 | neural | mlp-train-step | gaussian | loss_last_step (same init and batches on every arm) | - | - | torch-eager-fp32 1.123361; torch-eager-tf32 1.123355; torch-compile-fp32 1.123361; torch-compile-tf32 1.123355; torch-eager-bf16 1.123461; torch-compile-bf16 1.123462 |
 | neural | mlp-train-step | gaussian | steps | - | - | torch-eager-fp32 2; torch-eager-tf32 2; torch-compile-fp32 2; torch-compile-tf32 2; torch-eager-bf16 2; torch-compile-bf16 2 |
@@ -199,13 +202,13 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | trees | gbdt-rank-yetirank | istella | map (higher is better) | - | - | catboost-gpu 0.814091; xgboost-gpu 0.842476; lightgbm-cuda -; catboost-cpu -; xgboost-cpu -; lightgbm-cpu - |
 | trees | gbdt-rank-yetirank | istella | ndcg10 (higher is better) | - | - | catboost-gpu 0.681202; xgboost-gpu 0.725584; lightgbm-cuda -; catboost-cpu -; xgboost-cpu -; lightgbm-cpu - |
 | trees | gbdt-rank-yetirank | istella | ndcg5 (higher is better) | - | - | catboost-gpu 0.614769; xgboost-gpu 0.663588; lightgbm-cuda -; catboost-cpu -; xgboost-cpu -; lightgbm-cpu - |
-| trees | gbdt-symmetric-1000 | taxi | logloss (lower is better) | - | - | catboost-gpu 0.528240; catboost-cpu - |
 | trees | gbdt-symmetric-1000 | taxi | auc (higher is better) | - | - | catboost-gpu 0.631685; catboost-cpu - |
-| trees | gbdt-symmetric | taxi | logloss (lower is better) | - | - | catboost-gpu 0.528616; catboost-cpu - |
+| trees | gbdt-symmetric-1000 | taxi | logloss (lower is better) | - | - | catboost-gpu 0.528240; catboost-cpu - |
 | trees | gbdt-symmetric | taxi | auc (higher is better) | - | - | catboost-gpu 0.630310; catboost-cpu - |
+| trees | gbdt-symmetric | taxi | logloss (lower is better) | - | - | catboost-gpu 0.528616; catboost-cpu - |
 | trees | iforest | taxi | auc (higher is better) | - | - | cuml-iforest-gpu 0.551846 |
-| trees | rf | taxi | logloss (lower is better) | - | - | cuml-rf-gpu 0.525954 |
 | trees | rf | taxi | auc (higher is better) | - | - | cuml-rf-gpu 0.617836 |
+| trees | rf | taxi | logloss (lower is better) | - | - | cuml-rf-gpu 0.525954 |
 
 ## Inference at a glance
 
@@ -1797,22 +1800,34 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
 | seed | 7 | 7 | 7 | 7 | 7 | 7 |
 
-### lm-train-step / bytes (neural shape full: -)
+### lm-train-step / bytes (neural shape full: B1 L2048 DM384 H6 KV6 HD64 FF1024 layers8 V8192)
 
-race: failed, driver rc 1, log `logs/neural.lm-train-step.bytes.shape-full.log`, ran on 24a11adce16e
+race: done, driver rc 0, log `logs/neural.lm-train-step.bytes.shape-full.log`, ran on 24a11adce16e
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
-| torch-eager-tf32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
-| torch-compile-tf32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | 21.9 | 21.9..21.9 | 1 | - | - | 1257.2 | 959.2 | loss_first_step=9.018733, loss_last_step=8.418449, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 17.9 | 17.9..17.9 | 1 | - | - | 1252.4 | 959.2 | loss_first_step=9.018732, loss_last_step=8.418548, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 21.6 | 21.6..21.6 | 1 | - | - | 1224.5 | 720.7 | loss_first_step=9.018734, loss_last_step=8.418448, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 22.1 | 22.1..22.1 | 1 | - | - | 1219.0 | 727.2 | loss_first_step=9.018732, loss_last_step=8.418557, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 24.4 | 24.4..24.4 | 1 | - | - | 1388.2 | 796.6 | loss_first_step=9.018402, loss_last_step=8.417328, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 10.8 | 10.8..10.8 | 1 | - | - | 1394.1 | 546.6 | loss_first_step=9.018669, loss_last_step=8.417006, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-eager-tf32, torch-compile-fp32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| amsgrad | false | false | false | false | false | false |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+| weight_decay | 0.01 | 0.01 | 0.01 | 0.01 | 0.01 | 0.01 |
 
 ### mamba2-forward / gaussian (neural shape full: B1 L2048 DM384)
 
