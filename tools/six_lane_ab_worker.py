@@ -168,8 +168,11 @@ def run(args):
     loaded={};expected=job['artifact_provenance'][args.arm]
     observed={Path(m.__file__).resolve() for m in list(sys.modules.values()) if getattr(m,'__file__',None) and str(m.__file__).endswith(('.so','.dylib'))}
     for artifact in expected:
-        matches=[p for p in observed if p.name==Path(artifact['path']).name and p.is_relative_to(package)]
-        if len(matches)!=1 or digest(matches[0])!=artifact['sha256']:raise ValueError('Required artifact not observed in worker: '+artifact['path'])
+        # FAST estimators also load IDENTICAL input helpers. Both tiers may
+        # legitimately contain _mojolearn.so; the receipt binds the exact path.
+        required_path=Path(artifact['path']).resolve()
+        if not required_path.is_relative_to(package) or required_path not in observed or digest(required_path)!=artifact['sha256']:
+            raise ValueError('Required artifact not observed in worker: '+artifact['path'])
         loaded[artifact['path']]=artifact['sha256']
     pools=None
     try:
