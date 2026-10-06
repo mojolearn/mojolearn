@@ -41724,8 +41724,9 @@
           "warmup_scope": "same_process",
           "status": "MEASURED",
           "returncode": 0,
-          "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+          "limitation": "Head-reuse flag also changed the requested backward kvgrid schedule in the original timing driver. Bundled measurement only; isolated toggle rerun uses corrected freeze.",
           "promotion": false,
+          "comparison_kind": "confounded_schedule_bundle",
           "artifact_hashes": {
             "baseline": "c5cfb5bdb8cf7d92544f48178e67ce0b294dff7ad8ab6df83ed3b8ad6e3bf929",
             "candidate": "f1f21dce4e5d24b4bd3848661a02b58057ebfb8ae31c349ad971181f123f8aa2"
@@ -41758,8 +41759,9 @@
           "warmup_scope": "same_process",
           "status": "MEASURED",
           "returncode": 0,
-          "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+          "limitation": "Head-reuse flag also changed the requested backward kvgrid schedule in the original timing driver. Bundled measurement only; isolated toggle rerun uses corrected freeze.",
           "promotion": false,
+          "comparison_kind": "confounded_schedule_bundle",
           "artifact_hashes": {
             "baseline": "c5cfb5bdb8cf7d92544f48178e67ce0b294dff7ad8ab6df83ed3b8ad6e3bf929",
             "candidate": "f1f21dce4e5d24b4bd3848661a02b58057ebfb8ae31c349ad971181f123f8aa2"

@@ -4,6 +4,10 @@ The [60-candidate A/B measurement board](../experiments/performance_ideas/measur
 records the overnight candidate campaign, including pending and failed cases,
 component versus full-workload scope, and retained per-device evidence.
 
+The [A07/A08 cross-vendor caller review](../experiments/performance_ideas/measurements/20261006/a07-a08-cross-vendor-review.json)
+matches 15 fixture/arm pairs across AMD and NVIDIA with source and artifact provenance.
+These representative caller results retain the existing defaults.
+
 The overnight GPU-only opponent measurements are published separately for
 [NVIDIA architecture-specific](../bench/results/bench_board/overnight-20261006-nvidia-specific/BOARD.md),
 [NVIDIA default](../bench/results/bench_board/overnight-20261006-nvidia-default/BOARD.md), and

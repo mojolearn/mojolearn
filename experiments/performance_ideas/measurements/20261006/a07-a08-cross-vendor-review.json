@@ -1,0 +1,641 @@
+{
+  "scope": "Matched representative public caller fixtures; each ratio is candidate/baseline on its own physical device. No cross-machine timing ratio.",
+  "identity": "Previously validated; not rerun",
+  "source_equivalence": "Distinct campaign commits retained; listed driver/helper blobs and production directory trees are identical. No blanket whole-build identity claim.",
+  "matching_git_objects": {
+    "experiments/performance_ideas/A07/time.mojo": "c39db918b51b8799d22e1676df70c784eaf760b0",
+    "experiments/performance_ideas/A08/time.mojo": "173820ef5f3187ac565a8002a5d50ee27651b072",
+    "ensemble": "3cd079ba6f87f3555287559993c02713c9d69330",
+    "cluster": "e583cd69e001b276bcbe491db2c35a26d416df01",
+    "gemm/checks/gemm_step_arms.mojo": "fb3f565e34a68b1c782f3b1393d5c297bf05bcd0"
+  },
+  "input_sha256": {
+    "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json": "a86bb20013bd36e5697b9aa032c289175d69a15092ba450ae1b3a6cb7b3a15a3",
+    "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json": "40ed5eb6d42cecf6a8672d70117e5ff74cb80af6ba55273ad4994cf78d77eba9"
+  },
+  "paired_fixtures": [
+    {
+      "id": "A07",
+      "arm": "production_tasks256",
+      "fixture": {
+        "AB_FEATURES": 32,
+        "AB_ROWS": 100000
+      },
+      "clusters": null,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "692f818e60c90980e26d9666a9836f43bd16b90533441888e933432c32e74796",
+          "candidate": "9583ce98ae125f89c0af8ef0cf078e6e8b1e484152292c8ab4c9d3d72fc115fe"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 32, \"AB_ROWS\": 100000}-production_tasks256",
+        "baseline_ms": 335.773905,
+        "candidate_ms": 333.376677,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "8144124adc4b64c1aea48f32be4645b259056efb1cce94171e0f7fc697e69a62",
+          "candidate": "c6d7f48262b505d93c9cf083fe0edaa2e99de8a7d5842b101b7e066a5d8f09e1"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A07-production_tasks256-5b467815b5-f0/case0",
+        "baseline_ms": 124.910387,
+        "candidate_ms": 123.566701,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 0.9928605887345533,
+      "nvidia_candidate_over_baseline": 0.9892428001203775
+    },
+    {
+      "id": "A07",
+      "arm": "production_tasks256",
+      "fixture": {
+        "AB_FEATURES": 33,
+        "AB_ROWS": 100001
+      },
+      "clusters": null,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "692f818e60c90980e26d9666a9836f43bd16b90533441888e933432c32e74796",
+          "candidate": "9583ce98ae125f89c0af8ef0cf078e6e8b1e484152292c8ab4c9d3d72fc115fe"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 33, \"AB_ROWS\": 100001}-production_tasks256",
+        "baseline_ms": 337.714222,
+        "candidate_ms": 336.107111,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "8144124adc4b64c1aea48f32be4645b259056efb1cce94171e0f7fc697e69a62",
+          "candidate": "c6d7f48262b505d93c9cf083fe0edaa2e99de8a7d5842b101b7e066a5d8f09e1"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A07-production_tasks256-5b467815b5-shapecd30427c19/case0",
+        "baseline_ms": 126.938692,
+        "candidate_ms": 125.678158,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 0.9952412101851014,
+      "nvidia_candidate_over_baseline": 0.9900697416986146
+    },
+    {
+      "id": "A07",
+      "arm": "production_tasks256",
+      "fixture": {
+        "AB_FEATURES": 17,
+        "AB_ROWS": 65537
+      },
+      "clusters": null,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "692f818e60c90980e26d9666a9836f43bd16b90533441888e933432c32e74796",
+          "candidate": "9583ce98ae125f89c0af8ef0cf078e6e8b1e484152292c8ab4c9d3d72fc115fe"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 17, \"AB_ROWS\": 65537}-production_tasks256",
+        "baseline_ms": 293.831635,
+        "candidate_ms": 293.199587,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "8144124adc4b64c1aea48f32be4645b259056efb1cce94171e0f7fc697e69a62",
+          "candidate": "c6d7f48262b505d93c9cf083fe0edaa2e99de8a7d5842b101b7e066a5d8f09e1"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A07-production_tasks256-5b467815b5-shapec8eed4c7d6/case0",
+        "baseline_ms": 92.867687,
+        "candidate_ms": 92.117723,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 0.99784894502595,
+      "nvidia_candidate_over_baseline": 0.9919243816204876
+    },
+    {
+      "id": "A08",
+      "arm": "old1024",
+      "fixture": {
+        "AB_FEATURES": 32,
+        "AB_ROWS": 100000
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "fc4f6ff6fdcd93c0a9ec531f1f8062c915f265af1b28a90743fc2b5c08ebf0ec"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 32, \"AB_ROWS\": 100000}-old1024",
+        "baseline_ms": 3.085919,
+        "candidate_ms": 3.718356,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "c7f7c1c0222f7e96d527e18c167cfe6b8ce30777b0838e3fd07161f12273e698"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-old1024-5b467815b5-f0/case0",
+        "baseline_ms": 1.086341,
+        "candidate_ms": 1.412937,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 1.2049428387459296,
+      "nvidia_candidate_over_baseline": 1.300638565606932
+    },
+    {
+      "id": "A08",
+      "arm": "old1024",
+      "fixture": {
+        "AB_FEATURES": 33,
+        "AB_ROWS": 100001
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "fc4f6ff6fdcd93c0a9ec531f1f8062c915f265af1b28a90743fc2b5c08ebf0ec"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 33, \"AB_ROWS\": 100001}-old1024",
+        "baseline_ms": 3.295095,
+        "candidate_ms": 3.985798,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "c7f7c1c0222f7e96d527e18c167cfe6b8ce30777b0838e3fd07161f12273e698"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-old1024-5b467815b5-shape3c546c019b/case0",
+        "baseline_ms": 1.272154,
+        "candidate_ms": 1.638681,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 1.209615504257085,
+      "nvidia_candidate_over_baseline": 1.2881152753518836
+    },
+    {
+      "id": "A08",
+      "arm": "old1024",
+      "fixture": {
+        "AB_FEATURES": 17,
+        "AB_ROWS": 65537
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "fc4f6ff6fdcd93c0a9ec531f1f8062c915f265af1b28a90743fc2b5c08ebf0ec"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 17, \"AB_ROWS\": 65537}-old1024",
+        "baseline_ms": 4.358267,
+        "candidate_ms": 6.2145,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "c7f7c1c0222f7e96d527e18c167cfe6b8ce30777b0838e3fd07161f12273e698"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-old1024-5b467815b5-shapebf7e5f2bf1/case0",
+        "baseline_ms": 1.502589,
+        "candidate_ms": 2.416486,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 1.4259108035372776,
+      "nvidia_candidate_over_baseline": 1.608214887770375
+    },
+    {
+      "id": "A08",
+      "arm": "wide4096",
+      "fixture": {
+        "AB_FEATURES": 32,
+        "AB_ROWS": 100000
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "3a264846f414a3e4ccbc4f3593e4130eac94fd6171fb1b95e078135ddb693700"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 32, \"AB_ROWS\": 100000}-wide4096",
+        "baseline_ms": 3.085919,
+        "candidate_ms": 8.802624,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "c7faa090cc6c748af8a39f77fc674552d96071ec4912e5e074cf04b86ea52ae2"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-wide4096-5b467815b5-f0/case0",
+        "baseline_ms": 1.086341,
+        "candidate_ms": 3.267282,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 2.8525129791157835,
+      "nvidia_candidate_over_baseline": 3.0076025851919423
+    },
+    {
+      "id": "A08",
+      "arm": "wide4096",
+      "fixture": {
+        "AB_FEATURES": 33,
+        "AB_ROWS": 100001
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "3a264846f414a3e4ccbc4f3593e4130eac94fd6171fb1b95e078135ddb693700"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 33, \"AB_ROWS\": 100001}-wide4096",
+        "baseline_ms": 3.295095,
+        "candidate_ms": 9.367341,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "c7faa090cc6c748af8a39f77fc674552d96071ec4912e5e074cf04b86ea52ae2"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-wide4096-5b467815b5-shape3c546c019b/case0",
+        "baseline_ms": 1.272154,
+        "candidate_ms": 3.637499,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 2.842813636632631,
+      "nvidia_candidate_over_baseline": 2.8593228492776817
+    },
+    {
+      "id": "A08",
+      "arm": "wide4096",
+      "fixture": {
+        "AB_FEATURES": 17,
+        "AB_ROWS": 65537
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "3a264846f414a3e4ccbc4f3593e4130eac94fd6171fb1b95e078135ddb693700"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 17, \"AB_ROWS\": 65537}-wide4096",
+        "baseline_ms": 4.358267,
+        "candidate_ms": 19.381664,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "c7faa090cc6c748af8a39f77fc674552d96071ec4912e5e074cf04b86ea52ae2"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-wide4096-5b467815b5-shapebf7e5f2bf1/case0",
+        "baseline_ms": 1.502589,
+        "candidate_ms": 6.730238,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 4.447103401420795,
+      "nvidia_candidate_over_baseline": 4.479094416370677
+    },
+    {
+      "id": "A08",
+      "arm": "256_conv_poll1",
+      "fixture": {
+        "AB_FEATURES": 32,
+        "AB_ROWS": 100000
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "61417ddc1b4637fc05f74c3e876da25c8dfced45efb1eebc86e218e0566ddbc4"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 32, \"AB_ROWS\": 100000}-256_conv_poll1",
+        "baseline_ms": 3.085919,
+        "candidate_ms": 2.570114,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "7a90144221af15eb7046b1dd57059de0068d67c08c6262927a35afe2c7fdae93"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-256_conv_poll1-5b467815b5-f0/case0",
+        "baseline_ms": 1.086341,
+        "candidate_ms": 0.886597,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 0.8328520612498254,
+      "nvidia_candidate_over_baseline": 0.8161313988885626
+    },
+    {
+      "id": "A08",
+      "arm": "256_conv_poll1",
+      "fixture": {
+        "AB_FEATURES": 33,
+        "AB_ROWS": 100001
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "61417ddc1b4637fc05f74c3e876da25c8dfced45efb1eebc86e218e0566ddbc4"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 33, \"AB_ROWS\": 100001}-256_conv_poll1",
+        "baseline_ms": 3.295095,
+        "candidate_ms": 2.763179,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "7a90144221af15eb7046b1dd57059de0068d67c08c6262927a35afe2c7fdae93"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-256_conv_poll1-5b467815b5-shape3c546c019b/case0",
+        "baseline_ms": 1.272154,
+        "candidate_ms": 1.077181,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 0.8385733946972698,
+      "nvidia_candidate_over_baseline": 0.8467378949403924
+    },
+    {
+      "id": "A08",
+      "arm": "256_conv_poll1",
+      "fixture": {
+        "AB_FEATURES": 17,
+        "AB_ROWS": 65537
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "61417ddc1b4637fc05f74c3e876da25c8dfced45efb1eebc86e218e0566ddbc4"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 17, \"AB_ROWS\": 65537}-256_conv_poll1",
+        "baseline_ms": 4.358267,
+        "candidate_ms": 4.308101,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "7a90144221af15eb7046b1dd57059de0068d67c08c6262927a35afe2c7fdae93"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-256_conv_poll1-5b467815b5-shapebf7e5f2bf1/case0",
+        "baseline_ms": 1.502589,
+        "candidate_ms": 1.516739,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 0.988489461522206,
+      "nvidia_candidate_over_baseline": 1.0094170794541955
+    },
+    {
+      "id": "A08",
+      "arm": "1024_conv_poll1",
+      "fixture": {
+        "AB_FEATURES": 32,
+        "AB_ROWS": 100000
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "7ead7e10d39d27bab78242b59ed0382cf475cce9404e34777aeb18b925ac9f66"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 32, \"AB_ROWS\": 100000}-1024_conv_poll1",
+        "baseline_ms": 3.085919,
+        "candidate_ms": 3.528141,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "240d28f85496d9e07c0f4931048648282ec63539654fe8f8e981965136e80745"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-1024_conv_poll1-5b467815b5-f0/case0",
+        "baseline_ms": 1.086341,
+        "candidate_ms": 1.333815,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 1.1433031780808245,
+      "nvidia_candidate_over_baseline": 1.22780508146153
+    },
+    {
+      "id": "A08",
+      "arm": "1024_conv_poll1",
+      "fixture": {
+        "AB_FEATURES": 33,
+        "AB_ROWS": 100001
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "7ead7e10d39d27bab78242b59ed0382cf475cce9404e34777aeb18b925ac9f66"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 33, \"AB_ROWS\": 100001}-1024_conv_poll1",
+        "baseline_ms": 3.295095,
+        "candidate_ms": 3.833953,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "240d28f85496d9e07c0f4931048648282ec63539654fe8f8e981965136e80745"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-1024_conv_poll1-5b467815b5-shape3c546c019b/case0",
+        "baseline_ms": 1.272154,
+        "candidate_ms": 1.539559,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 1.163533373089395,
+      "nvidia_candidate_over_baseline": 1.2101986080301599
+    },
+    {
+      "id": "A08",
+      "arm": "1024_conv_poll1",
+      "fixture": {
+        "AB_FEATURES": 17,
+        "AB_ROWS": 65537
+      },
+      "clusters": 32,
+      "amd": {
+        "machine": "DigitalOcean-606508222-MI325X",
+        "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+        "artifact_hashes": {
+          "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+          "candidate": "7ead7e10d39d27bab78242b59ed0382cf475cce9404e34777aeb18b925ac9f66"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+        "case": "{\"AB_FEATURES\": 17, \"AB_ROWS\": 65537}-1024_conv_poll1",
+        "baseline_ms": 4.358267,
+        "candidate_ms": 6.36654,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "nvidia": {
+        "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+        "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "artifact_hashes": {
+          "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+          "candidate": "240d28f85496d9e07c0f4931048648282ec63539654fe8f8e981965136e80745"
+        },
+        "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json",
+        "case": "A08-1024_conv_poll1-5b467815b5-shapebf7e5f2bf1/case0",
+        "baseline_ms": 1.502589,
+        "candidate_ms": 2.412335,
+        "warmups": 1,
+        "scored_samples": 1,
+        "warmup_scope": "same_process"
+      },
+      "amd_candidate_over_baseline": 1.460796229326932,
+      "nvidia_candidate_over_baseline": 1.6054523226244837
+    }
+  ],
+  "decisions": {
+    "A07 production_tasks256": "Small improvements on both vendors (<1.1%); single scored sample, no promotion.",
+    "A08 old1024 / wide4096": "Loss on all three fixtures on both vendors; retain default256.",
+    "A08 256_conv_poll1": "Gains on larger two fixtures, NVIDIA smallest-case ratio1.0094; mixed, retain poll8.",
+    "A08 1024_conv_poll1": "Loss on all three fixtures on both vendors; retain default."
+  },
+  "promotion": false,
+  "promotion_limitation": "Representative generated caller fixtures do not complete named-dataset full-workload qualification."
+}
