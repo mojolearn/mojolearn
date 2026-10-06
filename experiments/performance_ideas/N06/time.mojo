@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
+# N06 2026-10-06 L40S component WIN: 12.389 vs 17.198 ms (1.388x).
+# H=4,L=512,HD=64; one same-process warmup/score; full caller promotion owed.
 """Measured resident-memory/time witness for exact recomputing v2 backward."""
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
