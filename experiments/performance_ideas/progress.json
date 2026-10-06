@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "user_plan": "all 60 supported candidates implemented; one full frozen compile campaign; retry only actual compiler failures; verify on local M4 and rented NVIDIA; mark NEVER RUN \u2014 PENDING VALIDATION next to experiment toggles, new defaults off; merge main after compilation and verification",
-  "compile_repetition_policy": "one full campaign after all source merges; retry only failures with relevant fixes",
+  "user_plan": "all 60 supported candidates implemented; compilation only where no matching proof exists; verified binaries already prove compilation and are never rebuilt unchanged; use local M4 and rented NVIDIA correctness; optional shared AMD targets pending; every selectable experiment/control arm labeled NEVER RUN \u2014 PENDING VALIDATION, new defaults off; merge main after required coverage",
+  "compile_repetition_policy": "reuse matching successful verification/build artifacts; one compiler invocation per missing configuration; retry only actual failures or relevant source fixes",
   "performance_timing_required_before_merge": false,
   "new_experiment_defaults": "off; existing main behavior preserved",
   "qualification": "pending; source comments sufficient; no performance qualification gate before main merge",
@@ -524,6 +524,22 @@
     "infrastructure_recovery": "Apple job001 through job004: existing successful artifacts recovered with supplemental receipts, no rebuild",
     "unsupported_targets": [
       "N03/amd"
+    ],
+    "primary_targets": {
+      "shared_and_nvidia_cards": "nvidia",
+      "amd_specific_cards": "amd cross-compile on NVIDIA builder",
+      "apple_fast_cards": "apple"
+    },
+    "verification_source_fixes": [
+      "I07 forced-recompute harness reach expectation",
+      "I14 all-noise harness refusal/empty-cluster expectations",
+      "F02 audit export and admitted caller fixture",
+      "F16 Jones-floor and genuine prepared-variance refusal fixture"
     ]
-  }
+  },
+  "verification_devices": [
+    "local Apple M4",
+    "rented NVIDIA RTX 4090"
+  ],
+  "optional_amd_policy": "preserve completed cross-compiles; finish AMD-specific A01-A08 arms; remaining shared AMD targets uncompiled pending per faster-local owner steering"
 }
