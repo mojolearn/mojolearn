@@ -73,6 +73,18 @@ comptime TABLE_BYTES = 256 * 1024 * 1024
 #: 9.69 ms (-17.9%); max_additivity_error and output digest identical. KEEP:
 #: the FAST + Apple default; the old -D name is harmless.
 comptime SHAP_TREE_TAB = SHAP_TABLE and not is_defined["MOJOLEARN_SHAP_TREE_TAB_OFF"]()
+# Bounded adjacent rows in one thread reuse the same tree metadata; no new
+# pipeline/state overlap or attribution fold. Full SHAP caller decides speed.
+comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
+struct ShapPairAudit(Defaultable, Movable):
+    var calls: Int
+    def __init__(out self):
+        self.calls = 0
+comptime SHAP_PAIR_STATE = _Global[StorageType=ShapPairAudit, name="ShapPairAudit", init_fn=ShapPairAudit.__init__]
+
+def shap_pair_count() raises -> Int:
+    return SHAP_PAIR_STATE.get_or_create_ptr()[].calls
+
 comptime TABLE_ACC = 64
 
 
@@ -149,10 +161,22 @@ def tree_kernel[W: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slots: In
                         slot: I32P, x: F32P, r0: Int32, buf: F32P, meta: I32P):
     """x is the whole input; the chunk's rows start at r0 (offset here, on
     the typed pointer: a pointer rebuilt from an integer misses on Metal)."""
-    var u = _uid()
-    if u < Int(units):
-        shap_tree_unit[W](u, Int(rows), Int(d), Int(k), Int(slots), offsets, colid, quesval, left, leaves, parent,
-                          cover, tscale, slot, x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
+    var group = _uid()
+    comptime if SHAP_FAST_ROW_PAIR:
+        var pairs = (Int(rows) + 1) // 2
+        var tree = group // pairs
+        var row = (group % pairs) * 2
+        if tree < Int(units) // Int(rows):
+            for offset in range(2):
+                if row + offset < Int(rows):
+                    var u = tree * Int(rows) + row + offset
+                    shap_tree_unit[W](u, Int(rows), Int(d), Int(k), Int(slots), offsets, colid, quesval, left, leaves, parent,
+                                      cover, tscale, slot, x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
+    else:
+        var u = _uid()
+        if u < Int(units):
+            shap_tree_unit[W](u, Int(rows), Int(d), Int(k), Int(slots), offsets, colid, quesval, left, leaves, parent,
+                              cover, tscale, slot, x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
 
 
 def table_kernel[W: Int](units: Int32, m: Int32, nm: Int32, offsets: I32P, n_trees: Int32, colid: I32P, left: I32P,
@@ -168,11 +192,24 @@ def table_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, sl
                                offsets: I32P, colid: I32P, quesval: F32P, left: I32P, leaves: F32P, parent: I32P,
                                slot: I32P, leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, x: F32P,
                                r0: Int32, buf: F32P, meta: I32P):
-    var u = _uid()
-    if u < Int(units):
-        shap_table_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
-                                 left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, x.unsafe_offset(Int(r0) * Int(d)), buf,
-                                 meta)
+    var group = _uid()
+    comptime if SHAP_FAST_ROW_PAIR:
+        var pairs = (Int(rows) + 1) // 2
+        var tree = group // pairs
+        var row = (group % pairs) * 2
+        if tree < Int(units) // Int(rows):
+            for offset in range(2):
+                if row + offset < Int(rows):
+                    var u = tree * Int(rows) + row + offset
+                    shap_table_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
+                                             left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, x.unsafe_offset(Int(r0) * Int(d)), buf,
+                                             meta)
+    else:
+        var u = _uid()
+        if u < Int(units):
+            shap_table_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
+                                     left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, x.unsafe_offset(Int(r0) * Int(d)), buf,
+                                     meta)
 
 
 def tab_rank_kernel(units: Int32, offsets: I32P, left: I32P, rank: I32P, nint: I32P):
@@ -193,11 +230,24 @@ def tab_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slot
                              offsets: I32P, colid: I32P, quesval: F32P, left: I32P, leaves: F32P, parent: I32P,
                              slot: I32P, leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, nint: I32P,
                              needl: U64P, needr: U64P, x: F32P, r0: Int32, buf: F32P, meta: I32P):
-    var u = _uid()
-    if u < Int(units):
-        shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
-                               left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
-                               x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
+    var group = _uid()
+    comptime if SHAP_FAST_ROW_PAIR:
+        var pairs = (Int(rows) + 1) // 2
+        var tree = group // pairs
+        var row = (group % pairs) * 2
+        if tree < Int(units) // Int(rows):
+            for offset in range(2):
+                if row + offset < Int(rows):
+                    var u = tree * Int(rows) + row + offset
+                    shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
+                                           left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
+                                           x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
+    else:
+        var u = _uid()
+        if u < Int(units):
+            shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
+                                   left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
+                                   x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
 
 
 def fold_kernel(units: Int32, r0: Int32, rows: Int32, n_trees: Int32, d: Int32, k: Int32, slots: Int32, slot: I32P,
@@ -365,6 +415,9 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
     while r0 < n:
         var rc = min(rows, n - r0)
         var tu = n_trees * rc
+        var row_units = n_trees * ((rc + 1) // 2) if SHAP_FAST_ROW_PAIR else tu
+        comptime if SHAP_FAST_ROW_PAIR:
+            SHAP_PAIR_STATE.get_or_create_ptr()[].calls += 1
         var ran = False
         comptime if SHAP_TABLE:
             if tt:
@@ -377,7 +430,7 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
                             fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(),
                             leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
                             nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(tu), block_dim=TPB)
+                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
                     else:
                         ctx.enqueue_function[tab_row_kernel[0]](
                             Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
@@ -385,7 +438,7 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
                             fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(),
                             leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
                             nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(tu), block_dim=TPB)
+                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
             elif use_table:
                 ran = True
                 if sl * k <= TABLE_ACC:
@@ -394,14 +447,14 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
                         fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(),
                         fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), leaf_mf.unsafe_ptr(),
                         leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(tu), block_dim=TPB)
+                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
                 else:
                     ctx.enqueue_function[table_row_kernel[0]](
                         Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
                         fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(),
                         fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), leaf_mf.unsafe_ptr(),
                         leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(tu), block_dim=TPB)
+                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
         comptime for wi in range(6):
             comptime W = 8 << wi
             if not ran and width == W:
@@ -409,7 +462,7 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
                     Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), fo.offsets.unsafe_ptr(),
                     fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(),
                     fo.parent.unsafe_ptr(), cover.unsafe_ptr(), fo.tscale.unsafe_ptr(), fo.slot.unsafe_ptr(),
-                    dx.unsafe_ptr(), Int32(r0), buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(tu),
+                    dx.unsafe_ptr(), Int32(r0), buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units),
                     block_dim=TPB)
         var fu = d * k * rc
         ctx.enqueue_function[fold_kernel](

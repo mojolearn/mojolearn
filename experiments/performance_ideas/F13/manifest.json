@@ -9,7 +9,9 @@
   "status": "source_ready",
   "implementation_paths": [
     "core/forest_inference.mojo",
-    "experiments/performance_ideas/F13/caller.py"
+    "experiments/performance_ideas/F13/caller.py",
+    "xtrees/shap_device.mojo",
+    "bindings/_mojolearn_trees.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_FOREST_FAST_SHARED_ROWS"
@@ -41,7 +43,8 @@
     "actual parallel_groves public inference",
     "shallow/deep/multiclass/skewed traversal coverage",
     "misclassification no material loss",
-    "TreeSHAP separate mechanism and attribution gate owed"
+    "TreeSHAP separate mechanism and attribution gate owed",
+    "Separate SHAP paired-row scheduling, actual attribution additivity and output lifetime, preparation counted"
   ],
   "timing_contract": "Cold and retained public prediction through first read; model fit excluded and reported as prerequisite",
   "blocker": null,
@@ -50,5 +53,19 @@
   "prerequisite_bindings": [
     "core"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "variants": {
+    "shap": [
+      "MOJOLEARN_SHAP_FAST_ROW_PAIR"
+    ]
+  },
+  "variant_bindings": {
+    "shap": "trees"
+  },
+  "variant_prerequisite_bindings": {
+    "shap": [
+      "core",
+      "rf"
+    ]
+  }
 }
