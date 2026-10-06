@@ -55,6 +55,10 @@ class MLPAdmission(unittest.TestCase):
         meta=copy.deepcopy(row['sidecar_metadata']);meta['full_dataset_coverage']=False
         with patch.object(m,'retained',return_value=meta):
             with self.assertRaises(ValueError):validate_variant(fact,cell)
+        with patch.object(m,'retained',return_value=row['sidecar_metadata']):
+            with self.assertRaises(ValueError):validate_variant(fact,dict(cell,vendor='amd'))
+            bad=copy.deepcopy(fact);bad['artifact_provenance']={'A':[],'B':[]}
+            with self.assertRaises(ValueError):validate_variant(bad,cell)
         wrong=dict(self.scope,vendor='amd')
         with self.assertRaises(ValueError):m.variant_cell(wrong,row)
 

@@ -88,11 +88,13 @@ def validate_variant(facts, cell=None):
     if (reg['variant_workload_id'] != expected_cell['workload_id']
             or reg['variant_cell_key'] != expected_cell['key']
             or cell and (cell['key'] != expected_cell['key']
-                         or cell['workload_id'] != expected_cell['workload_id'])):
+                         or cell['workload_id'] != expected_cell['workload_id']
+                         or any(cell[k] != original[k] for k in ('vendor','mode','configuration')))):
         raise ValueError('MLP variant identity differs')
     job = facts.get('job')
     if job and (job['key'] != expected_cell['key'] or job['workload_id'] != expected_cell['workload_id']
-                or facts['vendor'] != original['vendor']):
+                or facts['vendor'] != original['vendor'] or job['mode'] != original['mode']
+                or job['master_selection']['id'] != original['configuration']):
         raise ValueError('MLP worker identity differs')
     if facts.get('source_sha', reg['measurement_source_sha']) != reg['measurement_source_sha']:
         raise ValueError('Wrong MLP measurement freeze')
