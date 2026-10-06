@@ -39,8 +39,8 @@ def pipeline_kernel[ASYNC: Bool](c: MutPointer[Float32,MutAnyOrigin],a: MutPoint
         var ap = a.unsafe_offset(row*Int(asi)+begin*Int(asp))
         var bp = b.unsafe_offset(begin*Int(bsp)+col*Int(bsj))
         comptime if ASYNC and is_nvidia_gpu():
-            async_copy[DType.float32,4](ap.address_space_cast[AddressSpace.GLOBAL](),as_.unsafe_offset(tid))
-            async_copy[DType.float32,4](bp.address_space_cast[AddressSpace.GLOBAL](),bs_.unsafe_offset(tid))
+            async_copy[size=4](ap.address_space_cast[AddressSpace.GLOBAL](),as_.unsafe_offset(tid))
+            async_copy[size=4](bp.address_space_cast[AddressSpace.GLOBAL](),bs_.unsafe_offset(tid))
             async_copy_commit_group()
             async_copy_wait_all()
         else:
@@ -52,8 +52,8 @@ def pipeline_kernel[ASYNC: Bool](c: MutPointer[Float32,MutAnyOrigin],a: MutPoint
                 ap = a.unsafe_offset(row*Int(asi)+(p+1)*Int(asp))
                 bp = b.unsafe_offset((p+1)*Int(bsp)+col*Int(bsj))
                 comptime if ASYNC and is_nvidia_gpu():
-                    async_copy[DType.float32,4](ap.address_space_cast[AddressSpace.GLOBAL](),as_.unsafe_offset(nextslot*128+tid))
-                    async_copy[DType.float32,4](bp.address_space_cast[AddressSpace.GLOBAL](),bs_.unsafe_offset(nextslot*128+tid))
+                    async_copy[size=4](ap.address_space_cast[AddressSpace.GLOBAL](),as_.unsafe_offset(nextslot*128+tid))
+                    async_copy[size=4](bp.address_space_cast[AddressSpace.GLOBAL](),bs_.unsafe_offset(nextslot*128+tid))
                     async_copy_commit_group()
                 else:
                     as_[nextslot*128+tid]=ap.unsafe_load()
