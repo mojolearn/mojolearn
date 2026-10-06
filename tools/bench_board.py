@@ -2661,10 +2661,10 @@ def render_board(result):
                   "| repaired race | numerical source / artifacts | measured hardware | capture |",
                   "|---|---|---|---|"])
         for repair in overlay["repairs"]:
-            clean = lambda value: str(value).replace("|", "/").replace("\n", " ")
+            clean_overlay = lambda value: str(value).replace("|", "/").replace("\n", " ")
             L.append("| %s | %s | %s | `%s` |" % (
-                clean(repair["race"]), clean(repair["source_description"]),
-                clean(repair["hardware_description"]), repair["capture"]["sha256"]))
+                clean_overlay(repair["race"]), clean_overlay(repair["source_description"]),
+                clean_overlay(repair["hardware_description"]), repair["capture"]["sha256"]))
         L.extend(["", "The Box section describes the original run. Per-row replacement board, audit, "
                   "capture and artifact identities are pinned in overlay-manifest.json and board.json. "
                   "Original inference cells are retained; this overlay admits fit cells only. Ratios on repaired races are withdrawn. Missing original shape proof is explicitly recorded; no new comparability claim.", ""])
