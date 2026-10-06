@@ -108,8 +108,24 @@ def normalize(route):
     row=common(c,c['key']+'/case'+str(ix));row.update(status='NO_DISTINCT_RUNTIME_ARM',returncode=0,policy='Depthwise',limitation='Resident frontier and exact-batch controls affect Lossguide only; this Depthwise control has the same runtime route. Inherited-partition controls remain distinct. Raw timing preserved.');rows.append(row);continue
    put(b,c,bm.get('elapsed_ns'),cm.get('elapsed_ns'),c['key']+'/case'+str(ix))
  atom(E/(route+'-repair-normalized-measurements.json'),dict(rows=rows,updated=time.time(),snapshot=str(snap)))
-while True:
+
+def builder_retirement():
+ # The owner has verified provider deletion. Do not probe or reconnect to its
+ # former address; cached receipts remain evidence, never a new work queue.
+ p=E.parent/'cpu-builder/status.json'
+ if not p.exists():return None
+ owner=json.loads(p.read_text())
+ return owner if owner.get('status') in ['TERMINATED','TERMINATED_VERIFIED'] else None
+
+def stream_once():
  try:
+  retired_builder=builder_retirement()
+  if retired_builder is not None:
+   # Do not feed cached metadata through staging: it can resurrect stale jobs.
+   # Publication still normalizes captures and delivers the existing queues.
+   route_errors=publish_queues()
+   atom(E/'stream-status.json',dict(status='BUILDER_RETIRED_WITH_ROUTE_ERRORS' if route_errors else 'BUILDER_RETIRED',pid=os.getpid(),time=time.time(),builder_owner=retired_builder,cached_metadata_preserved=True,newly_staged=[],route_errors=route_errors))
+   return
   discover="""import pathlib,json
 root=pathlib.Path('/root/measurement-builder/artifacts');rows=[]
 for group in ['nvidia-family-repairs','amd-remaining','nvidia-more','nvidia-priority','a07a08-nvidia','nvidia-corrected','nvidia-corrected-i06']:
@@ -154,4 +170,10 @@ print(json.dumps(rows))
  except Exception as e:
   route_errors=publish_queues()
   (E/'stream-error.log').write_text(traceback.format_exc());atom(E/'stream-status.json',dict(status='ERROR',pid=os.getpid(),time=time.time(),error=repr(e)));notify('stream-error-'+type(e).__name__,'NVIDIA ready-artifact stager failed; inspect '+str(E/'stream-error.log')+' and GPU idle deadlines. Repair actual infrastructure only.')
- time.sleep(30)
+
+def main():
+ while True:
+  stream_once()
+  time.sleep(30)
+
+if __name__=='__main__':main()
