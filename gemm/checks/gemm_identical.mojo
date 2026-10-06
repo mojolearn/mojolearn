@@ -3343,6 +3343,7 @@ def _mfma_run_ws(
 
 #: `-D MOJOLEARN_IDN_GEMM_MFMA16_OFF` keeps the scalar stepped-down and split
 #: plans on the AMD column; also off under `MOJOLEARN_IDN_ALL_OFF`.
+# A01 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
 # A01 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Incumbent MFMA16 default retained; this card only compares explicit rollback arms.
 comptime IDN_GEMM_MFMA16 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
