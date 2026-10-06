@@ -8,7 +8,10 @@ hardware=subprocess.check_output(['nvidia-smi','--query-gpu=name,uuid,driver_ver
 results=json.loads((P/'results.json').read_text()) if (P/'results.json').exists() else {};queue=[]
 base_env=dict(os.environ,LD_LIBRARY_PATH=str(R/'runtime'),LD_PRELOAD=str(R/'runtime/libgcc_s.so.1')+':'+str(R/'runtime/libstdc++.so.6'),MOJOLEARN_VENDOR='nvidia',MOJOLEARN_NUMERIC_MODE='identical',CUDA_VISIBLE_DEVICES='0')
 while True:
- queue=json.loads((R/'repair-queue.json').read_text());pending=[x for x in queue if x['key'] not in results]
+ try:queue=json.loads((R/'repair-queue.json').read_text())
+ except (json.JSONDecodeError,FileNotFoundError) as error:
+  save(P/'queue-read-error.json',dict(time=time.time(),error=str(error)));time.sleep(2);continue
+ pending=[x for x in queue if x['key'] not in results]
  if not pending:
   if (R/'CANDIDATES_SEALED').exists() and (R/'opponents-ready.json').exists() and not (P/'OPPONENTS_DONE').exists():
    (O/'DONE').unlink(missing_ok=True);status('GPU_OPPONENTS_RUNNING',hardware=hardware)

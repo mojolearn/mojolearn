@@ -12,6 +12,9 @@ DEFAULT_ENVIRONMENT=json.loads((E/'driver-environment-defaults.json').read_text(
 def effective_environment(ident,env):
  defaults=DEFAULT_ENVIRONMENT.get(ident)
  return {k:str(env.get(k,v)) for k,v in defaults.items()} if defaults is not None else {k:str(v) for k,v in env.items()}
+def queue_install_command():
+ tmp='/root/overnight-nvidia/repair-queue.incoming-'+str(os.getpid())+'-'+str(time.time_ns())
+ return 'cat > '+tmp+' && mv '+tmp+' /root/overnight-nvidia/repair-queue.json'
 def cases(id):
  if id in ['I03','I05','N03','N05']:return [dict(AB_M='257',AB_N='259',AB_K='1025'),dict(AB_M='1023',AB_N='1025',AB_K='2049')]+([dict(AB_M='1025',AB_N='513',AB_K='1025')] if id!='N03' else [])
  if id in ['I02','I04']:return [dict(AB_M='1024',AB_N='1024',AB_K='2048'),dict(AB_M='1023',AB_N='1025',AB_K='2049')]
@@ -32,7 +35,7 @@ def cases(id):
  if id in ['A07','A08','I18']:return [dict(AB_ROWS=str(n),AB_FEATURES=str(d)) for n,d in [(100000,32),(100001,33),(65537,17)]]
  if id=='I16':return [dict(AB_ROWS='100000',AB_FEATURES=str(d),AB_QUERIES='128') for d in [7,33,65]]
  if id in ['I17','I21']:return [dict(AB_ROWS=str(n),AB_FEATURES=str(d)) for n,d in [(10000,17),(10001,18),(32769,9)]]
- if id=='I19':return [dict(AB_ROWS=str(n)) for n in [1000000,1000001,1048577]]
+ if id=='I19':return [dict(AB_ROWS=str(n)) for n in [65537,98305,131071]]
  if id=='I22':return [dict(AB_ROWS=str(n),AB_FEATURES=str(d)) for n,d in [(65537,33),(65539,34),(131073,17)]]
  if id=='I23':return [dict(AB_OBSERVATIONS=str(n)) for n in [4096,4097,8193]]
  return [dict(AB_ROWS='100000',AB_FEATURES='32'),dict(AB_ROWS='131071',AB_FEATURES='17')]
@@ -54,6 +57,8 @@ def normalize(route):
    row=common(r,key);row.update(status='NO_DISTINCT_RUNTIME_ARM',returncode=0,limitation='Original timing driver selects no _estash route; both flags ran_arm1030 kept_cells0. Raw timing retained; corrected selector driver pending.');rows.append(row);continue
   if r['candidate_id']=='I15':
    row=common(r,key);row.update(status='NO_DISTINCT_RUNTIME_ARM',returncode=0,limitation='KNN_CERTIFIED_MMA is compile-time Apple-only; NVIDIA macro arms use the same route. Raw timings retained without A/B comparison.');rows.append(row);continue
+  if r['candidate_id']=='I19' and r['status']!='MEASURED' and r['arm'] in ['baseline','incumbent'] and int(effective_environment('I19',r['environment']).get('AB_ROWS','0'))>131072:
+   row=common(r,key);row.update(status='UNSUPPORTED_BASELINE_SHAPE',returncode=r.get('returncode',1),limitation='Retained rank baseline supports at most4096 rows per segment; original totalrows with32segments exceeded its declared domain. Raw failure preserved; shared admissible shapes appended.');rows.append(row);continue
   if r['status']!='MEASURED':row=common(r,key);row.update(status=r['status'],returncode=r.get('returncode',1));rows.append(row);notify('failure-'+key,'NVIDIA repair measurement failed '+key+'; inspect '+str(p.parent/key/'receipt.json')+' and bounded measurement.log. No identity retests.');continue
   measurements=r['measurements']
   paired=[x for x in measurements if 'baseline_completion_ns' in x and 'candidate_completion_ns' in x]
@@ -108,14 +113,14 @@ print(json.dumps(rows))
     if not local.exists():cmd(['rsync','-az','-e',shlex.join(CPU[:-1]),CPU[-1]+':'+meta['_binary_path'],str(local)])
     if hashlib.sha256(local.read_bytes()).hexdigest()!=new[0]['binary_sha256']:raise RuntimeError('repair artifact hash mismatch '+job)
     cmd(['rsync','-az','-e',shlex.join(ssh[:-1]),str(local),ssh[-1]+':/root/overnight-nvidia/bin/'+job]);queue.extend(new);atom(queuefile,queue)
-    cmd([*ssh,'cat > /root/overnight-nvidia/repair-queue.incoming && mv /root/overnight-nvidia/repair-queue.incoming /root/overnight-nvidia/repair-queue.json'],input=queuefile.read_bytes());staged.extend(x['key'] for x in new)
+    cmd([*ssh,queue_install_command()],input=queuefile.read_bytes());staged.extend(x['key'] for x in new)
     # Release staging hold only after actual queued work has been delivered.
     subprocess.run(['python3','/Users/andrewhendel/mojolearn-wt/nvidia-overnight-20261006/tools/runpod_usage_lease.py','release-hold',str(E/(route+'-owner/config.json'))],capture_output=True,timeout=90)
   for route in ['specific','default']:
    normalize(route)
    queuefile=E/(route+'-repair-queue.json')
    if queuefile.exists():
-    cfg=json.loads((E/(route+'-owner/config.json')).read_text());cmd(['ssh',*cfg['ssh'],'cat > /root/overnight-nvidia/repair-queue.incoming && mv /root/overnight-nvidia/repair-queue.incoming /root/overnight-nvidia/repair-queue.json'],input=queuefile.read_bytes())
+    cfg=json.loads((E/(route+'-owner/config.json')).read_text());cmd(['ssh',*cfg['ssh'],queue_install_command()],input=queuefile.read_bytes())
   atom(E/'stream-status.json',dict(status='WATCHING',pid=os.getpid(),time=time.time(),discovered=len(metas),newly_staged=staged))
  except Exception as e:
   (E/'stream-error.log').write_text(traceback.format_exc());atom(E/'stream-status.json',dict(status='ERROR',pid=os.getpid(),time=time.time(),error=repr(e)));notify('stream-error-'+type(e).__name__,'NVIDIA ready-artifact stager failed; inspect '+str(E/'stream-error.log')+' and GPU idle deadlines. Repair actual infrastructure only.')
