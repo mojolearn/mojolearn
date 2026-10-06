@@ -6338,13 +6338,27 @@ comptime GEMM_KSPLIT_KS = 16
 # body-tiles + slack2 together was NOT tested; their speedups do not add.
 # slack8 did not win: NVIDIA 1.048267 (4.83% slower), AMD 0.999053.
 # Keep unsuccessful arms available explicitly so the experiment is reproducible.
-# Full public-harness comparisons remain incomplete: AMD baseline GEMM and
+# Initial public-harness attempt was incomplete: AMD baseline GEMM and
 # transformer succeeded; MLP timing succeeded but its driver emitted hash=null,
 # so the identity audit correctly refused it before candidate execution.
 # amd-integrated-{status,baseline-board,error} records retain that failure.
 # Harness-only fix 11420aa8 records complete weights/AdamW state outside timing.
 # These flags remain opt-in until the full-lane identity/timing checks finish;
 # a synthetic win alone does not prove a model-level gain or the combined arm.
+# Follow-up actual public harness, AMD MI325X, a006 binaries + 11420aa8
+# state-evidence fix: all 9 candidate/lane comparisons MATCH; independently
+# reloaded all model/AdamW/metadata arrays and checked dtype/shape/raw bytes.
+# One excluded warmup + one scored sample; timings are not significance tests.
+# B/A (GEMM, MLP train step, transformer): slack2 1.0012/1.1313/1.0597;
+# one-page 1.0399/1.1734/1.0171; slack8 0.9968/1.1789/1.0517.
+# Decision: no AMD default switch. Correct bits but no material timing win;
+# model lanes regressed in this sample. Preserve these arms for reproducibility.
+# Coverage: GEMM4096^3, full harness transformer, and harness SmallMLP
+# (8->16->3, batch256); this does NOT establish large-model training behavior.
+# Prior GEMM/transformer baseline timings retained with old ad1d provenance;
+# only baseline MLP was rerun. Original missing-hash failure remains recorded.
+# Evidence: experiments/identical_speed/results/20261005/amd-integrated-resume/.
+# Final owner capture 6ed220677906c67fe99968d5394309304494c1650f43f0a42dd3d46904b36dcd.
 comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime GEMM_KSPLIT_SLACK = (
     2 if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]()) else (
