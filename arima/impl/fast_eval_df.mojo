@@ -21,7 +21,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_FAST,ftz
 from arima.impl.fast_scalar_df import DF,df_add,df_sub,df_mul,df_div,df_round,df_log_positive
 from arima.impl.tsa.arima_common import ARIMAOrder
 
-# F16 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# F16 M3 2026-10-06 MEASURED; stays OFF: complete search/forecast B/A
+# 1.1328/1.0416/1.0132 for n129/257/509 (one warmup+score). Quality metrics
+# differ for first two cases; speed alone rejects promotion. ab-20261006/repairs-54c1f35a5/F16.
 # Tail requires Apple FAST + MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL; original Kalman path retained.
 # NEVER RUN — PENDING MEASUREMENT: actual production compensated likelihood/gradient tail.
 comptime PRODUCT_DF_ON=(GLOBAL_NUMERIC_MODE==NUMERIC_FAST and has_apple_gpu_accelerator()

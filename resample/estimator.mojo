@@ -2313,9 +2313,11 @@ comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     and is_defined["MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"]())
 
+# F19 M3 2026-10-06 public resample shapes(1,37)/(3,129)/(1,7,67):
+# B/A1.0402/0.9868/1.7701, quality equal, one warmup+score. Keep tiled gather OFF.
 comptime RESAMPLE_FAST_TILED_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # MEASURED M3; default OFF (mixed/regression).
     and is_defined["MOJOLEARN_RESAMPLE_FAST_TILED_GATHER"]())
 
 
@@ -2346,7 +2348,9 @@ def resample_gather_grouped(
     _ = keep^
 
 
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# F19 M3 permutation complete calls B/A2.0031/2.1569/1.0847 at509x3/521x129/997x67;
+# resample control1.6429/0.6770/0.4746. Quality equal, one warmup+score; keep OFF.
+# Evidence ab-20261006/repairs-54c1f35a5/F19; no unmeasured combination promotion.
 comptime RESAMPLE_FAST_DEVICE_PERMUTE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"]()
 
 def resample_permutation_gather_gpu(

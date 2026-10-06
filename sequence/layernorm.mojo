@@ -20,7 +20,10 @@ from std.sys.info import has_apple_gpu_accelerator
 #: size is a function of M alone. One block (M <= 64) is the single chain.
 #: It replaced one M-term chain per column.
 #: `-D MOJOLEARN_LN_FOLD_BLOCK_OFF` restores the single chain.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# F20 M3 2026-10-06 MEASURED FAST block-fold; stays OFF. Shapes131x17,137x65,
+# 257x129: forward B/A0.9739/1.1342/0.9834, backward0.8322/2.0792/1.0993,
+# downstream0.6184/1.2856/0.9373. Mixed/regression, one warmup+score; FAST quality
+# varies within recorded contract. Existing IDENTICAL decision separate. ab-20261006/repairs-54c1f35a5/F20.
 comptime LN_FOLD_BLOCK = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_LN_FAST_BLOCK_FOLD"]())
 
 

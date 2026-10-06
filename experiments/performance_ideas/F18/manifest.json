@@ -16,7 +16,9 @@
   "candidate_defines": [
     "MOJOLEARN_KDE_FAST_DIRECT_PREP"
   ],
-  "baseline_defines": [],
+  "baseline_defines": [
+    "MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF"
+  ],
   "build_argv": [
     "{python}",
     "experiments/performance_ideas/apple_fast/build_pair.py",
@@ -60,7 +62,8 @@
       "MOJOLEARN_KDE_FAST_DIRECT_PREP"
     ],
     "immutable": [
-      "MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"
+      "MOJOLEARN_KDE_FAST_IMMUTABLE_FIT",
+      "MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF"
     ]
   },
   "paired_build": true,
@@ -73,5 +76,11 @@
     "{output}/arms",
     "--output",
     "{output}/run"
-  ]
+  ],
+  "variant_baseline_defines": {
+    "immutable": [
+      "MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF"
+    ]
+  },
+  "measurement_decision": "2026-10-06 M3 planned public caller contract: direct prep promoted FAST Apple with OFF escape. Independent immutable arm stays OFF; combination unmeasured. Original artifacts retained."
 }

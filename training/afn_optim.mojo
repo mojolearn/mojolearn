@@ -123,15 +123,21 @@ comptime AFN_APPLE_FAST = (
 #: +-2%, the output digest changes, no quality metric. DROPPED: each stays off
 #: (opt-in only).
 comptime AFN_OPTIM_ALL = is_defined["MOJOLEARN_AFN_OPTIM_ALL"]()
+# F20 M3 2026-10-06 two-head fixed task (41x17,classes7/11,12steps,seed197),
+# one warmup+score: scan-fusion trajectory B/A1.0514, final losses equal and
+# deliberate NaN refusal preserves parameters. Remains OFF (regression).
+# Evidence ab-20261006/repairs-f20-3e19f734e/F20/status.
 comptime AFN_OPT_FUSE_SCAN = AFN_APPLE_FAST and (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_FUSE_SCAN"]()
 )
 comptime AFN_OPT_CLIP_FUSE = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_CLIP_FUSE"]()
 )
+# Same F20 task: multitensor trajectory B/A0.8528, losses equal and refusal
+# recovery passed. One small two-tensor caller alone leaves broader optimizer
+# contract pending; remain OFF until complete intended scope is assessed.
+# Evidence ab-20261006/repairs-f20-3e19f734e/F20/default.
 comptime AFN_OPT_MULTITENSOR = AFN_APPLE_FAST and (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_MULTITENSOR"]()
 )
 comptime AFN_OPT_VEC4 = AFN_APPLE_FAST and (

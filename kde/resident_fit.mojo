@@ -67,9 +67,16 @@ from kde.impl.neighbors.kernel_density import (
 
 # Immutable retained fit snapshots and direct upload are separate controls.
 # Buffer copies are transport; the GPU score/statistics remain unchanged.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# M3 2026-10-06 F18: one excluded warmup and one score per arm, 509x3,
+# 521x7,997x13; bandwidth invalidation, two models, refit, refusal recovery.
+# Direct prep cold B/A=0.6349/0.9221/0.8119; repeated totals=0.4917/0.7277/0.9234,
+# all captured score quality equal. Promote only FAST Apple direct preparation;
+# escape MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF. Evidence ab-20261006/repairs-54c1f35a5/F18.
+# Immutable snapshots independently measured faster (cold0.7578/0.9473/0.6224,
+# repeated0.4999/0.9233/0.7824) but remain OFF: ownership semantics change and
+# combination with direct preparation is unmeasured; one sample limits inference.
 comptime KDE_FAST_IMMUTABLE_FIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"]()
-comptime KDE_FAST_DIRECT_PREP = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_KDE_FAST_DIRECT_PREP"]()
+comptime KDE_FAST_DIRECT_PREP = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF"]()
 
 
 struct ResidentKdeFit(Movable):

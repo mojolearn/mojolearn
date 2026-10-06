@@ -707,6 +707,9 @@ def batched_loglike_grad(
 #: apple-identical-neural, 2026-09-26): it is a schedule, the members' filter
 #: arithmetic is the sequential form's, and the caller keeps IDENTICAL's
 #: flushes. `-D MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF` keeps the sequence there.
+# F17 M3 2026-10-06: n129/257/509 complete search/forecast B/A
+# 1.7453/0.9778/0.9918, quality equal, one warmup+score. Mixed scoped result;
+# retain established default, no new promotion. Evidence ab-20261006/repairs-54c1f35a5/F17.
 comptime ARIMA_FAST_BATCH_GRAD = has_apple_gpu_accelerator() and (
     (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
