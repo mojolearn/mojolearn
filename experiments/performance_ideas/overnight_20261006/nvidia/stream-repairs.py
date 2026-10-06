@@ -48,12 +48,16 @@ def normalize(route):
  if not snap.exists():snap.write_bytes(raw)
  results=json.loads(raw);rows=[]
  def common(r,case):
-  m=r['hardware'];s=r['source_sha'];return dict(effective_environment=effective_environment(r['candidate_id'],r['environment']),id=r['candidate_id'],vendor='nvidia',route=route,case=case,scope=r['scope'],machine=m,baseline_machine=m,candidate_machine=m,source_sha=s,baseline_source_sha=s,candidate_source_sha=s,evidence=str(snap),warmups=1,scored_samples=1,warmup_scope='same_process',status='MEASURED',returncode=0,limitation='Representative production operation; synthetic inputs, not full board dataset qualification.',promotion=False)
+  m=r['hardware'];s=r['source_sha'];return dict(effective_environment=effective_environment(r['candidate_id'],r['environment']),id=r['candidate_id'],vendor='nvidia',route=route,case=case,scope='component' if r['candidate_id']=='I22' else r['scope'],machine=m,baseline_machine=m,candidate_machine=m,source_sha=s,baseline_source_sha=s,candidate_source_sha=s,evidence=str(snap),warmups=1,scored_samples=1,warmup_scope='same_process',status='MEASURED',returncode=0,limitation='Representative production operation; synthetic inputs, not full board dataset qualification.',promotion=False)
  def put(b,c,bns,cns,case):
   if not bns or not cns:return
   row=common(c,case)
   if c['candidate_id']=='I06' and c['source_sha'].startswith('cbcc8dcd3'):row.update(comparison_kind='confounded_schedule_bundle',limitation='Head-reuse flag also changed the requested backward kvgrid schedule in the original timing driver. Bundled measurement only; isolated toggle rerun uses corrected freeze.',promotion=False)
   if c['candidate_id']=='I14':row.update(scope='component',comparison_kind='gated_shortcut_chunk_bundle',promotion=False,limitation='Disconnected17-vertex-clique weak_cc_batched graph component; gated+shortcut chunk16 versus ungated baseline, not an isolated chunk-width or full DBSCAN/HDBSCAN comparison.')
+  if c['candidate_id']=='I22':
+   reuse=c['arm'] in ['reuse','candidate']
+   kind={'reuse':'factor_reuse_pipeline','candidate':'factor_reuse_strip_bundle','strip':'strip_update_schedule'}.get(c['arm'],'tsqr_schedule_rollback')
+   row.update(scope='component',comparison_kind=kind,promotion=False,baseline_factorizations=3,candidate_factorizations=1 if reuse else 3,baseline_applications=3,candidate_applications=3,baseline_packed_buffers=3,candidate_packed_buffers=1 if reuse else 3,operation_count_evidence='source_audit_not_runtime_counter',retained_factor_budget_bytes=16*1024*1024,limitation='Generated TSQR helper pipeline: three Q*C applications (k=1,2,3) to the same packed matrix; reuse retains one factorization, control refactors three times. Work counts are source-audited; no runtime factor/apply counter or result download is emitted. The driver retains every packed matrix until phase end, so control holds three packed buffers and reuse one. Full estimator/dataset qualification pending.')
   row.update(artifact_hashes=dict(baseline=b['binary_sha256'],candidate=c['binary_sha256']),baseline_ms=bns/1e6,candidate_ms=cns/1e6);rows.append(row)
  for key,r in results.items():
   if r['candidate_id']=='I23':
