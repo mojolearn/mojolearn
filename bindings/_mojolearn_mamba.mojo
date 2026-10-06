@@ -545,7 +545,7 @@ def mamba1_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
 
 
 def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
-    var count = 17 if NN34_AFFINE_PREFIX else 14
+    comptime count = 17 if NN34_AFFINE_PREFIX else 14
     if len(addrs) != count:
         raise Error(
             what

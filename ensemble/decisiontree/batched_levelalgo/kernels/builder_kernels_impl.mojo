@@ -2785,7 +2785,7 @@ def build_histograms_binned_columns_kernel[
     No quantile copy exists in this binned-only kernel; shared storage is
     exactly TILE * max_n_bins * NumClasses bins, rounded up by the launcher.
     """
-    comptime assert SMEM_COPIES == 1 or SMEM_COPIES == 4
+    comptime assert SMEM_COPIES == 1 or SMEM_COPIES == 2 or SMEM_COPIES == 4
     comptime assert WARP_SIZE % SMEM_COPIES == 0
     comptime assert SMEM_BIN_SLOTS * size_of[O.BinT]() <= 16384
     ref args = argsp[unsafe_offset=0]

@@ -19,11 +19,6 @@ comptime NI57_GRAPH_TREE64 = _NI_AUX_ID and is_defined["MOJOLEARN_NI57_GRAPH_TRE
 comptime NI58_SAGE_FEATURE4 = _NI_AUX_ID and is_defined["MOJOLEARN_NI58_SAGE_FEATURE4"]()
 comptime NI59_DROPOUT_CHANNEL = _NI_AUX_ID and is_defined["MOJOLEARN_NI59_DROPOUT_CHANNEL"]()
 comptime NI60_DROPOUT_APPLY4 = _NI_AUX_ID and is_defined["MOJOLEARN_NI60_DROPOUT_APPLY4"]()
-def _integration_require_1() -> Bool:
-    comptime assert not (NI59_DROPOUT_CHANNEL and NI60_DROPOUT_APPLY4), "NI59 and NI60 select alternative dropout schedules"
-    return True
-
-comptime _INTEGRATION_REQUIRE_1 = _integration_require_1()
 
 # Four independent FP32 accumulators amortize graph metadata or mask reads
 # without a feature-size dispatch boundary. Tails are masked by true dimensions.

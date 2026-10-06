@@ -22,6 +22,7 @@ HARNESS_FAMILIES={
     'tools/classical_two_datasets.py':'classical',
     'tools/bench_board_more.py':'more',
     'tools/bench_board_algos.py':'expanded',
+    'bench/speed/forest_speed_arm.py':'forest',
 }
 
 
@@ -44,8 +45,31 @@ def hardware_record(runner):
     return record
 
 
+def resource_setup():
+    """Size Linux pools from this worker's actual allocation; Apple unrestricted."""
+    for name in THREAD_ENV:os.environ.pop(name,None)
+    if sys.platform=='darwin':return dict(policy='dedicated Apple; CPU libraries unrestricted')
+    allowed=len(os.sched_getaffinity(0)) if hasattr(os,'sched_getaffinity') else (os.cpu_count() or 1)
+    quota=None;source=None
+    p=Path('/sys/fs/cgroup/cpu.max')
+    if p.is_file():
+        raw=p.read_text().split()
+        if raw[0]!='max':quota=int(raw[0])/int(raw[1]);source=str(p)
+    if quota is None:
+        for base in ('/sys/fs/cgroup/cpu','/sys/fs/cgroup/cpu,cpuacct'):
+            q=Path(base+'/cpu.cfs_quota_us');period=Path(base+'/cpu.cfs_period_us')
+            if q.is_file() and period.is_file() and int(q.read_text())>0:
+                quota=int(q.read_text())/int(period.read_text());source=base;break
+    cap=max(1,min(allowed,int(quota))) if quota else max(1,allowed)
+    for name in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','NUMEXPR_NUM_THREADS'):os.environ[name]=str(cap)
+    return dict(policy='whole worker allocation; estimator semantics and nested pools preserved',affinity_cpus=allowed,cgroup_quota_cpus=quota,quota_source=source,configured_library_threads=cap,utilization='not inferred')
+
+
 def saved_inputs(module,family,work):
     import numpy as np
+    if family=='forest':
+        from six_lane_forest_adapter import inputs
+        return inputs(module,work)
     if family=='neural':
         with np.load(work['data_file'],allow_pickle=False) as z:data={k:z[k] for k in z.files}
         return data,{}
@@ -60,6 +84,9 @@ def saved_inputs(module,family,work):
 
 
 def make_runner(module,family,work,data,saved,race_arm):
+    if family=='forest':
+        from six_lane_forest_adapter import Runner
+        return Runner(module,work,data,'fast' if race_arm=='ours-fast' else 'identical')
     if family=='neural':return module.build_runner(work['lane'],race_arm,'full',data)
     if family=='expanded':return module.build(work['lane'],race_arm,data)
     if family=='more':return module.build(work['lane'],race_arm,data,saved)
@@ -68,6 +95,7 @@ def make_runner(module,family,work,data,saved,race_arm):
 
 def complete_operation(module,family,work,data,runner):
     start=time.perf_counter()
+    if family=='forest':runner.out=None
     if family=='expanded':runner.fit()
     else:runner.call();runner.sync()
     fitted=time.perf_counter();inference={}
@@ -104,9 +132,8 @@ def run(args):
     sys.path.insert(0,str(package));os.environ['PYTHONPATH']=str(package)
     for name in list(os.environ):
         if name.startswith('MOJOLEARN_'):os.environ.pop(name)
-    os.environ.update(cfg['environment']);os.environ.update(MOJOLEARN_BENCH_INSTALLED='1',MOJOLEARN_NUMERIC_MODE=job['mode'],MOJOLEARN_VENDOR=recipe['vendor'])
-    if sys.platform=='darwin':
-        for name in THREAD_ENV:os.environ.pop(name,None)
+    os.environ.update(cfg['environment']);os.environ.update(MOJOLEARN_BENCH_INSTALLED='1',MOJOLEARN_NUMERIC_MODE=job['mode'],MOJOLEARN_VENDOR={'nvidia':'cuda','amd':'hip','apple':'metal','host':'cpu'}[recipe['vendor']])
+    actual_resources=resource_setup()
     for item in work['input_files']:
         if digest(item['path'])!=item['sha256']:raise ValueError('Frozen input changed: '+item['path'])
     module=load(harness,'master_'+family+'_harness')
@@ -119,6 +146,7 @@ def run(args):
     timings.update(full_operation_seconds=end-start,preparation_seconds=prepared-start,cold_seconds=end-start)
     # Everything below (shape/setting admission, hashes, model export, metrics,
     # environment inspection and persistence) is outside the timed operation.
+    if hasattr(runner,'receipt'):runner.receipt()
     actual_shapes=shape_manifest(data)
     if actual_shapes!=work['actual_shapes']:raise ValueError('Observed shapes differ; hidden cap or dataset drift')
     params_module=load('tools/classical_two_datasets.py','master_parameter_records')
@@ -132,7 +160,8 @@ def run(args):
     state=capture_model(runner,work.get('model_state_paths'))
     # The unchanged quality functions own metric definitions. Gate outcomes are
     # separate, retained evidence; a self-relative metric is never acceptance.
-    if family=='neural':metrics=module.quality(work['lane'],data,{race_arm:outputs},shape='full')
+    if family=='forest':metrics=runner.quality()
+    elif family=='neural':metrics=module.quality(work['lane'],data,{race_arm:outputs},shape='full')
     elif family=='classical':metrics=module.quality(work['lane'],data,{race_arm:outputs},saved)
     else:metrics=module.quality(work['lane'],data,{race_arm:outputs})
     loaded={};expected=job['artifact_provenance'][args.arm]
@@ -158,7 +187,7 @@ def run(args):
     counts=dict(excluded_warmups=int(args.phase=='warmup'),scored=int(args.phase=='scored'))
     result=dict(schema='mojolearn.full-ab-result/1',status='PASS',source_sha=recipe['source_sha'],dataset_sha256=job['dataset_sha256'],dataset_version=work['dataset_version'],dataset_split=work['split'],seed=work['seed'],mode=job['mode'],vendor=recipe['vendor'],arm=args.arm,phase=args.phase,dimensions=actual_shapes,estimator_settings=actual_settings,full_dataset_coverage=True,timed_boundary=job['timed_boundary'],
         timings=timings,repeated_use=repeated,missing_timing_scopes=[] if repeated else ['repeated use'],outputs=output,retained_output_values=str(values_path),output_sha256=output['sha256'],model_state=state,loaded_artifacts=loaded,configuration=cfg,implementation_ids=job['implementation_ids'],workload_id=job['workload_id'],hashing_outside_timing=True,
-        hardware=hardware_record(runner),declared_hardware=recipe.get('hardware'),compiler=[a['compiler'] for a in expected],thread_environment={k:os.environ.get(k) for k in THREAD_ENV},resource_policy=recipe['resource_policy'],effective_pools=pools,harness_sha256=work['harness_sha256'],sample_counts=counts,
+        hardware=hardware_record(runner),declared_hardware=recipe.get('hardware'),compiler=[a['compiler'] for a in expected],thread_environment={k:os.environ.get(k) for k in THREAD_ENV},resource_policy=actual_resources,declared_resource_policy=recipe['resource_policy'],effective_pools=pools,harness_sha256=work['harness_sha256'],sample_counts=counts,
         task_quality=dict(status='PENDING',metrics=metrics,gate_source=work['quality_gate_source'],reason='Existing independent gate assessment remains required; no acceptance inferred from metrics alone'),runtime_reach=info)
     write(args.output,result)
 

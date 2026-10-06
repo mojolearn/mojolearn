@@ -11,11 +11,6 @@ comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # C52: independent numerical profiles, not scheduling-dependent leaves.
 comptime C52_PAIR_128 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C52_PAIR_128"]()
 comptime C52_PAIR_512 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C52_PAIR_512"]()
-def _integration_require_1() -> Bool:
-    comptime assert not (C52_PAIR_128 and C52_PAIR_512), "choose one C52 profile"
-    return True
-
-comptime _INTEGRATION_REQUIRE_1 = _integration_require_1()
 comptime C52_PAIR = C52_PAIR_128 or C52_PAIR_512
 comptime C52_ROWS = 512 if C52_PAIR_512 else 128
 # C53: independent GMM/BGMM centered-component staging arms.

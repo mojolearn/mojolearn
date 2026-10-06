@@ -10,7 +10,7 @@ logits. This deliberately does not pretend to implement stateful decode.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from training.neural_ab_lifetime import NN64_SESSION_PACK
 from training.mlp_ops import _mlp_kernel
-from training.neural_session_mlp_host import nn_mlp_session_shape
+from training.neural_session_shape import nn_mlp_session_shape
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
 from core.device_scan import device_first_nonfinite

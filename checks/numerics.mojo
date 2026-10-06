@@ -7,14 +7,16 @@ from core.six_lane_experiment_guards import SIX_LANE_CONFIGURATION_OK
 
 
 
-comptime GLOBAL_NUMERIC_MODE = (
-    NUMERIC_IDENTICAL if is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
-    else (
-        NUMERIC_DETERMINISTIC
-        if is_defined["MOJOLEARN_NUMERIC_DETERMINISTIC"]()
-        else NUMERIC_FAST
-    )
-)
+def _checked_numeric_mode() -> Int:
+    comptime assert SIX_LANE_CONFIGURATION_OK, "invalid integrated experiment configuration"
+    comptime if is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]():
+        return NUMERIC_IDENTICAL
+    comptime if is_defined["MOJOLEARN_NUMERIC_DETERMINISTIC"]():
+        return NUMERIC_DETERMINISTIC
+    return NUMERIC_FAST
+
+
+comptime GLOBAL_NUMERIC_MODE = _checked_numeric_mode()
 
 
 comptime PIN_DETERMINISM = (

@@ -56,31 +56,6 @@ comptime _STAGING = NN09 or NN15
 # standalone register/shared fold kernel. Other schedule families do not
 # implement its storage arm; reject those combinations instead of masking it.
 comptime _ROUTES = Int(NN01)+Int(NN08)+Int(NN10)+Int(_STREAM)+Int(_STAGING)+Int(NN11 and not _STREAM)
-def _integration_require_1() -> Bool:
-    comptime assert _ROUTES <= 1, "select one GEMM schedule family; NN11 composes only with NN02; NN12/profile/pair controls compose"
-    return True
-
-comptime _INTEGRATION_REQUIRE_1 = _integration_require_1()
-def _integration_require_2() -> Bool:
-    comptime assert not (NN01 and NEURAL_PROFILE_CHANGED), "legacy NN01 instruction geometry is v1-only; do not silently mix arithmetic profiles"
-    return True
-
-comptime _INTEGRATION_REQUIRE_2 = _integration_require_2()
-def _integration_require_3() -> Bool:
-    comptime assert not NN10 or is_defined["MOJOLEARN_IDN_NEURAL_FILL_BLOCKS"](), "NN10 requires a recorded device-fill budget, never guessed hardware"
-    return True
-
-comptime _INTEGRATION_REQUIRE_3 = _integration_require_3()
-def _integration_require_4() -> Bool:
-    comptime assert not NN10 or _FILL_BLOCKS>0, "NN10 device-fill budget must be positive"
-    return True
-
-comptime _INTEGRATION_REQUIRE_4 = _integration_require_4()
-def _integration_require_5() -> Bool:
-    comptime assert _STREAM_GROUP>0 and _RETAINED>0, "positive neural resource budgets"
-    return True
-
-comptime _INTEGRATION_REQUIRE_5 = _integration_require_5()
 
 
 def _overlaps(mut a: DeviceBuffer[DType.float32],na: Int,

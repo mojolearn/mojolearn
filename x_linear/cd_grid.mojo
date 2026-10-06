@@ -746,29 +746,30 @@ def enetcv_fit_grid(
             ctx.enqueue_function[classical_fold_combine_kernel](dcache.unsafe_ptr(), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(), wit.p(), Int32(wo), nonce,
                                                                grid_dim=_blocks(f_n + 1), block_dim=ECV_TPB)
             wo += _blocks(f_n + 1)
-        elif staged:
-            var tiles = (d + 1 + ECV_TC - 1) // ECV_TC
-            ctx.enqueue_function[ecv_means_staged_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
-                wit.p(), Int32(wo), nonce, grid_dim=tiles, block_dim=ECV_NT,
-            )
-            wo += tiles
-            ctx.enqueue_function[ecv_gram_staged_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
-                wit.p(), Int32(wo), nonce, grid_dim=tiles * (tiles + 1) // 2 * (f_n + 1), block_dim=ECV_NT,
-            )
-            wo += tiles * (tiles + 1) // 2 * (f_n + 1)
         else:
-            ctx.enqueue_function[ecv_means_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
-                wit.p(), Int32(wo), nonce, grid_dim=_blocks((f_n + 1) * (d + 1)), block_dim=ECV_TPB,
-            )
-            wo += _blocks((f_n + 1) * (d + 1))
-            ctx.enqueue_function[ecv_gram_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
-                wit.p(), Int32(wo), nonce, grid_dim=_blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1)), block_dim=ECV_TPB,
-            )
-            wo += _blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1))
+            if staged:
+                var tiles = (d + 1 + ECV_TC - 1) // ECV_TC
+                ctx.enqueue_function[ecv_means_staged_kernel](
+                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+                    wit.p(), Int32(wo), nonce, grid_dim=tiles, block_dim=ECV_NT,
+                )
+                wo += tiles
+                ctx.enqueue_function[ecv_gram_staged_kernel](
+                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+                    wit.p(), Int32(wo), nonce, grid_dim=tiles * (tiles + 1) // 2 * (f_n + 1), block_dim=ECV_NT,
+                )
+                wo += tiles * (tiles + 1) // 2 * (f_n + 1)
+            else:
+                ctx.enqueue_function[ecv_means_kernel](
+                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+                    wit.p(), Int32(wo), nonce, grid_dim=_blocks((f_n + 1) * (d + 1)), block_dim=ECV_TPB,
+                )
+                wo += _blocks((f_n + 1) * (d + 1))
+                ctx.enqueue_function[ecv_gram_kernel](
+                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+                    wit.p(), Int32(wo), nonce, grid_dim=_blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1)), block_dim=ECV_TPB,
+                )
+                wo += _blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1))
         ctx.enqueue_function[ecv_grid_kernel](
             Int32(n), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(),
             wit.p(), Int32(wo), nonce, grid_dim=_blocks(l_n * a_n), block_dim=ECV_TPB,

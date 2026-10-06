@@ -2,7 +2,7 @@
 
 Scope: the seven source commits in inputs.json, six logical lanes. Neural r3 and v2 require explicit reconciliation. Historical neural v1 and all other worktrees are excluded.
 
-Authorization: source/harness integration and supported local compile-only work. No estimators, runtime tests, performance, identity, quality, remote jobs, promotions, or merge into main.
+Authorization: source/harness integration and supported local compile-only work. Owner steering additionally authorizes renting a fast NVIDIA RunPod worker for compilation only. No estimators, runtime tests, performance, identity, quality, AMD remote jobs, promotions, or merge into main.
 
 1. Freeze source heads, preserve dirty-source gaps, inventory ideas, aliases, sub-arms, interactions and production reach.
 2. Consolidate on latest committed main, retaining incumbent fixes/defaults and benchmark contracts. Resolve shared code semantically. Keep new switches off.

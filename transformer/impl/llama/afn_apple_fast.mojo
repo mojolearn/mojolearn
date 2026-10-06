@@ -128,11 +128,6 @@ comptime AFN_TPB = 256
 # They do not enable a parent mechanism, and ALL does not enable them.
 comptime AFN26_ATTN_NORM_TPB128 = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN26_ATTN_NORM_TPB128"]()
 comptime AFN26_ATTN_NORM_TPB512 = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN26_ATTN_NORM_TPB512"]()
-def _integration_require_1() -> Bool:
-    comptime assert not (AFN26_ATTN_NORM_TPB128 and AFN26_ATTN_NORM_TPB512), "afn norm: select at most one launch-width experiment"
-    return True
-
-comptime _INTEGRATION_REQUIRE_1 = _integration_require_1()
 comptime AFN_NORM_TPB = 128 if AFN26_ATTN_NORM_TPB128 else (512 if AFN26_ATTN_NORM_TPB512 else AFN_TPB)
 #: Apple threadgroup memory per block: every shared page asserts it fits.
 comptime AFN_APPLE_TG_BYTES = 32768

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Master six-lane A/B planner and supported local compile-only orchestrator.
+"""Master six-lane A/B planner and compile-only orchestrator.
 
 Discovery/build never import an estimator. Future execution uses the existing
 full-operation queue and a concrete admitted recipe; planning is not execution.
@@ -40,6 +40,16 @@ CONFLICTS=[
  ('MOJOLEARN_NN53_HEAD_CHUNK512','MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2'),
  ('MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF','MOJOLEARN_AFT_P02'),
  ('MOJOLEARN_AFT_P07','MOJOLEARN_SHAP_FAST_ROW_PAIR'),
+ ('MOJOLEARN_AFCL_G01','MOJOLEARN_KNN_FAST_MMA_OFF'),
+ ('MOJOLEARN_IDN_NEURAL_NN01','MOJOLEARN_IDN_NEURAL_NN03'),
+ ('MOJOLEARN_IDN_NEURAL_NN01','MOJOLEARN_IDN_NEURAL_NN04'),
+ ('MOJOLEARN_IDN_GEMM_FOLD_LEAF_64','MOJOLEARN_NI08_GEMM_LEAF_256'),
+ ('MOJOLEARN_NN53_HEAD_CHUNK512','MOJOLEARN_NN53_HEAD_CHUNK2048'),
+ ('MOJOLEARN_AFN26_MAMBA1_CHUNKS16','MOJOLEARN_AFN26_MAMBA1_CHUNKS64'),
+ ('MOJOLEARN_AFN26_MAMBA3_THREADS64','MOJOLEARN_AFN26_MAMBA3_THREADS256'),
+ ('MOJOLEARN_AFN26_EMB_THREADS64','MOJOLEARN_AFN26_EMB_THREADS128'),
+ ('MOJOLEARN_AFN26_ATTN_NORM_TPB128','MOJOLEARN_AFN26_ATTN_NORM_TPB512'),
+ ('MOJOLEARN_C52_PAIR_128','MOJOLEARN_C52_PAIR_512'),
 ]
 
 
@@ -79,6 +89,8 @@ def combine(configs):
                 if k in dest and dest[k]!=v:problems.append('Conflicting '+key+' '+k)
                 dest[k]=v
     keys=set(ds)
+    for key in keys:
+        if key.endswith('_OFF') and key[:-4] in keys:problems.append('Enabled and disabled simultaneously: '+key[:-4])
     for a,b in CONFLICTS:
         if a in keys and b in keys:problems.append('Mutually exclusive '+a+' / '+b)
     routes=[x for x in ['NN01','NN02','NN08','NN10'] if 'MOJOLEARN_IDN_NEURAL_'+x in keys]
@@ -89,17 +101,27 @@ def combine(configs):
     return config([k+'='+v for k,v in sorted(ds.items())],env,runtime),problems
 
 
+def arm_problems(arms,combined):
+    keys={d.split('=')[0] for d in combined['defines']};problems=[]
+    for arm in arms:
+        if not arm.get('source_selectable',True):problems.append('Source arm is not selectable: '+arm['id'])
+        for conflict in arm.get('conflicts',[]):
+            if isinstance(conflict,str) and conflict.startswith('MOJOLEARN_') and conflict.split('=')[0] in keys:problems.append(arm['id']+' excludes '+conflict)
+    return unique(problems)
+
+
 def configurations(doc):
     entries={e['id']:e for e in doc['entries']};rows=[]
     aliases={a['id']:a for a in doc['aliases'] if a['kind']=='equivalent_implementation'}
     for e in doc['entries']:
         for arm in e['arms']:
-            A,problems=combine([arm['A']])
+            A,problems=combine([arm['A']]);problems+=arm_problems([arm],A)
             rows.append(dict(arm,id=arm['id'],members=[e['id']],mode=e['mode'],vendors=e['vendors'],A=A,problems=problems,kind='candidate',campaign_role=e['campaign_role'],source_gaps=unique(arm['source_gaps']+e['gaps']),alias_of=aliases.get(arm['id'],{}).get('canonical')))
     for e in doc['interactions']:
         if e.get('selection_only'):
-            members=[];specs=[];missing=[];excluded=[];compile_specs=[]
-            for mid in e['members']:
+            members=[];specs=[];missing=[e['pending_reason']] if e.get('pending_reason') else [];excluded=[];compile_specs=[]
+            ordered=sorted(e['members'],key=lambda mid:0 if mid=='I.N.NN02' else 1) if e['kind']=='complete_proposed' else e['members']
+            for mid in ordered:
                 base,_,variant=mid.partition(':');item=entries.get(base)
                 if not item:missing.append('Missing scoped implementation '+mid);continue
                 choices=item['arms'];chosen=next((a for a in choices if a['name']==variant),choices[0]) if choices else None
@@ -110,11 +132,11 @@ def configurations(doc):
                 # Public operations belong to individual saved workloads. They
                 # are retained per member, never overwritten by a global flag.
                 cs=dict(chosen['A'],runtime={})
-                _,incompatible=combine(compile_specs+[cs])
+                trial,incompatible=combine(compile_specs+[cs]);incompatible+=arm_problems(specs+[chosen],trial)
                 if proposed and incompatible:
                     excluded.append(dict(id=chosen['id'],reason=incompatible));continue
                 members.append(base);specs.append(chosen);compile_specs.append(cs)
-            A,problems=combine(compile_specs)
+            A,problems=combine(compile_specs);problems+=arm_problems(specs,A)
             workloads=[]
             for arm in specs:
                 for w in arm['workloads']:
@@ -132,11 +154,28 @@ def work_id(w):
     return w.get('id') or w.get('key') or w.get('lane') or sha_value(w)[:12]
 
 
+def expand_workload(value):
+    if isinstance(value,str):
+        for prefix,source in [('classical:', 'tools/classical_two_datasets.py'),('more:', 'tools/bench_board_more.py'),('expanded:', 'tools/bench_board_algos.py'),('classical2/','tools/bench_board_more.py'),('algos/','tools/bench_board_algos.py')]:
+            if value.startswith(prefix):
+                return [dict(id=value+'@dataset='+dataset,source_workload=value,harness=source,dataset=dataset,recipe='Saved full '+dataset+' race; intrinsic caps and additional operation suffixes remain unresolved') for dataset in ('taxi','istella')]
+    if isinstance(value,dict) and value.get('affected_models'):
+        tree=ast.parse((ROOT/'tools/bench_board_neural.py').read_text())
+        mapping=next(ast.literal_eval(n.value) for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='MODEL_OF' for t in n.targets))
+        aliases={'LM':['lm'],'MLP':['mlp'],'Mamba/Samba':['mamba1','mamba2','mamba3','samba'],'transformer':['transformer'],'CNN':[]}
+        models=unique(m for model in value['affected_models'] for m in aliases.get(model,[model.lower()]))
+        rows=[dict(value,id='neural:'+lane,lane=lane,model=model,recipe_status='Saved full shape; column-specific dimensions/caps require audit') for lane,model in mapping.items() if model in models]
+        if 'CNN' in value['affected_models']:rows.append(dict(value,id='neural:CNN',recipe_status='Resolve existing expanded CNN classifier/regressor races; no new race'))
+        return rows or [value]
+    return [value]
+
+
 def matrix(doc):
     configs=configurations(doc);cells=[]
     for c in configs:
         for vendor in c['vendors']:
-            for w in c.get('workloads') or [dict(id='MISSING_WORKLOAD',status='no saved workload mapping')]:
+            workloads=[w for value in c.get('workloads',[]) for w in expand_workload(value)]
+            for w in workloads or [dict(id='MISSING_WORKLOAD',status='no saved workload mapping')]:
                 gaps=list(c['problems'])+c.get('source_gaps',[])
                 gaps+=['Full dataset/version/hash, dimensions, settings, cap audit and accepted artifacts must be supplied from the frozen saved recipe.']
                 if c['A']==c['B']:gaps.append('Reused incumbent/no distinct A configuration; historical comparison is not new work')
@@ -148,7 +187,7 @@ def matrix(doc):
     return dict(schema='mojolearn.six-lane-matrix/1',base_main=doc['base_main'],configurations=configs,cells=cells,execution='NOT EXECUTED',qualification=doc['qualification'])
 
 
-BENCHMARK_FILES=['tools/bench_board.py','tools/bench_board_neural.py','tools/bench_board_algos.py','tools/bench_board_more.py','tools/classical_two_datasets.py','tools/classical_two_datasets_2.py','tools/speed_gbdt_arm.py','bench/speed/forest_speed_arm.py','tools/bench_neural_decode.py','tools/bench_board_state.py','tools/performance_measurement_board.py','experiments/performance_ideas/README.md','pixi.lock','pyproject.toml']
+BENCHMARK_FILES=['tools/bench_board.py','tools/bench_board_neural.py','tools/bench_board_algos.py','tools/bench_board_more.py','tools/classical_two_datasets.py','tools/classical_two_datasets_2.py','tools/speed_gbdt_arm.py','bench/speed/forest_speed_arm.py','tools/bench_neural_decode.py','tools/bench_board_state.py','tools/performance_measurement_board.py','experiments/performance_ideas/README.md','pixi.lock','pyproject.toml','tools/knn_datasets.py','tools/bench_board_params.py','tools/torch_lm_step_opponent.py','tools/speed_torch_seq.py']
 
 
 def freeze_benchmarks():
@@ -195,21 +234,29 @@ def build_plan(doc,mat):
         paths=unique([p for mid in c['members'] if mid in entries for p in binding_paths(entries[mid],c['mode'])])
         if not paths:blocked.append(dict(configuration=c['id'],status='MISSING_BINDING_MAP'));continue
         for path in paths:
-            vendor='host' if path.endswith('_host.mojo') else 'apple'
-            if vendor not in c['vendors']:continue
-            for arm in ('B','A'):
-                defines=c[arm]['defines'];params=c.get('parameters',{})
-                if any('{' in d for d in defines):
-                    blocked.append(dict(configuration=c['id'],arm=arm,status='UNRESOLVED_COMPILE_PARAMETERS',parameters=params));continue
-                if c['mode']=='identical':defines=defines+['MOJOLEARN_NUMERIC_IDENTICAL=1']
-                defines=unique(sorted(defines))
-                key=sha_value([path,vendor,c['mode'],defines])[:20]
-                job=jobs.setdefault(key,dict(key=key,binding=path,vendor=vendor,mode=c['mode'],defines=defines,configurations=[],status='NOT_COMPILED',target='Apple arm64 CPU' if vendor=='host' else 'Apple Metal on local Apple silicon',runtime_reach='NOT_VERIFIED'))
-                job['configurations'].append(dict(configuration=c['id'],arm=arm))
-    return dict(schema='mojolearn.six-lane-build-plan/1',jobs=list(jobs.values()),blocked=blocked,unsupported=[dict(vendor=v,status='NOT_COMPILED',reason='No supported local NVIDIA/AMD target; no cross-compilation or remote jobs authorized') for v in ('nvidia','amd')],policy='Deduplicated by binding, mode, vendor and exact defines. Compile success is not runtime reach; no import, smoke, quality, timing or identity execution.')
+            supported=['host'] if path.endswith('_host.mojo') else (['apple','nvidia'] if c['mode']=='identical' else ['apple'])
+            for vendor in supported:
+              if vendor not in c['vendors']:continue
+              for arm in ('B','A'):
+                  defines=c[arm]['defines'];params=c.get('parameters',{})
+                  if any('{' in d for d in defines):
+                      blocked.append(dict(configuration=c['id'],arm=arm,status='UNRESOLVED_COMPILE_PARAMETERS',parameters=params));continue
+                  if c['mode']=='identical':defines=defines+['MOJOLEARN_NUMERIC_IDENTICAL=1']
+                  defines=unique(sorted(defines))
+                  key=sha_value([path,vendor,c['mode'],defines])[:20]
+                  job=jobs.setdefault(key,dict(key=key,binding=path,vendor=vendor,mode=c['mode'],defines=defines,configurations=[],status='NOT_COMPILED',target={'host':'native CPU host binding','apple':'Apple Metal on local Apple silicon','nvidia':'native NVIDIA CUDA target on authorized RunPod worker'}[vendor],runtime_reach='NOT_VERIFIED'))
+                  job['configurations'].append(dict(configuration=c['id'],arm=arm))
+    return dict(schema='mojolearn.six-lane-build-plan/1',jobs=list(jobs.values()),blocked=blocked,unsupported=[dict(vendor='amd',status='NOT_COMPILED',reason='No supported local AMD target; AMD remote work is not authorized')],policy='Deduplicated by binding, mode, vendor and exact defines. Compile success is not runtime reach; no import, smoke, quality, timing or identity execution.')
 
 
-def frozen():
+def frozen(manifest=None):
+    if manifest is not None:
+        d=json.loads(Path(manifest).read_text())
+        if not d['branch'].startswith('integration/'):
+            raise ValueError('Archive is not an integration freeze')
+        for p,h in d['files'].items():
+            if digest(ROOT/p)!=h:raise ValueError('Archive source drift: '+p)
+        return d['source_sha']
     status=git('status','--porcelain','--untracked-files=all')
     if status:raise ValueError('Compile requires a clean committed integration freeze')
     if not git('branch','--show-current').startswith('integration/'):raise ValueError('Expected isolated integration branch')
@@ -217,8 +264,12 @@ def frozen():
 
 
 def compile_jobs(args):
-    if platform.system()!='Darwin' or platform.machine()!='arm64':raise ValueError('This local campaign supports Apple arm64 only')
-    source=frozen();check_benchmark();plan=json.loads(args.plan.read_text());compiler=args.compiler.resolve()
+    apple=platform.system()=='Darwin' and platform.machine()=='arm64'
+    linux=platform.system()=='Linux' and platform.machine()=='x86_64'
+    if not (apple or linux):raise ValueError('Supported compile hosts are Apple arm64 or Linux x86_64')
+    if linux and args.vendor not in ('nvidia','host'):raise ValueError('Linux compilation requires an explicit nvidia or host selection')
+    if apple and args.vendor=='nvidia':raise ValueError('NVIDIA compilation requires the authorized native Linux worker')
+    source=frozen(args.source_manifest);check_benchmark();plan=json.loads(args.plan.read_text());compiler=args.compiler.resolve()
     if not compiler.is_file():raise ValueError('Compiler missing')
     out=args.output.resolve()
     if out.is_relative_to(ROOT):raise ValueError('Retain binaries/logs outside the source freeze')
@@ -231,8 +282,20 @@ def compile_jobs(args):
         rc=subprocess.run([str(compiler),'--version'],env=env,stdout=log,stderr=subprocess.STDOUT).returncode
     if rc:raise ValueError('Compiler version probe failed; see compiler-version.log')
     version=(out/'compiler-version.log').read_text().strip()
-    sdk=subprocess.check_output(['xcrun','--sdk','macosx','--show-sdk-version'],text=True).strip()
-    hardware={k:subprocess.check_output(['sysctl','-n',k],text=True).strip() for k in ['machdep.cpu.brand_string','hw.ncpu','hw.memsize']}
+    if apple:
+        sdk=subprocess.check_output(['xcrun','--sdk','macosx','--show-sdk-version'],text=True).strip()
+        hardware={k:subprocess.check_output(['sysctl','-n',k],text=True).strip() for k in ['machdep.cpu.brand_string','hw.ncpu','hw.memsize']}
+    else:
+        hardware={'platform':platform.platform(),'cpu_affinity':sorted(os.sched_getaffinity(0))}
+        for name in ('cpu.max','memory.max','cpuset.cpus.effective'):
+            path=Path('/sys/fs/cgroup')/name
+            hardware[name]=path.read_text().strip() if path.exists() else 'unavailable'
+        hardware['cpu_model']=next((x.split(':',1)[1].strip() for x in Path('/proc/cpuinfo').read_text().splitlines() if x.startswith('model name')),'unavailable')
+        if args.vendor=='nvidia':
+            hardware['gpu']=subprocess.check_output(['nvidia-smi','--query-gpu=name,uuid,driver_version,compute_cap','--format=csv,noheader'],text=True).strip()
+            caps={line.rsplit(',',1)[1].strip().replace('.','') for line in hardware['gpu'].splitlines()}
+            if len(caps)!=1:raise ValueError('Need one native NVIDIA architecture')
+            accelerator='sm_'+caps.pop()
     manifest=dict(schema='mojolearn.six-lane-build-campaign/1',source_sha=source,compiler=str(compiler),compiler_sha256=digest(compiler),compiler_version=version,hardware=hardware,build_plan_sha256=digest(args.plan),records=[],qualification='No runtime, identity, quality or performance execution')
     closures,_=source_graph()
     reusable=[]
@@ -240,10 +303,10 @@ def compile_jobs(args):
         for path in root.resolve().glob('**/receipt.json'):
             old=json.loads(path.read_text())
             if old.get('status')=='COMPILED':reusable.append((path,old))
-    chosen=[j for j in plan['jobs'] if (not args.binding or j['binding'] in args.binding) and (not args.key or j['key'] in args.key)]
+    chosen=[j for j in plan['jobs'] if (j['vendor'] in (('apple','host') if apple else (args.vendor,))) and (not args.vendor or j['vendor']==args.vendor) and (not args.binding or j['binding'] in args.binding) and (not args.key or j['key'] in args.key)]
     if args.limit:chosen=chosen[:args.limit]
     for job in chosen:
-        if frozen()!=source:raise ValueError('Source changed during freeze')
+        if frozen(args.source_manifest)!=source:raise ValueError('Source changed during freeze')
         directory=out/job['key'];directory.mkdir(exist_ok=True)
         receipt=directory/'receipt.json'
         if receipt.exists():
@@ -252,14 +315,16 @@ def compile_jobs(args):
                 manifest['records'].append(old);continue
             raise ValueError('Evidence already exists; choose a new campaign directory for repairs')
         artifact=directory/(Path(job['binding']).stem+'.so');log=directory/'build.log'
-        flags=['--target-cpu','apple-m1']
+        flags=['--target-cpu','apple-m1' if apple else 'x86-64-v3']
         family=Path(job['binding']).stem.removeprefix('_mojolearn').lstrip('_')
         wrapper=ROOT/'bindings'/('build_'+family+'.sh' if family else 'build.sh')
         # Match inspected shipped Darwin builders. Neural AOT builders deliberately
         # omit --target-accelerator; expansion bindings explicitly use metal:1.
-        if job['vendor']=='apple' and wrapper.exists() and '--target-accelerator metal:1' in wrapper.read_text():flags+=['--target-accelerator','metal:1']
-        flags+=['-D','MOJOLEARN_COLUMN_CPU' if job['vendor']=='host' else 'MOJOLEARN_COLUMN_APPLE']
-        argv=[str(compiler),'build','-j','2','--emit','shared-lib',*flags,'-Xlinker','-platform_version','-Xlinker','macos','-Xlinker','11.0','-Xlinker',sdk,'-I',str(ROOT),'-I',str(ROOT/'bindings')]
+        if apple and job['vendor']=='apple' and wrapper.exists() and '--target-accelerator metal:1' in wrapper.read_text():flags+=['--target-accelerator','metal:1']
+        if linux and job['vendor']=='nvidia':flags+=['--target-accelerator',accelerator]
+        flags+=['-D',{'host':'MOJOLEARN_COLUMN_CPU','apple':'MOJOLEARN_COLUMN_APPLE','nvidia':'MOJOLEARN_COLUMN_NVIDIA'}[job['vendor']]]
+        if apple:flags+=['-Xlinker','-platform_version','-Xlinker','macos','-Xlinker','11.0','-Xlinker',sdk]
+        argv=[str(compiler),'build','-j',str(args.jobs),'--emit','shared-lib',*flags,'-I',str(ROOT),'-I',str(ROOT/'bindings')]
         for define in job['defines']:argv+=['-D',define]
         argv += [str(ROOT/job['binding']),'-o',str(artifact)]
         dep_hash={p:digest(ROOT/p) for p in sorted(closures.get(job['binding'],{job['binding']}))}
@@ -281,6 +346,7 @@ def compile_jobs(args):
             print(json.dumps(dict(key=job['key'],binding=job['binding'],status='REUSED_COMPILED',receipt=str(old_path))),flush=True)
             continue
         with log.open('x') as stream:proc=subprocess.run(argv,cwd=ROOT,env=env,stdout=stream,stderr=subprocess.STDOUT)
+        if any(digest(ROOT/p)!=h for p,h in dep_hash.items()):raise ValueError('Numerical source changed during compilation; artifact not admitted')
         record.update(returncode=proc.returncode,status='COMPILED' if proc.returncode==0 and artifact.exists() else 'FAILED',artifact_sha256=digest(artifact) if artifact.exists() else None)
         write(receipt,record);manifest['records'].append(record);write(out/'campaign.json',manifest)
         print(json.dumps(dict(key=job['key'],binding=job['binding'],status=record['status'],log=str(log))),flush=True)
@@ -341,6 +407,7 @@ def main(argv=None):
     sh=s.add_parser('show');sh.add_argument('id')
     b=s.add_parser('compile',help='compile shared libraries only, never import or execute')
     b.add_argument('--plan',type=Path,default=STORE/'build_plan.json');b.add_argument('--compiler',type=Path,required=True);b.add_argument('--output',type=Path,required=True);b.add_argument('--binding',action='append');b.add_argument('--key',action='append');b.add_argument('--limit',type=int);b.add_argument('--keep-going',action='store_true');b.add_argument('--reuse',type=Path,action='append',help='Prior compile evidence roots; exact source-closure/toolchain matches only')
+    b.add_argument('--vendor',choices=('apple','host','nvidia'));b.add_argument('--jobs',type=int,default=2);b.add_argument('--source-manifest',type=Path,help='Exact committed-source manifest for a verified archive on the authorized NVIDIA worker')
     q=s.add_parser('queue',help='write future queue; incomplete cells stay blocked');q.add_argument('--vendor',choices=VENDORS,required=True);q.add_argument('--recipes',type=Path);q.add_argument('--select',action='append');q.add_argument('--output',type=Path,required=True)
     bp=s.add_parser('board-plan',help='write inputs and command for the existing board tool, without invoking it');bp.add_argument('--output',type=Path,required=True)
     args=p.parse_args(argv)

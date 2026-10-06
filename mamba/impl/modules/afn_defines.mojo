@@ -242,11 +242,6 @@ comptime AFN26_MAMBA1_CHUNKS16 = AFN_APPLE_FAST and AFN_MAMBA1_CHUNKSCAN and is_
 comptime AFN26_MAMBA1_CHUNKS64 = AFN_APPLE_FAST and AFN_MAMBA1_CHUNKSCAN and is_defined[
     "MOJOLEARN_AFN26_MAMBA1_CHUNKS64"
 ]()
-def _integration_require_1() -> Bool:
-    comptime assert not (AFN26_MAMBA1_CHUNKS16 and AFN26_MAMBA1_CHUNKS64), "choose one AFN26 Mamba1 chunk count"
-    return True
-
-comptime _INTEGRATION_REQUIRE_1 = _integration_require_1()
 # M08: not tested; a shorter staged K window trades shared storage for
 # more loop/barrier work, with the same full f32 dot products.
 comptime AFN26_MAMBA2_SSD_K16 = AFN_APPLE_FAST and AFN_MAMBA2_SSD_MMA and is_defined[
@@ -261,11 +256,6 @@ comptime AFN26_MAMBA3_THREADS64 = AFN_APPLE_FAST and AFN_MAMBA3_SISO_FUSED and i
 comptime AFN26_MAMBA3_THREADS256 = AFN_APPLE_FAST and AFN_MAMBA3_SISO_FUSED and is_defined[
     "MOJOLEARN_AFN26_MAMBA3_THREADS256"
 ]()
-def _integration_require_2() -> Bool:
-    comptime assert not (AFN26_MAMBA3_THREADS64 and AFN26_MAMBA3_THREADS256), "choose one AFN26 Mamba3 block size"
-    return True
-
-comptime _INTEGRATION_REQUIRE_2 = _integration_require_2()
 # M10: not tested; smaller reductions or four elements per launched thread
 # may amortize refusal overhead. The bounded grid-stride scan stays complete.
 comptime AFN26_MAMBA_REFUSAL_THREADS128 = AFN_APPLE_FAST and is_defined[

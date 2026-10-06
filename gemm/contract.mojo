@@ -128,11 +128,6 @@ comptime _NEURAL_GEMM_PROFILE_ARM = (
 )
 comptime _NEURAL_GEMM_LEAF64 = _NEURAL_GEMM_PROFILE_ARM and is_defined["MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"]()
 comptime _NEURAL_GEMM_LEAF256 = _NEURAL_GEMM_PROFILE_ARM and is_defined["MOJOLEARN_NI08_GEMM_LEAF_256"]()
-def _integration_require_1() -> Bool:
-    comptime assert not (_NEURAL_GEMM_LEAF64 and _NEURAL_GEMM_LEAF256), "select one GEMM numerical profile"
-    return True
-
-comptime _INTEGRATION_REQUIRE_1 = _integration_require_1()
 comptime CONTRACT_K_LEAF_MIN = 64 if _NEURAL_GEMM_LEAF64 else (256 if _NEURAL_GEMM_LEAF256 else 128)
 comptime GEMM_NUMERICAL_PROFILE = (
     "mojolearn.identical.gemm.fp32.ni08-leaf256" if _NEURAL_GEMM_LEAF256

@@ -241,7 +241,14 @@
       ],
       "source_id": "identical.classical",
       "stable_two_checks": true,
-      "source_completeness": "Retained lane catalogs/handoffs require per-entry audit; clean Git does not establish completion.",
+      "source_completeness": {
+        "handoff": "experiments/classical_identical_ideas/IMPLEMENTATION_STATUS.md",
+        "handoff_sha256": "e746052fec7c1d4000f54d90a12523e7e32cfd94bdb74ac042c086eb68c329ba",
+        "summary": "53 classical-owned cards delivered with explicit incomplete extensions; C45-C51 are seven tree cross-links. The selected source delivery is retained; broad idea scope is not complete.",
+        "all_original_idea_scope_complete": false,
+        "unresolved_detail": "See every retained source record and integration catalog.gaps; clean Git is not completion evidence",
+        "peer_contact": "none needed; retained artifacts resolve source scope"
+      },
       "qualification": "NOT COMPILED / NOT TESTED / IDENTITY NOT VERIFIED / QUALITY NOT VERIFIED / NOT MEASURED for integrated source",
       "uncommitted_gaps": []
     },
@@ -400,7 +407,14 @@
       ],
       "source_id": "identical.trees",
       "stable_two_checks": true,
-      "source_completeness": "Retained lane catalogs/handoffs require per-entry audit; clean Git does not establish completion.",
+      "source_completeness": {
+        "handoff": "experiments/trees_identical_20261006/NEW_TREE_AB_INVENTORY.json",
+        "handoff_sha256": "ab8f8f52a74d845c59c92c53c1fca75525412a8e47e743e9be663adec363312e",
+        "summary": "52 new tree-owned implementation records, including scoped classical overlaps; 10 source records explicitly partial. A stable untracked planning document is preserved externally, not silently included in Git.",
+        "all_original_idea_scope_complete": false,
+        "unresolved_detail": "See every retained source record and integration catalog.gaps; clean Git is not completion evidence",
+        "peer_contact": "none needed; retained artifacts resolve source scope"
+      },
       "qualification": "NOT COMPILED / NOT TESTED / IDENTITY NOT VERIFIED / QUALITY NOT VERIFIED / NOT MEASURED for integrated source",
       "uncommitted_gaps": [
         {
@@ -611,7 +625,14 @@
       ],
       "source_id": "identical.neural.r3",
       "stable_two_checks": true,
-      "source_completeness": "Retained lane catalogs/handoffs require per-entry audit; clean Git does not establish completion.",
+      "source_completeness": {
+        "handoff": "experiments/neural_identical_ab/IMPLEMENTATION_STATUS.md",
+        "handoff_sha256": "cd6e557f5cac80cf806bd9168a3dda008bdc99390d6b1954d30a1f2210ca894f",
+        "summary": "64 cards accounted for: 59 wired drafts and five reused implementations. Broader variants and full saved workload recipes remain incomplete.",
+        "all_original_idea_scope_complete": false,
+        "unresolved_detail": "See every retained source record and integration catalog.gaps; clean Git is not completion evidence",
+        "peer_contact": "none needed; retained artifacts resolve source scope"
+      },
       "qualification": "NOT COMPILED / NOT TESTED / IDENTITY NOT VERIFIED / QUALITY NOT VERIFIED / NOT MEASURED for integrated source",
       "uncommitted_gaps": []
     },
@@ -725,7 +746,14 @@
       ],
       "source_id": "identical.neural.v2",
       "stable_two_checks": true,
-      "source_completeness": "Retained lane catalogs/handoffs require per-entry audit; clean Git does not establish completion.",
+      "source_completeness": {
+        "handoff": "experiments/neural_identical_20261006/IMPLEMENTATION_STATUS.md",
+        "handoff_sha256": "718a8fda62f3d9c29544c00ea566df49a5910cb96dd371530e4e4eb3a011326c",
+        "summary": "60 cards accounted for: 41 new wired candidate subarms, 15 reused implementations, two partial designs, two source-rejected hypotheses. Unique work is reconciled with r3; five scoped equivalences retain aliases.",
+        "all_original_idea_scope_complete": false,
+        "unresolved_detail": "See every retained source record and integration catalog.gaps; clean Git is not completion evidence",
+        "peer_contact": "none needed; retained artifacts resolve source scope"
+      },
       "qualification": "NOT COMPILED / NOT TESTED / IDENTITY NOT VERIFIED / QUALITY NOT VERIFIED / NOT MEASURED for integrated source",
       "uncommitted_gaps": []
     },
@@ -887,7 +915,14 @@
       ],
       "source_id": "apple_fast.classical",
       "stable_two_checks": true,
-      "source_completeness": "Retained lane catalogs/handoffs require per-entry audit; clean Git does not establish completion.",
+      "source_completeness": {
+        "handoff": "experiments/apple_fast_classical_20261006/README.md",
+        "handoff_sha256": "9fa0e434f8a407671504078b47fbc48effc0cd460c528aa789eb6c7ae979ed04",
+        "summary": "54 source cards delivered; per-card caller constraints, prerequisites, and full-workload coverage remain unverified. Source delivery does not establish full intended idea completion.",
+        "all_original_idea_scope_complete": false,
+        "unresolved_detail": "See every retained source record and integration catalog.gaps; clean Git is not completion evidence",
+        "peer_contact": "none needed; retained artifacts resolve source scope"
+      },
       "qualification": "NOT COMPILED / NOT TESTED / IDENTITY NOT VERIFIED / QUALITY NOT VERIFIED / NOT MEASURED for integrated source",
       "uncommitted_gaps": []
     },
@@ -960,7 +995,14 @@
       ],
       "source_id": "apple_fast.trees",
       "stable_two_checks": true,
-      "source_completeness": "Retained lane catalogs/handoffs require per-entry audit; clean Git does not establish completion.",
+      "source_completeness": {
+        "handoff": "experiments/apple_fast_trees/DELIVERY.md",
+        "handoff_sha256": "3833e651a1e5154c8626b082a482eedb38ed7b2970826a641e74896f7bd1b72f",
+        "summary": "48 new cards and 12 declared interaction groups retained. X11/X12 source membership is deliberately deferred to later qualified decisions; the integration separately proposes an unqualified compatible configuration.",
+        "all_original_idea_scope_complete": false,
+        "unresolved_detail": "See every retained source record and integration catalog.gaps; clean Git is not completion evidence",
+        "peer_contact": "none needed; retained artifacts resolve source scope"
+      },
       "qualification": "NOT COMPILED / NOT TESTED / IDENTITY NOT VERIFIED / QUALITY NOT VERIFIED / NOT MEASURED for integrated source",
       "uncommitted_gaps": []
     },
@@ -1013,7 +1055,14 @@
       ],
       "source_id": "apple_fast.neural",
       "stable_two_checks": true,
-      "source_completeness": "Retained lane catalogs/handoffs require per-entry audit; clean Git does not establish completion.",
+      "source_completeness": {
+        "handoff": "experiments/apple_fast_neural_20261006/README.md",
+        "handoff_sha256": "ccb18b3fc92fbe576b4fb1328f2cefa8a86c699c3d09d8f1148cca8e9a7e873a",
+        "summary": "44 mechanism cards plus eight authored interactions retained. Existing reused parent arms remain dependencies; coverage, compilation and qualification were not performed in the source lane.",
+        "all_original_idea_scope_complete": false,
+        "unresolved_detail": "See every retained source record and integration catalog.gaps; clean Git is not completion evidence",
+        "peer_contact": "none needed; retained artifacts resolve source scope"
+      },
       "qualification": "NOT COMPILED / NOT TESTED / IDENTITY NOT VERIFIED / QUALITY NOT VERIFIED / NOT MEASURED for integrated source",
       "uncommitted_gaps": []
     }

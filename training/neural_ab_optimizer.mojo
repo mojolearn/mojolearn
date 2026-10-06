@@ -32,30 +32,67 @@ comptime NN_ADAM_TPB = 128
 comptime NN_ADAM_SCALARS = 9
 
 
-def nn_adam_scalar_table(configs: List[OptimizerConfig], steps: List[Int]) raises -> List[Float32]:
-    """Host metadata only: one canonical scalar tuple per optimizer group.
+def _nn_adam_scalar_kernel(dst: _FP, params: _FP,
+    steps: MutPointer[Int64, MutAnyOrigin], groups: Int32):
+    var group = Int(block_idx.x) * 128 + Int(thread_idx.x)
+    if group >= Int(groups):
+        return
+    var at = group * 5
+    # Only the Adam/AdamW fields used by the shared canonical scalar contract.
+    # Other optimizer fields do not enter any of the nine published values.
+    var cfg = OptimizerConfig(0, params[at], params[at+1], params[at+2],
+        params[at+3], params[at+4], Float32(0), Float32(0), False, Float32(0))
+    var value = step_scalars(cfg, Int(steps[group]))
+    var out_at = group * NN_ADAM_SCALARS
+    dst[out_at] = cfg.beta1
+    dst[out_at+1] = cfg.beta2
+    dst[out_at+2] = cfg.eps
+    dst[out_at+3] = cfg.weight_decay
+    dst[out_at+4] = value.c1
+    dst[out_at+5] = value.c2
+    dst[out_at+6] = value.step_size
+    dst[out_at+7] = value.rt_bc2
+    dst[out_at+8] = value.decay_mul
 
-    Caller uses its existing config admission and uploads this small table.
-    The step count is per group. The public optimizer's exact pow_int_f32 is
-    retained rather than a running beta-power recurrence.
+
+def nn_adam_scalar_table(ctx: DeviceContext, configs: List[OptimizerConfig],
+    steps: List[Int]) raises -> DeviceBuffer[DType.float32]:
+    """Upload optimizer configuration metadata; compute step arithmetic on GPU.
+
+    One lane owns each independent optimizer group. The same step_scalars
+    contract supplies the nine values used by Adam/AdamW. Synchronization keeps
+    the temporary upload buffers alive and belongs inside the training step.
     """
-    if len(configs) != len(steps):
+    if len(configs) != len(steps) or len(configs) < 1 or len(configs) > 2147483647 // NN_ADAM_SCALARS:
         raise Error("NN56 group/step metadata length mismatch")
-    var table = List[Float32]()
+    var metadata = List[Float32]()
+    var counts = List[Int64]()
     for group in range(len(configs)):
         if steps[group] < 1:
             raise Error("NN56 optimizer step must be positive")
         var cfg = configs[group]
-        var s = step_scalars(cfg, steps[group])
-        table.append(cfg.beta1)
-        table.append(cfg.beta2)
-        table.append(cfg.eps)
-        table.append(cfg.weight_decay)
-        table.append(s.c1)
-        table.append(s.c2)
-        table.append(s.step_size)
-        table.append(s.rt_bc2)
-        table.append(s.decay_mul)
+        metadata.append(cfg.lr)
+        metadata.append(cfg.beta1)
+        metadata.append(cfg.beta2)
+        metadata.append(cfg.eps)
+        metadata.append(cfg.weight_decay)
+        counts.append(Int64(steps[group]))
+    var params = ctx.enqueue_create_buffer[DType.float32](len(metadata))
+    var dsteps = ctx.enqueue_create_buffer[DType.int64](len(counts))
+    var table = ctx.enqueue_create_buffer[DType.float32](NN_ADAM_SCALARS * len(configs))
+    try:
+        ctx.enqueue_copy(dst_buf=params, src_ptr=metadata.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=dsteps, src_ptr=counts.unsafe_ptr())
+        ctx.enqueue_function[_nn_adam_scalar_kernel](table.unsafe_ptr(), params.unsafe_ptr(),
+            dsteps.unsafe_ptr(), Int32(len(configs)), grid_dim=(len(configs)+127)//128, block_dim=128)
+        ctx.synchronize()
+    except e:
+        ctx.synchronize()
+        raise e
+    _ = metadata^
+    _ = counts^
+    _ = params^
+    _ = dsteps^
     return table^
 
 

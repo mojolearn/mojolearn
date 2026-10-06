@@ -112,6 +112,42 @@
       "changed": false,
       "integrated_sha256": "408bd74117e33b874ebfb2327b05b2234617759ab299bb388b032cb509d1e7f9",
       "path": "pixi.lock"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "e5e205d29a369ce2a69288b0546a0f70e4133f7b",
+      "base_sha256": "29b987715722dadc59aea1e6353a8b621ac83f2ea19ba799e8c46b1a250967b5",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "29b987715722dadc59aea1e6353a8b621ac83f2ea19ba799e8c46b1a250967b5",
+      "path": "tools/knn_datasets.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "8cb0a60dc073afbdb77628d2b32d19148f44fcf3",
+      "base_sha256": "b5aa1c7a9d7ab41382e8875513b1d7515b9da0883c1dda593976d58ed30a6d2e",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "b5aa1c7a9d7ab41382e8875513b1d7515b9da0883c1dda593976d58ed30a6d2e",
+      "path": "tools/bench_board_params.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "27738a564ff0c136168ba2d26ebd88862c0af6ed",
+      "base_sha256": "1c0e8872770e0421bf9caba17ff4f4def2d1cc9c2a24be50544590e39fba6c08",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "1c0e8872770e0421bf9caba17ff4f4def2d1cc9c2a24be50544590e39fba6c08",
+      "path": "tools/torch_lm_step_opponent.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "89adef8b53bf6cb88e1256f1231906127e4bd561",
+      "base_sha256": "a4aa37b34cb68e784b75a6b6d7459d6d6ad764360babd1e8f34c28072e5f8e27",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "a4aa37b34cb68e784b75a6b6d7459d6d6ad764360babd1e8f34c28072e5f8e27",
+      "path": "tools/speed_torch_seq.py"
     }
   ],
   "opponent_execution": "NOT RUN; opponent source/dependencies/results untouched",

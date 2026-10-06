@@ -78,12 +78,12 @@ def normalize(lane, source, e, path, *, original=None, workloads=None, bindings=
                          reference_policy='frozen incumbent defaults; authored reference retained separately',
                          authored_reference_differs=changed_reference,
                          prerequisites=seq(v.get('dependencies'))+seq(v.get('prerequisites')),
-                         conflicts=seq(v.get('mutually_exclusive_with'))+seq(v.get('incompatible_defines')),
+                         conflicts=seq(v.get('mutually_exclusive_with'))+seq(v.get('incompatible_defines'))+seq(v.get('conflicting_defines'))+seq(v.get('excluded_defines'))+seq(v.get('defines_absent_in_both_arms')),
                          source_selectable=v.get('selectable',True),
                          source_gaps=seq(v.get('source_gaps'))+seq(v.get('blocker')),
                          parameters=v.get('parameters',e.get('required_compile_parameters',{})),
                          workloads=workloads if workloads is not None else v.get('required_workload_keys',e.get('workloads',[]))))
-    paths=unique(paths+[p for p in calls if (ROOT/p).is_file()])
+    paths=unique(p.split(':')[0] for p in paths+calls if (ROOT/p.split(':')[0]).is_file())
     status=e.get('source_status',e.get('implementation_status',e.get('status','idea')))
     role='incumbent_dependency' if status in ('reused_existing','existing_candidate_unverified') else 'source_rejected' if status=='rejected_source' else 'new_candidate'
     return dict(id=key,lane=lane,source_id=source,original_id=ident,title=e.get('title',ident),campaign_role=role,
@@ -136,6 +136,9 @@ def discover():
             key,values=parameter_options[e['id']]
             for value in values:
                 arm=json.loads(json.dumps(item['arms'][0]));arm['name']=key.lower()+'-'+str(value);arm['id']=item['id']+':'+arm['name'];arm['A']['defines']=[d for d in arm['A']['defines'] if d.split('=')[0]!=key]+[key+'='+str(value)];item['arms'].append(arm)
+        if e['id']=='NN09':
+            for name,extra in [('padding1',['MOJOLEARN_IDN_NEURAL_STAGE_PAD=1']),('xor',['MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE=1']),('padding1-xor',['MOJOLEARN_IDN_NEURAL_STAGE_PAD=1','MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE=1'])]:
+                arm=json.loads(json.dumps(item['arms'][0]));arm['name']=name;arm['id']=item['id']+':'+name;keys={d.split('=')[0] for d in extra};arm['A']['defines']=[d for d in arm['A']['defines'] if d.split('=')[0] not in keys]+extra;item['arms'].append(arm)
         entries.append(item)
     niroot='experiments/neural_identical_20261006/'
     nimap=read(niroot+'integration.json')
@@ -203,6 +206,8 @@ def discover():
         dict(id='AF.X.complete-proposed',members=[e['id'] for e in entries if e['mode']=='fast'],kind='complete_proposed',selection_only=True,rationale='Complete Apple FAST proposal across all three lanes; explicit alternative exclusions and unchanged benchmark coverage remain visible.'),
         dict(id='I.X.complete-proposed',members=[e['id'] for e in entries if e['mode']=='identical'],kind='complete_proposed',selection_only=True,rationale='Complete IDENTICAL proposal across classical, trees and reconciled neural source. All numerical columns share this configuration; Apple timing does not vote.'),
     ])
+    for spec in read('experiments/six_lane_integration/interaction_specs.json')['interactions']:
+        interactions.append(dict(spec,kind='interaction',selection_only=True,source_record=reference(spec['source'],spec['id'])))
     for e in entries+interactions:
         e.setdefault('qualification',dict(QUALIFICATION));e.setdefault('new_defaults_enabled',False)
     return entries,interactions,aliases

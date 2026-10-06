@@ -23,16 +23,6 @@ comptime NN04 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_
 comptime NEURAL_PROFILE_CHANGED = NN03 or NN04
 comptime NEURAL_LEAF = get_defined_int["MOJOLEARN_IDN_NEURAL_LEAF",128]() if NN03 else CONTRACT_K_LEAF_MIN
 comptime NEURAL_CHAINS = get_defined_int["MOJOLEARN_IDN_NEURAL_CHAINS",2]() if NN04 else 1
-def _integration_require_1() -> Bool:
-    comptime assert NEURAL_LEAF == 64 or NEURAL_LEAF == 128 or NEURAL_LEAF == 256, "neural leaf profile must be 64/128/256"
-    return True
-
-comptime _INTEGRATION_REQUIRE_1 = _integration_require_1()
-def _integration_require_2() -> Bool:
-    comptime assert NEURAL_CHAINS == 1 or NEURAL_CHAINS == 2 or NEURAL_CHAINS == 4, "neural chains must be 1/2/4"
-    return True
-
-comptime _INTEGRATION_REQUIRE_2 = _integration_require_2()
 
 
 def neural_partition[MIN_LEAF: Int](k: Int) -> Tuple[Int, Int]:

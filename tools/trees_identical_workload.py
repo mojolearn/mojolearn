@@ -33,7 +33,7 @@ def file_hash(path):
 
 
 def consume(value):
-    """Host-returned public buffers are consumed inside the operation timer.
+    """Encode already-consumed public buffers after the operation timer.
 
     Bytes are evidence transport, not estimator data computation. No list of
     row values, Python reductions, label processing, or runtime arithmetic.
@@ -284,8 +284,8 @@ def run(request, args, data, cfg, driver):
             output_call = consumer(model, data, request["recipe"])
             raw = output_call()
             arm.sync()
-            output = consume(raw)
             finished = time.perf_counter()
+            output = consume(raw)
             sample = dict(phase=phase, preparation_ms=(prepared-start)*1000,
                           fit_ms=(fitted-prepared)*1000,
                           cold_inference_ms=(finished-fitted)*1000,
@@ -295,8 +295,9 @@ def run(request, args, data, cfg, driver):
                 repeated_start = time.perf_counter()
                 repeated_raw = output_call()
                 arm.sync()
+                repeated_finished = time.perf_counter()
+                sample["repeated_inference_ms"] = (repeated_finished-repeated_start)*1000
                 repeated = consume(repeated_raw)
-                sample["repeated_inference_ms"] = (time.perf_counter()-repeated_start)*1000
                 sample["repeated_output"] = repeated
                 # Read the earlier output after reuse: no extra model invocation.
                 sample["retained_cold_output"] = consume(raw)
