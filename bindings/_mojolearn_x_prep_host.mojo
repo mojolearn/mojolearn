@@ -25,6 +25,8 @@ from x_prep.host.rr_eigh_host import IDN_RR_EIGH
 from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, IDN_LABEL_INV
 from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
 from x_prep.proba64 import PROBA64
+from bindings.prep_sparse_host import sparse_csr_binding, sparse_capacity_binding
+from bindings.prep_sparse_common import sparse_object_size, sparse_object_pack
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -231,6 +233,10 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
         m.def_function[x_prep_host_column_binding]("x_prep_host_column")
         m.def_function[x_prep_host_sabotage_binding]("x_prep_host_sabotage")
         m.def_function[run_binding]("x_prep_run")
+        m.def_function[sparse_csr_binding]("x_prep_sparse_csr")
+        m.def_function[sparse_capacity_binding]("x_prep_sparse_capacity")
+        m.def_function[sparse_object_size]("x_prep_sparse_object_size")
+        m.def_function[sparse_object_pack]("x_prep_sparse_object_pack")
         m.def_function[ii_rows_binding]("x_prep_ii_rows")
         m.def_function[ii_gather_binding]("x_prep_ii_gather")
         m.def_function[ii_scatter_binding]("x_prep_ii_scatter")

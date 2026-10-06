@@ -673,11 +673,11 @@ def cat_hfold_unit(t: Int, f: FP, q: IP):
 #: comes back to the host between the flag and the dense stages. The words
 #: are `toarray`'s for float32 data: zeros, each entry added in its row's
 #: stored order (a duplicate column sums, -0.0 becomes +0.0, NaN stays).
-#: -D MOJOLEARN_IDN_NB_CSR_DENSE_OFF restores the host densify.
-comptime IDN_NB_CSR_DENSE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_NB_CSR_DENSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+#: Native sparse fallback is required in every mode and in the CPU binding.
+#: The legacy *_CSR_DENSE_OFF / IDN_ALL_OFF defines cannot restore a Python
+#: runtime conversion. Historical binaries/results retain their original
+#: semantics; this source starts a new freeze and requires fresh evidence.
+comptime IDN_NB_CSR_DENSE = True
 
 
 def csr_dense_unit(t: Int, f: FP, q: IP):

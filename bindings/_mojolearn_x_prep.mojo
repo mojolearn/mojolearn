@@ -29,6 +29,8 @@ from x_prep.py2mojo import PY2MOJO_PREP
 from x_prep.proba64 import PROBA64
 from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from x_prep.fastmaxabs import maxabs_fit_direct
+from bindings.prep_sparse_device import sparse_csr_binding, sparse_capacity_binding
+from bindings.prep_sparse_common import sparse_object_size, sparse_object_pack
 
 from x_prep.fastpt import PTIMPUTE_FLAGS
 from x_prep.label_fast import LABEL_PRESENT, IDN_LABEL
@@ -352,6 +354,10 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
         m.def_function[run_binding]("x_prep_run")
+        m.def_function[sparse_csr_binding]("x_prep_sparse_csr")
+        m.def_function[sparse_capacity_binding]("x_prep_sparse_capacity")
+        m.def_function[sparse_object_size]("x_prep_sparse_object_size")
+        m.def_function[sparse_object_pack]("x_prep_sparse_object_pack")
         comptime if NB_TEXT_CSR:
             # lane apple-fast-nb: FAST + Apple default (M3 A/B 186.9 -> 35.4 ms), -D MOJOLEARN_NB_TEXT_CSR_OFF reverts (x_prep/fastnb_csr.mojo)
             m.def_function[nb_csr_fit_py]("x_prep_nb_csr_fit")

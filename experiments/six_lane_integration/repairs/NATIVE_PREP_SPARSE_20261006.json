@@ -1,0 +1,164 @@
+{
+  "base_commit": "e4cd912e842bd6168320f634e4dc0d79a8392a29",
+  "benchmark_change": "Only ours CSR conversion body changes; opponent call and race spec preserved. Preparation stays in the same whole-operation boundary.",
+  "branch": "repair/prep-native-sparse-20261006",
+  "builds_performed": false,
+  "compile_plan": {
+    "bindings": [
+      "_mojolearn_x_prep",
+      "_mojolearn_x_prep_host"
+    ],
+    "not_shipped": [
+      "deterministic x_prep"
+    ],
+    "required_configurations": [
+      "incumbent current defines",
+      "sparse NB optimization OFF",
+      "legacy CSR_DENSE_OFF",
+      "IDN_ALL_OFF",
+      "AFCL_P04",
+      "affected existing combined configurations"
+    ],
+    "status": "NOT COMPILED on Apple/host/NVIDIA/AMD; no jobs launched",
+    "supported_modes": [
+      "identical",
+      "fast"
+    ]
+  },
+  "controls": {
+    "candidate_controls_changed": false,
+    "mandatory_native_densifier": true,
+    "retired_runtime_fallbacks": [
+      "MOJOLEARN_IDN_NB_CSR_DENSE_OFF -> SciPy",
+      "MOJOLEARN_IDN_ALL_OFF -> SciPy"
+    ]
+  },
+  "evidence_directory": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-prep-native-sparse",
+  "execution_performed": false,
+  "formats": [
+    "csr",
+    "csc",
+    "coo",
+    "bsr",
+    "dia",
+    "lil",
+    "dok",
+    "dense"
+  ],
+  "implementation": {
+    "compiled_targets": [],
+    "harness_wired": "source_inspection_only",
+    "production_wired": "source_inspection_only",
+    "programmed": true
+  },
+  "implementation_id": "REPAIR.PREP.NATIVE_SPARSE.20261006",
+  "interface_compliance": "INCOMPLETE: Python adapters and CPython object protocols remain product-execution debt",
+  "native_api": {
+    "device": [
+      "sparse_to_csr_device",
+      "sparse_dense_nnz_device"
+    ],
+    "host": [
+      "sparse_to_csr_host",
+      "sparse_dense_nnz_host"
+    ]
+  },
+  "native_public_interface_sources": [
+    "bindings/_mojolearn_tokenizer_host.mojo",
+    "bindings/_mojolearn_byte_lm.mojo",
+    "https://docs.modular.com/mojo/manual/python/mojo-from-python/"
+  ],
+  "qualification": {
+    "accepted": false,
+    "identity_assessed": false,
+    "promoted": false,
+    "quality_assessed": false,
+    "timed": false
+  },
+  "remaining_blockers": [
+    "All Mojo source is uncompiled and execution unverified.",
+    "Full native public estimator interface migration is separate work.",
+    "tocsr-only custom providers need a native representation adapter.",
+    "Duplicate order, NaN payload/subnormal semantics and model-state identity require future evidence.",
+    "Original matrix recipes/caps remain unresolved; coordinator-admitted full recipes must be used."
+  ],
+  "schema": "mojolearn.source-repair.v1",
+  "scope": [
+    "native sparse format normalization",
+    "native all-mode CSR dense fallback",
+    "ours-only benchmark CSR preparation",
+    "native public-interface feasibility"
+  ],
+  "workload_aliases_from_existing_matrix": {
+    "algos/complement-nb@dataset=istella": {
+      "dataset": "istella",
+      "harness": "tools/bench_board_algos.py",
+      "id": "algos/complement-nb@dataset=istella",
+      "recipe": "Saved full istella race; intrinsic caps and additional operation suffixes remain unresolved",
+      "source_workload": "algos/complement-nb"
+    },
+    "algos/complement-nb@dataset=taxi": {
+      "dataset": "taxi",
+      "harness": "tools/bench_board_algos.py",
+      "id": "algos/complement-nb@dataset=taxi",
+      "recipe": "Saved full taxi race; intrinsic caps and additional operation suffixes remain unresolved",
+      "source_workload": "algos/complement-nb"
+    },
+    "algos/multinomial-nb@dataset=istella": {
+      "dataset": "istella",
+      "harness": "tools/bench_board_algos.py",
+      "id": "algos/multinomial-nb@dataset=istella",
+      "recipe": "Saved full istella race; intrinsic caps and additional operation suffixes remain unresolved",
+      "source_workload": "algos/multinomial-nb"
+    },
+    "algos/multinomial-nb@dataset=taxi": {
+      "dataset": "taxi",
+      "harness": "tools/bench_board_algos.py",
+      "id": "algos/multinomial-nb@dataset=taxi",
+      "recipe": "Saved full taxi race; intrinsic caps and additional operation suffixes remain unresolved",
+      "source_workload": "algos/multinomial-nb"
+    },
+    "expanded:bernoulli-nb@dataset=istella": {
+      "dataset": "istella",
+      "harness": "tools/bench_board_algos.py",
+      "id": "expanded:bernoulli-nb@dataset=istella",
+      "recipe": "Saved full istella race; intrinsic caps and additional operation suffixes remain unresolved",
+      "source_workload": "expanded:bernoulli-nb"
+    },
+    "expanded:bernoulli-nb@dataset=taxi": {
+      "dataset": "taxi",
+      "harness": "tools/bench_board_algos.py",
+      "id": "expanded:bernoulli-nb@dataset=taxi",
+      "recipe": "Saved full taxi race; intrinsic caps and additional operation suffixes remain unresolved",
+      "source_workload": "expanded:bernoulli-nb"
+    },
+    "expanded:complement-nb@dataset=istella": {
+      "dataset": "istella",
+      "harness": "tools/bench_board_algos.py",
+      "id": "expanded:complement-nb@dataset=istella",
+      "recipe": "Saved full istella race; intrinsic caps and additional operation suffixes remain unresolved",
+      "source_workload": "expanded:complement-nb"
+    },
+    "expanded:complement-nb@dataset=taxi": {
+      "dataset": "taxi",
+      "harness": "tools/bench_board_algos.py",
+      "id": "expanded:complement-nb@dataset=taxi",
+      "recipe": "Saved full taxi race; intrinsic caps and additional operation suffixes remain unresolved",
+      "source_workload": "expanded:complement-nb"
+    },
+    "expanded:multinomial-nb@dataset=istella": {
+      "dataset": "istella",
+      "harness": "tools/bench_board_algos.py",
+      "id": "expanded:multinomial-nb@dataset=istella",
+      "recipe": "Saved full istella race; intrinsic caps and additional operation suffixes remain unresolved",
+      "source_workload": "expanded:multinomial-nb"
+    },
+    "expanded:multinomial-nb@dataset=taxi": {
+      "dataset": "taxi",
+      "harness": "tools/bench_board_algos.py",
+      "id": "expanded:multinomial-nb@dataset=taxi",
+      "recipe": "Saved full taxi race; intrinsic caps and additional operation suffixes remain unresolved",
+      "source_workload": "expanded:multinomial-nb"
+    }
+  }
+}

@@ -70,7 +70,7 @@ from x_prep.calib import (
 #: lane idn-int-prep: IDENTICAL compiles the presence ops 157-160 (IDN_LABEL,
 #: x_prep/label_fast.mojo) and ops 162-163 (IDN_NB_ONEPASS, x_prep/blocked.mojo)
 #: on every vendor and in the host column; the op numbers between are empty there.
-#: lane idn-all: op 164 (IDN_NB_CSR_DENSE, x_prep/blocked.mojo `csr_dense_unit`), IDENTICAL only.
+#: op 164 is the required native CSR dense fallback in every mode/column.
 comptime IDN_INT_OPS = IDN_LABEL or IDN_NB_ONEPASS or IDN_NB_CSR_DENSE
 #: lane fam-prep-metrics: op 165 (IDN_CLASS_ONEPASS, x_prep/blocked.mojo `csb1_ss_unit`) and ops
 #: 166-171 (IDN_SELECT_BLOCKED, x_prep/select_blocked.mojo), IDENTICAL only, every vendor and the

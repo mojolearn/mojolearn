@@ -95,8 +95,7 @@ _OPS = dict(
     # -D MOJOLEARN_IDN_NB_ONEPASS_OFF has none) run them (`_idn_int` bit 2); IDENTICAL also
     # compiles 157-160 (x_prep/label_fast.mojo IDN_LABEL)
     csb1_part=162, csb1_neg=163,
-    # lane idn-all (x_prep/blocked.mojo `csr_dense_unit`): the IDENTICAL device binding
-    # (`_idn_int` bit 8; -D MOJOLEARN_IDN_NB_CSR_DENSE_OFF has none) densifies a CSR input
+    # Required native CSR fallback in every mode and host/device binding.
     csr_dense=164,
     # lane fam-prep-metrics: the IDENTICAL bindings (device and host column) run them
     # (`_idn_fam` bit 2: csb1_ss, x_prep/blocked.mojo, -D MOJOLEARN_IDN_CLASS_ONEPASS_OFF has
@@ -2341,14 +2340,18 @@ class _Classifier(_PrepBase):
         pr = _Prog()
         # lane idn-all: `csr` (the IDENTICAL CSR scoring's fallback, its
         # width already checked) is densified by the program on the device
+        if csr is None:
+            csr = _csr_input(X, self.numeric_mode_)
         xo = _csr_dense_x(pr, csr, self.numeric_mode_) if csr is not None else None
         if xo is None:
-            arr = _x2d(X.toarray() if csr is not None else X)
+            arr = _x2d(X)
             self._check_width(arr)
             n, d = arr.shape
             xo = pr.put(arr)
         else:
             n, d = csr[3], csr[4]
+            if d != self.n_features_in_:
+                raise ValueError(f"mojolearn: X has {d} features, expected {self.n_features_in_}")
         K = len(self.classes_)
         chk = self._score_checks(pr, xo, n, d)
         # the joint log likelihood stays on the device unless it is the answer
@@ -2859,27 +2862,34 @@ class GaussianNB(_Classifier):
         pr.stage("gnb_jll", n * K, xo, n, d, th, va, co, K, out)
 
 
-def _csr_input(X):
-    """(indptr, indices, data, n, d) of a scipy.sparse matrix as int32, int32
-    and float32 C Arrays (its CSR form), or None for anything else."""
-    if not (hasattr(X, "tocsr") and hasattr(X, "nnz") and hasattr(X, "shape")):
+def _csr_input(X, mode=None):
+    """Native normalization of sparse storage; dense inputs return None.
+
+    This Python adapter remains interface debt under the no-product-Python
+    rule. Conversion itself runs in the selected Mojo host/device binding.
+    """
+    from ._sparse_input import NativeCSR, as_csr
+    if isinstance(X, NativeCSR):
+        return X._parts
+    if getattr(X, "format", None) is None and not hasattr(X, "tocsr"):
         return None
-    X = X.tocsr()
-    n, d = (int(v) for v in X.shape)  # glue: unpacks the two shape entries
-    ip = _as_typed(X.indptr, "<i4", "C", 1, "indptr")[0]
-    ix = _as_typed(X.indices, "<i4", "C", 1, "indices")[0]
-    dv = _as_typed(X.data, "<f4", "C", 1, "data")[0]
-    return ip, ix, dv, n, d
+    got = as_csr(X, _prep_binding(_mode() if mode is None else mode))
+    return None if got is None else got._parts
+
+
+def _native_dense_csr(X):
+    """Benchmark conversion through Mojo, inside the declared preparation boundary."""
+    from ._sparse_input import as_csr
+    return as_csr(X, _prep_binding(_mode()), dense=True)
 
 
 def _csr_dense_x(pr, csr, mode):
-    """Lane idn-all: the dense n x d block of a CSR input, built ON THE
-    DEVICE by the program itself (op csr_dense, x_prep/blocked.mojo): the
-    CSR arrays go up, the block is device work words. Returns its offset, or
-    None when the binding has no such stage (`_idn_int` bit 8 clear: the
-    caller densifies on the host, the old form)."""
-    if not _idn_int(mode) & _IDN_NB_CSR_DENSE:
-        return None
+    """Dense fallback in Mojo: device on GPU, native host on CPU.
+
+    A stale binding fails explicitly; no mode/rollback restores SciPy.
+    """
+    if _optional_prep_entry(_prep_binding(mode), "x_prep_sparse_csr") is None:
+        raise RuntimeError("mojolearn: rebuild x_prep for native sparse input support")
     ip, ix, dv, n, d = csr
     if n * d > 2 ** 31 - 1:
         raise ValueError("mojolearn: X exceeds the native Int32 indexing bound")
@@ -2901,7 +2911,7 @@ class _DiscreteNB(_Classifier):
     _needs_min = False
 
     @classmethod
-    def _nb_csr_ready(cls):
+    def _nb_csr_ready(cls, mode=None):
         """Whether this class fits a scipy.sparse CSR matrix without
         densifying it: FAST mode and the x_prep binding built on Apple with
         NB_TEXT_CSR (lane apple-fast-nb, default since the M3 A/B; it exports
@@ -2912,7 +2922,7 @@ class _DiscreteNB(_Classifier):
         -D MOJOLEARN_NB_TEXT_CSR_OFF."""
         if not cls._csr_ok:
             return False
-        mode = _mode()
+        mode = _mode() if mode is None else mode
         try:
             if mode == "identical":
                 # lane idn-int-prep: the IDENTICAL device binding on every
@@ -2925,12 +2935,13 @@ class _DiscreteNB(_Classifier):
         except Exception:
             return False
 
-    def _csr_fast(self, X):
+    def _csr_fast(self, X, mode=None):
         """X's CSR parts when it is a scipy.sparse matrix and the FAST CSR
         path is on, else None (a dense input keeps main's program)."""
-        if not type(self)._nb_csr_ready():
+        mode = _mode() if mode is None else mode
+        if not type(self)._nb_csr_ready(mode):
             return None
-        return _csr_input(X)
+        return _csr_input(X, mode)
 
     def _fit_counts_csr(self, csr, y):
         """`_fit_counts` on a CSR matrix (FAST + Apple + define only): the
@@ -2943,8 +2954,8 @@ class _DiscreteNB(_Classifier):
         K = len(self.classes_)
         mode = _mode()
         fit_csr = _optional_prep_entry(_prep_binding(mode), "x_prep_nb_csr_fit")
-        fc = Array._from_flat([0.0] * (K * d), (K, d), "<f4")
-        cnt = Array._from_flat([0.0] * K, (K,), "<f4")
+        fc = empty((K, d), "<f4")
+        cnt = empty((K,), "<f4")
         flag = Array.from_list([0], "<i4")
         fit_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
                 addr_ro(codes, name="y"), [n, d, K, dv.size],
@@ -2961,7 +2972,7 @@ class _DiscreteNB(_Classifier):
             raise ValueError(f"mojolearn: Negative values in data passed to {type(self).__name__} (input X)")
         pr = _Prog()
         st = pr.alloc(6 * d)
-        z = pr.put_list([0.0] * (K * d))
+        z = pr.alloc(K * d)
         cnt_o, fc_o, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
         pr.stage("add_arrays", K, pr.put(cnt), z, cnt_o)
         pr.stage("add_arrays", K * d, pr.put(fc), z, fc_o)
@@ -2973,7 +2984,8 @@ class _DiscreteNB(_Classifier):
         return self.class_log_prior_
 
     def _scores(self, X, want):
-        csr = self._csr_fast(X)
+        self._check_fitted()
+        csr = self._csr_fast(X, self.numeric_mode_)
         if csr is None:
             return super()._scores(X, want)
         self._check_fitted()
@@ -2983,7 +2995,7 @@ class _DiscreteNB(_Classifier):
                              f"{self.n_features_in_}")
         K = len(self.classes_)
         jll_csr = _optional_prep_entry(_prep_binding(self.numeric_mode_), "x_prep_nb_csr_jll")
-        jll_h = Array._from_flat([0.0] * (n * K), (n, K), "<f4")
+        jll_h = empty((n, K), "<f4")
         bias = self._csr_bias()
         args = (addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
                 addr_ro(self.feature_log_prob_, name="feature_log_prob_"),
@@ -3001,7 +3013,7 @@ class _DiscreteNB(_Classifier):
         else:
             jll_csr(*args)
         pr = _Prog()
-        z = pr.put_list([0.0] * (n * K))
+        z = pr.alloc(n * K)
         jll = pr.alloc(n * K)
         pr.stage("add_arrays", n * K, pr.put(jll_h), z, jll)
         return self._score_tail(pr, n, d, K, jll, want, None)
@@ -3011,9 +3023,11 @@ class _DiscreteNB(_Classifier):
         pr = _Prog()
         # lane idn-all: `csr` (the IDENTICAL CSR route's fallback) is
         # densified by the program on the device, not by the host
+        if csr is None:
+            csr = _csr_input(X, mode)
         xo = _csr_dense_x(pr, csr, mode) if csr is not None else None
         if xo is None:
-            arr = _x2d(X.toarray() if csr is not None else X)
+            arr = _x2d(X)
             n, d = arr.shape
             xo = pr.put(arr)
         else:
@@ -3070,17 +3084,20 @@ class _DiscreteNB(_Classifier):
         feature counts added to the running ones, then the log probabilities
         and the class log prior recomputed from the sums."""
         _check_alpha(self)
-        arr = _x2d(X)
-        n, d = arr.shape
+        mode = getattr(self, "numeric_mode_", _mode())
+        csr = _csr_input(X, mode)
+        arr = _x2d(X) if csr is None else None
+        n, d = arr.shape if csr is None else (csr[3], csr[4])
         first, codes = _partial_codes(self, y, classes, n, defer=True)
         K = len(self.classes_)
         if first:
             mode = _mode()
         else:
-            self._check_width(arr)
+            if d != self.n_features_in_:
+                raise ValueError(f"mojolearn: X has {d} features, expected {self.n_features_in_}")
             mode = self.numeric_mode_
         pr = _Prog()
-        xo = pr.put(arr)
+        xo = pr.put(arr) if csr is None else _csr_dense_x(pr, csr, mode)
         wo = _nb_weights(pr, sample_weight, n)
         onepass = _nb_onepass(mode)
         thr = _NONE
