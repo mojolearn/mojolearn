@@ -42,7 +42,7 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 1 planned, 422 done, 29 failed, 0 unsupported, 0 pending. Cells: 1540 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 30, ok 1504).
+Races: 1 planned, 422 done, 29 failed, 0 unsupported, 0 pending. Cells: 1540 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 28, ok 1506).
 
 Inference cells: 920 (REFUSED 48, ok 872).
 
@@ -714,7 +714,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | neural | mlp-train-step | gaussian | loss_first_step (same init and batches on every arm) | - | 1.160401 | torch-eager-fp32 1.160401; torch-compile-fp32 1.160401; torch-eager-bf16 1.160498; torch-compile-bf16 1.160498 |
 | neural | mlp-train-step | gaussian | loss_last_step (same init and batches on every arm) | - | 1.123361 | torch-eager-fp32 1.123361; torch-compile-fp32 1.123361; torch-eager-bf16 1.123461; torch-compile-bf16 1.123461 |
 | neural | mlp-train-step | gaussian | steps | - | 2 | torch-eager-fp32 2; torch-compile-fp32 2; torch-eager-bf16 2; torch-compile-bf16 2 |
-| neural | samba-forward | bytes | mean_nll (lower is better) | - | 5.635910 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
+| neural | samba-forward | bytes | mean_nll (lower is better) | - | 5.635910 | torch-eager-fp32 5.635910; torch-compile-fp32 -; torch-eager-bf16 5.636059; torch-compile-bf16 - |
 | neural | samba-train-step | bytes | loss_first_step (same init and batches on every arm) | - | 5.635910 | torch-eager-fp32 5.635910; torch-compile-fp32 -; torch-eager-bf16 5.636006; torch-compile-bf16 - |
 | neural | samba-train-step | bytes | loss_last_step (same init and batches on every arm) | - | 4.833934 | torch-eager-fp32 4.833934; torch-compile-fp32 -; torch-eager-bf16 4.833773; torch-compile-bf16 - |
 | neural | samba-train-step | bytes | steps | - | 2 | torch-eager-fp32 2; torch-compile-fp32 -; torch-eager-bf16 2; torch-compile-bf16 - |
@@ -5212,14 +5212,16 @@ race: done, driver rc 0, log `logs/neural.samba-forward.bytes.shape-full.log`, r
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 55.8 | 55.8..55.8 | 1 | - | - | 717.7 | - | mean_nll=5.635910 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:27Z', 'original_source': 'measured this run'}) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:27Z', 'original_source': 'measured this run'}) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:27Z', 'original_source': 'measured this run'}) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:27Z', 'original_source': 'measured this run'}) |
+| torch-eager-fp32 | torch | gpu | opponent | 42.5 | 42.5..42.5 | 1 | 1.311 | - | 727.5 | 168.8 | mean_nll=5.635910 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'f1a002de740b3a1018ec99dd9e02ef19803caec2889ac242e2fd40b7c456e79f', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-samba-final.json', 'finished': '2026-10-06T05:21:29Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "REFUSED: torch-compile-fp32 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/error.h>\\n#include <c10/metal/reduction_utils) ({'opponent_snapshot_sha256': 'f1a002de740b3a1018ec99dd9e02ef19803caec2889ac242e2fd40b7c456e79f', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-samba-final.json', 'finished': '2026-10-06T05:21:29Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 43.6 | 43.6..43.6 | 1 | 1.278 | - | 730.4 | 168.8 | mean_nll=5.636059 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'f1a002de740b3a1018ec99dd9e02ef19803caec2889ac242e2fd40b7c456e79f', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-samba-final.json', 'finished': '2026-10-06T05:21:29Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "REFUSED: torch-compile-bf16 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/error.h>\\n#include <c10/metal/reduction_utils) ({'opponent_snapshot_sha256': 'f1a002de740b3a1018ec99dd9e02ef19803caec2889ac242e2fd40b7c456e79f', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-samba-final.json', 'finished': '2026-10-06T05:21:29Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-eager-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
+
+memory, torch-compile-fp32, torch-compile-bf16: host not sampled; GPU not sampled
 
 config: the board's own settings (no NVIDIA harness entry)
 
