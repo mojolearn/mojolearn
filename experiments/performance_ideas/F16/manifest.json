@@ -61,5 +61,6 @@
       "name": "F16-independent-gradient",
       "source": "arima/checks/product_df_quality_check.mojo"
     }
-  ]
+  ],
+  "paired_build": true
 }

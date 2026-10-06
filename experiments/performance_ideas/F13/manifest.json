@@ -69,5 +69,6 @@
       "core",
       "rf"
     ]
-  }
+  },
+  "paired_build": true
 }

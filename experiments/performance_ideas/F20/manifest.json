@@ -67,5 +67,6 @@
   },
   "variant_bindings": {
     "normalization": "x_sequence"
-  }
+  },
+  "paired_build": true
 }

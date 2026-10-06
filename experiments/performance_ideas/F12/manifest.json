@@ -80,5 +80,6 @@
     "lossguide": [
       "MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF"
     ]
-  }
+  },
+  "paired_build": true
 }

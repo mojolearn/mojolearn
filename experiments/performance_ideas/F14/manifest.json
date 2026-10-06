@@ -72,5 +72,6 @@
     "ann": [
       "core"
     ]
-  }
+  },
+  "paired_build": true
 }

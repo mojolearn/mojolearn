@@ -53,5 +53,6 @@
   "prerequisite_bindings": [
     "core"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "paired_build": true
 }

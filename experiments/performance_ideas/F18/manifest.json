@@ -62,5 +62,6 @@
     "immutable": [
       "MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"
     ]
-  }
+  },
+  "paired_build": true
 }

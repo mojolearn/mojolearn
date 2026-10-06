@@ -57,5 +57,6 @@
   "build_uses_compile_slot": true,
   "variants": {
     "default": []
-  }
+  },
+  "paired_build": true
 }
