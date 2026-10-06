@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T05:21:56Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T05:25:41Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T05:21:56Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 114 planned, 25 done, 1 failed, 0 unsupported, 88 pending. Cells: 59 (REFUSED 1, ok 58).
+Races: 114 planned, 31 done, 1 failed, 0 unsupported, 82 pending. Cells: 80 (REFUSED 1, ok 79).
 
-Inference cells: 48 (ok 48).
+Inference cells: 69 (ok 69).
 
 ## Quality at a glance
 
@@ -83,6 +83,14 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | gcn | taxi | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 9.803e-08; torch-eager-tf32 7.223e-08; torch-compile-tf32 9.801e-08; torch-eager-bf16 0.002330; torch-compile-bf16 0.002330 |
 | algos | global-maxpool | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000; torch-eager-tf32 0.000000; torch-compile-tf32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | global-maxpool | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000; torch-eager-tf32 0.000000; torch-compile-tf32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | graphsage | taxi | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.238419; torch-eager-tf32 0.029851; torch-compile-tf32 1475.334167; torch-eager-bf16 5460.333333; torch-compile-bf16 4608.154297 |
+| algos | graphsage | taxi | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 6.954e-08; torch-eager-tf32 4.218e-08; torch-compile-tf32 0.0002145; torch-eager-bf16 0.003557; torch-compile-bf16 0.003285 |
+| algos | gru-clf | taxi-hourly | accuracy (higher is better) | - | - | torch-eager-fp32 0.865668; torch-compile-fp32 0.865668; torch-eager-tf32 0.865668; torch-compile-tf32 0.865668; torch-eager-bf16 0.865668; torch-compile-bf16 0.865668 |
+| algos | gru-reg | taxi-hourly | r2 (higher is better) | - | - | torch-eager-fp32 0.748219; torch-compile-fp32 0.748219; torch-eager-tf32 0.748219; torch-compile-tf32 0.748219; torch-eager-bf16 0.748325; torch-compile-bf16 0.748325 |
+| algos | gru-reg | taxi-hourly | rmse (lower is better) | - | - | torch-eager-fp32 0.544182; torch-compile-fp32 0.544182; torch-eager-tf32 0.544182; torch-compile-tf32 0.544182; torch-eager-bf16 0.544067; torch-compile-bf16 0.544067 |
+| algos | incremental-pca | taxi | explained_variance_fraction | - | - | cuml-gpu 0.999995 |
+| algos | ivf-pq | taxi | recall_at_10 (higher is better) | - | - | cuvs-gpu 0.976875 |
+| algos | ivf-refine | taxi | recall_at_10 (higher is better) | - | - | cuvs-gpu 0.999050 |
 
 ## Inference at a glance
 
@@ -109,6 +117,12 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | gaussian-rp | taxi | Xq | - | - | - | - | cuml-gpu 3.9 ms (IDENTICAL/arm -) |
 | algos | gcn | taxi | Xq | - | - | - | - | torch-eager-fp32 5.5 ms (IDENTICAL/arm -); torch-compile-fp32 1.5 ms (IDENTICAL/arm -); torch-eager-tf32 5.5 ms (IDENTICAL/arm -); torch-compile-tf32 1.5 ms (IDENTICAL/arm -); torch-eager-bf16 4.5 ms (IDENTICAL/arm -); torch-compile-bf16 1.4 ms (IDENTICAL/arm -) |
 | algos | global-maxpool | synthetic | Xq | - | - | - | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm -); torch-compile-fp32 0.2 ms (IDENTICAL/arm -); torch-eager-tf32 0.1 ms (IDENTICAL/arm -); torch-compile-tf32 0.1 ms (IDENTICAL/arm -); torch-eager-bf16 0.1 ms (IDENTICAL/arm -); torch-compile-bf16 0.1 ms (IDENTICAL/arm -) |
+| algos | graphsage | taxi | Xq | - | - | - | - | torch-eager-fp32 0.8 ms (IDENTICAL/arm -); torch-compile-fp32 0.6 ms (IDENTICAL/arm -); torch-eager-tf32 0.7 ms (IDENTICAL/arm -); torch-compile-tf32 0.4 ms (IDENTICAL/arm -); torch-eager-bf16 0.4 ms (IDENTICAL/arm -); torch-compile-bf16 0.4 ms (IDENTICAL/arm -) |
+| algos | gru-clf | taxi-hourly | Xq | - | - | - | - | torch-eager-fp32 2.5 ms (IDENTICAL/arm -); torch-compile-fp32 2.5 ms (IDENTICAL/arm -); torch-eager-tf32 2.6 ms (IDENTICAL/arm -); torch-compile-tf32 2.6 ms (IDENTICAL/arm -); torch-eager-bf16 2.1 ms (IDENTICAL/arm -); torch-compile-bf16 2.3 ms (IDENTICAL/arm -) |
+| algos | gru-reg | taxi-hourly | Xq | - | - | - | - | torch-eager-fp32 2.6 ms (IDENTICAL/arm -); torch-compile-fp32 2.6 ms (IDENTICAL/arm -); torch-eager-tf32 2.6 ms (IDENTICAL/arm -); torch-compile-tf32 2.5 ms (IDENTICAL/arm -); torch-eager-bf16 2.0 ms (IDENTICAL/arm -); torch-compile-bf16 2.2 ms (IDENTICAL/arm -) |
+| algos | incremental-pca | taxi | Xq | - | - | - | - | cuml-gpu 9.1 ms (IDENTICAL/arm -) |
+| algos | ivf-pq | taxi | Xq | - | - | - | - | cuvs-gpu 4.0 ms (IDENTICAL/arm -) |
+| algos | ivf-refine | taxi | Xq | - | - | - | - | cuvs-gpu 57.5 ms (IDENTICAL/arm -) |
 
 ## Algorithm expansion
 
@@ -1034,6 +1048,270 @@ inference call, torch-compile-tf32: forward(x) (no autograd)(Xq)
 inference call, torch-eager-bf16: forward(x) (no autograd)(Xq)
 
 inference call, torch-compile-bf16: forward(x) (no autograd)(Xq)
+
+### graphsage / taxi (rows full, shape X 100000x11; indices 1258298; indptr 100001; y 100000)
+
+race: done, driver rc 0, log `logs/algos.graphsage.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 1.6 | 1.6..1.6 | 1 | - | - | 1181.3 | 289.1 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 1.9 | 1.9..1.9 | 1 | - | - | 1246.5 | 240.0 | max_rel_diff_vs_torch_eager_fp32=0.238419, rel_fro_vs_torch_eager_fp32=6.954e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 2.3 | 2.3..2.3 | 1 | - | - | 1182.5 | 289.1 | max_rel_diff_vs_torch_eager_fp32=0.029851, rel_fro_vs_torch_eager_fp32=4.218e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 2.0 | 2.0..2.0 | 1 | - | - | 1240.6 | 240.0 | max_rel_diff_vs_torch_eager_fp32=1475.334167, rel_fro_vs_torch_eager_fp32=0.0002145 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 1.7 | 1.7..1.7 | 1 | - | - | 1316.0 | 262.6 | max_rel_diff_vs_torch_eager_fp32=5460.333333, rel_fro_vs_torch_eager_fp32=0.003557 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 1.7 | 1.7..1.7 | 1 | - | - | 1364.9 | 167.2 | max_rel_diff_vs_torch_eager_fp32=4608.154297, rel_fro_vs_torch_eager_fp32=0.003285 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-tf32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'aggr': 'mean', 'bias': True, 'normalize': False, 'out_channels': 128, 'project': False, 'root_weight': True}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| normalize | false | false | false | false | false | false |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 0.8 | 0.8..0.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 0.6 | 0.6..0.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-tf32 | Xq | - | 0.7 | 0.7..0.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-tf32 | Xq | - | 0.4 | 0.4..0.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 0.4 | 0.4..0.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 0.4 | 0.4..0.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-tf32: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-tf32: forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-bf16: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-bf16: forward(x) (no autograd)(Xq)
+
+### gru-clf / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
+
+race: done, driver rc 0, log `logs/algos.gru-clf.taxi-hourly.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 591.3 | 591.3..591.3 | 1 | - | - | 1122.2 | 643.7 | accuracy=0.865668 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 662.7 | 662.7..662.7 | 1 | - | - | 1173.5 | 643.7 | accuracy=0.865668 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 641.7 | 641.7..641.7 | 1 | - | - | 1123.2 | 643.7 | accuracy=0.865668 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 733.4 | 733.4..733.4 | 1 | - | - | 1174.8 | 643.7 | accuracy=0.865668 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 838.4 | 838.4..838.4 | 1 | - | - | 1487.9 | 340.9 | accuracy=0.865668 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 789.0 | 789.0..789.0 | 1 | - | - | 1539.0 | 340.9 | accuracy=0.865668 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-tf32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| num_layers | 1 | 1 | 1 | 1 | 1 | 1 |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 2.5 | 2.5..2.5 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 2.5 | 2.5..2.5 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-tf32 | Xq | - | 2.6 | 2.6..2.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-tf32 | Xq | - | 2.6 | 2.6..2.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 2.1 | 2.1..2.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 2.3 | 2.3..2.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: predict(Xq)(Xq)
+
+inference call, torch-eager-tf32: predict(Xq)(Xq)
+
+inference call, torch-compile-tf32: predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: predict(Xq)(Xq)
+
+### gru-reg / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
+
+race: done, driver rc 0, log `logs/algos.gru-reg.taxi-hourly.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 650.5 | 650.5..650.5 | 1 | - | - | 1137.2 | 643.4 | finite=True, r2=0.748219, rmse=0.544182 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 859.6 | 859.6..859.6 | 1 | - | - | 1188.0 | 643.4 | finite=True, r2=0.748219, rmse=0.544182 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 545.3 | 545.3..545.3 | 1 | - | - | 1138.4 | 643.4 | finite=True, r2=0.748219, rmse=0.544182 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 721.3 | 721.3..721.3 | 1 | - | - | 1190.0 | 643.4 | finite=True, r2=0.748219, rmse=0.544182 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 696.1 | 696.1..696.1 | 1 | - | - | 1534.1 | 340.6 | finite=True, r2=0.748325, rmse=0.544067 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 762.0 | 762.0..762.0 | 1 | - | - | 1585.0 | 340.6 | finite=True, r2=0.748325, rmse=0.544067 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-tf32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| num_layers | 1 | 1 | 1 | 1 | 1 | 1 |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 2.6 | 2.6..2.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 2.6 | 2.6..2.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-tf32 | Xq | - | 2.6 | 2.6..2.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-tf32 | Xq | - | 2.5 | 2.5..2.5 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 2.0 | 2.0..2.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 2.2 | 2.2..2.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: predict(Xq)(Xq)
+
+inference call, torch-eager-tf32: predict(Xq)(Xq)
+
+inference call, torch-compile-tf32: predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: predict(Xq)(Xq)
+
+### incremental-pca / taxi (rows full, shape X 900000x11; Xq 100000x11)
+
+race: done, driver rc 0, log `logs/algos.incremental-pca.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 178.2 | 178.2..178.2 | 1 | - | - | 1176.1 | 518.0 | explained_variance_fraction=0.999995 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'batch_size': 65536, 'n_components': 10, 'whiten': False}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), IncrementalPCA (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| batch_size | 65536 |
+| n_components | 10 |
+| seed | "none (deterministic)" |
+| whiten | false |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 9.1 | 9.1..9.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### ivf-pq / taxi (rows full, shape index 400000x11; queries 4000x11)
+
+race: done, driver rc 0, log `logs/algos.ivf-pq.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuvs-gpu | cuvs | gpu | opponent | 471.5 | 471.5..471.5 | 1 | - | - | 995.4 | 466.0 | recall_at_10=0.976875 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'kmeans_n_iters': 20, 'n_lists': 1024, 'n_neighbors': 10, 'n_probes': 32, 'pq_bits': 8, 'random_state': 7}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuvs-gpu`, seed 7): MATCHED
+
+| parameter | cuvs-gpu |
+|---|---|
+| library (source) | cuvs (declared) |
+| n_neighbors | 10 |
+| nlist | 1024 |
+| nprobe | 32 |
+| seed | "none (no argument; draws random numbers, see exceptions)" |
+
+accepted difference: cuvs-gpu seed: cuVS IndexParams take no seed and the index build samples rows; ours and faiss get 7
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuvs-gpu | Xq | - | 4.0 | 4.0..4.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuvs-gpu: search(queries)(Xq)
+
+### ivf-refine / taxi (rows full, shape index 400000x11; queries 4000x11)
+
+race: done, driver rc 0, log `logs/algos.ivf-refine.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuvs-gpu | cuvs | gpu | opponent | 381.6 | 381.6..381.6 | 1 | - | - | 1026.7 | 468.0 | recall_at_10=0.999050 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'kmeans_n_iters': 20, 'n_lists': 1024, 'n_neighbors': 10, 'n_probes': 32, 'pq_bits': 8, 'random_state': 7, 'refine_ratio': 4}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuvs-gpu`, seed 7): MATCHED
+
+| parameter | cuvs-gpu |
+|---|---|
+| library (source) | cuvs (declared) |
+| n_neighbors | 10 |
+| nlist | 1024 |
+| nprobe | 32 |
+| seed | "none (no argument; draws random numbers, see exceptions)" |
+
+accepted difference: cuvs-gpu seed: cuVS IndexParams take no seed and the index build samples rows; ours and faiss get 7
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuvs-gpu | Xq | - | 57.5 | 57.5..57.5 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuvs-gpu: search(queries)(Xq)
 
 ## Not covered by this board
 

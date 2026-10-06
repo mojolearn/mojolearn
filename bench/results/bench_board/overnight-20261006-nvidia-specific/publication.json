@@ -2,27 +2,27 @@
   "coverage": {
     "cell_statuses": {
       "REFUSED": 1,
-      "ok": 58
+      "ok": 79
     },
-    "cells": 59,
-    "done": 25,
+    "cells": 80,
+    "done": 31,
     "failed": 1,
-    "pending": 88,
+    "pending": 82,
     "planned": 114,
     "race_statuses": {
-      "done": 25,
+      "done": 31,
       "failed": 1
     },
     "unsupported": 0
   },
   "harness_source_sha": "b0f5242d244ef75cd9ba7d78ca92e10008d75510",
   "policy": "Exact opponent-only source files, hardware and failures retained. No A/B component ratios are derived.",
-  "published_at": 1791264184.505013,
+  "published_at": 1791264364.7126899,
   "schema": "mojolearn-opponent-publication/1",
   "source_directory": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-capture/artifacts/gpu-opponents/board",
   "source_sha256": {
-    "board_json": "4bd14648a1087d5e76aa77bfefb0c647f2eddcc82b28ab05bcf64eb9a45fa407",
-    "board_markdown": "14f78bf5c7ff95071147af986ddaa7659fac47c0677e2a00813a22275574ad77"
+    "board_json": "fea1690f381bf029e44e4b941bdfd03ad7136a20aa63d1d03975f7c022b9de23",
+    "board_markdown": "89d07e5f5a4b6ba45bb0f57c654b45f41cb10ab2c16fc0c74b26c3a32382eed9"
   },
-  "source_updated": "2026-10-06T05:21:56Z"
+  "source_updated": "2026-10-06T05:25:41Z"
 }

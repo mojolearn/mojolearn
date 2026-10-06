@@ -5624,19 +5624,11 @@
           "warmup_scope": "same_process",
           "measurement_stage": "streamed_driver",
           "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
-          "case": "{\"AB_HEADS\": \"12\", \"AB_KV_HEADS\": \"4\", \"AB_LENGTH\": \"1024\"}/{\"heads\": 12, \"kv_heads\": 4, \"length\": 1024}/candidate",
-          "status": "MEASURED",
+          "case": "amd-I07-candidate-I07-0",
+          "status": "NO_DISTINCT_RUNTIME_ARM",
           "returncode": 0,
-          "artifact_hashes": {
-            "baseline": "15ab3936aad710fcefae78b917a18a045a18a7f7bc8278e9efe700a991cad9dc",
-            "candidate": "b9ed4121b74c21593a4085f428c9de7eec6fb019157bd3f95f106e264b16e891"
-          },
-          "baseline_ms": 24.891797,
-          "candidate_ms": 24.934967,
-          "baseline_arm": "baseline",
-          "candidate_arm": "candidate",
-          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
-          "candidate_over_baseline": 1.0017343062857214
+          "reason": "Driver requested a no-estash attention arm; both macro variants ran arm1030 with kept_cells0. Retained/recomputed lifetime was not exercised. Raw timings retained.",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
         },
         {
           "id": "I07",
@@ -5655,22 +5647,60 @@
           "warmup_scope": "same_process",
           "measurement_stage": "streamed_driver",
           "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
-          "case": "{\"AB_HEADS\": \"12\", \"AB_KV_HEADS\": \"4\", \"AB_LENGTH\": \"1536\"}/{\"heads\": 12, \"kv_heads\": 4, \"length\": 1536}/candidate",
-          "status": "MEASURED",
+          "case": "amd-I07-candidate-I07-1",
+          "status": "NO_DISTINCT_RUNTIME_ARM",
           "returncode": 0,
-          "artifact_hashes": {
-            "baseline": "15ab3936aad710fcefae78b917a18a045a18a7f7bc8278e9efe700a991cad9dc",
-            "candidate": "b9ed4121b74c21593a4085f428c9de7eec6fb019157bd3f95f106e264b16e891"
-          },
-          "baseline_ms": 37.874817,
-          "candidate_ms": 37.996035,
-          "baseline_arm": "baseline",
-          "candidate_arm": "candidate",
-          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
-          "candidate_over_baseline": 1.003200490711282
+          "reason": "Driver requested a no-estash attention arm; both macro variants ran arm1030 with kept_cells0. Retained/recomputed lifetime was not exercised. Raw timings retained.",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+        },
+        {
+          "id": "I07",
+          "vendor": "amd",
+          "route": "gfx942",
+          "scope": "component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "measurement_stage": "streamed_driver",
+          "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+          "case": "amd-I07-baseline-I07-0",
+          "status": "NO_DISTINCT_RUNTIME_ARM",
+          "returncode": 0,
+          "reason": "Driver requested a no-estash attention arm; both macro variants ran arm1030 with kept_cells0. Retained/recomputed lifetime was not exercised. Raw timings retained.",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+        },
+        {
+          "id": "I07",
+          "vendor": "amd",
+          "route": "gfx942",
+          "scope": "component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "measurement_stage": "streamed_driver",
+          "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+          "case": "amd-I07-baseline-I07-1",
+          "status": "NO_DISTINCT_RUNTIME_ARM",
+          "returncode": 0,
+          "reason": "Driver requested a no-estash attention arm; both macro variants ran arm1030 with kept_cells0. Retained/recomputed lifetime was not exercised. Raw timings retained.",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
         }
       ],
-      "status": "PARTIAL_MEASUREMENTS_RETAINED"
+      "status": "NO_DISTINCT_RUNTIME_ARM"
     },
     {
       "id": "I08",
@@ -6506,18 +6536,10 @@
           "measurement_stage": "streamed_driver",
           "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
           "case": "{\"AB_FEATURES\": \"17\", \"AB_ROWS\": \"10000\"}/{\"features\": 17, \"policy\": \"Depthwise\", \"rows\": 10000}/candidate",
-          "status": "MEASURED",
+          "status": "NO_DISTINCT_RUNTIME_ARM",
           "returncode": 0,
-          "artifact_hashes": {
-            "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
-            "candidate": "93c1e5d121114e865fa05f8c4acffdee3dd58e29eceba645b717220a68577b91"
-          },
-          "baseline_ms": 18.847639,
-          "candidate_ms": 18.315649,
-          "baseline_arm": "incumbent",
-          "candidate_arm": "candidate",
-          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
-          "candidate_over_baseline": 0.9717741834932216
+          "reason": "Resident frontier toggle requires lg_exact/Lossguide. Depthwise logs report zero resident snapshots; timing retained only as control coverage.",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
         },
         {
           "id": "I17",
@@ -6568,18 +6590,10 @@
           "measurement_stage": "streamed_driver",
           "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
           "case": "{\"AB_FEATURES\": \"18\", \"AB_ROWS\": \"10001\"}/{\"features\": 18, \"policy\": \"Depthwise\", \"rows\": 10001}/candidate",
-          "status": "MEASURED",
+          "status": "NO_DISTINCT_RUNTIME_ARM",
           "returncode": 0,
-          "artifact_hashes": {
-            "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
-            "candidate": "93c1e5d121114e865fa05f8c4acffdee3dd58e29eceba645b717220a68577b91"
-          },
-          "baseline_ms": 16.793925,
-          "candidate_ms": 19.010903,
-          "baseline_arm": "incumbent",
-          "candidate_arm": "candidate",
-          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
-          "candidate_over_baseline": 1.1320107122069438
+          "reason": "Resident frontier toggle requires lg_exact/Lossguide. Depthwise logs report zero resident snapshots; timing retained only as control coverage.",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
         },
         {
           "id": "I17",
@@ -6630,18 +6644,10 @@
           "measurement_stage": "streamed_driver",
           "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
           "case": "{\"AB_FEATURES\": \"9\", \"AB_ROWS\": \"32769\"}/{\"features\": 9, \"policy\": \"Depthwise\", \"rows\": 32769}/candidate",
-          "status": "MEASURED",
+          "status": "NO_DISTINCT_RUNTIME_ARM",
           "returncode": 0,
-          "artifact_hashes": {
-            "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
-            "candidate": "93c1e5d121114e865fa05f8c4acffdee3dd58e29eceba645b717220a68577b91"
-          },
-          "baseline_ms": 18.545676,
-          "candidate_ms": 18.895337,
-          "baseline_arm": "incumbent",
-          "candidate_arm": "candidate",
-          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
-          "candidate_over_baseline": 1.018854044468371
+          "reason": "Resident frontier toggle requires lg_exact/Lossguide. Depthwise logs report zero resident snapshots; timing retained only as control coverage.",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
         },
         {
           "id": "I17",
