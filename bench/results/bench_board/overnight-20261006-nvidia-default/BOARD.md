@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:06:36Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:34:21Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,9 @@ Generated 2026-10-06T07:06:36Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 3 done, 0 failed, 0 unsupported, 110 pending. Cells: 5 (ok 5).
+Races: 113 planned, 5 done, 0 failed, 0 unsupported, 108 pending. Cells: 12 (ok 12).
+
+Inference cells: 6 (ok 6).
 
 ## Quality at a glance
 
@@ -47,6 +49,17 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | adagrad | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000 |
 | algos | adamax | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 6.395e-09 |
 | algos | als | taxi-zones | recall_at_10 (higher is better) | - | - | implicit-gpu 0.076266 |
+| algos | autoarima | synthetic | forecast_rmse (lower is better) | - | - | cuml-gpu 32.552990 |
+| algos | avgpool1d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000; torch-eager-tf32 0.000000; torch-compile-tf32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | avgpool1d | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000; torch-eager-tf32 0.000000; torch-compile-tf32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+
+## Inference at a glance
+
+Batch prediction, each arm with its own fitted model from the same race; medians in ms. `FAST = IDENTICAL bits` compares our two tiers' predictions on the same rows. Our CPU is never raced or reported.
+
+| family | lane | dataset | batch | rows | ours FAST ms | ours IDENTICAL ms | FAST = IDENTICAL bits | opponents |
+|---|---|---|---|---|---|---|---|---|
+| algos | avgpool1d | synthetic | Xq | - | - | - | - | torch-eager-fp32 0.2 ms (IDENTICAL/arm -); torch-compile-fp32 0.4 ms (IDENTICAL/arm -); torch-eager-tf32 0.2 ms (IDENTICAL/arm -); torch-compile-tf32 0.3 ms (IDENTICAL/arm -); torch-eager-bf16 0.2 ms (IDENTICAL/arm -); torch-compile-bf16 0.3 ms (IDENTICAL/arm -) |
 
 ## Algorithm expansion
 
@@ -127,6 +140,79 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | alpha | 1.0 |
 | n_estimators | 15 |
 | seed | 7 |
+
+### autoarima / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc 0, log `logs/algos.autoarima.synthetic.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 822483.3 | 822483.3..822483.3 | 1 | - | - | 860.9 | 810.0 | forecast_rmse=32.552990 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'allow_intercept': True, 'ic': 'aicc', 'max_d': 1, 'max_p': 3, 'max_q': 3, 'seasonal': False, 'stepwise': False}. Rows: None. Timed: None.
+
+mismatch: the likelihood optimizer and its stopping rule are each library's own
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (declared) |
+| seasonal | false |
+| seed | "none (deterministic)" |
+
+### avgpool1d / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.avgpool1d.synthetic.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 2.5 | 2.5..2.5 | 1 | - | - | 695.3 | 224.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 2.4 | 2.4..2.4 | 1 | - | - | 924.1 | 224.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 1.3 | 1.3..1.3 | 1 | - | - | 695.8 | 224.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 1.5 | 1.5..1.5 | 1 | - | - | 875.6 | 224.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 1.5 | 1.5..1.5 | 1 | - | - | 695.5 | 224.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 2.5 | 2.5..2.5 | 1 | - | - | 870.2 | 224.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-tf32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'ceil_mode': False, 'count_include_pad': True, 'kernel_size': 2, 'padding': 0, 'stride': 2}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 0.2 | 0.2..0.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 0.4 | 0.4..0.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-tf32 | Xq | - | 0.2 | 0.2..0.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-tf32 | Xq | - | 0.3 | 0.3..0.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 0.2 | 0.2..0.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 0.3 | 0.3..0.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-tf32: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-tf32: forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-bf16: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-bf16: forward(x) (no autograd)(Xq)
 
 ## Not covered by this board
 
