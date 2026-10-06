@@ -1,0 +1,349 @@
+{
+  "schema": 1,
+  "id": "C03",
+  "title": "Fuse finite checks and extrema production",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "preprocessing/minmax.mojo",
+    "preprocessing/estimator.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Same refusal type/index, fitted extrema, signed zeros, empty-input and all-missing behavior.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C03",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C03",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C03",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C03",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C03",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/shared_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/shared_controls.mojo"
+  ],
+  "default_configuration": "finite_extrema",
+  "configurations": {
+    "finite_extrema": {
+      "name": "finite_extrema",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C03"
+      ],
+      "source_gaps": [
+        "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+        "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented."
+      ],
+      "scope": [
+        "MinMaxScaler"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "expanded:minmax-scaler",
+        "expanded:maxabs-scaler"
+      ]
+    },
+    "interaction_preparation_lifetime": {
+      "name": "interaction_preparation_lifetime",
+      "selectable": true,
+      "candidate_ids": [
+        "C03",
+        "C04",
+        "C05",
+        "C08"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA",
+        "MOJOLEARN_CLASSICAL_C04_LOAD_CENTER",
+        "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH",
+        "MOJOLEARN_CLASSICAL_C05_OLS_PHASE",
+        "MOJOLEARN_CLASSICAL_C08_DICTIONARY",
+        "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+        "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+        "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+        "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed.",
+        "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+        "Default TSQR does not allocate these Gram/inverse buffers; do not claim its reach. No cross-call cache.",
+        "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+        "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+        "Dictionary reuse is independent of grouped emission; only one-hot emission integrated."
+      ],
+      "required_workload_keys": [
+        "expanded:minmax-scaler",
+        "expanded:maxabs-scaler",
+        "classical:pca",
+        "classical:ols",
+        "more:ridge",
+        "expanded:gaussian-nb",
+        "expanded:lda-clf@lda_outputs",
+        "expanded:sgd-reg@regression_report",
+        "expanded:sgd-clf@ranking_report",
+        "expanded:onehot@onehot_fit_transform",
+        "expanded:ordinal@ordinal_fit_transform",
+        "expanded:target-encoder",
+        "expanded:label-encoder",
+        "expanded:categorical-nb"
+      ],
+      "component_arms": [
+        {
+          "id": "C03",
+          "configuration": "finite_extrema"
+        },
+        {
+          "id": "C04",
+          "configuration": "load_center"
+        },
+        {
+          "id": "C05",
+          "configuration": "combined"
+        },
+        {
+          "id": "C08",
+          "configuration": "combined"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c03_c04": {
+      "name": "interaction_c03_c04",
+      "selectable": true,
+      "candidate_ids": [
+        "C03",
+        "C04"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA",
+        "MOJOLEARN_CLASSICAL_C04_LOAD_CENTER"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+        "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+        "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+        "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed."
+      ],
+      "required_workload_keys": [
+        "expanded:minmax-scaler",
+        "expanded:maxabs-scaler",
+        "classical:pca",
+        "classical:ols",
+        "more:ridge",
+        "expanded:gaussian-nb",
+        "expanded:lda-clf@lda_outputs"
+      ],
+      "component_arms": [
+        {
+          "id": "C03",
+          "configuration": "finite_extrema"
+        },
+        {
+          "id": "C04",
+          "configuration": "load_center"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c03_c05": {
+      "name": "interaction_c03_c05",
+      "selectable": true,
+      "candidate_ids": [
+        "C03",
+        "C05"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA",
+        "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+        "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+        "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced."
+      ],
+      "required_workload_keys": [
+        "expanded:minmax-scaler",
+        "expanded:maxabs-scaler",
+        "expanded:sgd-reg@regression_report",
+        "expanded:sgd-clf@ranking_report",
+        "classical:ols"
+      ],
+      "component_arms": [
+        {
+          "id": "C03",
+          "configuration": "finite_extrema"
+        },
+        {
+          "id": "C05",
+          "configuration": "phase_scratch"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c03_c08": {
+      "name": "interaction_c03_c08",
+      "selectable": true,
+      "candidate_ids": [
+        "C03",
+        "C08"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA",
+        "MOJOLEARN_CLASSICAL_C08_DICTIONARY"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+        "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+        "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+        "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent."
+      ],
+      "required_workload_keys": [
+        "expanded:minmax-scaler",
+        "expanded:maxabs-scaler",
+        "expanded:onehot@onehot_fit_transform",
+        "expanded:ordinal@ordinal_fit_transform",
+        "expanded:target-encoder",
+        "expanded:label-encoder",
+        "expanded:categorical-nb"
+      ],
+      "component_arms": [
+        {
+          "id": "C03",
+          "configuration": "finite_extrema"
+        },
+        {
+          "id": "C08",
+          "configuration": "dictionary_inverse"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+    "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented."
+  ],
+  "catalog_estimators": [
+    "MinMaxScaler",
+    "MaxAbsScaler",
+    "classical estimator input preparation"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "expanded:minmax-scaler",
+    "expanded:maxabs-scaler"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

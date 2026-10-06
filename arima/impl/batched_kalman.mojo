@@ -132,6 +132,7 @@ the branch is written and unreached, and an unreached branch is an unchecked
 one (CONTRIBUTING.md (Non-default paths)).
 """
 
+from experiments.classical_identical_ideas.stats_controls import C59_TRIAL_STATE
 from arima.impl.fast_kalman_scan import fast_kalman_scan
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
@@ -606,6 +607,7 @@ def batched_kalman_loop_kernel[
     n_diff_in: Int32,
     fc_steps_in: Int32,
     has_exog_in: Int32,
+    observation_batch_in: Int32 = 0,
 ):
     """`batched_kalman_loop_kernel` (:117-333) without the `missing` arms
     and `conf_int`. `d_obs` / `d_obs_fut` are `d_obs_inter` /
@@ -659,6 +661,13 @@ def batched_kalman_loop_kernel[
     var n_obs_ll = 0
     var info = Int32(0)
     var b_ys = bid * nobs
+    # C59 immutable observations can be shared by independent parameter trials.
+    # Output/innovation offsets still use the full logical trial ID.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var y_base = b_ys
+    comptime if C59_TRIAL_STATE:
+        if observation_batch_in > 0:
+            y_base = (bid % Int(observation_batch_in))*nobs
     var mu = ftz(d_mu.unsafe_load(bid)) if intercept_in != 0 else Float32(0.0)
 
     for it in range(nobs):
@@ -673,7 +682,7 @@ def batched_kalman_loop_kernel[
                 pred = ftz(identical_mul_add(l_alpha[i], l_Z[i], pred))
         comptime if not LL_ONLY:
             d_pred.unsafe_store(b_ys + it, pred)
-        var yt = ftz(ys.unsafe_load(b_ys + it))
+        var yt = ftz(ys.unsafe_load(y_base + it))
         var vs_it = ftz(yt - pred)
         comptime if not LL_ONLY:
             d_vs.unsafe_store(b_ys + it, vs_it)
@@ -1087,6 +1096,7 @@ def batched_kalman_filter_x(
                     ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                     Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
                     Int32(1 if has_exog else 0),
+                    Int32(0),
                     grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
                 )
             kl_done = True
@@ -1109,6 +1119,7 @@ def batched_kalman_filter_x(
                     ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                     Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
                     Int32(1 if has_exog else 0),
+                    Int32(0),
                     grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
                 )
             kl_done = True
@@ -1131,6 +1142,7 @@ def batched_kalman_filter_x(
                     ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                     Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
                     Int32(1 if has_exog else 0),
+                    Int32(0),
                     grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
                 )
             kl_done = True
@@ -1153,6 +1165,7 @@ def batched_kalman_filter_x(
                     ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                     Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
                     Int32(1 if has_exog else 0),
+                    Int32(0),
                     grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
                 )
             kl_done = True
@@ -1165,6 +1178,7 @@ def batched_kalman_filter_x(
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
             Int32(1 if has_exog else 0),
+            Int32(0),
             grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
     if not defer_checks:
@@ -1184,6 +1198,7 @@ def _launch_loop_ll_only(
     n_diff: Int,
     kalman_tpb: Int,
     has_exog: Int = 0,
+    observation_batch: Int = 0,
 ) raises:
     """lane/apple-fast-tsa: the loop kernel at `LL_ONLY = True` (no `pred` /
     `vs` / `Fs` stores), the same per-rd instantiation choice as
@@ -1209,6 +1224,7 @@ def _launch_loop_ll_only(
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
             Int32(has_exog),
+            Int32(observation_batch),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
     elif spec and rd == 2:
@@ -1220,6 +1236,7 @@ def _launch_loop_ll_only(
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
             Int32(has_exog),
+            Int32(observation_batch),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
     elif spec and rd == 3:
@@ -1231,6 +1248,7 @@ def _launch_loop_ll_only(
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
             Int32(has_exog),
+            Int32(observation_batch),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
     elif spec and rd == 4:
@@ -1242,6 +1260,7 @@ def _launch_loop_ll_only(
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
             Int32(has_exog),
+            Int32(observation_batch),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
     else:
@@ -1253,6 +1272,7 @@ def _launch_loop_ll_only(
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
             Int32(has_exog),
+            Int32(observation_batch),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
 
@@ -1287,6 +1307,7 @@ def fast_kalman_into(
     kalman_tpb: Int = KALMAN_TPB,
     has_exog: Int = 0,
     capture_stages: Bool = False,
+    observation_batch: Int = 0,
 ) raises:
     """lane/apple-fast-tsa (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`, FAST on
     Apple): `batched_kalman_filter_x`'s launch sequence into a CALLER-OWNED
@@ -1308,7 +1329,7 @@ def fast_kalman_into(
         # and variances. False keeps the original LL_ONLY path unchanged.
         if not capture_stages:
             _launch_loop_ll_only(
-                ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb, has_exog
+                ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb, has_exog, observation_batch
             )
             kl_done = True
     if not kl_done:
@@ -1325,6 +1346,7 @@ def fast_kalman_into(
                 ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                 Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
                 Int32(has_exog),
+                Int32(observation_batch),
                 grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
             )
         elif fast_rd and rd == 2:
@@ -1336,6 +1358,7 @@ def fast_kalman_into(
                 ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                 Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
                 Int32(has_exog),
+                Int32(observation_batch),
                 grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
             )
         elif fast_rd and rd == 3:
@@ -1347,6 +1370,7 @@ def fast_kalman_into(
                 ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                 Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
                 Int32(has_exog),
+                Int32(observation_batch),
                 grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
             )
         elif fast_rd and rd == 4:
@@ -1358,6 +1382,7 @@ def fast_kalman_into(
                 ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                 Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
                 Int32(has_exog),
+                Int32(observation_batch),
                 grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
             )
         else:
@@ -1369,6 +1394,7 @@ def fast_kalman_into(
                 ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                 Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
                 Int32(has_exog),
+                Int32(observation_batch),
                 grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
             )
 

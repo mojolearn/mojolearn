@@ -1,3 +1,4 @@
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C55_CLASS_GROUP, C04_LOAD_CENTER, C56_LDA_INPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE PREP LANE'S GPU BINDING (preprocessing additions, naive Bayes and
@@ -312,6 +313,11 @@ def py2mojo_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def classical_shared_binding() raises -> PythonObject:
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    return PythonObject(Int(C08_DICTIONARY) | (Int(C55_CLASS_GROUP) << 1) | (Int(C04_LOAD_CENTER) << 2) | (Int(C56_LDA_INPUT) << 3))
+
+
 def idn_fam_binding() raises -> PythonObject:
     """Lane fam-prep-metrics (IDENTICAL, device and host column alike): the
     bits of the family switches this binding was built with, read by
@@ -358,6 +364,7 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         comptime if IDN_STATS_BLOCKED or IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED or IDN_RR_EIGH:
             # lane fam-prep-metrics
             m.def_function[idn_fam_binding]("x_prep_idn_fam")
+            m.def_function[classical_shared_binding]("x_prep_classical_shared")
         comptime if IDN_WDRAW or IDN_PERM_DRAW or IDN_WPICK or IDN_PARTIAL_CODES or IDN_GRAM_BLOCKED or IDN_LABEL_INV:
             # lane fam2-prep-metrics: the fam2 switches (x_prep/fam2.mojo)
             m.def_function[idn_fam2_binding]("x_prep_idn_fam2")

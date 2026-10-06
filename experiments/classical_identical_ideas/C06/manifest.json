@@ -1,0 +1,642 @@
+{
+  "schema": 1,
+  "id": "C06",
+  "title": "Batch row norms without changing feature folds",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "core/row_norms.mojo",
+    "neighbors/impl/detail/knn_brute_force.mojo",
+    "kde/impl/distance/distance.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_CLASSICAL_C06_ROWS2"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Norm and final distance words, underflow, overflow, signed zero, tails and downstream task quality.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C06",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C06",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C06",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C06",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C06",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/shared_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/shared_controls.mojo"
+  ],
+  "default_configuration": "rows2",
+  "configurations": {
+    "rows2": {
+      "name": "rows2",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS2"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C06"
+      ],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites."
+      ],
+      "scope": [
+        "KMeans",
+        "KNN",
+        "KDE"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer"
+      ]
+    },
+    "rows4": {
+      "name": "rows4",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS4"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C06"
+      ],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites."
+      ],
+      "scope": [
+        "KMeans",
+        "KNN",
+        "KDE"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer"
+      ]
+    },
+    "interaction_distance_selection": {
+      "name": "interaction_distance_selection",
+      "selectable": true,
+      "candidate_ids": [
+        "C06",
+        "C29",
+        "C30",
+        "C32",
+        "C36"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS2",
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C29_TILE_128",
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C30_ROWS_4",
+        "MOJOLEARN_C32_COUNT_FUSION",
+        "MOJOLEARN_C32_EMIT_FUSION",
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C36_ROWS_4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated.",
+        "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle",
+        "classical:dbscan",
+        "more:agglomerative",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:radius-neighbors",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans"
+      ],
+      "component_arms": [
+        {
+          "id": "C06",
+          "configuration": "rows2"
+        },
+        {
+          "id": "C29",
+          "configuration": "combined"
+        },
+        {
+          "id": "C30",
+          "configuration": "combined"
+        },
+        {
+          "id": "C32",
+          "configuration": "combined"
+        },
+        {
+          "id": "C36",
+          "configuration": "combined"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c06_c29": {
+      "name": "interaction_c06_c29",
+      "selectable": true,
+      "candidate_ids": [
+        "C06",
+        "C29"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS2",
+        "MOJOLEARN_C29_STREAM_TOPK"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle"
+      ],
+      "component_arms": [
+        {
+          "id": "C06",
+          "configuration": "rows2"
+        },
+        {
+          "id": "C29",
+          "configuration": "stream_topk"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c06_c30": {
+      "name": "interaction_c06_c30",
+      "selectable": true,
+      "candidate_ids": [
+        "C06",
+        "C30"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS2",
+        "MOJOLEARN_C30_DIRECT_DISTANCE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer",
+        "classical:dbscan",
+        "more:agglomerative",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:radius-neighbors"
+      ],
+      "component_arms": [
+        {
+          "id": "C06",
+          "configuration": "rows2"
+        },
+        {
+          "id": "C30",
+          "configuration": "direct_distance"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c06_c32": {
+      "name": "interaction_c06_c32",
+      "selectable": true,
+      "candidate_ids": [
+        "C06",
+        "C32"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS2",
+        "MOJOLEARN_C32_COUNT_FUSION"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer",
+        "expanded:radius-neighbors",
+        "classical:dbscan"
+      ],
+      "component_arms": [
+        {
+          "id": "C06",
+          "configuration": "rows2"
+        },
+        {
+          "id": "C32",
+          "configuration": "count_fusion"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c06_c36": {
+      "name": "interaction_c06_c36",
+      "selectable": true,
+      "candidate_ids": [
+        "C06",
+        "C36"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS2",
+        "MOJOLEARN_C36_CENTROID_TILES"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans"
+      ],
+      "component_arms": [
+        {
+          "id": "C06",
+          "configuration": "rows2"
+        },
+        {
+          "id": "C36",
+          "configuration": "centroid_tiles"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c06_rows2_c30_direct_distance": {
+      "name": "profile_c06_rows2_c30_direct_distance",
+      "selectable": true,
+      "candidate_ids": [
+        "C06",
+        "C30"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS2",
+        "MOJOLEARN_C30_DIRECT_DISTANCE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer",
+        "classical:dbscan",
+        "more:agglomerative",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:radius-neighbors"
+      ],
+      "component_arms": [
+        {
+          "id": "C06",
+          "configuration": "rows2"
+        },
+        {
+          "id": "C30",
+          "configuration": "direct_distance"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c06_rows2_c30_direct_distance_rows_4": {
+      "name": "profile_c06_rows2_c30_direct_distance_rows_4",
+      "selectable": true,
+      "candidate_ids": [
+        "C06",
+        "C30"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS2",
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C30_ROWS_4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer",
+        "classical:dbscan",
+        "more:agglomerative",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:radius-neighbors"
+      ],
+      "component_arms": [
+        {
+          "id": "C06",
+          "configuration": "rows2"
+        },
+        {
+          "id": "C30",
+          "configuration": "direct_distance_rows_4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c06_rows4_c30_direct_distance": {
+      "name": "profile_c06_rows4_c30_direct_distance",
+      "selectable": true,
+      "candidate_ids": [
+        "C06",
+        "C30"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS4",
+        "MOJOLEARN_C30_DIRECT_DISTANCE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer",
+        "classical:dbscan",
+        "more:agglomerative",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:radius-neighbors"
+      ],
+      "component_arms": [
+        {
+          "id": "C06",
+          "configuration": "rows4"
+        },
+        {
+          "id": "C30",
+          "configuration": "direct_distance"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c06_rows4_c30_direct_distance_rows_4": {
+      "name": "profile_c06_rows4_c30_direct_distance_rows_4",
+      "selectable": true,
+      "candidate_ids": [
+        "C06",
+        "C30"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C06_ROWS4",
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C30_ROWS_4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer",
+        "classical:dbscan",
+        "more:agglomerative",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:radius-neighbors"
+      ],
+      "component_arms": [
+        {
+          "id": "C06",
+          "configuration": "rows4"
+        },
+        {
+          "id": "C30",
+          "configuration": "direct_distance_rows_4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites."
+  ],
+  "catalog_estimators": [
+    "KMeans",
+    "KNN",
+    "KDE",
+    "kernel matrices",
+    "Normalizer"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "classical:kmeans",
+    "classical:knn",
+    "classical:kde",
+    "classical:hdbscan",
+    "more:knn-clf",
+    "more:knn-reg",
+    "more:ivf",
+    "expanded:normalizer"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

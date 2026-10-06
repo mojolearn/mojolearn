@@ -1,3 +1,4 @@
+from experiments.classical_identical_ideas.shared_controls import C07_KEYS1024, C07_KEYS4096, C08_GROUPED_OUTPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The prep lane's device runner: the arena goes up once, every stage of the
@@ -356,7 +357,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # 0.070 s, every digest equal); MOJOLEARN_XPREP_SORT_RADIX=0 is the bitonic sort.
     # MOJOLEARN_XPREP_SORT_CHUNK = positions per chunk (512 to 4096 measured within 0.006 s).
     var radix = False
-    var radix_rows = 2048
+    # C07 task sizes bound per-task key traffic independently of digit width.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var radix_rows = 4096 if C07_KEYS4096 else (1024 if C07_KEYS1024 else 2048)
     comptime if IDN_XPREP_RADIX:
         # K1: IDENTICAL takes the radix sort by define, not by env (the same words either way)
         radix = True
@@ -724,6 +727,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )
                 continue
+        comptime if C08_GROUPED_OUTPUT:
+            if op == 9:
+                total = (total+3)//4
         comptime for k in range(N_OPS):
             if op == k:
                 ctx.enqueue_function[prep_kernel[k]](

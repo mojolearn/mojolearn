@@ -5,3 +5,5 @@
 - D003: New integrated source has no inherited qualification. Retain historical evidence as provenance only. Implementation and qualification are separate.
 - D004: C45–C51 are cross-links owned by IDENTICAL trees; never duplicate their implementations as classical candidates.
 - D005: Merge conflicts require preserving current-main fixes and independent mode gates. Neural r3/v2 competing contracts will be reconciled before build freeze.
+
+- D006: Classical resampling conflict keeps main's measured Apple FAST defaults and provenance, with the separate default-off C11 IDENTICAL opt-in.

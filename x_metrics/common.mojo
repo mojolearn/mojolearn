@@ -38,7 +38,11 @@ comptime STAGE_INTS = 16
 comptime PARAMS = 14
 #: DEVIATION 6100: the leaf width of the pairwise fold. A constant of the
 #: source, never of a launch, a core count or a vendor.
-comptime LEAF = 32
+# C01: classical metrics only. Fixed leaves, adjacent binary carries and FTZ
+# use the same PairSum/parallel planner on host and all GPU vendors.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+from experiments.classical_identical_ideas.shared_controls import C01_LEAF64, C01_LEAF128
+comptime LEAF = 128 if C01_LEAF128 else (64 if C01_LEAF64 else 32)
 comptime STACK = 48
 
 

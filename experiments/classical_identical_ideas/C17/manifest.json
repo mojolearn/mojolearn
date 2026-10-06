@@ -1,0 +1,263 @@
+{
+  "schema": 1,
+  "id": "C17",
+  "title": "Batch independent OVR and line-search tasks",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "x_linear/device.mojo",
+    "glm/impl/qn/qn_linesearch.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_CLASSICAL_C17_OVR"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "All fitted states, probabilities, accepted steps, refusals and convergence; count physical speculative work separately.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C17",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C17",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C17",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C17",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C17",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/linear_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/linear_controls.mojo"
+  ],
+  "default_configuration": "ovr_waves",
+  "configurations": {
+    "ovr_waves": {
+      "name": "ovr_waves",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C17_OVR"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C17"
+      ],
+      "source_gaps": [
+        "OVR arm changes scheduling waves, not full model-state allocation.",
+        "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+        "Do not claim unchanged old I12 OVR/exact-trial experiments as new."
+      ],
+      "scope": "Groups up to four independent OVR models per ordered wave; preserves incumbent default OVR switch",
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:logreg-cv"
+      ]
+    },
+    "line_search_pairs": {
+      "name": "line_search_pairs",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C17_LS_TRIALS"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C17"
+      ],
+      "source_gaps": [
+        "OVR arm changes scheduling waves, not full model-state allocation.",
+        "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+        "Do not claim unchanged old I12 OVR/exact-trial experiments as new."
+      ],
+      "scope": "Evaluate bounded two exact trial descriptors while retaining accepted/trial counts",
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:logreg-cv"
+      ]
+    },
+    "combo_ovr_waves_line_search_pairs": {
+      "name": "combo_ovr_waves_line_search_pairs",
+      "selectable": true,
+      "candidate_ids": [
+        "C17"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C17_OVR",
+        "MOJOLEARN_CLASSICAL_C17_LS_TRIALS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "OVR arm changes scheduling waves, not full model-state allocation.",
+        "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+        "Do not claim unchanged old I12 OVR/exact-trial experiments as new."
+      ],
+      "required_workload_keys": [
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:logreg-cv"
+      ],
+      "component_arms": [
+        {
+          "id": "C17",
+          "configuration": "ovr_waves"
+        },
+        {
+          "id": "C17",
+          "configuration": "line_search_pairs"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combined": {
+      "name": "combined",
+      "selectable": true,
+      "candidate_ids": [
+        "C17"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C17_OVR",
+        "MOJOLEARN_CLASSICAL_C17_LS_TRIALS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "OVR arm changes scheduling waves, not full model-state allocation.",
+        "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+        "Do not claim unchanged old I12 OVR/exact-trial experiments as new."
+      ],
+      "required_workload_keys": [
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:logreg-cv"
+      ],
+      "component_arms": [
+        {
+          "id": "C17",
+          "configuration": "ovr_waves"
+        },
+        {
+          "id": "C17",
+          "configuration": "line_search_pairs"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "OVR arm changes scheduling waves, not full model-state allocation.",
+    "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+    "Do not claim unchanged old I12 OVR/exact-trial experiments as new."
+  ],
+  "catalog_estimators": [
+    "Multiclass linear models",
+    "independent optimizer trials"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "more:logreg",
+    "more:linearsvc",
+    "more:linearsvr",
+    "expanded:logreg-cv"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

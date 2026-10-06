@@ -33,6 +33,7 @@ composition and launch geometry are unchanged.
 FAST on Apple only; nothing here is launched or instantiated in any other
 build (`eval`'s body exists only under KALMAN_FAST_EVAL_WS)."""
 
+from experiments.classical_identical_ideas.stats_controls import C59_TRIAL_STATE
 from max.gpu.host import DeviceBuffer, DeviceContext
 from arima.impl.fast_eval_df import (PRODUCT_DF_ON,product_df_eligible,ProductDfScratch,
     product_parts_kernel,product_finish_kernel,product_tail_kernel,product_df_hit)
@@ -304,6 +305,7 @@ struct FastEvalWS(Movable):
     """The `nb` series' differenced regressors (a view of the caller's
     buffer, `[b * n_exog * n_obs + i * n_obs + t]`); one float when
     `n_exog == 0`."""
+    var observation_batch: Int
     var y_ext: DeviceBuffer[DType.float32]
     var x_ext: DeviceBuffer[DType.float32]
     var p_ext: ARIMAParams
@@ -334,10 +336,15 @@ struct FastEvalWS(Movable):
         var M1 = N + 1
         var eb = M1 * nb
         var nb_y = nb * n_obs
-        var y_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * n_obs))
-        for m in range(M1):
+        # C59 owns one immutable copy instead of N+1 replicated observations.
+        # Each trial still has private Kalman/filter/optimizer state.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        self.observation_batch = nb if C59_TRIAL_STATE else 0
+        var copies = 1 if C59_TRIAL_STATE else M1
+        var y_ext = ctx.enqueue_create_buffer[DType.float32](max(1, copies*nb_y))
+        for m in range(copies):
             ctx.enqueue_copy(
-                dst_buf=y_ext.create_sub_buffer[DType.float32](m * nb_y, nb_y),
+                dst_buf=y_ext.create_sub_buffer[DType.float32](m*nb_y, nb_y),
                 src_buf=d_y.create_sub_buffer[DType.float32](0, nb_y),
             )
         var x_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * N))
@@ -400,6 +407,7 @@ struct FastEvalWS(Movable):
         self.eb = eb
         self.n_exog = 0
         self.exog = ctx.enqueue_create_buffer[DType.float32](1)
+        self.observation_batch = 0
         self.y_ext = y_ext^
         self.x_ext = x_ext^
         self.p_ext = p_ext^
@@ -440,6 +448,7 @@ struct FastEvalWS(Movable):
         self.eb = eb
         self.n_exog = 0
         self.exog = ctx.enqueue_create_buffer[DType.float32](1)
+        self.observation_batch = 0
         self.y_ext = d_ykf.create_sub_buffer[DType.float32](0, max(1, nb * n_obs))
         self.x_ext = x_ext^
         self.p_ext = p_ext^
@@ -490,7 +499,7 @@ struct FastEvalWS(Movable):
             self.css_into(ctx, order)
         else:
             fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, 32,
-                             1 if self.n_exog > 0 else 0, Bool(self.compensated))
+                             1 if self.n_exog > 0 else 0, Bool(self.compensated), self.observation_batch)
             comptime if PRODUCT_DF_ON:
                 if self.compensated:
                     ref sc=self.compensated.value()

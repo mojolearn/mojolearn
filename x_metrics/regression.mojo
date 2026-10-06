@@ -241,3 +241,16 @@ def col_max_unit(t: Int, f: FP, q: IP):
         if v > m:
             m = v
     st(f, p(q, 3) + t, m)
+
+
+# C09 requested SQ/ABS term pair: one target/prediction load, independent
+# outputs consumed by the unchanged PairSum streams and soft-f64 tails.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+def reg_pair_unit(t: Int, f: FP, q: IP):
+    # q=[Y,P,SQ,ABS,D,PB]. Planner admits identical inputs only.
+    var D = p(q, 4)
+    var y = ld(f, p(q, 0)+t)
+    var pred = ld(f, p(q, 1)+(t % D if p(q, 5) == 1 else t))
+    var delta = ftz(y-pred)
+    st(f, p(q, 2)+t, identical_mul(delta, delta))
+    st(f, p(q, 3)+t, abs(delta))

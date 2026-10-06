@@ -77,3 +77,22 @@ def permutation_merge_kernel(
         else:
             hi = probe
     dst[base + (i - own_lo) + (lo - other_lo)] = Int32(position)
+
+
+# C11 deterministic counter draws at the output consumer, preserving the
+# exact utils_draw_kernel index (key, replicate=0, output row). No index
+# storage, no pointer-based cache and no mutable generator state.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+from resample.checks.index_map import draw_row_index, key_join
+
+
+def classical_draw_gather_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin], src: MutPointer[Float32, MutAnyOrigin],
+    key_lo: Int32, key_hi: Int32, n_in: Int32, count_in: Int32, d_in: Int32,
+):
+    var o = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    var d = Int(d_in)
+    if o < Int(count_in)*d:
+        var row = o//d
+        var selected = Int(draw_row_index(key_join(key_lo, key_hi), 0, row, n_in))
+        dst.unsafe_store(o, src.unsafe_load(selected*d+o%d))

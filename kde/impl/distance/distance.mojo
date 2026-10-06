@@ -56,11 +56,16 @@ row-major only (cuML hands KDE C-contiguous arrays, `kernel_density.py:
 norm workspace is allocated here.
 """
 
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from core.classical_distance import direct_squared_distance
+from checks.numerics import ftz, identical_sqrt
+from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
-from core.row_norms import NORM_TPB, row_norm_kernel
+from core.row_norms import enqueue_row_norms, NORM_TPB, row_norm_kernel
+from experiments.classical_identical_ideas.shared_controls import C06_ROWS2, C06_ROWS4
 from kde.impl.distance.distance_ops import (
     DIST_COSINE_EXPANDED,
     DIST_L1,
@@ -81,6 +86,14 @@ from neighbors.impl.distance.detail.distance_ops import (
     metric_distance_kernel,
     validate_metric_arg,
 )
+
+
+def kde_direct_distance_kernel(outp: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
+                              y: MutPointer[Float32, MutAnyOrigin], m: Int32, n: Int32, d: Int32, root: Int32):
+    var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if t < Int(m)*Int(n):
+        var value = direct_squared_distance(x+(t//Int(n))*Int(d), y+(t%Int(n))*Int(d), Int(d))
+        outp[t] = ftz(identical_sqrt(value)) if root != 0 else value
 
 
 def pairwise_distance(
@@ -129,6 +142,13 @@ def pairwise_distance(
     var cells = m * n
     var grid = (cells + elem_tpb - 1) // elem_tpb
 
+    comptime if C30_DIRECT_DISTANCE:
+        if metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_UNEXPANDED:
+            ctx.enqueue_function[kde_direct_distance_kernel](dist.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(),
+                Int32(m), Int32(n), Int32(k), Int32(1 if metric == DIST_L2_SQRT_UNEXPANDED else 0),
+                grid_dim=(grid,1,1), block_dim=(elem_tpb,1,1))
+            return
+
     if metric == DIST_LP_UNEXPANDED:
         # `lp_unexp.cuh:41`: `use_norms = false`. The two norm pointers are
         # never read, so `x` is passed twice rather than allocating a
@@ -170,20 +190,22 @@ def pairwise_distance(
         # answer.
         var xn = ctx.enqueue_create_buffer[DType.float32](m)
         var yn = ctx.enqueue_create_buffer[DType.float32](n)
-        ctx.enqueue_function[cosine_row_norm_kernel](
-            xn.unsafe_ptr(),
-            x.unsafe_ptr(),
-            Int32(k),
-            grid_dim=(m, 1, 1),
-            block_dim=(COSINE_NORM_TPB, 1, 1),
-        )
-        ctx.enqueue_function[cosine_row_norm_kernel](
-            yn.unsafe_ptr(),
-            y.unsafe_ptr(),
-            Int32(k),
-            grid_dim=(n, 1, 1),
-            block_dim=(COSINE_NORM_TPB, 1, 1),
-        )
+        # C06 batches independent norm rows; the shared norm now uses the
+        # same portable sqrt as cosine, with the same logical halving tree.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        comptime if C06_ROWS2 or C06_ROWS4:
+            comptime assert NORM_TPB == COSINE_NORM_TPB
+            enqueue_row_norms(ctx, xn, x, m, k, 1)
+            enqueue_row_norms(ctx, yn, y, n, k, 1)
+        else:
+            ctx.enqueue_function[cosine_row_norm_kernel](
+                xn.unsafe_ptr(), x.unsafe_ptr(), Int32(k),
+                grid_dim=(m, 1, 1), block_dim=(COSINE_NORM_TPB, 1, 1),
+            )
+            ctx.enqueue_function[cosine_row_norm_kernel](
+                yn.unsafe_ptr(), y.unsafe_ptr(), Int32(k),
+                grid_dim=(n, 1, 1), block_dim=(COSINE_NORM_TPB, 1, 1),
+            )
         # ONE kernel for the dot product AND the epilogue in both modes.
         # KDE's caller is `pairwise_distances`, which is their DIRECT
         # distance entry (`kernel_density.py:315-317`) and not the k-NN
@@ -241,22 +263,8 @@ def pairwise_distance(
     # squared (identity_op), the `x != y` row-major branch.
     var x_norm = ctx.enqueue_create_buffer[DType.float32](m)
     var y_norm = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_function[row_norm_kernel](
-        x_norm.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(k),
-        Int32(0),
-        grid_dim=(m, 1, 1),
-        block_dim=(NORM_TPB, 1, 1),
-    )
-    ctx.enqueue_function[row_norm_kernel](
-        y_norm.unsafe_ptr(),
-        y.unsafe_ptr(),
-        Int32(k),
-        Int32(0),
-        grid_dim=(n, 1, 1),
-        block_dim=(NORM_TPB, 1, 1),
-    )
+    enqueue_row_norms(ctx, x_norm, x, m, k, 0)
+    enqueue_row_norms(ctx, y_norm, y, n, k, 0)
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         # IDENTITY_PATHS row 24: the product and the epilogue as ONE kernel
         # with the feature axis in one thread; the k-NN lane's tile, called.

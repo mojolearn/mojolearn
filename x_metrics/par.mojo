@@ -51,6 +51,7 @@ comptime RUN = 16
 comptime KEY_COL = 0
 comptime KEY_CURVE = 1
 comptime KEY_PERM = 2
+comptime KEY_GROUP = 3
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +266,11 @@ def sort_key_unit(t: Int, f: FP, q: IP):
     var kl = UInt32(0)
     if mode == KEY_COL:
         kl = key(ld(f, p(q, 4) + i * p(q, 5) + pp))
+    elif mode == KEY_GROUP:
+        var group = ldi(f, p(q, 4) + i)
+        var groups = p(q, 5)
+        kh = UInt32(0) if group >= 0 and group < groups else UInt32(1)
+        kl = UInt32(group) if kh == UInt32(0) else UInt32(0)
     elif mode == KEY_CURVE:
         var W = p(q, 6)
         if W >= 0 and ld(f, W + i) == Float32(0):

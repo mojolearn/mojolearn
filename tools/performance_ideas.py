@@ -31,8 +31,9 @@ EXPECTED = tuple(
     + [f"A{n:02d}" for n in range(1, 9)]
     + [f"N{n:02d}" for n in range(1, 9)]
     + [f"F{n:02d}" for n in range(1, 21)]
+    + [f"C{n:02d}" for n in range(1, 61)]
 )
-STATUSES = {"source_ready", "build_passed", "blocked_toolchain", "blocked_prerequisite"}
+STATUSES = {"source_draft", "source_ready", "build_passed", "blocked_toolchain", "blocked_prerequisite"}
 STAGES = {"build": "build_argv", "validate": "validation_argv", "time": "timing_argv", "run": "run_argv"}
 
 
@@ -131,7 +132,9 @@ def read_manifest(path: Path, root: Path = ROOT) -> dict[str, Any]:
 def catalog(root: Path = ROOT) -> tuple[dict[str, dict[str, Any]], list[str]]:
     records: dict[str, dict[str, Any]] = {}
     problems: list[str] = []
-    for path in sorted((root / "experiments/performance_ideas").glob("*/manifest.json")):
+    paths = list((root / "experiments/performance_ideas").glob("*/manifest.json"))
+    paths += list((root / "experiments/classical_identical_ideas").glob("*/manifest.json"))
+    for path in sorted(paths):
         try:
             record = read_manifest(path, root)
             records[record["id"]] = record
@@ -201,12 +204,36 @@ def command_for(record: dict[str, Any], stage: str, vendor: str, output: Path, s
     variables = {
         "repo": str(root), "python": sys.executable, "mojo": mojo_path(root),
         "compile_slot": str(Path.home() / "mojolearn-evidence/compile_slot.sh"),
-        "vendor": vendor, "output": str(output), "source_sha": source, "mode": record["mode"], "arm": arm,
+        "vendor": vendor, "output": str(output), "source_sha": source, "mode": record["mode"], "arm": arm, "configuration": record.get("configuration", "default"),
     }
     try:
         return [argument.format_map(variables) for argument in command]
     except (KeyError, ValueError) as exc:
         raise ExperimentError(f"{record['id']}: invalid command template: {exc}") from exc
+
+
+def select_configuration(record: dict[str, Any], name: str | None) -> dict[str, Any]:
+    """Select a programmed C-card sub-arm/interaction without changing incumbents.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    Selection changes compile defines and the full-workload coverage requirement.
+    It never imports a candidate or establishes runtime reach.
+    """
+    if not record["id"].startswith("C"):
+        if name is not None:
+            raise ExperimentError("--configuration is a classical C-card selector")
+        return record
+    if record["status"].startswith("blocked_"):
+        raise ExperimentError(f"{record['id']}: {record['blocker']}")
+    selected = name or record.get("default_configuration")
+    configs = record.get("configurations", {})
+    if selected not in configs:
+        raise ExperimentError(f"{record['id']}: configuration is pending or unknown: {selected}")
+    cfg = configs[selected]
+    if not cfg.get("selectable", False):
+        raise ExperimentError(f"{record['id']}/{selected}: source integration pending")
+    return {**record, "configuration": selected,
+            "candidate_defines": cfg["candidate_defines"], "baseline_defines": cfg["baseline_defines"]}
 
 
 def admitted_quality(path: Path, record: dict[str, Any], source: str, vendor: str, manifest_digest: str) -> None:
@@ -229,6 +256,11 @@ def admitted_quality(path: Path, record: dict[str, Any], source: str, vendor: st
     for name in record["quality_gates"]:
         if gates.get(name) != "PASS":
             raise ExperimentError(f"Quality gate has not passed: {name}")
+    if record["id"].startswith("C"):
+        if evidence.get("configuration") != record.get("configuration"):
+            raise ExperimentError("Quality receipt does not name the selected classical configuration")
+        if evidence.get("candidate_defines") != record["candidate_defines"]:
+            raise ExperimentError("Quality receipt does not match the selected classical defines")
     # The actual harness is responsible for task metrics and identity witnesses.
     # Merely exiting zero is never converted into a quality PASS here.
 
@@ -287,6 +319,8 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
     environment["MOJOLEARN_COMPILE_JOBS"] = "1"
     environment["MOJOLEARN_NUMERIC_MODE"] = record["mode"]
     environment["MOJOLEARN_VENDOR"] = vendor
+    if quality is not None and record["id"].startswith("C"):
+        environment["MOJOLEARN_CLASSICAL_QUALITY_RECEIPT"] = str(quality.resolve())
     if stage == "build":
         defines = record["baseline_defines" if arm == "baseline" else "candidate_defines"]
         flags = " ".join(
@@ -309,6 +343,9 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
         "paired_build": stage == "build" and record.get("paired_build", False),
         "argv": command, "log": str(log_path), "status": "RUNNING",
         "quality_receipt": str(quality) if quality else None,
+        "configuration": record.get("configuration"),
+        "candidate_defines": record["candidate_defines"],
+        "baseline_defines": record["baseline_defines"],
     }
     receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
     start = time.monotonic()
@@ -354,6 +391,8 @@ def parser() -> argparse.ArgumentParser:
     for name in ["plan", "execute"]:
         command = commands.add_parser(name)
         command.add_argument("id", choices=EXPECTED)
+        command.add_argument("--configuration", help="Classical candidate sub-arm or interaction name")
+        command.add_argument("--workload-recipe", type=Path, help="Resolved full-dataset recipe for classical C cards")
         command.add_argument("--stage", choices=STAGES, required=True)
         command.add_argument("--vendor", choices=["nvidia", "amd", "apple", "host"], required=True)
         command.add_argument("--output", type=Path, required=True)
@@ -393,13 +432,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.id not in records:
         raise ExperimentError(f"No implementation manifest for {args.id}")
-    record = records[args.id]
-    manifest = root / f"experiments/performance_ideas/{args.id}/manifest.json"
+    record = select_configuration(records[args.id], args.configuration)
+    family = "classical_identical_ideas" if args.id.startswith("C") else "performance_ideas"
+    manifest = root / f"experiments/{family}/{args.id}/manifest.json"
+    if args.workload_recipe is not None:
+        os.environ["MOJOLEARN_CLASSICAL_WORKLOAD_RECIPE"] = str(args.workload_recipe.resolve())
     if args.command == "plan":
         source = git(root, "rev-parse", "HEAD")
         command = command_for(record, args.stage, args.vendor, args.output.resolve(), source, root, args.arm)
         print(json.dumps({"id": args.id, "mode": record["mode"], "source_sha": source,
-                          "stage": args.stage, "vendor": args.vendor, "argv": command}, indent=2))
+                          "stage": args.stage, "vendor": args.vendor, "configuration": record.get("configuration"),
+                          "candidate_defines": record["candidate_defines"], "baseline_defines": record["baseline_defines"],
+                          "argv": command}, indent=2))
         return 0
     if args.timeout <= 0:
         raise ExperimentError("Timeout must be positive")

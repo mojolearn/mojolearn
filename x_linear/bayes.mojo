@@ -18,6 +18,7 @@ Centering (fit_intercept) is their `_preprocess_data`: column means and the
 target mean, rows ascending. float32 throughout.
 """
 from std.sys.compile import is_defined
+from experiments.classical_identical_ideas.linear_controls import C15_FACTOR_SOLVE
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fsqrt, ld, st, ldi, sti, i2f, fill, copy,
     cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
@@ -878,9 +879,31 @@ def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, 
     return dk
 
 
+def _ard_factor_coef(d: Int, dk: Int, fw: FP, aa: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
+    """C15 direct coefficient solve. Required posterior sigma remains materialized.
+    aa is the immutable Cholesky produced in this same accepted ARD step.
+    res is temporary compact RHS until solved, then scatter descending so
+    ascending kept feature indices never overwrite an unread compact value.
+    """
+    for a in range(dk):
+        st(res, a, fm(alpha, ld(fw, xty + ldi(iw, keep + d + a))))
+    chol_solve(fw, aa, dk, res, 0)
+    for offset in range(dk):
+        var a = dk - 1 - offset
+        st(res, ldi(iw, keep + d + a), ld(res, a))
+    for j in range(d):
+        if ldi(iw, keep + j) == 0:
+            st(res, j, Float32(0))
+
+
 def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
     """`_ard_coef` with its dk outputs split across the team (each its own
     chain over b ascending); the same words."""
+    comptime if C15_FACTOR_SOLVE:
+        if t.lead():
+            _ard_factor_coef(d, dk, fw, sg - d * d, xty, alpha, iw, keep, res)
+        t.sync()
+        return
     if t.nt <= 1:
         _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
         return
@@ -896,6 +919,9 @@ def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Floa
 
 
 def _ard_coef(d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
+    comptime if C15_FACTOR_SOLVE:
+        _ard_factor_coef(d, dk, fw, sg - d * d, xty, alpha, iw, keep, res)
+        return
     fill(res, 0, d, Float32(0))
     for a in range(dk):
         var acc = Float32(0)

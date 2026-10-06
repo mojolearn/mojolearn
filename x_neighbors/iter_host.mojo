@@ -1,3 +1,5 @@
+from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
+from x_neighbors.classical_graph import classical_graph_degree, classical_graph_product
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CPU column of `x_neighbors/iter_device.mojo`: the same loop over the
@@ -33,8 +35,15 @@ def op_lp_iterate(
     alpha: Float32,
 ) raises:
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
+    var raw_graph = C43_RESIDENT_NORMALIZATION and variant >= 2
+    var clamp_variant = variant % 2
     var nc = n * c
     var pg = FP(unsafe_from_address=g)
+    var degree = List[Float32](length=max(n,1) if raw_graph else 1,fill=Float32(0))
+    var pd = degree.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    if raw_graph:
+        for row in range(n):
+            classical_graph_degree(row,pg,pd,n,clamp_variant)
     var pys = FP(unsafe_from_address=ystatic)
     var punl = IP(unsafe_from_address=unlabeled)
     var a = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
@@ -57,8 +66,11 @@ def op_lp_iterate(
             converged = True
             break
         for t in range(nc):
-            matmul_item(t, pg, cur, pn, n, n, c)
-        if variant == 0:
+            if raw_graph:
+                classical_graph_product(t,pg,pd,cur,pn,n,c,clamp_variant)
+            else:
+                matmul_item(t, pg, cur, pn, n, n, c)
+        if clamp_variant == 0:
             for t in range(n):
                 lp_clamp_item(t, pn, pys, punl, prev, n, c)
         else:
@@ -77,6 +89,7 @@ def op_lp_iterate(
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
+    _ = degree^
     _ = a^
     _ = b^
     _ = nxt^

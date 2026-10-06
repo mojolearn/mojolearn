@@ -1,3 +1,5 @@
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from core.classical_distance import direct_distance_step
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
@@ -609,11 +611,16 @@ def hdbh_mutual_reachability(
                 for f in range(n):
                     var qv = ftz(xp.unsafe_load(row * n + f))
                     var yv = ftz(xp.unsafe_load(col * n + f))
-                    acc = ftz(identical_mul_add(qv, yv, acc))
+                    comptime if C30_DIRECT_DISTANCE:
+                        acc = direct_distance_step[1](acc,qv,yv)
+                    else:
+                        acc = ftz(identical_mul_add(qv, yv, acc))
                 var d = ftz(identical_mul_add(
                     Float32(-2.0), acc,
                     ftz(ftz(np.unsafe_load(row)) + ftz(np.unsafe_load(col))),
                 ))
+                comptime if C30_DIRECT_DISTANCE:
+                    d = acc
                 if d <= Float32(0.0):
                     d = Float32(0.0)
                 d = ftz(identical_sqrt(d))

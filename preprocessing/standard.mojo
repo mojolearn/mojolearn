@@ -14,6 +14,10 @@ STD-3: IDENTICAL operand/seam FTZ, pinned multiply/divide and portable sqrt.
 Finite inputs/statistics/output only. Unused statistics are not computed.
 """
 from std.gpu import block_idx, block_dim, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from experiments.classical_identical_ideas.shared_controls import C02_STATS_PAIR
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_mul, identical_div, portable_sqrtf, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -52,13 +56,33 @@ def standard_chunks_kernel[variance: Bool](
                 value = ftz(identical_mul(value,value))
         else:
             different = Float32(1) if value != ftz(x.unsafe_load(c)) else Float32(0)
-    var total = virtual_block_sum[256](SIMD[DType.float32,1](value))
-    if tid == 0:
-        partials.unsafe_store(chunk*d+c,ftz(total))
-    comptime if not variance:
-        var changed = virtual_block_sum[256](SIMD[DType.float32,1](different))
+    # C02: two independent slab trees share each synchronization boundary.
+    # Each stream keeps its incumbent lane membership and halving additions;
+    # the centered second pass remains a separate pass with the fitted mean.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    comptime if C02_STATS_PAIR and not variance:
+        var both = stack_allocation[512, Float32, address_space=AddressSpace.SHARED]()
+        both[tid] = ftz(value)
+        both[256 + tid] = ftz(different)
+        barrier()
+        var step = 128
+        while step > 0:
+            if tid < step:
+                both[tid] = ftz(both[tid] + both[tid + step])
+                both[256 + tid] = ftz(both[256 + tid] + both[256 + tid + step])
+            barrier()
+            step //= 2
         if tid == 0:
-            differences.unsafe_store(chunk*d+c,changed)
+            partials.unsafe_store(chunk*d+c, ftz(both[0]))
+            differences.unsafe_store(chunk*d+c, both[256])
+    else:
+        var total = virtual_block_sum[256](SIMD[DType.float32,1](value))
+        if tid == 0:
+            partials.unsafe_store(chunk*d+c,ftz(total))
+        comptime if not variance:
+            var changed = virtual_block_sum[256](SIMD[DType.float32,1](different))
+            if tid == 0:
+                differences.unsafe_store(chunk*d+c,changed)
 
 
 def standard_finalize_kernel[variance: Bool](

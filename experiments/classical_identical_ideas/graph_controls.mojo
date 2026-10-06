@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Classical IDENTICAL source-only candidates. A defines the named control;
+B omits it and preserves incumbent dispatch. Every candidate is default OFF.
+NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+Geometry bounds describe work/storage, never dataset or benchmark dimensions.
+"""
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
+comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime C29_STREAM_TOPK = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C29_STREAM_TOPK"]()
+comptime C29_REFERENCE_TILE = 128 if is_defined["MOJOLEARN_C29_TILE_128"]() else 256
+comptime C30_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C30_DIRECT_DISTANCE"]()
+comptime C30_REGISTER_ROWS = 4 if is_defined["MOJOLEARN_C30_ROWS_4"]() else 2
+comptime C31_DEVICE_BUCKETS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C31_DEVICE_BUCKETS"]()
+comptime C32_COUNT_FUSION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C32_COUNT_FUSION"]()
+comptime C32_EMIT_FUSION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C32_EMIT_FUSION"]()
+comptime C33_FROZEN_CHUNKS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C33_FROZEN_CHUNKS"]()
+comptime C33_CHUNK = 4 if is_defined["MOJOLEARN_C33_CHUNK_4"]() else 16
+comptime C34_PARALLEL_EDGES = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C34_PARALLEL_EDGES"]()
+comptime C35_PACKED_LISTS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C35_PACKED_LISTS"]()
+comptime C35_TASK_ROWS = 128 if is_defined["MOJOLEARN_C35_ROWS_128"]() else 256
+comptime C36_CENTROID_TILES = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C36_CENTROID_TILES"]()
+comptime C36_ROWS = 4 if is_defined["MOJOLEARN_C36_ROWS_4"]() else 2
+comptime C37_ROW_PANELS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C37_ROW_PANELS"]()
+comptime C37_PANEL_ROWS = 128 if is_defined["MOJOLEARN_C37_PANEL_128"]() else 256
+comptime C38_REUSE_NEAREST = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C38_REUSE_NEAREST"]()
+comptime C38_DEVICE_POTENTIAL = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C38_DEVICE_POTENTIAL"]()
+comptime C39_RETAIN_STATE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C39_RETAIN_STATE"]()
+comptime C40_SEED_TILES = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C40_SEED_TILES"]()
+comptime C40_ACTIVE_SEEDS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C40_ACTIVE_SEEDS"]()
+comptime C41_FUSED_MINIMA = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C41_FUSED_MINIMA"]()
+comptime C42_ACTIVE_TRIANGLE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C42_ACTIVE_TRIANGLE"]()
+comptime C43_RESIDENT_NORMALIZATION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C43_RESIDENT_NORMALIZATION"]()
+comptime C44_SAMPLING_DESCRIPTORS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C44_SAMPLING_DESCRIPTORS"]()

@@ -1,3 +1,4 @@
+from experiments.classical_identical_ideas.shared_controls import C05_OLS_PHASE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host-pointer surfaces for the GLM section: OLS, Ridge, logistic regression.
@@ -65,7 +66,7 @@ from core.gram_splitk import (
     gram_splitk_chunk_count,
     gram_splitk_scratch_covers,
 )
-from glm.impl.center_device import center_buf, col_means_buf, col_sums_buf
+from glm.impl.center_device import center_buf, col_means_buf, col_sums_buf, col_sums_pair_buf
 
 
 def _add_scalar_kernel(
@@ -108,7 +109,16 @@ def ols_fit_host(
     var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
-    var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    # C05: Jacobi and diagonal extraction finish before inv is first written;
+    # cov has no later consumer. The inverse GEMM overwrites every cell.
+    # Two DeviceBuffer handles own one per-invocation allocation, as in
+    # ridge_eig_scratch_traced's u/u_scratch handles. No global retention.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var inv: DeviceBuffer[DType.float32]
+    comptime if C05_OLS_PHASE:
+        inv = cov
+    else:
+        inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -188,7 +198,16 @@ def ols_fit_resident_host(
     var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
-    var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    # C05: Jacobi and diagonal extraction finish before inv is first written;
+    # cov has no later consumer. The inverse GEMM overwrites every cell.
+    # Two DeviceBuffer handles own one per-invocation allocation, as in
+    # ridge_eig_scratch_traced's u/u_scratch handles. No global retention.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var inv: DeviceBuffer[DType.float32]
+    comptime if C05_OLS_PHASE:
+        inv = cov
+    else:
+        inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var splitk = gram_splitk_applies(n_features, n_features, n_rows)
     var alias2_n = 1 if splitk else cells
     var xa2 = ctx.enqueue_create_buffer[DType.float32](alias2_n)
@@ -201,8 +220,7 @@ def ols_fit_resident_host(
     if center:
         var d_sx = ctx.enqueue_create_buffer[DType.uint64](n_features)
         var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
-        col_sums_buf(ctx, d_x, d_sx, n_rows, n_features)
-        col_sums_buf(ctx, d_y, d_sy, n_rows, 1)
+        col_sums_pair_buf(ctx, d_x, d_y, d_sx, d_sy, n_rows, n_features)
         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
         var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
@@ -312,7 +330,16 @@ def ols_fit_weighted_host(
     var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
-    var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    # C05: Jacobi and diagonal extraction finish before inv is first written;
+    # cov has no later consumer. The inverse GEMM overwrites every cell.
+    # Two DeviceBuffer handles own one per-invocation allocation, as in
+    # ridge_eig_scratch_traced's u/u_scratch handles. No global retention.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var inv: DeviceBuffer[DType.float32]
+    comptime if C05_OLS_PHASE:
+        inv = cov
+    else:
+        inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -477,8 +504,7 @@ def ridge_fit_resident_host(
     if center:
         var d_sx = ctx.enqueue_create_buffer[DType.uint64](n_features)
         var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
-        col_sums_buf(ctx, d_x, d_sx, n_rows, n_features)
-        col_sums_buf(ctx, d_y, d_sy, n_rows, 1)
+        col_sums_pair_buf(ctx, d_x, d_y, d_sx, d_sy, n_rows, n_features)
         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
         var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)

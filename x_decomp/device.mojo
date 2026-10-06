@@ -28,6 +28,8 @@ from gemm.afn_apple_fast import (
 from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
 from decomposition.linalg_public_device import device_qr_r
 from decomposition.linalg_types import _validate_shape
+from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS, C28_BUCKET_SOLVES
+from x_decomp.classical_device import contrast_kernel, centered_gram_kernel
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from std.sys.info import has_apple_gpu_accelerator
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
@@ -55,7 +57,7 @@ from x_decomp.cells import (
     lu_aux_clamp,
     lu_aux_join,
     lu_aux_val,
-    trs_block_col,
+    trs_block_col, trs_block_group,
     trs_coef,
     trs_divides,
     trs_feed_cell,
@@ -156,7 +158,7 @@ from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import (
     ts_apply_device, ts_factor_device, ts_free_device, ts_pack_center_device, ts_pack_device,
 )
-from glm.impl.center_device import col_means_buf, col_sums_buf
+from glm.impl.center_device import col_means_buf, col_sums_buf, col_sums_pair_buf
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -1183,6 +1185,62 @@ def omp_rows_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: I
         na.unsafe_store(i, omp_row(g, q, w, s, i, Int(k), Int(nnz)))
 
 
+# C28 shared-Gram sparse-code tasks: stable descriptors group equal active
+# workspace scale, while every row retains its original scratch and tie order.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+def classical_code_bucket_kernel(q: F32Ptr, w: F32Ptr, keys: U32Ptr, order: U32Ptr, n: Int32, k: Int32,
+                                  kind: Int32, alpha: Float32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        var count = 0
+        for j in range(Int(k)):
+            var value = ftz(q.unsafe_load(i * Int(k) + j))
+            if kind == 0:
+                if ftz(w.unsafe_load(i * Int(k) + j)) != Float32(0) or abs(value) > alpha:
+                    count += 1
+            elif value != Float32(0):
+                count += 1
+        var bucket = UInt32(0)
+        while count > 0:
+            count >>= 1
+            bucket += 1
+        keys.unsafe_store(i, bucket)
+        order.unsafe_store(i, UInt32(i))
+
+
+def classical_code_rows_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, counts: F32Ptr, order: U32Ptr,
+                                 n: Int32, k: Int32, kind: Int32, a: Int32, b: Int32, alpha: Float32, tol: Float32):
+    var slot = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if slot < Int(n):
+        var i = Int(order.unsafe_load(slot))
+        var count = Float32(0)
+        if kind == 0:
+            count = lasso_row(g, q, w, s, i, Int(k), alpha, Int(a), tol, b != 0)
+        elif kind == 1:
+            count = lars_row(g, q, w, s, i, Int(k), Int(a), Int(b))
+        else:
+            count = omp_row(g, q, w, s, i, Int(k), Int(a))
+        counts.unsafe_store(i, count)
+
+
+def launch_classical_code_rows(ctx: DeviceContext, g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, counts: F32Ptr,
+                                n: Int, k: Int, kind: Int, a: Int, b: Int, alpha: Float32, tol: Float32) raises:
+    if n <= 0:
+        return
+    var keys = ctx.enqueue_create_buffer[DType.uint32](n)
+    var order = ctx.enqueue_create_buffer[DType.uint32](n)
+    var tk = ctx.enqueue_create_buffer[DType.uint32](n)
+    var tv = ctx.enqueue_create_buffer[DType.uint32](n)
+    var cnt = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
+    ctx.enqueue_function[classical_code_bucket_kernel](q, w, keys.unsafe_ptr(), order.unsafe_ptr(), Int32(n), Int32(k),
+        Int32(kind), alpha, grid_dim=_blocks(n), block_dim=TPB)
+    fast_radix_sort_pairs_u32(ctx, n, keys, order, tk, tv, cnt)
+    # One wave of 32 independent rows shares the same immutable Gram allocation;
+    # power-of-two workspace buckets reduce warp divergence for neighboring shapes.
+    ctx.enqueue_function[classical_code_rows_kernel](g, q, w, s, counts, order.unsafe_ptr(), Int32(n), Int32(k),
+        Int32(kind), Int32(a), Int32(b), alpha, tol, grid_dim=(n + 31) // 32, block_dim=32)
+
+
 def gamma_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, shape: Float32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(count):
@@ -1274,12 +1332,14 @@ def _ast[SH: Bool](sh: ShF32, g: F32Ptr, o: Int, q: Int, v: Float32):
 
 def als_block_kernel[SH: Bool](
     c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int32, m: Int32, f: Int32,
-    su: Int32, si: Int32, reg: Float32,
+    su: Int32, si: Int32, reg: Float32, order: MutPointer[UInt32, MutAnyOrigin],
 ):
     """`als_row` for row u = block_idx.x of C (element (u, i) at c[u * su +
     i * si]), by a block of ALS_BLK_TPB threads; SH: the f*f + f cells in
     threadgroup memory, else at s[u * (f*f + f)]."""
     var u = Int(block_idx.x)
+    comptime if C28_BUCKET_SOLVES:
+        u = Int(order.unsafe_load(u))
     var tid = Int(thread_idx.x)
     var ff = Int(f)
     var mm = Int(m)
@@ -1375,6 +1435,22 @@ def als_scratch(n: Int, f: Int) -> Int:
     return 0 if cells <= ALS_SH_CELLS else n * cells
 
 
+def als_bucket_keys_kernel(c: F32Ptr, keys: MutPointer[UInt32, MutAnyOrigin], order: MutPointer[UInt32, MutAnyOrigin],
+                           n: Int32, m: Int32, su: Int32, si: Int32):
+    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if u < Int(n):
+        var count = 0
+        for i in range(Int(m)):
+            if ftz(c.unsafe_load(u * Int(su) + i * Int(si))) != Float32(0):
+                count += 1
+        var bucket = UInt32(0)
+        while count > 0:
+            count >>= 1
+            bucket += 1
+        keys.unsafe_store(u, bucket)
+        order.unsafe_store(u, UInt32(u))
+
+
 def launch_als_rows(
     ctx: DeviceContext, c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int, m: Int,
     f: Int, su: Int, si: Int, reg: Float32,
@@ -1383,16 +1459,29 @@ def launch_als_rows(
     (cgr-decomp: the MOJOLEARN_XD_ALS_BLOCK=0 A/B arm is deleted.)"""
     if n <= 0:
         return
+    var order = ctx.enqueue_create_buffer[DType.uint32](n if C28_BUCKET_SOLVES else 1)
+    comptime if C28_BUCKET_SOLVES:
+        var keys = ctx.enqueue_create_buffer[DType.uint32](n)
+        var tk = ctx.enqueue_create_buffer[DType.uint32](n)
+        var tv = ctx.enqueue_create_buffer[DType.uint32](n)
+        var cnt = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
+        ctx.enqueue_function[als_bucket_keys_kernel](c, keys.unsafe_ptr(), order.unsafe_ptr(), Int32(n), Int32(m), Int32(su), Int32(si),
+                                                    grid_dim=_blocks(n), block_dim=TPB)
+        fast_radix_sort_pairs_u32(ctx, n, keys, order, tk, tv, cnt)
+        _ = keys^
+        _ = tk^
+        _ = tv^
+        _ = cnt^
     if f * f + f <= ALS_SH_CELLS:
         comptime k_sh = als_block_kernel[True]
         ctx.enqueue_function[k_sh](
-            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg,
+            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg, order.unsafe_ptr(),
             grid_dim=n, block_dim=ALS_BLK_TPB,
         )
     else:
         comptime k_g = als_block_kernel[False]
         ctx.enqueue_function[k_g](
-            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg,
+            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg, order.unsafe_ptr(),
             grid_dim=n, block_dim=ALS_BLK_TPB,
         )
 
@@ -1933,6 +2022,12 @@ def trs_block_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, l
         trs_block_col(lu, b, Int(n), Int(nrhs), Int(tri), Int(lo), Int(hi), c)
 
 
+def trs_group_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, lo: Int32, hi: Int32):
+    var c = (Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)) * 4
+    if c < Int(nrhs):
+        trs_block_group(lu, b, Int(n), Int(nrhs), Int(tri), Int(lo), Int(hi), c, min(c + 4, Int(nrhs)))
+
+
 def trs_diag_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, lo: Int32, hi: Int32):
     """`trs_block_col` with a thread per (row, column) cell of the diagonal
     block [lo, hi) (lane hr-lu, 2026-10-02): the block's rows sit in one
@@ -2011,7 +2106,12 @@ def launch_trs_tri(ctx: DeviceContext, lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int,
         var bq = q if (tri == 0 or tri == 2) else nblk - 1 - q
         var lo = bq * TRS_BLOCK
         var hi = min(n, lo + TRS_BLOCK)
-        comptime if TRS_DIAG_FITS:
+        comptime if C14_GROUP_RHS:
+            ctx.enqueue_function[trs_group_kernel](
+                lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi),
+                grid_dim=_blocks((nrhs + 3) // 4), block_dim=TPB,
+            )
+        elif TRS_DIAG_FITS:
             ctx.enqueue_function[trs_diag_kernel](
                 lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi),
                 grid_dim=(nrhs + TRS_DIAG_COLS - 1) // TRS_DIAG_COLS, block_dim=TRS_DIAG_TPB,
@@ -2483,6 +2583,37 @@ struct DevExec(Exec):
         _ = dp^
         ctx.synchronize()
         _ = ctx^
+
+    @staticmethod
+    def classical_centered_gram(x: F32Ptr, means: F32Ptr, out: F32Ptr, n: Int, d: Int) raises:
+        var ctx = xd_ctx()
+        var dx = _up(ctx, x, n * d)
+        var dm = _up(ctx, means, d)
+        var dg = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+        if d > 0:
+            ctx.enqueue_function[centered_gram_kernel](_p(dx), _p(dm), _p(dg), Int32(n), Int32(d),
+                                                      grid_dim=_blocks(d * d), block_dim=TPB)
+        _down(ctx, dg, out, d * d)
+        ctx.synchronize()
+        _ = dx^
+        _ = dm^
+        _ = dg^
+
+    @staticmethod
+    def classical_contrast(y: F32Ptr, gx: F32Ptr, gp: F32Ptr, count: Int, fun: Int, alpha: Float32) raises:
+        var ctx = xd_ctx()
+        var dy = _up(ctx, y, count)
+        var dg = ctx.enqueue_create_buffer[DType.float32](max(count, 1))
+        var dp = ctx.enqueue_create_buffer[DType.float32](max(count, 1))
+        if count > 0:
+            ctx.enqueue_function[contrast_kernel](_p(dy), _p(dg), _p(dp), Int32(count), Int32(fun), alpha,
+                                                 grid_dim=_blocks(count), block_dim=TPB)
+        _down(ctx, dg, gx, count)
+        _down(ctx, dp, gp, count)
+        ctx.synchronize()
+        _ = dy^
+        _ = dg^
+        _ = dp^
 
     @staticmethod
     def ew(
@@ -3446,7 +3577,10 @@ struct DevExec(Exec):
         comptime if DECOMP_FAST_LASSO_GRP:
             # lane/apple-fast-gap-clus3: a 32-thread block per row (x_decomp/lasso_grp.mojo)
             grp = n > 0 and k >= 1 and k <= LG_MAXK
-        if grp:
+        if C28_BUCKET_SOLVES:
+            launch_classical_code_rows(ctx, _p(dg), _p(dq), _p(dw), _p(dh), _p(di), n, k, 0, max_iter,
+                                      1 if positive else 0, alpha, tol)
+        elif grp:
             ctx.enqueue_function[lasso_grp_kernel](
                 dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
                 alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=n, block_dim=LG_TPB,
@@ -3530,10 +3664,13 @@ struct DevExec(Exec):
         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
         var ds = ctx.enqueue_create_buffer[DType.float32](n * per if n * per > 0 else 1)
         var dn = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[lars_rows_kernel](
-            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
-            Int32(m), Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
-        )
+        if C28_BUCKET_SOLVES:
+            launch_classical_code_rows(ctx, _p(dg), _p(dq), _p(dw), _p(ds), _p(dn), n, k, 1, m, nnz, Float32(0), Float32(0))
+        else:
+            ctx.enqueue_function[lars_rows_kernel](
+                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+                Int32(m), Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
+            )
         _down(ctx, dw, w, n * k)
         _down(ctx, dn, na, n)
         ctx.synchronize()
@@ -3564,7 +3701,9 @@ struct DevExec(Exec):
                     dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
                     Int32(nnz), grid_dim=n, block_dim=OMP_TPB,
                 )
-        if not block:
+        if C28_BUCKET_SOLVES:
+            launch_classical_code_rows(ctx, _p(dg), _p(dq), _p(dw), _p(ds), _p(dn), n, k, 2, nnz, 0, Float32(0), Float32(0))
+        elif not block:
             ctx.enqueue_function[omp_rows_kernel](
                 dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
                 Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
@@ -3969,8 +4108,7 @@ struct DevExec(Exec):
         var tb = _up(ctx, b, m)
         var d_sx = ctx.enqueue_create_buffer[DType.uint64](d)
         var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
-        col_sums_buf(ctx, ta, d_sx, m, d)
-        col_sums_buf(ctx, tb, d_sy, m, 1)
+        col_sums_pair_buf(ctx, ta, tb, d_sx, d_sy, m, d)
         var d_mx = ctx.enqueue_create_buffer[DType.float32](d)
         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
         var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n)

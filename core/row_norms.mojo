@@ -117,3 +117,66 @@ def row_norm_kernel(
             # column this fixes is NVIDIA.
             total = ftz(identical_sqrt(total))
         out_norm.unsafe_store(row, total)
+
+
+# C06 schedules independent rows in one block. Each row retains NORM_TPB
+# logical lanes and the incumbent halving fold. 2/4 rows are independent
+# arms: 2/4 times the shared storage, fewer blocks, no shape-specific route.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+from experiments.classical_identical_ideas.shared_controls import C06_ROWS2, C06_ROWS4
+from max.gpu.host import DeviceContext, DeviceBuffer
+comptime CLASSICAL_NORM_ROWS = 4 if C06_ROWS4 else (2 if C06_ROWS2 else 1)
+
+
+def batched_row_norm_kernel[rows_per_block: Int](
+    out_norm: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin], n_rows_in: Int32,
+    n_cols_in: Int32, take_sqrt_in: Int32,
+):
+    var lane = Int(thread_idx.x)
+    var local_row = Int(thread_idx.y)
+    var row = Int(block_idx.x) * rows_per_block + local_row
+    var slab = stack_allocation[NORM_TPB * rows_per_block, Float32, address_space=AddressSpace.SHARED]()
+    var acc = Float32(0)
+    if row < Int(n_rows_in):
+        var col = lane
+        while col < Int(n_cols_in):
+            var v = ftz(a.unsafe_load(row * Int(n_cols_in) + col))
+            acc = ftz(identical_mul_add(v, v, acc))
+            col += NORM_TPB
+    var at = local_row * NORM_TPB + lane
+    slab[at] = acc
+    barrier()
+    var step = NORM_TPB // 2
+    while step > 0:
+        if lane < step:
+            slab[at] = ftz(slab[at] + slab[at + step])
+        barrier()
+        step //= 2
+    if lane == 0 and row < Int(n_rows_in):
+        var total = ftz(slab[at])
+        if take_sqrt_in != 0:
+            if total <= Float32(0):
+                total = Float32(0)
+            total = ftz(identical_sqrt(total))
+        out_norm.unsafe_store(row, total)
+
+
+def enqueue_row_norms(
+    ctx: DeviceContext, mut output: DeviceBuffer[DType.float32],
+    mut values: DeviceBuffer[DType.float32], rows: Int, cols: Int,
+    take_sqrt: Int = 0,
+) raises:
+    if rows <= 0:
+        return
+    comptime if C06_ROWS2 or C06_ROWS4:
+        ctx.enqueue_function[batched_row_norm_kernel[CLASSICAL_NORM_ROWS]](
+            output.unsafe_ptr(), values.unsafe_ptr(), Int32(rows), Int32(cols), Int32(take_sqrt),
+            grid_dim=(rows + CLASSICAL_NORM_ROWS - 1) // CLASSICAL_NORM_ROWS,
+            block_dim=(NORM_TPB, CLASSICAL_NORM_ROWS),
+        )
+    else:
+        ctx.enqueue_function[row_norm_kernel](
+            output.unsafe_ptr(), values.unsafe_ptr(), Int32(cols), Int32(take_sqrt),
+            grid_dim=rows, block_dim=NORM_TPB,
+        )

@@ -1,3 +1,8 @@
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from core.classical_distance import direct_distance_step
+from checks.numerics import identical_sqrt
+from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
+from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The mutual reachability MST without the m x m graph, on the device.
@@ -57,7 +62,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
-from core.row_norms import NORM_TPB, row_norm_kernel
+from core.row_norms import NORM_TPB, row_norm_kernel, enqueue_row_norms
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
 from hdbscan.impl.detail.sparse_mr import mr_edge_weight
 from hdbscan.impl.detail.fast_apple import HDB_SMR_TILED
@@ -81,6 +86,15 @@ comptime SMR_NONE_J: Int32 = -1
 comptime SMR_BAD_J: Int32 = -2
 comptime SMR_POISON_J: Int32 = -3
 comptime SMR_KEY_MIN: Int32 = -0x7FFFFFFF - 1
+
+
+@always_inline
+def _c30_mr_edge_weight(acc: Float32, na: Float32, nb: Float32, ca: Float32, cb: Float32, inv_alpha: Float32, sabotage: Int32) -> Float32:
+    comptime if C30_DIRECT_DISTANCE:
+        var d = Float32(0) if acc <= Float32(0) else acc
+        return mr_max3(ca,cb,mr_scale(inv_alpha,ftz(identical_sqrt(d))),sabotage)
+    else:
+        return mr_edge_weight(acc,na,nb,ca,cb,inv_alpha,sabotage)
 
 
 def sparse_mr_search_kernel(
@@ -132,8 +146,11 @@ def sparse_mr_search_kernel(
             continue
         var acc = Float32(0.0)
         for f in range(d):
-            acc = ftz(identical_mul_add(ftz(xt[f * m + i]), ftz(x[j * d + f]), acc))
-        var v = mr_edge_weight(acc, ni, norms[j], cri, core[j], inv_alpha, sabotage)
+            comptime if C30_DIRECT_DISTANCE:
+                acc = direct_distance_step[1](acc,xt[f*m+i],x[j*d+f])
+            else:
+                acc = ftz(identical_mul_add(ftz(xt[f * m + i]), ftz(x[j * d + f]), acc))
+        var v = _c30_mr_edge_weight(acc, ni, norms[j], cri, core[j], inv_alpha, sabotage)
         if (bitcast[DType.uint32](v) & 0x7F800000) == 0x7F800000:
             bad = True
             continue
@@ -320,9 +337,12 @@ def sparse_mr_search_tiled_kernel(
                     bv[c] = b_s[unsafe_offset = kk * SMR_TJ + tx + c * SMR_TX]
                 comptime for r in range(SMR_RI):
                     comptime for c in range(SMR_RJ):
-                        acc[r * SMR_RJ + c] = ftz(
-                            identical_mul_add(av[r], bv[c], acc[r * SMR_RJ + c])
-                        )
+                        comptime if C30_DIRECT_DISTANCE:
+                            acc[r*SMR_RJ+c] = direct_distance_step[1](acc[r*SMR_RJ+c],av[r],bv[c])
+                        else:
+                            acc[r * SMR_RJ + c] = ftz(
+                                identical_mul_add(av[r], bv[c], acc[r * SMR_RJ + c])
+                            )
             barrier()
             k0 += SMR_KC
         comptime for c in range(SMR_RJ):
@@ -332,7 +352,7 @@ def sparse_mr_search_tiled_kernel(
             if j < jb:
                 comptime for r in range(SMR_RI):
                     if ci[r] >= 0 and cj != ci[r]:
-                        var v = mr_edge_weight(
+                        var v = _c30_mr_edge_weight(
                             acc[r * SMR_RJ + c], ni[r], nj_s[unsafe_offset=jj],
                             cri[r], crj_s[unsafe_offset=jj], inv_alpha, sabotage,
                         )
@@ -732,6 +752,45 @@ def smr_merge_kernel(
         pj[i] = jj
 
 
+def _c34_component_edge(comp: _I32P,pk: _I32P,pj: _I32P,state: _I32P,ckey: _I32P,clo: _I32P,chi: _I32P,m: Int32):
+    # One component owns a canonical triple reduction. 128 lanes and 1536
+    # shared bytes are scheduling choices; weight/endpoints define the key.
+    var component=Int(block_idx.x)
+    var lane=Int(thread_idx.x)
+    var ks=stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
+    var ls=stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
+    var hs=stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
+    var key=WEIGHT_KEY_SENTINEL
+    var lo=Int32.MAX
+    var hi=Int32.MAX
+    for row in range(lane,Int(m),128):
+        if Int(comp[row])==component and state[row]!=SMR_DROPPED and pj[row]>=0:
+            var lk=min(Int32(row),pj[row])
+            var hk=max(Int32(row),pj[row])
+            if pk[row]<key or (pk[row]==key and (lk<lo or (lk==lo and hk<hi))):
+                key=pk[row]
+                lo=lk
+                hi=hk
+    ks[lane]=key
+    ls[lane]=lo
+    hs[lane]=hi
+    barrier()
+    var width=64
+    while width>0:
+        if lane<width:
+            var other=lane+width
+            if ks[other]<ks[lane] or (ks[other]==ks[lane] and (ls[other]<ls[lane] or (ls[other]==ls[lane] and hs[other]<hs[lane]))):
+                ks[lane]=ks[other]
+                ls[lane]=ls[other]
+                hs[lane]=hs[other]
+        barrier()
+        width//=2
+    if lane==0:
+        ckey[component]=ks[0]
+        clo[component]=ls[0]
+        chi[component]=hs[0]
+
+
 def smr_cmin_key_kernel(
     comp: _I32P, pk: _I32P, pj: _I32P, state: _I32P, ckey: _I32P,
     m_in: Int32,
@@ -1117,10 +1176,7 @@ def sparse_mr_mst_device(
         raise Error("hdbscan.sparse_mr_mst: m=" + String(m) + " < 2")
     # `pairwise_distances`'s norms: the same kernel, the same launch.
     var norms_d = ctx.enqueue_create_buffer[DType.float32](m)
-    ctx.enqueue_function[row_norm_kernel](
-        norms_d.unsafe_ptr(), x.unsafe_ptr(), Int32(d), Int32(0),
-        grid_dim=(m, 1, 1), block_dim=(NORM_TPB, 1, 1),
-    )
+    enqueue_row_norms(ctx, norms_d, x, m, d)
     # the feature-major copy on the device (moves words, no arithmetic)
     var xt_d = ctx.enqueue_create_buffer[DType.float32](m * d)
     ctx.enqueue_function[transpose_kernel](
@@ -1232,22 +1288,25 @@ def sparse_mr_mst_device(
             n_b, m, d, inv_alpha, sabotage, launch_macs,
         )
         # Each component's cheapest edge under (key, lo, hi).
-        ctx.enqueue_function[smr_cmin_key_kernel](
-            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
-            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), Int32(m),
-            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-        )
-        ctx.enqueue_function[smr_cmin_lo_kernel](
-            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
-            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
-            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-        )
-        ctx.enqueue_function[smr_cmin_hi_kernel](
-            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
-            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
-            chi_d.unsafe_ptr(), Int32(m),
-            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-        )
+        comptime if C34_PARALLEL_EDGES:
+            ctx.enqueue_function[_c34_component_edge](comp_d.unsafe_ptr(),pk_d.unsafe_ptr(),pj_d.unsafe_ptr(),state_d.unsafe_ptr(),ckey_d.unsafe_ptr(),clo_d.unsafe_ptr(),chi_d.unsafe_ptr(),Int32(m),grid_dim=(m,1,1),block_dim=128)
+        else:
+            ctx.enqueue_function[smr_cmin_key_kernel](
+                comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+                state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), Int32(m),
+                grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+            )
+            ctx.enqueue_function[smr_cmin_lo_kernel](
+                comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+                state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
+                Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+            )
+            ctx.enqueue_function[smr_cmin_hi_kernel](
+                comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+                state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
+                chi_d.unsafe_ptr(), Int32(m),
+                grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+            )
         ctx.enqueue_function[smr_winner_kernel](
             comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
             state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),

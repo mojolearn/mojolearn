@@ -141,6 +141,7 @@ from gemm.checks.gemm_identical import (
 from solver.impl.linalg.norm import col_norm_l2_squared
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
+from experiments.classical_identical_ideas.linear_controls import C18_TILE64, C18_GRAM_PREFETCH
 from solver.impl.cd_gram_rule import CD_IDN_GRAM_ON, cd_idn_gram_shape
 from checks.rtf_seam import rtf_mul_add
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
@@ -730,7 +731,10 @@ def cd_step_kernel(
 # Every stored word is the same expression of the same words, so no bit
 # moves. -D MOJOLEARN_CD_FUSED_OFF=1 restores the six-launch sweep.
 comptime CD_FUSED_LEAVES = 4
-comptime CD_FUSED_STEPS = 128
+# C18_TILE64 halves the live residual window, independent of data dimensions;
+# every canonical leaf still consumes rows ascending. B retains 128 rows.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime CD_FUSED_STEPS = 64 if C18_TILE64 else 128
 comptime CD_FUSED_TPB = 128
 comptime CD_FUSED_PER_THREAD = CD_FUSED_LEAVES * CD_FUSED_STEPS // CD_FUSED_TPB
 comptime CD_FUSED = (
@@ -1069,7 +1073,15 @@ def cd_idn_gram_sweep_kernel(
         if live and tid == 0:
             sh[unsafe_offset = 1] = Float32(0.0)
             sh[unsafe_offset = 2] = Float32(0.0)
+        var gram_word = Float32(0)
+        comptime if C18_GRAM_PREFETCH:
+            if tid < p:
+                gram_word = ftz(g.unsafe_load(tid * p))
         for j in range(p):
+            var next_gram = Float32(0)
+            comptime if C18_GRAM_PREFETCH:
+                if tid < p and j + 1 < p:
+                    next_gram = ftz(g.unsafe_load(tid * p + j + 1))
             if live and tid == j:
                 var old = ftz(coef.unsafe_load(j))
                 var c = ftz(identical_mul_add(ftz(g.unsafe_load(j * p + j)), old, qk))
@@ -1098,9 +1110,11 @@ def cd_idn_gram_sweep_kernel(
             if live and tid < p:
                 qk = ftz(
                     identical_mul_add(
-                        sh[unsafe_offset = 0], ftz(g.unsafe_load(tid * p + j)), qk
+                        sh[unsafe_offset = 0], gram_word if C18_GRAM_PREFETCH else ftz(g.unsafe_load(tid * p + j)), qk
                     )
                 )
+            comptime if C18_GRAM_PREFETCH:
+                gram_word = next_gram
             barrier()
         if live and tid == 0:
             var cmax = sh[unsafe_offset = 1]

@@ -1,3 +1,4 @@
+from experiments.classical_identical_ideas.graph_controls import C38_REUSE_NEAREST
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Helpers every cluster-lane driver shares (lane/algos-cluster), compiled
@@ -94,7 +95,10 @@ def greedy_kmeans_pp_indices[O: ClusterOps](
             vs.append(rng.unit() * pot)
         ops.kpp_search(closest, ws, m, vs, ids)
         ops.gather_rows(xs, d, ids, n_trials, cslot)
-        ops.sqdist(cslot, n_trials, xs, m, d, dc_s)
+        comptime if C38_REUSE_NEAREST:
+            ops.kpp_distinct(cslot,ids,n_trials,xs,m,d,dc_s)
+        else:
+            ops.sqdist(cslot, n_trials, xs, m, d, dc_s)
         var pots = ops.kpp_pots(dc_s, closest, ws, n_trials, m)
         var best = 0
         for t in range(1, n_trials):

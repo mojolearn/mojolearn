@@ -1,0 +1,394 @@
+{
+  "schema": 1,
+  "id": "C36",
+  "title": "Reuse KMeans centroid tiles through assignment",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "cluster/impl/detail/classical_assignment.mojo",
+    "cluster/impl/detail/min_cluster_distance_compute.mojo",
+    "x_cluster/device_ops.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_C36_CENTROID_TILES"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Labels, centers, inertia, iterations and initialization trajectories across multiple seeds.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C36",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C36",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C36",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C36",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C36",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/graph_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/graph_controls.mojo"
+  ],
+  "default_configuration": "centroid_tiles",
+  "configurations": {
+    "centroid_tiles": {
+      "name": "centroid_tiles",
+      "candidate_defines": [
+        "MOJOLEARN_C36_CENTROID_TILES"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C36"
+      ],
+      "source_gaps": [
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured."
+      ],
+      "scope": [
+        "KMeans",
+        "MiniBatchKMeans",
+        "BisectingKMeans",
+        "IVFFlat training"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ]
+    },
+    "centroid_tiles_rows_4": {
+      "name": "centroid_tiles_rows_4",
+      "candidate_defines": [
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C36_ROWS_4"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C36"
+      ],
+      "source_gaps": [
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured."
+      ],
+      "scope": [
+        "KMeans",
+        "MiniBatchKMeans",
+        "BisectingKMeans",
+        "IVFFlat training"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ]
+    },
+    "combined": {
+      "name": "combined",
+      "selectable": true,
+      "candidate_ids": [
+        "C36"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C36_ROWS_4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "component_arms": [
+        {
+          "id": "C36",
+          "configuration": "centroid_tiles"
+        },
+        {
+          "id": "C36",
+          "configuration": "centroid_tiles_rows_4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_kmeans_complete": {
+      "name": "interaction_kmeans_complete",
+      "selectable": true,
+      "candidate_ids": [
+        "C36",
+        "C37",
+        "C38",
+        "C39"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C36_ROWS_4",
+        "MOJOLEARN_C37_ROW_PANELS",
+        "MOJOLEARN_C37_PANEL_128",
+        "MOJOLEARN_C38_REUSE_NEAREST",
+        "MOJOLEARN_C38_DEVICE_POTENTIAL",
+        "MOJOLEARN_C39_RETAIN_STATE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+        "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach.",
+        "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "component_arms": [
+        {
+          "id": "C36",
+          "configuration": "combined"
+        },
+        {
+          "id": "C37",
+          "configuration": "combined"
+        },
+        {
+          "id": "C38",
+          "configuration": "combined"
+        },
+        {
+          "id": "C39",
+          "configuration": "retain_state"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c36_c37": {
+      "name": "interaction_c36_c37",
+      "selectable": true,
+      "candidate_ids": [
+        "C36",
+        "C37"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C37_ROW_PANELS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "component_arms": [
+        {
+          "id": "C36",
+          "configuration": "centroid_tiles"
+        },
+        {
+          "id": "C37",
+          "configuration": "row_panels"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c36_c38": {
+      "name": "interaction_c36_c38",
+      "selectable": true,
+      "candidate_ids": [
+        "C36",
+        "C38"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C38_REUSE_NEAREST"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+        "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "component_arms": [
+        {
+          "id": "C36",
+          "configuration": "centroid_tiles"
+        },
+        {
+          "id": "C38",
+          "configuration": "reuse_nearest"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c36_c39": {
+      "name": "interaction_c36_c39",
+      "selectable": true,
+      "candidate_ids": [
+        "C36",
+        "C39"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C39_RETAIN_STATE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+        "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "component_arms": [
+        {
+          "id": "C36",
+          "configuration": "centroid_tiles"
+        },
+        {
+          "id": "C39",
+          "configuration": "retain_state"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured."
+  ],
+  "catalog_estimators": [
+    "KMeans",
+    "MiniBatchKMeans",
+    "BisectingKMeans",
+    "IVF training"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "classical:kmeans",
+    "expanded:minibatch-kmeans",
+    "expanded:bisecting-kmeans",
+    "more:ivf"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

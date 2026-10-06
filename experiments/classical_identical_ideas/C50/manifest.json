@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "C50",
+  "title": "Packed forest inference and fixed tree-output reduction",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "blocked_prerequisite",
+  "implementation_paths": [],
+  "validation_paths": [],
+  "candidate_defines": [],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Decision paths, leaf IDs, scores/probabilities and predict outputs; unbalanced depths and repeated/cold use.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [],
+  "baseline_build_argv": [],
+  "validation_argv": [],
+  "timing_argv": [],
+  "run_argv": [],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": "External TREES IDENTICAL lane owns C45\u2013C51; retained and cross-referenced only.",
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [],
+  "controls_paths": [],
+  "default_configuration": null,
+  "configurations": {},
+  "source_gaps": [],
+  "catalog_estimators": [
+    "GBDT",
+    "RandomForest",
+    "ExtraTrees",
+    "IsolationForest"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [],
+  "external_owner": "TREES IDENTICAL",
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

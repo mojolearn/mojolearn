@@ -22,6 +22,7 @@ The caller passes zeros for the fold ids; the host binding fills them
 (`logcv_fold_ids`) and the device binding builds them on the grid
 (x_linear/logcv_grid.mojo) from the same table.
 """
+from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fmax, ld, st, ldi, sti, i2f, fill, copy, row_dot,
     axpy_acc, par_rows, row_dots,
@@ -163,6 +164,26 @@ def logcv_rows(t: Team, y: FP, n: Int, fold: Int, kp: Int) -> Int:
 
 
 @always_inline
+
+def lcv_disjoint_weight(y: FP, n: Int, fold: Int, weighted: Bool) -> Float32:
+    """C13 weighted LogCV preparation: immutable fold sum, rows ascending.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    var total = Float32(0)
+    for i in range(n):
+        if Int(ld(y, n + i)) == fold:
+            total = fa(total, ld(y, 2 * n + i) if weighted else Float32(1))
+    return total
+
+
+def lcv_retained_weight(cache: FP, folds: Int, held: Int) -> Float32:
+    var total = Float32(0)
+    for f in range(folds):
+        if f != held:
+            total = fa(total, ld(cache, f))
+    return total
+
+
 def _logcv_part(o: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw: Bool, fold: Int, ix: IP, cnt: Int,
                 bk: Int, t: Team) -> Float32:
     return logcv_part_rows(o, x, y, n, d, kp, fi, sw, fold, ix, cnt, bk, t.row(0))
@@ -196,7 +217,7 @@ def logcv_part_rows(o: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw:
         if fold >= 0:
             return fold_fa_ix(lt, ix + lo, cb)
         return fold_fa(lt, lo, 1, cb)
-    if not sw:
+    if not sw or C13_LOGCV_WEIGHTS:
         return Float32(0)
     if fold >= 0:
         return fold_fa_ix(y, ix + lo, cb, 2 * n)
@@ -339,6 +360,8 @@ def _logistic_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: 
                 acc = fa(acc, _logcv_part(p, x, y, n, d, kp, fi, sw, fold, ix, cnt, bk, t))
                 if sw:
                     wrows = fa(wrows, _logcv_part(p + 1, x, y, n, d, kp, fi, sw, fold, ix, cnt, bk, t))
+        comptime if C13_LOGCV_WEIGHTS:
+            wrows = ld(fp, 1) if sw else Float32(0)
         out = logcv_finish(g, goff, th, toff, kp, d, sw, c, cnt, acc, wrows)
     return t.bcast(out)
 
@@ -425,11 +448,11 @@ def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
                 st(pg, o, Float32(0))
             acc = fa(acc, pacc)
             pacc = Float32(0)
-            if sw:
+            if sw and not C13_LOGCV_WEIGHTS:
                 wrows = fa(wrows, pw)
                 pw = Float32(0)
         rows += 1
-        if sw:
+        if sw and not C13_LOGCV_WEIGHTS:
             pw = fa(pw, ld(y, 2 * n + i))
         pacc = fa(pacc, ld(sl, i))
         for k in range(kp):
@@ -441,9 +464,11 @@ def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
         for o in range(p):
             st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
         acc = fa(acc, pacc)
-        if sw:
+        if sw and not C13_LOGCV_WEIGHTS:
             wrows = fa(wrows, pw)
     _ = pl^
+    comptime if C13_LOGCV_WEIGHTS:
+        wrows = ld(fp, 1) if sw else Float32(0)
     return logcv_finish(g, goff, th, toff, kp, d, sw, c, rows, acc, wrows)
 
 
@@ -530,7 +555,8 @@ def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, s
     var p = kp * stride
     var th = 0
     var cslot = p
-    var work = p + 1 + n * (kp + 1)
+    var extra = nf + 2 if C13_LOGCV_WEIGHTS else 1
+    var work = p + extra + n * (kp + 1)
     var sc = kp * d + kp + 2
     if t.lead():
         sti(iw, 0, kp)
@@ -538,9 +564,15 @@ def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, s
         sti(iw, 3, ldi(ip, 5))
     var cptr = fw + cslot
     var hitr = t.row(0)
+    comptime if C13_LOGCV_WEIGHTS:
+        for f in range(t.tid, nf, t.nt):
+            st(cptr, 2 + f, lcv_disjoint_weight(y, n, f, ldi(ip, 5) != 0))
+        t.sync()
     for f in range(nf):
         var cnt = rows(t, y, n, f, kp)
         if t.lead():
+            comptime if C13_LOGCV_WEIGHTS:
+                st(cptr, 1, lcv_retained_weight(cptr + 2, nf, f))
             sti(iw, 2, f)
             sti(iw, 4, cnt)
             fill(fw, th, p, Float32(0))
@@ -549,7 +581,7 @@ def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, s
             if t.lead():
                 st(fw, cslot, ld(fp, 1 + ci))
             t.sync()
-            _ = lbfgs[obj](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + 1)
+            _ = lbfgs[obj](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + extra)
             # the held-out score: each row's hit (1) or miss (0), the lead's
             # blocked fold (weighted by the raw sample weights at y + 3n)
             var sc_v = score(t, x, y, n, d, kp if kp > 1 else 1, fi != 0, fw, th, f, hitr, ldi(ip, 5) != 0)
@@ -567,11 +599,13 @@ def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, s
             if ci == 0 or m > bs:  # DEVIATION 5005: the first best C
                 best = ci
                 bs = m
+        comptime if C13_LOGCV_WEIGHTS:
+            st(cptr, 1, lcv_retained_weight(cptr + 2, nf, -1))
         sti(iw, 2, -1)
         st(fw, cslot, ld(fp, 1 + best))
         fill(fw, th, p, Float32(0))
     best = t.bcast_int(best, 3)
-    var it = lbfgs[obj](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + 1)
+    var it = lbfgs[obj](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + extra)
     if not t.lead():
         return
     for k in range(kp):

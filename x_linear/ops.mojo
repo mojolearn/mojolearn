@@ -510,6 +510,36 @@ def chol_solve(l: FP, loff: Int, m: Int, b: FP, boff: Int):
         i -= 1
 
 
+
+def chol_solve_group(l: FP, loff: Int, m: Int, b: FP, first: Int, count: Int):
+    """C14: up to four column-major RHS share factor loads, same scalar chains.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    var values = InlineArray[Float32, 4](fill=Float32(0))
+    for i in range(m):
+        for t in range(count):
+            values[t] = ld(b, (first + t) * m + i)
+        for k in range(i):
+            var lik = ld(l, loff + i * m + k)
+            for t in range(count):
+                values[t] = fs(values[t], fm(lik, ld(b, (first + t) * m + k)))
+        var lii = ld(l, loff + i * m + i)
+        for t in range(count):
+            st(b, (first + t) * m + i, fd(values[t], lii))
+    var i = m - 1
+    while i >= 0:
+        for t in range(count):
+            values[t] = ld(b, (first + t) * m + i)
+        for k in range(i + 1, m):
+            var lki = ld(l, loff + k * m + i)
+            for t in range(count):
+                values[t] = fs(values[t], fm(lki, ld(b, (first + t) * m + k)))
+        var lii = ld(l, loff + i * m + i)
+        for t in range(count):
+            st(b, (first + t) * m + i, fd(values[t], lii))
+        i -= 1
+
+
 def jacobi_eig(a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):
     """Cyclic Jacobi (Golub & Van Loan, Algorithm 8.5.3, the classical
     rotation of Rutishauser's form) on the symmetric m x m block at `aoff`:

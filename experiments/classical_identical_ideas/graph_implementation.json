@@ -1,0 +1,1766 @@
+{
+  "schema": 1,
+  "lane": "graph",
+  "branch": "ideas/classical-identical-20261006",
+  "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "controls": "experiments/classical_identical_ideas/graph_controls.mojo",
+  "runtime_reach": "NOT DEMONSTRATED: source edits only; execution prohibited by request",
+  "experiments": [
+    {
+      "id": "C29",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "stream_topk",
+          "a_defines": [
+            "MOJOLEARN_C29_STREAM_TOPK"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "stream_topk_tile_128",
+          "a_defines": [
+            "MOJOLEARN_C29_STREAM_TOPK",
+            "MOJOLEARN_C29_TILE_128"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": [],
+          "modifier_requires": {
+            "MOJOLEARN_C29_TILE_128": "MOJOLEARN_C29_STREAM_TOPK"
+          }
+        }
+      ],
+      "estimators": [
+        "NearestNeighbors",
+        "KNNClassifier",
+        "KNNRegressor",
+        "LocalOutlierFactor",
+        "exact graph construction"
+      ],
+      "production_paths": [
+        "neighbors/impl/detail/knn_brute_force.mojo",
+        "neighbors/impl/detail/classical_stream_topk.mojo",
+        "neighbors/estimator.mojo",
+        "core/knn_host_predict.mojo"
+      ],
+      "recipe_refs": [
+        "classical:knn",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "Reuse I15/A06 selection machinery; split new full-caller tile/merge arms from prior experiments.",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "NearestNeighbors",
+          "saved_recipe_refs": [
+            "classical:knn"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "KNNClassifier",
+          "saved_recipe_refs": [
+            "classical:knn"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "KNNRegressor",
+          "saved_recipe_refs": [
+            "classical:knn"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "LocalOutlierFactor",
+          "saved_recipe_refs": [
+            "expanded:lof"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "exact graph construction",
+          "saved_recipe_refs": [
+            "expanded:label-propagation",
+            "expanded:label-spreading",
+            "expanded:isomap",
+            "expanded:lle"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C30",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "direct_distance",
+          "a_defines": [
+            "MOJOLEARN_C30_DIRECT_DISTANCE"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "direct_distance_rows_4",
+          "a_defines": [
+            "MOJOLEARN_C30_DIRECT_DISTANCE",
+            "MOJOLEARN_C30_ROWS_4"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": [],
+          "modifier_requires": {
+            "MOJOLEARN_C30_ROWS_4": "MOJOLEARN_C30_DIRECT_DISTANCE"
+          }
+        }
+      ],
+      "estimators": [
+        "KNN",
+        "KMeans",
+        "KDE",
+        "RBF kernels",
+        "RadiusNeighbors",
+        "DBSCAN",
+        "IVFFlat",
+        "HDBSCAN",
+        "hierarchy single-linkage"
+      ],
+      "production_paths": [
+        "core/classical_distance.mojo",
+        "core/knn_host_predict.mojo",
+        "neighbors/impl/detail/knn_brute_force.mojo",
+        "cluster/impl/detail/classical_assignment.mojo",
+        "cluster/host/kmeans_oracle.mojo",
+        "neighbors/impl/ball_cover/common.mojo",
+        "dbscan/impl/neighbors/epsilon_neighborhood.mojo",
+        "dbscan/host/dbscan_oracle.mojo",
+        "cluster/impl/detail/kmeans_transform.mojo",
+        "cluster/checks/plus_plus.mojo",
+        "cluster/impl/detail/kmeans.mojo",
+        "ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo",
+        "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo",
+        "ivf/host/ivf_host.mojo",
+        "hierarchy/checks/linkage_oracle.mojo",
+        "hdbscan/host/hdbscan_host_oracle.mojo",
+        "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo"
+      ],
+      "recipe_refs": [
+        "classical:knn",
+        "classical:kmeans",
+        "classical:kde",
+        "classical:svc",
+        "classical:dbscan",
+        "expanded:radius-neighbors",
+        "more:ivf",
+        "classical:hdbscan",
+        "more:agglomerative"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "New extension",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "KNN",
+          "saved_recipe_refs": [
+            "classical:knn"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "KMeans",
+          "saved_recipe_refs": [
+            "classical:kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "KDE",
+          "saved_recipe_refs": [
+            "classical:kde"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "RBF kernels",
+          "saved_recipe_refs": [
+            "classical:svc",
+            "more:gpr",
+            "more:gpc"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "RadiusNeighbors",
+          "saved_recipe_refs": [
+            "expanded:radius-neighbors"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "DBSCAN",
+          "saved_recipe_refs": [
+            "classical:dbscan"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "IVFFlat",
+          "saved_recipe_refs": [
+            "more:ivf"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "HDBSCAN",
+          "saved_recipe_refs": [
+            "classical:hdbscan"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "hierarchy single-linkage",
+          "saved_recipe_refs": [
+            "more:agglomerative"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C31",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "device_buckets",
+          "a_defines": [
+            "MOJOLEARN_C31_DEVICE_BUCKETS"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        }
+      ],
+      "estimators": [
+        "RadiusNeighbors",
+        "DBSCAN",
+        "HDBSCAN graph preparation"
+      ],
+      "production_paths": [
+        "neighbors/checks/ball_cover_canonical_order.mojo",
+        "neighbors/impl/ball_cover/registers.mojo"
+      ],
+      "recipe_refs": [
+        "expanded:radius-neighbors",
+        "classical:dbscan",
+        "classical:hdbscan"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "Follow-up to I13 stable canonical merge, not its initial implementation.",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "RadiusNeighbors",
+          "saved_recipe_refs": [
+            "expanded:radius-neighbors"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "DBSCAN",
+          "saved_recipe_refs": [
+            "classical:dbscan"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "HDBSCAN graph preparation",
+          "saved_recipe_refs": [
+            "classical:hdbscan"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C32",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "count_fusion",
+          "a_defines": [
+            "MOJOLEARN_C32_COUNT_FUSION"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "emit_fusion",
+          "a_defines": [
+            "MOJOLEARN_C32_EMIT_FUSION"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "count_fusion_emit_fusion",
+          "a_defines": [
+            "MOJOLEARN_C32_COUNT_FUSION",
+            "MOJOLEARN_C32_EMIT_FUSION"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        }
+      ],
+      "estimators": [
+        "RadiusNeighbors",
+        "DBSCAN",
+        "radius graph building"
+      ],
+      "production_paths": [
+        "neighbors/impl/ball_cover/registers.mojo",
+        "neighbors/estimator.mojo",
+        "dbscan/impl/runner.mojo"
+      ],
+      "recipe_refs": [
+        "expanded:radius-neighbors",
+        "classical:dbscan"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "Reuse N08; extend vendor-neutral caller integration.",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "RadiusNeighbors",
+          "saved_recipe_refs": [
+            "expanded:radius-neighbors"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "DBSCAN",
+          "saved_recipe_refs": [
+            "classical:dbscan"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "radius graph building",
+          "saved_recipe_refs": [
+            "expanded:radius-neighbors",
+            "classical:dbscan"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C33",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "frozen_chunks",
+          "a_defines": [
+            "MOJOLEARN_C33_FROZEN_CHUNKS"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "frozen_chunks_chunk_4",
+          "a_defines": [
+            "MOJOLEARN_C33_FROZEN_CHUNKS",
+            "MOJOLEARN_C33_CHUNK_4"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": [],
+          "modifier_requires": {
+            "MOJOLEARN_C33_CHUNK_4": "MOJOLEARN_C33_FROZEN_CHUNKS"
+          }
+        }
+      ],
+      "estimators": [
+        "DBSCAN",
+        "ConnectedComponents",
+        "LabelPropagation",
+        "LabelSpreading"
+      ],
+      "production_paths": [
+        "x_neighbors/iter_device.mojo",
+        "dbscan/impl/sparse/detail/csr.mojo",
+        "dbscan/impl/label/merge_labels.mojo"
+      ],
+      "recipe_refs": [
+        "classical:dbscan",
+        "expanded:connected-components",
+        "expanded:label-propagation",
+        "expanded:label-spreading"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "Reuse I14 convergence machinery; include full graph callers and interactions.",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "DBSCAN",
+          "saved_recipe_refs": [
+            "classical:dbscan"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "ConnectedComponents",
+          "saved_recipe_refs": [
+            "expanded:connected-components"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "LabelPropagation",
+          "saved_recipe_refs": [
+            "expanded:label-propagation"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "LabelSpreading",
+          "saved_recipe_refs": [
+            "expanded:label-spreading"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C34",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "parallel_edges",
+          "a_defines": [
+            "MOJOLEARN_C34_PARALLEL_EDGES"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        }
+      ],
+      "estimators": [
+        "HDBSCAN",
+        "single-linkage clustering"
+      ],
+      "production_paths": [
+        "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "hierarchy/impl/sparse/solver/mst_solver.mojo",
+        "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo"
+      ],
+      "recipe_refs": [
+        "classical:hdbscan",
+        "more:agglomerative"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "New extension",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "HDBSCAN",
+          "saved_recipe_refs": [
+            "classical:hdbscan"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "single-linkage clustering",
+          "saved_recipe_refs": [
+            "more:agglomerative"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C35",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "packed_lists",
+          "a_defines": [
+            "MOJOLEARN_C35_PACKED_LISTS"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "packed_lists_rows_128",
+          "a_defines": [
+            "MOJOLEARN_C35_PACKED_LISTS",
+            "MOJOLEARN_C35_ROWS_128"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": [],
+          "modifier_requires": {
+            "MOJOLEARN_C35_ROWS_128": "MOJOLEARN_C35_PACKED_LISTS"
+          }
+        }
+      ],
+      "estimators": [
+        "IVFFlat search"
+      ],
+      "production_paths": [
+        "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo",
+        "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+        "ivf/resident.mojo"
+      ],
+      "recipe_refs": [
+        "more:ivf"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "Extend I16 scheduling with recorded scope; no duplication of already supplied staging arms.",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "IVFFlat search",
+          "saved_recipe_refs": [
+            "more:ivf"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C36",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "centroid_tiles",
+          "a_defines": [
+            "MOJOLEARN_C36_CENTROID_TILES"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "centroid_tiles_rows_4",
+          "a_defines": [
+            "MOJOLEARN_C36_CENTROID_TILES",
+            "MOJOLEARN_C36_ROWS_4"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": [],
+          "modifier_requires": {
+            "MOJOLEARN_C36_ROWS_4": "MOJOLEARN_C36_CENTROID_TILES"
+          }
+        }
+      ],
+      "estimators": [
+        "KMeans",
+        "MiniBatchKMeans",
+        "BisectingKMeans",
+        "IVFFlat training"
+      ],
+      "production_paths": [
+        "cluster/impl/detail/classical_assignment.mojo",
+        "cluster/impl/detail/min_cluster_distance_compute.mojo",
+        "x_cluster/device_ops.mojo"
+      ],
+      "recipe_refs": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "New extension",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "KMeans",
+          "saved_recipe_refs": [
+            "classical:kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "MiniBatchKMeans",
+          "saved_recipe_refs": [
+            "expanded:minibatch-kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "BisectingKMeans",
+          "saved_recipe_refs": [
+            "expanded:bisecting-kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "IVFFlat training",
+          "saved_recipe_refs": [
+            "more:ivf"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C37",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "row_panels",
+          "a_defines": [
+            "MOJOLEARN_C37_ROW_PANELS"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "row_panels_panel_128",
+          "a_defines": [
+            "MOJOLEARN_C37_ROW_PANELS",
+            "MOJOLEARN_C37_PANEL_128"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": [],
+          "modifier_requires": {
+            "MOJOLEARN_C37_PANEL_128": "MOJOLEARN_C37_ROW_PANELS"
+          }
+        }
+      ],
+      "estimators": [
+        "KMeans",
+        "MiniBatchKMeans",
+        "BisectingKMeans",
+        "IVFFlat training"
+      ],
+      "production_paths": [
+        "core/classical_centroid.mojo",
+        "cluster/impl/detail/classical_centroid.mojo",
+        "cluster/impl/detail/kmeans.mojo",
+        "cluster/host/kmeans_oracle.mojo",
+        "x_cluster/minibatch_cells.mojo",
+        "x_cluster/minibatch.mojo",
+        "x_cluster/device_ops.mojo",
+        "x_cluster/host/host_ops.mojo"
+      ],
+      "recipe_refs": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "A08 tested a geometry candidate; reuse evidence only when source/profile actually match.",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "KMeans",
+          "saved_recipe_refs": [
+            "classical:kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "MiniBatchKMeans",
+          "saved_recipe_refs": [
+            "expanded:minibatch-kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "BisectingKMeans",
+          "saved_recipe_refs": [
+            "expanded:bisecting-kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "IVFFlat training",
+          "saved_recipe_refs": [
+            "more:ivf"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C38",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "reuse_nearest",
+          "a_defines": [
+            "MOJOLEARN_C38_REUSE_NEAREST"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "device_potential",
+          "a_defines": [
+            "MOJOLEARN_C38_DEVICE_POTENTIAL"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "reuse_nearest_device_potential",
+          "a_defines": [
+            "MOJOLEARN_C38_REUSE_NEAREST",
+            "MOJOLEARN_C38_DEVICE_POTENTIAL"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        }
+      ],
+      "estimators": [
+        "KMeans initialization",
+        "MiniBatchKMeans initialization",
+        "BisectingKMeans",
+        "IVFFlat training"
+      ],
+      "production_paths": [
+        "cluster/impl/detail/kmeans.mojo",
+        "x_cluster/common.mojo",
+        "x_cluster/device_ops.mojo",
+        "x_cluster/host/host_ops.mojo",
+        "x_cluster/ops.mojo"
+      ],
+      "recipe_refs": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "Existing incremental init/PSI switches need selective recipe coverage; do not reinvent them.",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "KMeans initialization",
+          "saved_recipe_refs": [
+            "classical:kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "MiniBatchKMeans initialization",
+          "saved_recipe_refs": [
+            "expanded:minibatch-kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "BisectingKMeans",
+          "saved_recipe_refs": [
+            "expanded:bisecting-kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "IVFFlat training",
+          "saved_recipe_refs": [
+            "more:ivf"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C39",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "retain_state",
+          "a_defines": [
+            "MOJOLEARN_C39_RETAIN_STATE"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        }
+      ],
+      "estimators": [
+        "MiniBatchKMeans",
+        "BisectingKMeans"
+      ],
+      "production_paths": [
+        "x_cluster/minibatch.mojo",
+        "x_cluster/bisect.mojo",
+        "x_cluster/ops.mojo",
+        "x_cluster/device_ops.mojo",
+        "x_cluster/host/host_ops.mojo"
+      ],
+      "recipe_refs": [
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "New extension",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "MiniBatchKMeans",
+          "saved_recipe_refs": [
+            "expanded:minibatch-kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "BisectingKMeans",
+          "saved_recipe_refs": [
+            "expanded:bisecting-kmeans"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C40",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "seed_tiles",
+          "a_defines": [
+            "MOJOLEARN_C40_SEED_TILES"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "active_seeds",
+          "a_defines": [
+            "MOJOLEARN_C40_ACTIVE_SEEDS"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        },
+        {
+          "name": "seed_tiles_active_seeds",
+          "a_defines": [
+            "MOJOLEARN_C40_SEED_TILES",
+            "MOJOLEARN_C40_ACTIVE_SEEDS"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        }
+      ],
+      "estimators": [
+        "MeanShift"
+      ],
+      "production_paths": [
+        "x_cluster/meanshift_idn.mojo",
+        "x_cluster/device_ops.mojo"
+      ],
+      "recipe_refs": [
+        "expanded:meanshift"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "New extension",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "MeanShift",
+          "saved_recipe_refs": [
+            "expanded:meanshift"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C41",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "fused_minima",
+          "a_defines": [
+            "MOJOLEARN_C41_FUSED_MINIMA"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        }
+      ],
+      "estimators": [
+        "OPTICS"
+      ],
+      "production_paths": [
+        "x_cluster/device_post.mojo",
+        "x_cluster/device_ops.mojo",
+        "x_cluster/optics.mojo"
+      ],
+      "recipe_refs": [
+        "expanded:optics"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "New extension",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "OPTICS",
+          "saved_recipe_refs": [
+            "expanded:optics"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C42",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "active_triangle",
+          "a_defines": [
+            "MOJOLEARN_C42_ACTIVE_TRIANGLE"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        }
+      ],
+      "estimators": [
+        "AgglomerativeClustering",
+        "linkage"
+      ],
+      "production_paths": [
+        "x_cluster/device_ops.mojo",
+        "x_cluster/agglo.mojo"
+      ],
+      "recipe_refs": [
+        "more:agglomerative@active_linkage"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "New extension",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "AgglomerativeClustering",
+          "saved_recipe_refs": [
+            "more:agglomerative@active_linkage"
+          ],
+          "mapping_status": "Explicit public x_cluster variant adapter programmed; full saved variant settings and dataset facts pending. Original hierarchy single-linkage recipe is distinct.",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "linkage",
+          "saved_recipe_refs": [
+            "more:agglomerative@active_linkage"
+          ],
+          "mapping_status": "Explicit public x_cluster variant adapter programmed; full saved variant settings and dataset facts pending. Original hierarchy single-linkage recipe is distinct.",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ],
+      "harness_variant": "experiments/classical_identical_ideas/more_workloads.py: explicit classical_agglomerative adapter; settings/dataset facts pending. Uses public x_cluster route and same saved dataset preparation in A and B."
+    },
+    {
+      "id": "C43",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "resident_normalization",
+          "a_defines": [
+            "MOJOLEARN_C43_RESIDENT_NORMALIZATION"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        }
+      ],
+      "estimators": [
+        "SpectralEmbedding",
+        "SpectralClustering",
+        "LabelPropagation",
+        "PageRank",
+        "Isomap",
+        "LLE"
+      ],
+      "production_paths": [
+        "spectral/impl/sparse/linalg/detail/laplacian.mojo",
+        "spectral/impl/sparse/solver/detail/lanczos.mojo",
+        "x_neighbors/graph_par.mojo",
+        "x_neighbors/lp_knn.mojo",
+        "x_neighbors/iter_device.mojo",
+        "x_neighbors/iter_host.mojo",
+        "python/mojolearn/_expansion_neighbors.py",
+        "x_neighbors/classical_graph.mojo",
+        "bindings/_mojolearn_x_neighbors.mojo",
+        "bindings/_mojolearn_x_neighbors_host.mojo"
+      ],
+      "recipe_refs": [
+        "more:spectral-embedding",
+        "more:spectral",
+        "expanded:label-propagation",
+        "expanded:pagerank",
+        "expanded:isomap",
+        "expanded:lle"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "source_gaps": [
+        "Compact kNN LabelSpreading two-sided-degree descriptor",
+        "Isomap/LLE distinct dense graph contract"
+      ],
+      "prior_work_reference": "New extension",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "SpectralEmbedding",
+          "saved_recipe_refs": [
+            "more:spectral-embedding"
+          ],
+          "mapping_status": "Root located the saved more:spectral-embedding factory; full dataset facts and candidate runtime admission pending.",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "SpectralClustering",
+          "saved_recipe_refs": [
+            "more:spectral"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "LabelPropagation",
+          "saved_recipe_refs": [
+            "expanded:label-propagation"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "PageRank",
+          "saved_recipe_refs": [
+            "expanded:pagerank"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "Isomap",
+          "saved_recipe_refs": [
+            "expanded:isomap"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "LLE",
+          "saved_recipe_refs": [
+            "expanded:lle"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    },
+    {
+      "id": "C44",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "mode": "identical",
+      "source_integration": "production_callers_edited_not_executed",
+      "arms": [
+        {
+          "name": "sampling_descriptors",
+          "a_defines": [
+            "MOJOLEARN_C44_SAMPLING_DESCRIPTORS"
+          ],
+          "b_defines": [],
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "default_enabled": false,
+          "mode": "identical",
+          "requires": []
+        }
+      ],
+      "estimators": [
+        "UMAP",
+        "manifold graph preparation"
+      ],
+      "production_paths": [
+        "umap/optimizer_identical_device.mojo",
+        "umap/sparse_optimizer.mojo",
+        "umap/optimizer.mojo"
+      ],
+      "recipe_refs": [
+        "more:umap"
+      ],
+      "harness_owner": "root: experiments/classical_identical_ideas runner/discovery/full_workload",
+      "pending_recipe_facts": [
+        "saved dataset version/hash",
+        "actual full rows/features/classes and intrinsic caps",
+        "all estimator variant settings",
+        "consumed outputs for fit/inference/cold/repeated",
+        "neighboring-shape and non-board coverage"
+      ],
+      "remaining_gaps": [
+        "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced."
+      ],
+      "runtime_reach": "not_demonstrated",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request",
+      "control_contract": "A includes listed defines; B omits them. IDENTICAL required; FAST unaffected. No default promotion.",
+      "prior_work_reference": "New extension",
+      "prior_evidence_reuse": "No old I/A/N evidence treated as compilation, identity, quality, or timing evidence for this new source.",
+      "estimator_recipe_map": [
+        {
+          "estimator": "UMAP",
+          "saved_recipe_refs": [
+            "more:umap"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        },
+        {
+          "estimator": "manifold graph preparation",
+          "saved_recipe_refs": [
+            "more:umap",
+            "expanded:isomap",
+            "expanded:lle"
+          ],
+          "mapping_status": "source recipe entry located; full-data facts and estimator variant reach pending",
+          "mode": "identical",
+          "boundary": "preparation + fit/training + synchronization + consumed outputs; inference and cold/repeated separately where applicable"
+        }
+      ]
+    }
+  ],
+  "relevant_interactions": [
+    {
+      "name": "neighbors_direct_stream",
+      "a_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C30_DIRECT_DISTANCE"
+      ],
+      "b_defines": [],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "runtime_reach": "not_demonstrated"
+    },
+    {
+      "name": "radius_graph",
+      "a_defines": [
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C31_DEVICE_BUCKETS",
+        "MOJOLEARN_C32_COUNT_FUSION",
+        "MOJOLEARN_C32_EMIT_FUSION",
+        "MOJOLEARN_C33_FROZEN_CHUNKS"
+      ],
+      "b_defines": [],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "runtime_reach": "not_demonstrated"
+    },
+    {
+      "name": "hdbscan_distance_edges",
+      "a_defines": [
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C34_PARALLEL_EDGES"
+      ],
+      "b_defines": [],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "runtime_reach": "not_demonstrated"
+    },
+    {
+      "name": "ivf_training_search",
+      "a_defines": [
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C35_PACKED_LISTS",
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C37_ROW_PANELS",
+        "MOJOLEARN_C38_DEVICE_POTENTIAL"
+      ],
+      "b_defines": [],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "runtime_reach": "not_demonstrated"
+    },
+    {
+      "name": "kmeans_complete",
+      "a_defines": [
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C37_ROW_PANELS",
+        "MOJOLEARN_C38_REUSE_NEAREST",
+        "MOJOLEARN_C38_DEVICE_POTENTIAL"
+      ],
+      "b_defines": [],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "runtime_reach": "not_demonstrated"
+    },
+    {
+      "name": "incremental_cluster",
+      "a_defines": [
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C37_ROW_PANELS",
+        "MOJOLEARN_C38_REUSE_NEAREST",
+        "MOJOLEARN_C39_RETAIN_STATE"
+      ],
+      "b_defines": [],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "runtime_reach": "not_demonstrated"
+    },
+    {
+      "name": "meanshift_tiles_active",
+      "a_defines": [
+        "MOJOLEARN_C40_SEED_TILES",
+        "MOJOLEARN_C40_ACTIVE_SEEDS"
+      ],
+      "b_defines": [],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "runtime_reach": "not_demonstrated"
+    },
+    {
+      "name": "spectral_neighbor_graph",
+      "a_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C43_RESIDENT_NORMALIZATION"
+      ],
+      "b_defines": [],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "runtime_reach": "not_demonstrated"
+    },
+    {
+      "name": "umap_exact_graph_sampling",
+      "a_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C44_SAMPLING_DESCRIPTORS"
+      ],
+      "b_defines": [],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "runtime_reach": "not_demonstrated"
+    },
+    {
+      "name": "propagation_normalization_chunks",
+      "a_defines": [
+        "MOJOLEARN_C33_FROZEN_CHUNKS",
+        "MOJOLEARN_C43_RESIDENT_NORMALIZATION"
+      ],
+      "b_defines": [],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "runtime_reach": "not_demonstrated"
+    }
+  ],
+  "shared_integration": {
+    "C06": [
+      "cluster/impl/detail/min_cluster_distance_compute.mojo",
+      "cluster/impl/detail/kmeans.mojo",
+      "neighbors/impl/detail/knn_brute_force.mojo",
+      "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo"
+    ],
+    "C53_BGMM_STATS": {
+      "path": "x_cluster/device_ops.mojo:DeviceOps._moments_gemm",
+      "control": "MOJOLEARN_C53_BGMM_STATS",
+      "scratch_bound": "8 float32 planes <=16 MiB; otherwise incumbent",
+      "source_behavior": "Four components reuse centering/weighted-responsibility reads, covariance GEMMs retain component order",
+      "runtime_reach": "not_demonstrated; recipe memory admission pending"
+    },
+    "C54_PREDICT_TILES": {
+      "path": "x_neighbors/iter_device.mojo:op_svgp_predict -> _launch_scaled_rbf(prediction=True) -> _c54_svgp_predict_kernel",
+      "control": "MOJOLEARN_C54_PREDICT_TILES",
+      "behavior": "four independent inducing outputs reuse each query feature load; same squared-distance FMA/exponential/variance scale; host incumbent arithmetic retained",
+      "recipe": "expanded:svgp",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+    }
+  },
+  "base_commit": "35b2d4976550a6a9a47c4563ca1c08b6de21670b",
+  "commit_status": "No agent commit; source edits handed to root for lane commit/push.",
+  "owned_source_files": [
+    "experiments/classical_identical_ideas/graph_controls.mojo",
+    "experiments/classical_identical_ideas/graph_implementation.json",
+    "core/classical_distance.mojo",
+    "core/classical_centroid.mojo",
+    "core/knn_host_predict.mojo",
+    "neighbors/impl/detail/classical_stream_topk.mojo",
+    "neighbors/impl/detail/knn_brute_force.mojo",
+    "neighbors/checks/pinned_distance_tile.mojo",
+    "neighbors/checks/ball_cover_canonical_order.mojo",
+    "neighbors/impl/ball_cover/common.mojo",
+    "neighbors/impl/ball_cover/registers.mojo",
+    "dbscan/host/dbscan_oracle.mojo",
+    "dbscan/impl/neighbors/epsilon_neighborhood.mojo",
+    "dbscan/impl/sparse/detail/csr.mojo",
+    "hdbscan/host/hdbscan_host_oracle.mojo",
+    "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo",
+    "hierarchy/checks/linkage_oracle.mojo",
+    "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+    "ivf/host/ivf_host.mojo",
+    "ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo",
+    "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo",
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+    "cluster/checks/plus_plus.mojo",
+    "cluster/host/kmeans_oracle.mojo",
+    "cluster/impl/detail/classical_assignment.mojo",
+    "cluster/impl/detail/classical_centroid.mojo",
+    "cluster/impl/detail/kmeans.mojo",
+    "cluster/impl/detail/kmeans_transform.mojo",
+    "cluster/impl/detail/min_cluster_distance_compute.mojo",
+    "spectral/impl/sparse/linalg/detail/laplacian.mojo",
+    "spectral/impl/sparse/solver/detail/lanczos.mojo",
+    "umap/optimizer_identical_device.mojo",
+    "x_cluster/bisect.mojo",
+    "x_cluster/common.mojo",
+    "x_cluster/device_ops.mojo",
+    "x_cluster/device_post.mojo",
+    "x_cluster/host/host_ops.mojo",
+    "x_cluster/meanshift_idn.mojo",
+    "x_cluster/minibatch.mojo",
+    "x_cluster/minibatch_cells.mojo",
+    "x_cluster/ops.mojo",
+    "x_neighbors/classical_graph.mojo",
+    "x_neighbors/graph_par.mojo",
+    "x_neighbors/iter_device.mojo",
+    "x_neighbors/iter_host.mojo",
+    "x_neighbors/lp_knn.mojo",
+    "bindings/_mojolearn_x_neighbors.mojo",
+    "bindings/_mojolearn_x_neighbors_host.mojo",
+    "python/mojolearn/_expansion_neighbors.py"
+  ],
+  "commands_policy": "Source reads, source edits, and Git state/diff inspection only. No build, import, validator, lint, test, benchmark, identity/quality check, remote job, or hook executed by graph agent."
+}

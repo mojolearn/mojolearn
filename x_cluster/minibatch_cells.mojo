@@ -1,3 +1,4 @@
+from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS, C37_PANEL_ROWS
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MiniBatchKMeans' center update as cells (lane/neural-pass133, 2026-10-02).
@@ -27,9 +28,17 @@ def mb_center_word(pb: FPtr, batch: Int, pl: IPtr, cjf: Float32, wj: Float32, ws
                    d: Int) -> Float32:
     """The center word (j, f) after the batch (wsum > 0)."""
     var acc = ftz(identical_mul(cjf, wj))
-    for t in range(batch):
-        if Int(pl[t]) == j:
-            acc = ftz(acc + ftz(pb[t * d + f]))
+    comptime if C37_ROW_PANELS:
+        for start in range(0,batch,C37_PANEL_ROWS):
+            var part=Float32(0)
+            for t in range(start,min(start+C37_PANEL_ROWS,batch)):
+                if Int(pl[t])==j:
+                    part=ftz(part+ftz(pb[t*d+f]))
+            acc=ftz(acc+part)
+    else:
+        for t in range(batch):
+            if Int(pl[t]) == j:
+                acc = ftz(acc + ftz(pb[t * d + f]))
     var alpha = ftz(identical_div(Float32(1), ftz(wj + wsum)))
     return ftz(identical_mul(acc, alpha))
 

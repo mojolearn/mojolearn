@@ -39,6 +39,8 @@ This implementation, both modes the same association, the pins under IDENTICAL:
 # =========================================================================
 """
 
+from experiments.classical_identical_ideas.linear_controls import C22_TRIANGLE
+from svm.impl.classical_kernel_device import classical_triangle_kernel
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.info import has_apple_gpu_accelerator
 from std.math import exp
@@ -529,6 +531,15 @@ def kernel_op(
     `kernel_workspace_floats(m, n, k)` floats."""
     if m <= 0 or n <= 0:
         return
+    comptime if C22_TRIANGLE:
+        # Pointer equality proves one immutable dataset on both sides; a
+        # square cross-kernel between distinct datasets is not symmetric.
+        if m == n and Int(a.unsafe_ptr()) == Int(b.unsafe_ptr()) and (kp.kernel == KERNEL_LINEAR or kp.kernel == KERNEL_RBF or kp.kernel == KERNEL_POLYNOMIAL or kp.kernel == KERNEL_TANH):
+            ctx.enqueue_function[classical_triangle_kernel](
+                a.unsafe_ptr(), norm_a.unsafe_ptr(), out.unsafe_ptr(), Int32(n), Int32(k), Int32(kp.kernel),
+                Float32(kp.gamma), Float32(kp.coef0), Int32(kp.degree), grid_dim=_grid(n * n), block_dim=KM_TPB,
+            )
+            return
     if distribute:
         var setting = String(getenv("MOJOLEARN_SVM_DEVICE_COUNT"))
         if setting != "" and setting != "1":

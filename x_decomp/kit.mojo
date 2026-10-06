@@ -168,6 +168,17 @@ struct Kit[E: Exec](Movable):
             return 3
         raise Error("x_decomp: cannot broadcast")
 
+    def classical_centered_gram(self, X: Mat, means: Mat) raises -> Mat:
+        var out = Mat(X.c, X.c)
+        Self.E.classical_centered_gram(X.p(), means.p(), out.p(), X.r, X.c)
+        return out^
+
+    def classical_contrast(self, Y: Mat, fun: Int, alpha: Float64, mut gp: Mat) raises -> Mat:
+        var gx = Mat(Y.r, Y.c)
+        gp = Mat(Y.r, Y.c)
+        Self.E.classical_contrast(Y.p(), gx.p(), gp.p(), Y.n(), fun, Float32(alpha))
+        return gx^
+
     def ew1(self, op: Int, A: Mat, s: Float64) raises -> Mat:
         """`ew(op, A, s=s)`: B and C the unused 0 broadcast operand."""
         var out = Mat(A.r, A.c)
