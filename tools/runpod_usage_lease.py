@@ -5,7 +5,7 @@ plan CONFIG; adopt CONFIG; manage CONFIG [--once]
 Adoption installs an independent remote watchdog using its existing 0600 curl
 credential. Parent must separately retire *all* old EXIT traps/deadmen/timers.
 A healthy manager renews a 90-minute orphan deadline while work runs. Idle
-termination requires DONE, exact captured file hashes, then 45 idle minutes.
+termination requires DONE, exact captured file hashes, then the configured 30 or 45 idle minutes.
 Remove DONE before assigning new work. Job timeouts remain the job's concern.
 """
 import argparse
@@ -74,8 +74,8 @@ def validate(c):
     for key in ('remote_out','remote_state','remote_curlrc'):
         if not re.fullmatch(r'/[A-Za-z0-9_./-]+', c[key]) or '..' in Path(c[key]).parts:
             raise ValueError('unsafe remote path '+key)
-    if c.get('idle_seconds', 2700) != 2700:
-        raise ValueError('owner requested exactly 45 idle minutes')
+    if c.get('idle_seconds', 2700) not in (1800, 2700):
+        raise ValueError('supported idle policies are 30 or 45 minutes')
     if not 5400 <= c.get('orphan_seconds', 5400) <= 86400:
         raise ValueError('orphan lease must be at least 90 minutes')
     if not 10 <= c.get('poll_seconds', 30) <= 300:
@@ -357,7 +357,7 @@ def manage(c, once=False):
                 rows=remote_call(c,'inventory')['rows'];captured=verify_capture(rows,artifacts)
                 state=remote_call(c,'heartbeat',dict(captured_manifest=captured))
                 atomic(local/'capture-receipt.json',dict(exclude_relative=c.get('exclude_relative',[]),pod_id=c['pod_id'],owner_id=c['owner_id'],manifest_sha256=captured,rows=rows,verified_at=time.time()))
-                notify(c,local,'JOB_DONE_CAPTURED',('All retained files verified; pending-work hold remains' if state.get('busy_hold') else 'All retained files verified;45-minute idle deletion armed')+'; capture '+captured[:16])
+                notify(c,local,'JOB_DONE_CAPTURED',('All retained files verified; pending-work hold remains' if state.get('busy_hold') else 'All retained files verified;'+str(c.get('idle_seconds',2700)//60)+'-minute idle deletion armed')+'; capture '+captured[:16])
             failed_polls=0;state=remote_call(c,'heartbeat')
             atomic(local/'manager-status.json',dict(status='MANAGING',lease=state,last_probe=probe,updated_at=time.time(),manager_pid=os.getpid()))
         except Exception as exc:
