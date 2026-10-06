@@ -41,7 +41,7 @@ from resample.estimator import (
     resample_indices_replace_into,
     RESAMPLE_IDX_DIRECT,
     RESAMPLE_GPU_GATHER,
-    resample_gather_gpu,
+    resample_gather_gpu, resample_permutation_gather_gpu,
     resample_fast_defines,
     GATHER_NARROW_MAX_BYTES,
     resample_gather_narrow,
@@ -434,6 +434,27 @@ def resample_gather_gpu_binding(addrs: PythonObject, params: PythonObject) raise
     return PythonObject(Int(done))
 
 
+def resample_permutation_gather_gpu_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    # addrs: src,dst per array; params: n,count,seed,width per array.
+    var k = len(addrs) // 2
+    if k < 1 or len(addrs) != 2 * k or len(params) != 3 + k:
+        raise Error("resample: invalid GPU gather argument lengths")
+    var srcs = List[Int]()
+    var dsts = List[Int]()
+    var widths = List[Int]()
+    for a in range(k):
+        srcs.append(Int(py=addrs[2 * a]))
+        dsts.append(Int(py=addrs[2 * a + 1]))
+        widths.append(Int(py=params[3 + a]))
+    var n = Int(py=params[0])
+    var count = Int(py=params[1])
+    var seed = UInt64(Int(py=params[2]))
+    var done = False
+    with GILReleased(Python()):
+        done = resample_permutation_gather_gpu(n, count, seed, srcs, dsts, widths)
+    return PythonObject(Int(done))
+
+
 def resample_gather_narrow_bytes_binding() raises -> PythonObject:
     """RESAMPLE_FAST_GATHER_NARROW: the widest row (bytes) gathered on the device."""
     return PythonObject(GATHER_NARROW_MAX_BYTES)
@@ -579,6 +600,7 @@ def PyInit__mojolearn_resample() abi("C") -> PythonObject:
         m.def_function[resample_indices_binding]("resample_indices")
         m.def_function[resample_gpu_gather_enabled_binding]("resample_gpu_gather_enabled")
         m.def_function[resample_gather_gpu_binding]("resample_gather_gpu")
+        m.def_function[resample_permutation_gather_gpu_binding]("resample_permutation_gather_gpu")
         m.def_function[resample_gather_narrow_bytes_binding]("resample_gather_narrow_bytes")
         m.def_function[resample_gather_narrow_binding]("resample_gather_narrow")
         m.def_function[monte_carlo_integrate_binding]("monte_carlo_integrate")

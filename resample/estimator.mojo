@@ -34,7 +34,7 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32, f32_ptr, i32_ptr
-from resample.gather_fast import gather_rows_f32_kernel, gather_rows_tiled_f32_kernel
+from resample.gather_fast import gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
 from resample.fast_apple import (
     RESAMPLE_FAST_APPLE,
     bootstrap_mean_fast,
@@ -2317,7 +2317,7 @@ comptime RESAMPLE_FAST_TILED_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 
 
 def resample_gather_grouped(
-    ctx: DeviceContext, rows: DeviceBuffer[DType.int32], n: Int, count: Int,
+    ctx: DeviceContext, mut rows: DeviceBuffer[DType.int32], n: Int, count: Int,
     srcs: List[Int], dsts: List[Int], widths: List[Int],
 ) raises:
     var keep = List[DeviceBuffer[DType.float32]]()
@@ -2341,6 +2341,55 @@ def resample_gather_grouped(
         keep.append(output^)
     ctx.synchronize()
     _ = keep^
+
+
+comptime RESAMPLE_FAST_DEVICE_PERMUTE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"]()
+
+def resample_permutation_gather_gpu(
+    n: Int, count: Int, seed: UInt64, srcs: List[Int], dsts: List[Int], widths: List[Int],
+) raises -> Bool:
+    comptime if RESAMPLE_GPU_GATHER and RESAMPLE_FAST_DEVICE_PERMUTE:
+        utils_validate(n, count, False)
+        if len(srcs) == 0 or len(srcs) != len(dsts) or len(srcs) != len(widths):
+            raise Error("resample: invalid permutation gather spans")
+        if count <= 0:
+            return False
+        for a in range(len(widths)):
+            if widths[a] <= 0 or max(n * widths[a], count * widths[a]) > 2147483647:
+                return False
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var rows = ctx.enqueue_create_buffer[DType.int32](n)
+        var scratch = ctx.enqueue_create_buffer[DType.int32](n)
+        var keys = ctx.enqueue_create_buffer[DType.uint64](n)
+        var key = resample_key(seed, RESAMPLE_KIND_UTILS_PERMUTE)
+        ctx.enqueue_function[utils_draw_kernel](
+            rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key), Int32(n), Int32(n), Int32(0),
+            grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_function[permutation_positions_kernel](rows.unsafe_ptr(), Int32(n),
+            grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
+        var width = 1
+        var output_in_rows = True
+        while width < n:
+            if output_in_rows:
+                ctx.enqueue_function[permutation_merge_kernel](scratch.unsafe_ptr(), rows.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(width),
+                    grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
+            else:
+                ctx.enqueue_function[permutation_merge_kernel](rows.unsafe_ptr(), scratch.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(width),
+                    grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
+            output_in_rows = not output_in_rows
+            width *= 2
+        if output_in_rows:
+            resample_gather_grouped(ctx, rows, n, count, srcs, dsts, widths)
+        else:
+            resample_gather_grouped(ctx, scratch, n, count, srcs, dsts, widths)
+        _ = rows^
+        _ = scratch^
+        _ = keys^
+        _ = ctx^
+        return True
+    else:
+        return False
 
 
 def resample_gather_gpu(
