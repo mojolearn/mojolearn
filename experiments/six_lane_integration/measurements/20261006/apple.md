@@ -5,7 +5,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 
 | Candidate | Mode | Measurement status | Captured pairs |
 |---|---|---|---:|
-| AF.X.complete-proposed | fast | FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION, QUALITY_FAILED | 32 |
+| AF.X.complete-proposed | fast | FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED | 36 |
 | I.X.complete-proposed | identical | PENDING_MEASUREMENT | 0 |
 
 ## Captured evidence
@@ -46,7 +46,10 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | AF.X.complete-proposed | apple/apple-fast | algos/huber@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/f0c4179bfa4fda6936f2/attempt-0001/receipt.json |
 | AF.X.complete-proposed | apple/apple-fast | algos/lasso-cv@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/f2b21063131028aae994/attempt-0001/receipt.json |
 | AF.X.complete-proposed | apple/apple-fast | classical2/gmm@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--gmm-istella-full--runs/e54f3cfdf88e2e305a71/attempt-0001/receipt.json |
-| AF.X.complete-proposed | apple/apple-fast | algos/pls@dataset=taxi/attempt-0001 | full_workload | IN_PROGRESS | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/258012ade2a00a9645a9/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple/apple-fast | algos/qn-reg@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/177e591a0085ff705250/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple/apple-fast | algos/pls@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/1f0fc8e14b88c7e0588c/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple/apple-fast | algos/pls@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/258012ade2a00a9645a9/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple/apple-fast | algos/qn-reg@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--pls-qn-full--runs/e93854e1cf11c7c7adfb/attempt-0001/receipt.json |
 
 ## Campaign notes
 

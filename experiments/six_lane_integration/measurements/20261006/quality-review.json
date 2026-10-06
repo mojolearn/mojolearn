@@ -10,8 +10,9 @@
     "pca": "Existing gate uses explained_variance_ratio_sum. No new orthogonality/reconstruction thresholds invented; values slightly >1 by6e-8 are within existing tolerance."
   },
   "counts": {
-    "BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING": 6,
+    "BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING": 4,
     "TASK_METRIC_GATE_PASSED": 4,
+    "PENDING": 2,
     "FAILED_FAST_OPPONENT_GATE": 1,
     "BASELINE_NONREGRESSION_WITH_OPPONENT_QUALITY_DEFICIT": 1
   },
@@ -570,11 +571,45 @@
         ]
       },
       "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
-      "quality_assessment": "BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING",
-      "reason": "Current full taxi has 5,250,086 fit rows. Historical board opponents used4,000,000; incomparable dataset size, so no opponent quality admission.",
+      "quality_assessment": "PENDING",
+      "reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved.",
       "remaining_nonquality_requirements": [
         "Affected-estimator/configuration coverage; scope does not establish complete-default acceptance"
       ],
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [
+          {
+            "arm": "torch-gpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-04/board/raw/classical/rows-full/kmeans-taxi.json",
+            "receipt_sha256": "43216fc65acd803cda3036337b5053d2885e491da7f3d600ec3947b93b99d81a",
+            "input_npz_sha256": "0db47891038cb000a320470f8f6f7172285118e9c0697bc3e118dab2bc4921e0",
+            "parameter_mismatches": {
+              "random_state": [
+                7,
+                null
+              ],
+              "init_centroids": [
+                null,
+                null
+              ],
+              "oversampling_factor": [
+                0.0,
+                null
+              ]
+            },
+            "reasons": [
+              "Constructor settings differ or are missing: {\"init_centroids\": [null, null], \"oversampling_factor\": [0.0, null], \"random_state\": [7, null]}"
+            ]
+          }
+        ],
+        "expected_arms": [
+          "sklearn-cpu",
+          "torch-gpu"
+        ],
+        "matched_arms": [],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      },
       "original_review_receipt_path": "/Users/andrewhendel/CascadeProjects/mojolearn/experiments/six_lane_integration/measurements/20261006/receipts/apple/449522fb6bd97f700c04/attempt-0001/receipt.json"
     },
     {
@@ -1544,12 +1579,46 @@
         ]
       },
       "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
-      "quality_assessment": "BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING",
-      "reason": "Current full taxi has 5,250,086 fit rows. Historical board opponents used4,000,000; incomparable dataset size, so no opponent quality admission.",
+      "quality_assessment": "PENDING",
+      "reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved.",
       "remaining_nonquality_requirements": [
         "Same-arm IDENTICAL cross-column identity evidence including AMD/Apple/host",
         "Affected-estimator/configuration coverage and both-vendor performance decision"
       ],
+      "new_full_opponent_review": {
+        "qualified": [],
+        "unqualified": [
+          {
+            "arm": "torch-gpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-04/board/raw/classical/rows-full/kmeans-taxi.json",
+            "receipt_sha256": "43216fc65acd803cda3036337b5053d2885e491da7f3d600ec3947b93b99d81a",
+            "input_npz_sha256": "0db47891038cb000a320470f8f6f7172285118e9c0697bc3e118dab2bc4921e0",
+            "parameter_mismatches": {
+              "random_state": [
+                7,
+                null
+              ],
+              "init_centroids": [
+                null,
+                null
+              ],
+              "oversampling_factor": [
+                0.0,
+                null
+              ]
+            },
+            "reasons": [
+              "Constructor settings differ or are missing: {\"init_centroids\": [null, null], \"oversampling_factor\": [0.0, null], \"random_state\": [7, null]}"
+            ]
+          }
+        ],
+        "expected_arms": [
+          "sklearn-cpu",
+          "torch-gpu"
+        ],
+        "matched_arms": [],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      },
       "original_review_receipt_path": "/Users/andrewhendel/CascadeProjects/mojolearn/experiments/six_lane_integration/measurements/20261006/receipts/nvidia/fb6aa398a4fe2f787945/attempt-0001/receipt.json"
     }
   ],
@@ -1562,5 +1631,6 @@
     "required_fix": "Publish original failure and repaired success under distinct run-qualified paths and update each summary reference; preserve original captures.",
     "parent_notified": true
   },
+  "new_opponent_review_at": "2026-10-06T17:33:54.674222+00:00",
   "publication_repair": "Original review retained externally; links relocated by exact receipt SHA256 into controller-qualified paths. Distinct failed and repaired attempts no longer collide."
 }

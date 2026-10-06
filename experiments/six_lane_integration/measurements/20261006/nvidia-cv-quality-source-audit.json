@@ -1,0 +1,278 @@
+{
+  "schema": "full-cv-quality-source-audit.v1",
+  "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+  "scope": "Read-only retained scored evidence and frozen source audit; no fits, remeasurement, builds or gate changes",
+  "quality_status": "CANDIDATE_CONFIGURATION_UNQUALIFIED_FOR_FULL_TAXI_LASSOCV_AND_ELASTICNETCV",
+  "preserve_timing_status": "MEASURED_FULL; successful timing execution is independent of failing quality gate",
+  "failures": [
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:lasso-cv@dataset=taxi",
+      "mode": "identical",
+      "lane": "lasso-cv",
+      "dataset": "taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json",
+      "receipt_sha256": "82bd778ed89a56ac2b0dc0686a0508fd45c0e0d578c42b96a6dceddb5de799ff",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9088028117512673,
+          "rmse": 4.697345852642057
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9091215889136197,
+          "rmse": 4.689128946848568
+        }
+      },
+      "output_sha256": {
+        "A": "6fd654bf51028df8ee08cd7213039af50bca7e6718582417c535cc82f6ddea97",
+        "B": "8dc2e83675dfccd5b5670e67320efd2e8f5f8fe3cbaf7165a2292186eb4f8fec"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9088028117512673,
+            0.9091215889136197,
+            -0.0003506430451545357
+          ],
+          "rmse": [
+            "WORSE",
+            4.697345852642057,
+            4.689128946848568,
+            -0.0017492656600678967
+          ]
+        },
+        "unknown": [],
+        "worst": -0.0017492656600678967
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "algos/lasso-cv/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.9090382338661919,
+            "rmse": 4.803593328484525
+          }
+        }
+      ],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/96ac4d3d170baa9b8709/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:enet-cv@dataset=taxi",
+      "mode": "identical",
+      "lane": "enet-cv",
+      "dataset": "taxi",
+      "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json",
+      "receipt_sha256": "9fc87489464b142ab9cd356046f588738393c45dca8793fe30236f3b4899c770",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9087603210162847,
+          "rmse": 4.698440022529554
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9090718560676742,
+          "rmse": 4.690411824863933
+        }
+      },
+      "output_sha256": {
+        "A": "46a7555765fda05ee0080b7cf0b902088bf15e53a3e8872b76c44f947b94d810",
+        "B": "b3e9b228057f6aced8af27dbdfa3a0a583df0fd4f2a39efbf5f7ac5f9f206ec9"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "WORSE",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9087603210162847,
+            0.9090718560676742,
+            -0.0003426957388572879
+          ],
+          "rmse": [
+            "WORSE",
+            4.698440022529554,
+            4.690411824863933,
+            -0.0017086942957928607
+          ]
+        },
+        "unknown": [],
+        "worst": -0.0017086942957928607
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "algos/enet-cv/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.9090044061673993,
+            "rmse": 4.8044864477062825
+          }
+        }
+      ],
+      "quality_assessment": "QUALITY_FAILED",
+      "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/3392ecb27af9675963d9/attempts/attempt-0001/receipt.json"
+    }
+  ],
+  "accepted_artifacts": {
+    "A": {
+      "binding": "bindings/_mojolearn_x_linear.mojo",
+      "artifact_sha256": "3046f0b2001b021c91f9f55652abe17ce05a0067c9c51994629b952a680d3708",
+      "receipt_key": "55b52e9d35fba4da0448",
+      "relevant_defines": [
+        "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+        "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+        "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1"
+      ]
+    },
+    "B": {
+      "binding": "bindings/_mojolearn_x_linear.mojo",
+      "artifact_sha256": "814408be3f9c27edab432706aad75041ee04a61eeedc6ad6d2a4fab2545f57f8",
+      "receipt_key": "ca4918077f351c8926e8",
+      "relevant_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1"
+      ]
+    }
+  },
+  "source_hashes": {
+    "python/mojolearn/_expansion_linear.py": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957",
+    "bindings/_mojolearn_x_linear.mojo": "b6d51f3dccd6544d774b51ac575ddcf3ca98c8a2400598f686bdbfa9c21954bc",
+    "x_linear/device.mojo": "51bf979dd41a21818136782e0e7448d0e2813343d151678f40e4a47df6fa6630",
+    "x_linear/cd_grid.mojo": "78ce474394a57d35ee5b2a58f23b402b32a7fba8ffec95636e1abe5f87ba9588",
+    "x_linear/cd.mojo": "f990b2bccecb6b0ddd06a44fe7392e456fa1b5239c287c5e0310393d392375d7",
+    "x_linear/classical_fold_stats.mojo": "5394f983e4310199cd97a5c19c941dc4f3269a3254bf71f554ca2307aeded814",
+    "experiments/classical_identical_ideas/linear_controls.mojo": "577cab991266535b50c3c89ac3b7b0eb7faf23522178fc8e4a7cb4b4ac0d0b43"
+  },
+  "route": [
+    "Public LassoCV and ElasticNetCV call _enetcv_fit; _run ALGO_ENETCV",
+    "x_linear/device.mojo:4784 enetcv_fit_grid for positive d and seven integer params",
+    "x_linear/cd_grid.mojo:739 candidate C13_FOLD_STATS takes disjoint fold means, centered Gram and combine route; baseline else retains direct selected-row sums",
+    "x_linear/cd.mojo:594,611 candidate C18_RESIDUAL_NEXT forwards updated next-coordinate residual; baseline reads Qw memory"
+  ],
+  "arithmetic_finding": "C13 is algebraically equivalent centered sufficient-statistic recombination, with a different FP32 reduction/centering schedule. fold_mean_cell/fold_gram_cell sum rows inside each fold; retained_mean/retained_cross combine folds ascending. Baseline accumulates all retained training rows directly. No full-minus-held-out subtraction or held-out leakage is present in this source.",
+  "attribution_limit": "C13 changes the reached arithmetic and is a plausible contributor, but combined A/B evidence does not isolate C13 from C18 or prove a specific defect. No alpha/coefficient/CV-path diagnostic was retained by these output-only saved workers.",
+  "unrelated_control": "C19_ORDERED_128 only changes SGD_PS_CHUNK in x_linear/device.mojo:1934, not the reached ENETCV driver.",
+  "retained_binary_repair": "None supported: controls use comptime is_defined, not runtime environment. Current retained native x_linear inventory is complete-proposed A and incumbent B only. Replacing candidate with incumbent or labeling a hybrid complete-proposed would misrepresent the experiment.",
+  "future_options": [
+    "Keep candidate unqualified and incumbent unchanged; preserve all original scored hashes and timings.",
+    "After explicit build authorization, an isolated C13-off or compensated/general fold-statistic numerical candidate could be built once for all IDENTICAL columns and evaluated on full affected workloads; neither is a proven fix from this audit."
+  ],
+  "rerun_policy": "Do not blindly rerun these deterministic full cases; no gate relaxation or dimensional dispatch workaround.",
+  "publication_note": "Review sample_counts currently reports excluded_warmups0, but each underlying receipt retains warmupA, warmupB, scoredA, scoredB with rc0; publisher should reflect original executed sample counts.",
+  "frozen_source_hashes_match": true
+}

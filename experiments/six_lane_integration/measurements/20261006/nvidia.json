@@ -319,7 +319,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
         },
         {
           "id": "I.X.complete-proposed",
@@ -488,7 +488,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
         },
         {
           "id": "I.X.complete-proposed",
@@ -657,7 +657,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
         },
         {
           "id": "I.X.complete-proposed",
@@ -826,7 +826,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1333,7 +1333,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1502,7 +1502,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
         },
         {
           "id": "I.X.complete-proposed",
@@ -4714,7 +4714,7 @@
           "vendor": "nvidia",
           "case": "expanded:pls@dataset=istella/attempt-0001",
           "scope": "full_workload",
-          "status": "IN_PROGRESS",
+          "status": "PENDING_ADMISSION",
           "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
           "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/2f8b608f6ae23ccbef94/attempt-0001/receipt.json",
           "dimensions": {
@@ -4734,23 +4734,23 @@
             ]
           },
           "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
-          "execution_status": "IN_PROGRESS",
+          "execution_status": "MEASURED_FULL",
           "actual_sample_counts": {
             "A": {
               "warmup": 1,
-              "scored": 0
+              "scored": 1
             },
             "B": {
               "warmup": 1,
-              "scored": 0
+              "scored": 1
             }
           },
           "warmups": 1,
-          "scored_samples": 0,
-          "quality": "NOT_ASSESSED",
+          "scored_samples": 1,
+          "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
-          "receipt_sha256": "ac8bf157e6d7b90af7c9403be840291969a1c1a6db8a62eb7a39aed7691897eb",
+          "receipt_sha256": "878a9416296322fa82b8886f27f1e2ffce277726d30e945ef5370c33d21ff3e4",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
             "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
@@ -4848,7 +4848,35 @@
             "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
             "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
             "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
-          ]
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality(pls); unchanged held-out R2/RMSE and matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.2943605458845713,
+                  "rmse": 0.700949370518026
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality(pls); unchanged held-out R2/RMSE and matching full opponent gate; pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.2943605458845713,
+                  "rmse": 0.700949370518026
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
         },
         {
           "id": "I.X.complete-proposed",
@@ -6046,11 +6074,11 @@
               "status": "PENDING"
             }
           },
-          "quality_assessment": "BASELINE_NONREGRESSION_OPPONENT_EVIDENCE_PENDING",
-          "quality_reason": "Current full taxi has 5,250,086 fit rows. Historical board opponents used4,000,000; incomparable dataset size, so no opponent quality admission."
+          "quality_assessment": "PENDING",
+          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
         }
       ],
-      "status": "FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION, QUALITY_FAILED"
+      "status": "FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED"
     }
   ],
   "notes": [

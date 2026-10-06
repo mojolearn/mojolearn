@@ -5,7 +5,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 
 | Candidate | Mode | Measurement status | Captured pairs |
 |---|---|---|---:|
-| I.X.complete-proposed | identical | FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION, QUALITY_FAILED | 34 |
+| I.X.complete-proposed | identical | FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED | 35 |
 
 ## Captured evidence
 
@@ -39,7 +39,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I.X.complete-proposed | nvidia/native-sm90 | expanded:poisson@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/f3338c86505a1c49367a/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/ffcd41dde6ea522c48e3/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | more:gmm@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-gmm-istella/f579c55ac28cfd6fb99a/attempt-0001/receipt.json |
-| I.X.complete-proposed | nvidia/native-sm90 | expanded:pls@dataset=istella/attempt-0001 | full_workload | IN_PROGRESS | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/2f8b608f6ae23ccbef94/attempt-0001/receipt.json |
+| I.X.complete-proposed | nvidia/native-sm90 | expanded:pls@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/2f8b608f6ae23ccbef94/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | expanded:pls@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-pls/53a58fdcb7a34a48e102/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | classical:ols@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/201c5234acc7b0ac4689/attempt-0001/receipt.json |
 | I.X.complete-proposed | nvidia/native-sm90 | classical:ols@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements/5df5c5720c0d6d872c16/attempt-0001/receipt.json |

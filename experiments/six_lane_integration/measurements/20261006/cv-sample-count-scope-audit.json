@@ -1,0 +1,89 @@
+{
+  "schema": "mojolearn.sample-count-scope-audit/1",
+  "method": "Read retained JSON only; no workers, models, quality recomputation, identity comparison, compilation or data reads",
+  "original_audit": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/expanded-reg/cv-quality-source-audit.json",
+    "sha256": "b29ee4458ddbc4a0663ad6e4439ea226f213d5bdab475e59a410869c371ba112"
+  },
+  "findings": [
+    {
+      "workload": "expanded:lasso-cv@dataset=taxi",
+      "receipt": "/Users/andrewhendel/CascadeProjects/mojolearn/experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json",
+      "receipt_sha256": "82bd778ed89a56ac2b0dc0686a0508fd45c0e0d578c42b96a6dceddb5de799ff",
+      "worker_records": 4,
+      "original_embedded_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "actual_attempt_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "current_main_review_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "current_review": "/Users/andrewhendel/CascadeProjects/mojolearn/experiments/six_lane_integration/measurements/20261006/next-quality-review.json",
+      "status": "ALREADY_CORRECT_IN_CURRENT_MAIN",
+      "repair": "Keep original source audit with scope note/reference to this audit; per-phase worker and comparator checks must remain unchanged."
+    },
+    {
+      "workload": "expanded:enet-cv@dataset=taxi",
+      "receipt": "/Users/andrewhendel/CascadeProjects/mojolearn/experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json",
+      "receipt_sha256": "9fc87489464b142ab9cd356046f588738393c45dca8793fe30236f3b4899c770",
+      "worker_records": 4,
+      "original_embedded_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "actual_attempt_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "current_main_review_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "current_review": "/Users/andrewhendel/CascadeProjects/mojolearn/experiments/six_lane_integration/measurements/20261006/next-quality-review.json",
+      "status": "ALREADY_CORRECT_IN_CURRENT_MAIN",
+      "repair": "Keep original source audit with scope note/reference to this audit; per-phase worker and comparator checks must remain unchanged."
+    }
+  ],
+  "conclusion": "Worker per-phase counts are correct. Original source-audit copied scored-worker counts into a broader sample_counts field. Current main quality review already records the complete attempt totals. Preserve original receipt counts and audit; no rerun or compiler action needed."
+}
