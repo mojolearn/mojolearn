@@ -50,6 +50,7 @@ def check(ctx: DeviceContext, n: Int, topology: Int) raises:
         print("I14 topology=",topology,"rows=",n,"repeat=",repeat,"first_converged_pass=",passes)
     _ = ia^; _ = ja^; _ = core^; _ = labels^; _ = dc^
 
+# NEVER RUN — PENDING VALIDATION
 def main() raises:
     var ctx = DeviceContext()
     for n in [31, 129, 259]:

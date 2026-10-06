@@ -113,9 +113,12 @@ comptime IDN_DBSCAN_CC_GATED = (
 # four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
 # defaults stay unchanged; this campaign attributes explicit experiment arms.
 comptime IDN_DBSCAN_CC_CHUNK = (
+    # NEVER RUN — PENDING VALIDATION
     4 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK4"]()
     else (
+        # NEVER RUN — PENDING VALIDATION
         16 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK16"]()
+        # NEVER RUN — PENDING VALIDATION
         else (32 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK32"]() else 8)
     )
 )
@@ -130,9 +133,12 @@ comptime IDN_DBSCAN_CC_CHUNK = (
 #: differ. `-D MOJOLEARN_IDN_DBSCAN_CC_SPLIT4=1`, `..._SPLIT8=1`,
 #: `..._SPLIT16=1`.
 comptime IDN_DBSCAN_CC_SPLIT = (
+    # NEVER RUN — PENDING VALIDATION
     4 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT4"]()
     else (
+        # NEVER RUN — PENDING VALIDATION
         8 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT8"]()
+        # NEVER RUN — PENDING VALIDATION
         else (16 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT16"]() else 1)
     )
 )
