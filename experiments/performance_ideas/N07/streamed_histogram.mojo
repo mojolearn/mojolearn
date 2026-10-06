@@ -15,18 +15,15 @@ from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext,DeviceBuffer
 
 
-def histogram_kernel[CHUNK: Int,BINS: Int,REPLICAS: Int](
+@always_inline
+def _histogram_tile_body[CHUNK: Int,BINS: Int,REPLICAS: Int](
     bins: MutPointer[Int32,MutAnyOrigin],weights: MutPointer[Int32,MutAnyOrigin],
     partials: MutPointer[Int64,MutAnyOrigin],status: MutPointer[Int32,MutAnyOrigin],
-    rows: Int32,features: Int32,max_abs: Int32):
+    features: Int32,max_abs: Int32,fg: Int,tile: Int,row_begin: Int,row_end: Int):
     comptime assert REPLICAS==1 or REPLICAS==4
     comptime assert CHUNK*BINS*REPLICAS*4<=16384, "bounded shared replication"
     var hist=stack_allocation[CHUNK*BINS*REPLICAS,Int32,address_space=AddressSpace.SHARED]()
     var tid=Int(thread_idx.x)
-    var fg=Int(block_idx.x)
-    var tile=Int(block_idx.y)
-    var row_begin=tile*256
-    var row_end=min(row_begin+256,Int(rows))
     for cell in range(tid,CHUNK*BINS*REPLICAS,128):
         hist[cell]=Int32(0)
     if tid==0:
@@ -57,6 +54,14 @@ def histogram_kernel[CHUNK: Int,BINS: Int,REPLICAS: Int](
                 total+=Int64(hist[replica_id*CHUNK*BINS+cell])
             partials.unsafe_store(tile*Int(features)*BINS+feature*BINS+cell%BINS,total)
 
+
+def histogram_kernel[CHUNK: Int,BINS: Int,REPLICAS: Int](
+    bins: MutPointer[Int32,MutAnyOrigin],weights: MutPointer[Int32,MutAnyOrigin],
+    partials: MutPointer[Int64,MutAnyOrigin],status: MutPointer[Int32,MutAnyOrigin],
+    rows: Int32,features: Int32,max_abs: Int32):
+    var tile=Int(block_idx.y)
+    _histogram_tile_body[CHUNK,BINS,REPLICAS](bins,weights,partials,status,features,max_abs,
+        Int(block_idx.x),tile,tile*256,min(tile*256+256,Int(rows)))
 
 def merge_kernel(partials: MutPointer[Int64,MutAnyOrigin],output: MutPointer[Int64,MutAnyOrigin],cells: Int32,tiles: Int32):
     var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)

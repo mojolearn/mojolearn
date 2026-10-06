@@ -3,12 +3,23 @@
 
 Uses the canonical row scheduler's skew/dense/tail/extreme-value fixtures.
 Each task writes independent CSR slots; canonical order and reach are gated.
-Histogram workload buckets additionally require the N07 histogram adapter;
-that extension remains an explicit dependency, not a claimed graph result.
+Also qualifies actual node histogram task construction with the shared N07
+integer arithmetic, skewed node row spans, and refused malformed offsets.
+Neither primitive qualification substitutes for a complete forest fit.
 """
-from experiments.performance_ideas.I13.check import main as graph_tasks
+from max.gpu.host import DeviceContext
+from neighbors.checks.rbc_canonical_merge_check import check
+from experiments.performance_ideas.A07.histogram_check import run_checks
 
 
 def main() raises:
-    graph_tasks()
-    print("A07_GRAPH_TASKS_PASS histogram_task_admission_requires_N07")
+    var ctx=DeviceContext()
+    check(ctx,[0,1,2,7,31,257,3,513,2,1025,0],False,False)
+    check(ctx,[0,1,2,7,31,257,3,513,2,1025,0],True,False)
+    check(ctx,[0,1,2,7,31,257,3,513,2,1025,0],False,True)
+    var skew=List[Int](length=4099,fill=3)
+    skew[2037]=16385
+    check(ctx,skew,True,False)
+    check(ctx,[0,0],False,False)
+    print("A07_GRAPH_TASKS_PASS")
+    run_checks()
