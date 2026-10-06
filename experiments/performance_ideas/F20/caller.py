@@ -15,12 +15,21 @@ def exercise(args):
         for rows,d,scale,offset in ((131,17,1.,0.),(137,65,.01,1e5),(257,129,1e3,0.)):
             rng=np.random.default_rng(197);x=np.asarray(offset+scale*rng.normal(size=(rows,d)),'float32');dy=rng.normal(size=(rows,d)).astype('float32')
             model=LayerNorm(d,numeric_mode='fast')
-            y,forward=consumed(lambda:model(x));dx,backward=consumed(lambda:model.backward(dy))
+            y,forward=consumed(lambda:model(x))
+            def gradients():
+                dx=model.backward(dy)
+                return dx,model.weight_grad,model.bias_grad
+            (dx,dw,db),backward=consumed(gradients)
             xx=x.astype(float);mu=xx.mean(axis=1,keepdims=True);variance=((xx-mu)**2).mean(axis=1,keepdims=True)
             ref=(xx-mu)/np.sqrt(variance+model.eps)
             error=float(np.max(np.abs(np.asarray(y)-ref))/max(np.max(np.abs(ref)),1e-9))
+            gg=dy.astype(float);inv=1/np.sqrt(variance+model.eps)
+            dxref=inv*(gg-gg.mean(axis=1,keepdims=True)-ref*(gg*ref).mean(axis=1,keepdims=True))
+            dwref=(gg*ref).sum(axis=0);dbref=gg.sum(axis=0)
+            dxerror=float(np.max(np.abs(np.asarray(dx)-dxref))/max(np.max(np.abs(dxref)),1e-9))
+            affine_error=float(max(np.max(np.abs(np.asarray(dw)-dwref)),np.max(np.abs(np.asarray(db)-dbref)))/max(np.max(np.abs(dwref)),np.max(np.abs(dbref)),1e-9))
             cases[f'{rows}-{d}-{scale}']=dict(contract=dict(rows=rows,d=d,scale=scale,offset=offset,seed=197),
-                metrics=dict(normalization_error=dict(value=error,rtol=.1,atol=1e-5)),forward_ms=forward,backward_ms=backward)
+                metrics=dict(normalization_error=dict(value=error,rtol=.1,atol=1e-5),input_gradient_error=dict(value=dxerror,rtol=.1,atol=1e-5),affine_gradient_error=dict(value=affine_error,rtol=.1,atol=1e-5)),forward_ms=forward,backward_ms=backward)
     else:
         from mojolearn import SGD,linear_forward,linear_backward,cross_entropy
         from mojolearn import _mojolearn_training as binding
