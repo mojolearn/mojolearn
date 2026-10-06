@@ -70,5 +70,8 @@
     "MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF=1",
     "--define",
     "MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
