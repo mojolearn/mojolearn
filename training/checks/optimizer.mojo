@@ -119,6 +119,8 @@ The full list is contract section 16. The five that bear on THIS file.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.atomic import Atomic
+from std.memory import bitcast
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
@@ -767,6 +769,45 @@ def _adam_update_body(
         q_out.unsafe_store(i, q)
 
 
+@always_inline
+def _adam_oop_cell(param_value: Float32,grad_value: Float32,m_value: Float32,v_value: Float32,is_adamw_in: Int32,beta1: Float32,beta2: Float32,eps: Float32,weight_decay: Float32,c1: Float32,c2: Float32,step_size: Float32,rt_bc2: Float32,decay_mul: Float32) -> Tuple[Float32,Float32,Float32]:
+    """One shared spelling of the clean OOP update; exact old seam order."""
+    var is_adamw = is_adamw_in != Int32(0)
+
+    var g = ftz(grad_value)  # O1, seam
+    var p = ftz(param_value)  # O2, seam
+    var mp = ftz(m_value)  # O3, seam
+    var vp = ftz(v_value)  # O3, seam
+
+    if weight_decay != Float32(0.0):
+        if is_adamw:
+            # O4b. DECOUPLED, a PRODUCT on the PARAMETER.
+            p = ftz(identical_mul(decay_mul, p))
+        else:
+            # O4a. COUPLED, ONE fused rounding into the GRADIENT.
+            g = ftz(identical_mul_add(weight_decay, p, g))
+
+    # O5 and O6, a PRODUCT then an FMA. Contract 7.2a.
+    var ms = ftz(identical_mul(beta1, mp))
+    var m = ftz(identical_mul_add(c1, g, ms))
+
+    # O7, O8, O9. Contract 7.2b, the square is formed FIRST.
+    var vs = ftz(identical_mul(beta2, vp))
+    var g2 = ftz(identical_mul(g, g))
+    var v = ftz(identical_mul_add(c2, g2, vs))
+
+    # O10 through O13, the denominator and the quotient.
+    var s = ftz(identical_sqrt(v))  # O10
+    var sd = ftz(identical_div(s, rt_bc2))  # O11
+    var dn = ftz(sd + eps)  # O12, eps OUTSIDE the root
+    var q = ftz(identical_div(m, dn))  # O13, a TRUE divide
+
+    # O14. ONE fused rounding. Contract 7.2d.
+    var p_new = ftz(identical_mul_add(-step_size, q, p))
+
+    return (p_new,ftz(m),ftz(v))
+
+
 def adam_update_oop_kernel(
     p_out: MutPointer[Float32, MutAnyOrigin],
     m_out: MutPointer[Float32, MutAnyOrigin],
@@ -821,43 +862,51 @@ def adam_update_oop_kernel(
     if i >= n:
         return
 
-    var is_adamw = is_adamw_in != Int32(0)
+    var updated = _adam_oop_cell(param.unsafe_load(i),grad.unsafe_load(i),m_state.unsafe_load(i),v_state.unsafe_load(i),is_adamw_in,beta1,beta2,eps,weight_decay,c1,c2,step_size,rt_bc2,decay_mul)
+    p_out.unsafe_store(i,updated[0])
+    m_out.unsafe_store(i,updated[1])
+    v_out.unsafe_store(i,updated[2])
 
-    var g = ftz(grad.unsafe_load(i))  # O1, seam
-    var p = ftz(param.unsafe_load(i))  # O2, seam
-    var mp = ftz(m_state.unsafe_load(i))  # O3, seam
-    var vp = ftz(v_state.unsafe_load(i))  # O3, seam
 
-    if weight_decay != Float32(0.0):
-        if is_adamw:
-            # O4b. DECOUPLED, a PRODUCT on the PARAMETER.
-            p = ftz(identical_mul(decay_mul, p))
-        else:
-            # O4a. COUPLED, ONE fused rounding into the GRADIENT.
-            g = ftz(identical_mul_add(weight_decay, p, g))
-
-    # O5 and O6, a PRODUCT then an FMA. Contract 7.2a.
-    var ms = ftz(identical_mul(beta1, mp))
-    var m = ftz(identical_mul_add(c1, g, ms))
-
-    # O7, O8, O9. Contract 7.2b, the square is formed FIRST.
-    var vs = ftz(identical_mul(beta2, vp))
-    var g2 = ftz(identical_mul(g, g))
-    var v = ftz(identical_mul_add(c2, g2, vs))
-
-    # O10 through O13, the denominator and the quotient.
-    var s = ftz(identical_sqrt(v))  # O10
-    var sd = ftz(identical_div(s, rt_bc2))  # O11
-    var dn = ftz(sd + eps)  # O12, eps OUTSIDE the root
-    var q = ftz(identical_div(m, dn))  # O13, a TRUE divide
-
-    # O14. ONE fused rounding. Contract 7.2d.
-    var p_new = ftz(identical_mul_add(-step_size, q, p))
-
-    p_out.unsafe_store(i, p_new)
-    m_out.unsafe_store(i, ftz(m))
-    v_out.unsafe_store(i, ftz(v))
-
+def adam_update_oop_status_kernel(
+    status: MutPointer[Int32, MutAnyOrigin],
+    p_out: MutPointer[Float32, MutAnyOrigin],
+    m_out: MutPointer[Float32, MutAnyOrigin],
+    v_out: MutPointer[Float32, MutAnyOrigin],
+    param: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    m_state: MutPointer[Float32, MutAnyOrigin],
+    v_state: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    is_adamw_in: Int32,
+    beta1: Float32,
+    beta2: Float32,
+    eps: Float32,
+    weight_decay: Float32,
+    c1: Float32,
+    c2: Float32,
+    step_size: Float32,
+    rt_bc2: Float32,
+    decay_mul: Float32,
+):
+    """I10 update emits integer status while newly computed words are live.
+    Four minima retain parameter/m/v first-index order and negative-v state.
+    Only actual offenders issue atomics; finite steps write no status traffic.
+    Caller initializes all four slots to n and gates commit after readback.
+    Existing gradient/pre-update admission remains mandatory."""
+    var n=Int(n_in)
+    var i=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if i>=n:
+        return
+    var updated = _adam_oop_cell(param.unsafe_load(i),grad.unsafe_load(i),m_state.unsafe_load(i),v_state.unsafe_load(i),is_adamw_in,beta1,beta2,eps,weight_decay,c1,c2,step_size,rt_bc2,decay_mul)
+    p_out.unsafe_store(i,updated[0])
+    m_out.unsafe_store(i,updated[1])
+    v_out.unsafe_store(i,updated[2])
+    comptime for field in range(3):
+        if (bitcast[DType.uint32](updated[field]) & UInt32(0x7f800000))==UInt32(0x7f800000):
+            _ = Atomic[DType.int32].min(status+field,Int32(i))
+    if updated[2]<Float32(0):
+        _ = Atomic[DType.int32].min(status+3,Int32(i))
 
 def sgd_update_kernel(
     param: MutPointer[Float32, MutAnyOrigin],

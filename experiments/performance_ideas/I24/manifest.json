@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "id": "I24",
+  "title": "fuse resident confusion and PRF input counts in one device pass",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/I24/check.mojo",
+    "metrics/impl/classification_joint.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_METRICS_JOINT_COUNTS=1"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "mojo",
+    "build",
+    "-j1",
+    "-I",
+    "{repo}",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_METRICS_JOINT_COUNTS=1",
+    "experiments/performance_ideas/I24/check.mojo",
+    "-o",
+    "{output}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/I24/check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "public semantics and canonical tie order retained",
+    "NVIDIA+AMD combined faster and neither materially slower"
+  ],
+  "timing_contract": "Frozen source; compile once on cheap boxes; device runs only; full public-operation timing includes all scratch/preparation/readback. Apple IDENTICAL bit check only.",
+  "blocker": null,
+  "baseline_build_argv": [
+    "mojo",
+    "build",
+    "-j1",
+    "-I",
+    "{repo}",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "experiments/performance_ideas/I24/check.mojo",
+    "-o",
+    "{output}"
+  ]
+}
