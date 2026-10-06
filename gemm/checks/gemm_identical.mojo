@@ -5449,6 +5449,8 @@ def identical_gemm_into[allow_vendor: Bool = True](
 # the column's row is above 0: the shipped dispatch reaches
 # `identical_gemm_shipped_into` and `_ksplit_run` in the long-k section below
 # and nothing else here.
+# N04 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# Experimental staging entrance requires MOJOLEARN_GEMM_ARM_TRIAL; shipped route retained.
 comptime GEMM_ARM_TRIAL = is_defined["MOJOLEARN_GEMM_ARM_TRIAL"]()
 
 comptime GEMM_ARM_SHIPPED = 0
