@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:52:40Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:53:21Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T07:52:40Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 64 done, 2 failed, 0 unsupported, 47 pending. Cells: 155 (REFUSED 2, ok 153).
+Races: 113 planned, 70 done, 2 failed, 0 unsupported, 41 pending. Cells: 162 (REFUSED 2, ok 160).
 
-Inference cells: 128 (REFUSED 2, ok 126).
+Inference cells: 132 (REFUSED 2, ok 130).
 
 ## Quality at a glance
 
@@ -126,6 +126,12 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | sgd-reg | istella | rmse (lower is better) | - | - | cuml-gpu 0.684889 |
 | algos | sgd | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 6.772e-10 |
 | algos | simple-imputer | taxi | masked_rmse | - | - | cuml-gpu 5.985180 |
+| algos | sparse-rp | taxi | mean_abs_distortion | - | - | cuml-gpu 0.266849 |
+| algos | svd | taxi | max_rel_singular_value_error | - | - | torch-gpu 2.595e-06; cupy-gpu 3.763e-06 |
+| algos | svd | taxi | relative_reconstruction_error_100k_rows | - | - | torch-gpu 7.244e-06; cupy-gpu 6.886e-06 |
+| algos | svgp | taxi | r2 (higher is better) | - | - | gpytorch-gpu -0.209527 |
+| algos | svgp | taxi | rmse (lower is better) | - | - | gpytorch-gpu 17.831018 |
+| algos | tree-shap | taxi | max_additivity_error | - | - | xgboost-gpu 5.402e-05 |
 
 ## Inference at a glance
 
@@ -181,6 +187,10 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | sgd-clf | istella | Xq | - | - | - | - | cuml-gpu 0.8 ms (IDENTICAL/arm -) |
 | algos | sgd-reg | istella | Xq | - | - | - | - | cuml-gpu 0.7 ms (IDENTICAL/arm -) |
 | algos | simple-imputer | taxi | Xq | - | - | - | - | cuml-gpu 3.3 ms (IDENTICAL/arm -) |
+| algos | sparse-rp | taxi | Xq | - | - | - | - | cuml-gpu 4.6 ms (IDENTICAL/arm -) |
+| algos | standard-scaler | taxi | Xq | - | - | - | - | cuml-gpu 0.7 ms (IDENTICAL/arm -) |
+| algos | svgp | taxi | Xq | - | - | - | - | gpytorch-gpu 7.2 ms (IDENTICAL/arm -) |
+| algos | target-encoder | taxi | Xq | - | - | - | - | cuml-gpu 29.8 ms (IDENTICAL/arm -) |
 
 ## Algorithm expansion
 
@@ -2531,6 +2541,182 @@ Inference (each arm predicts with its own model from the fit rounds above):
 | cuml-gpu | Xq | - | 3.3 | 3.3..3.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, cuml-gpu: transform(Xq)(Xq)
+
+### sparse-rp / taxi (rows full, shape X 900000x11; Xq 100000x11)
+
+race: done, driver rc 0, log `logs/algos.sparse-rp.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 5.9 | 5.9..5.9 | 1 | - | - | 932.9 | 430.0 | mean_abs_distortion=0.266849 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'compute_inverse_components': False, 'dense_output': False, 'density': 'auto', 'eps': 0.1, 'n_components': 10, 'random_state': 7}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), SparseRandomProjection (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| eps | 0.1 |
+| n_components | 10 |
+| seed | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 4.6 | 4.6..4.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### standard-scaler / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.standard-scaler.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 53.5 | 53.5..53.5 | 1 | - | - | 932.4 | 488.0 | output_shape=100000x11 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'with_mean': True, 'with_std': True}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 0.7 | 0.7..0.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### svd / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.svd.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 8.6 | 8.6..8.6 | 1 | - | - | 850.4 | 1186.8 | max_rel_singular_value_error=2.595e-06, relative_reconstruction_error_100k_rows=7.244e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| cupy-gpu | cupy | gpu | opponent | 8.3 | 8.3..8.3 | 1 | - | - | 658.5 | 2766.0 | max_rel_singular_value_error=3.763e-06, relative_reconstruction_error_100k_rows=6.886e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+memory, cupy-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'full_matrices': False}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | cupy-gpu | torch-gpu |
+|---|---||---|---|
+| library (source) | cupy (declared) | torch (declared) |
+| seed | "none (deterministic)" | "none (deterministic)" |
+
+### svgp / taxi (rows full, shape X 100000x11; Xq 20000x11; y 100000; yq 20000)
+
+race: done, driver rc 0, log `logs/algos.svgp.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| gpytorch-gpu | gpytorch | gpu | opponent | 29.1 | 29.1..29.1 | 1 | - | - | 1184.3 | 1395.0 | finite=True, r2=-0.209527, rmse=17.831018 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, gpytorch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'jitter': 1e-06, 'kernel_variance': 1.0, 'lengthscale': 1.0, 'n_inducing': 512, 'noise_variance': 1.0}. Rows: None. Timed: None.
+
+mismatch: no seed on any arm: nothing is drawn (fixed inducing points, closed form)
+
+mismatch: jitter: ours 1e-6 on K_uu; gpytorch adds its own Cholesky jitter (1e-6 in float32) only when a factorization fails
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `gpytorch-gpu`, seed 7): MATCHED
+
+| parameter | gpytorch-gpu |
+|---|---|
+| library (source) | gpytorch (declared) |
+| seed | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| gpytorch-gpu | Xq | - | 7.2 | 7.2..7.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, gpytorch-gpu: predict(Xq)(Xq)
+
+### target-encoder / taxi (rows full, shape X 1000000x5; Xq 100000x5; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.target-encoder.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 1170.7 | 1170.7..1170.7 | 1 | - | - | 1331.0 | 614.0 | output_shape=100000x5 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'categories': 'auto', 'cv': 4, 'random_state': 42, 'shuffle': True, 'smooth': 0.0, 'target_type': 'binary'}. Rows: None. Timed: None.
+
+mismatch: fold assignment: cuML 'interleaved' (row i in fold i mod 4, the cuML benchmark's cuml_args); scikit-learn and ours a KFold shuffled by seed 42 (its cpu_args)
+
+config: cuML benchmark (RAPIDS), TargetEncoder (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 42): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| cv | 4 |
+| seed | 42 |
+| smooth | 0.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 29.8 | 29.8..29.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### tree-shap / taxi (rows full, shape X 100000x11; Xq 10000x11; y 100000; yq 10000)
+
+race: done, driver rc 0, log `logs/algos.tree-shap.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | xgboost | gpu | opponent | 51.2 | 51.2..51.2 | 1 | - | - | 485.3 | 500.0 | max_additivity_error=5.402e-05 | - | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok (measured this run) |
+
+memory, xgboost-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'learning_rate': 0.1, 'max_depth': 6, 'n_estimators': 100}. Rows: None. Timed: None.
+
+mismatch: ours explains its RandomForestRegressor (TreeExplainer takes RF, ExtraTrees, DecisionTree and DART models), the opponents their GBDT of the same size
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `xgboost-gpu`, seed 7): MATCHED
+
+| parameter | xgboost-gpu |
+|---|---|
+| library (source) | xgboost (declared) |
+| learning_rate | 0.1 |
+| max_depth | 6 |
+| n_estimators | 100 |
+| seed | 7 |
 
 ## Not covered by this board
 
