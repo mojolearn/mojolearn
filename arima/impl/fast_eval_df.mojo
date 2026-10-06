@@ -8,6 +8,8 @@ never dispatches the private supplied-state scalar probe. Two bounded GPU
 reduction levels own independent model members; no host arithmetic or wait.
 """
 from std.gpu import block_idx,thread_idx,block_dim
+from std.atomic import Atomic,Ordering
+from std.ffi import _Global
 from std.memory import stack_allocation
 from std.math import isfinite,isinf,inf
 from std.sys.compile import is_defined
@@ -22,6 +24,41 @@ from arima.impl.tsa.arima_common import ARIMAOrder
 comptime PRODUCT_DF_ON=(GLOBAL_NUMERIC_MODE==NUMERIC_FAST and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL"]())
 comptime PRODUCT_DF_TPB=256
+
+
+struct _ProductDfAudit(Defaultable,Movable):
+    var likelihoods: Int64
+    var tails: Int64
+
+    def __init__(out self):
+        self.likelihoods=Int64(0)
+        self.tails=Int64(0)
+
+
+comptime _PRODUCT_DF_AUDIT=_Global[StorageType=_ProductDfAudit,name="MojolearnProductDfAuditV1",init_fn=_ProductDfAudit.__init__]
+
+
+def product_df_count(stage: Int) raises -> Int:
+    """Enqueued actual product routes: 0 likelihood, 1 finite-difference tail.
+
+    The default build returns zero without creating an audit global. A hit
+    proves source route reach, never device completion or numerical quality.
+    Device completion and quality are independently owed by the caller gate.
+    """
+    if stage<0 or stage>1:raise Error("invalid product DF audit stage")
+    comptime if PRODUCT_DF_ON:
+        ref audit=_PRODUCT_DF_AUDIT.get_or_create_ptr()[]
+        if stage==0:return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.likelihoods)))
+        return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.tails)))
+    return 0
+
+
+@always_inline
+def product_df_hit(stage: Int) raises:
+    comptime if PRODUCT_DF_ON:
+        ref audit=_PRODUCT_DF_AUDIT.get_or_create_ptr()[]
+        if stage==0:_=Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.likelihoods),Int64(1))
+        else:_=Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.tails),Int64(1))
 
 
 def product_df_eligible(order: ARIMAOrder,nobs: Int) -> Bool:

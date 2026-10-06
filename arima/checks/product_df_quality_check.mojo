@@ -11,7 +11,7 @@ from std.math import log,abs
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from arima.impl.fast_eval_ws import FastEvalWS,ew_finish_kernel
-from arima.impl.fast_eval_df import PRODUCT_DF_ON,product_df_eligible,product_parts_kernel,product_finish_kernel
+from arima.impl.fast_eval_df import PRODUCT_DF_ON,product_df_eligible,product_parts_kernel,product_finish_kernel,product_df_count
 from arima.impl.batched_kalman import fast_kalman_into
 from arima.impl.tsa.arima_common import ARIMAOrder
 
@@ -108,6 +108,22 @@ def _case(nobs: Int,refuse: Bool=False) raises:
             if newerror>olderror:failures+=1
     if failures:raise Error("PRODUCT_DF_QUALITY_HOLD worsened_fields="+String(failures))
     print("PRODUCT_DF_QUALITY_PASS nobs="+String(nobs)+" components="+String(nb*N))
+    # Reevaluate through the actual production workspace entry after the
+    # independent stage oracle. A compile flag alone never proves reach.
+    var route0=product_df_count(0);var route1=product_df_count(1)
+    var routed_f=ctx.enqueue_create_host_buffer[DType.float32](nb)
+    var routed_g=ctx.enqueue_create_host_buffer[DType.float32](nb*N)
+    held.loglike_at(ctx,order,h,x,bad)
+    held.finish(ctx,h,scale,x,grad,xp,f,g,bad)
+    ctx.enqueue_copy(dst_ptr=routed_f.unsafe_ptr(),src_buf=f)
+    ctx.enqueue_copy(dst_ptr=routed_g.unsafe_ptr(),src_buf=g)
+    ctx.synchronize()
+    if product_df_count(0)-route0!=1 or product_df_count(1)-route1!=1:raise Error("actual product DF route not reached")
+    for b in range(nb):
+        if bitcast[DType.uint32](routed_f[b])!=bitcast[DType.uint32](fh[b]):raise Error("actual likelihood entry differs from qualified stages")
+    for cell in range(nb*N):
+        if bitcast[DType.uint32](routed_g[cell])!=bitcast[DType.uint32](gh[cell]):raise Error("actual gradient entry differs from qualified stages")
+    print("PRODUCT_DF_ROUTE_PASS likelihood_launches=1 tail_launches=1")
 
 
 def main() raises:
