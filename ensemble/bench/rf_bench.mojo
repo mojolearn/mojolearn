@@ -258,6 +258,7 @@ def run_arm[
     timed: Bool = True,
     score: Bool = True,
     fingerprint: Bool = False,
+    repeats: Int = REPEATS,
 ) raises:
     """One arm. `timed=False` fits once and prints ACCURACY ONLY.
 
@@ -319,7 +320,7 @@ def run_arm[
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
 
-    var reps = REPEATS if timed else 1
+    var reps = repeats if timed else 1
     for rep in range(reps):
         var p = _params(n_cols, n_bins)
         var t0 = perf_counter_ns()
