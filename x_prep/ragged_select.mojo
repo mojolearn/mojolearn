@@ -15,6 +15,7 @@ from checks.numerics import ftz,GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
 from x_prep.common import canon
 from x_prep.dradix import radix_key,radix_word
 
+# NEVER RUN — PENDING VALIDATION
 comptime SELECT_RADIX=GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RAGGED_RADIX_SELECT"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime SELECT_TPB=128
 
