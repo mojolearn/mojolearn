@@ -4,7 +4,9 @@
   "mode": "fast",
   "vendor": "apple",
   "source_guard_paths": [
-    "x_decomp/mcd_bmma.mojo"
+    "x_decomp/mcd_bmma.mojo",
+    "x_decomp/mcd_experiments.mojo",
+    "x_decomp/mcd_fast.mojo"
   ],
   "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
   "existing_default_exception": null,
@@ -18,23 +20,82 @@
       ],
       "caller": "caller.py",
       "prerequisites": [
-        "core"
+        "core",
+        "x_metrics"
       ],
       "compiler_status": "pending_current_source_instantiation",
       "device_quality": "pending",
       "performance": "pending"
+    },
+    {
+      "name": "active_compact",
+      "binding": "x_decomp",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_MCD_FAST_ACTIVE_COMPACT"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "x_metrics"
+      ],
+      "compiler_status": "pending_final_frozen_campaign",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "cov_reuse",
+      "binding": "x_decomp",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_MCD_FAST_COV_REUSE"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "x_metrics"
+      ],
+      "compiler_status": "pending_final_frozen_campaign",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "active_cov",
+      "binding": "x_decomp",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_MCD_FAST_ACTIVE_COMPACT",
+        "MOJOLEARN_MCD_FAST_COV_REUSE"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "x_metrics"
+      ],
+      "compiler_status": "pending_final_frozen_campaign",
+      "device_quality": "pending",
+      "performance": "pending"
     }
   ],
-  "native_checks": [],
+  "native_checks": [
+    {
+      "name": "mcd_candidate_mechanisms",
+      "source": "experiments/performance_ideas/F06/native_check.mojo"
+    }
+  ],
   "input_transport_helper": {
     "binding": "core",
     "numeric_mode": "identical",
     "defines": [],
     "role": "input_transport_helpers"
   },
-  "remaining_subarms": [
-    "Active-candidate compaction and covariance-reuse independent variants are not supplied by the bounded-batch flag. Prediction/score consumers require additional caller fixtures."
-  ],
+  "remaining_subarms": [],
   "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
-  "promotion_authorized": false
+  "promotion_authorized": false,
+  "resource_contract": {
+    "candidate_capacity": 65536,
+    "compact_scratch": "three nc Int32 planes + bounded chunk sums + one counter",
+    "covariance_cache": "existing parity mean/covariance reused; one nc Int32 work gate + one counter; no new numerical cache",
+    "larger_phases": "incumbent fallback"
+  }
 }
