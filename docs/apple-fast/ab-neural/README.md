@@ -1,5 +1,11 @@
 # docs/apple-fast/ab-neural: A/B request lines for the Apple FAST NEURAL tier
 
+For the 2026-10-06 source-only campaign and an inventory of the older neural
+experiments in this directory, see the
+[neural A/B experiment and file index](../../../experiments/apple_fast_neural_20261006/EXPERIMENT_INDEX.md).
+It includes all new named variants, controls and implementation files without
+claiming compilation, execution or full-workload qualification.
+
 One file per afn lane (`<lane>.txt`), one line per comparison, plus `<lane>.md` explaining each
 define in a paragraph (mechanism, expected effect, risk, board lanes touched) so the M3 manager
 reads results without reading code. `tier.txt` holds the baselines (IDENTICAL vs FAST, no define)

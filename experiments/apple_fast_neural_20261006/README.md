@@ -7,6 +7,12 @@ implementation in a new worktree and a pushed branch. The starting point is
 local `main` at `fd6cf8045`; branch `ideas/apple-fast-neural-20261006`.
 The new worktree is `../mojolearn-apple-fast-neural-20261006`.
 
+The [complete experiment and file index](EXPERIMENT_INDEX.md) lists every new
+named A/B variant with its exact baseline/candidate defines and implementation
+paths, followed by the existing neural A/B experiments found in this worktree.
+It separates new source proposals, reused arms, historical recipes and pending
+integration/qualification.
+
 Read [IDEAS.md](IDEAS.md) for 44 mechanism cards, eight interaction recipes,
 their A/B hypotheses, workload map, quality risks and future acceptance
 requirements. The list was authored before implementation fanout. Source
