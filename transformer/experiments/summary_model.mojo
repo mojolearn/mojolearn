@@ -124,7 +124,10 @@ def model_summary_forward(ctx:DeviceContext,mut output:DeviceBuffer[DType.float3
     ctx.enqueue_function[summary_pack_kernel[False]](output.unsafe_ptr(),work.output.unsafe_ptr(),Int32(rows*hd),Int32(l),Int32(nh),Int32(hd),grid_dim=((rows*hd+255)//256,1,1),block_dim=(256,1,1))
     if materialize:
         step_count_launch()
-        ctx.enqueue_function[summary_materialize_kernel[False]](work.q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),work.dy.unsafe_ptr(),work.lo.unsafe_ptr(),work.hi.unsafe_ptr(),maxes.unsafe_ptr(),denoms.unsafe_ptr(),maxes.unsafe_ptr(),scores.unsafe_ptr(),masked.unsafe_ptr(),exps.unsafe_ptr(),probs.unsafe_ptr(),Int32(rows*s),Int32(s),Int32(hd),Int32(qpg),scale,grid_dim=((rows*s+255)//256,1,1),block_dim=(256,1,1))
+        # BACKWARD=False only reads maxes; the zdot argument is unused.
+        # Take one explicit pointer view for these repeated read-only arguments.
+        var maxes_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](maxes.unsafe_ptr())
+        ctx.enqueue_function[summary_materialize_kernel[False]](work.q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),work.dy.unsafe_ptr(),work.lo.unsafe_ptr(),work.hi.unsafe_ptr(),maxes_ptr,denoms.unsafe_ptr(),maxes_ptr,scores.unsafe_ptr(),masked.unsafe_ptr(),exps.unsafe_ptr(),probs.unsafe_ptr(),Int32(rows*s),Int32(s),Int32(hd),Int32(qpg),scale,grid_dim=((rows*s+255)//256,1,1),block_dim=(256,1,1))
     step_count_sync()
     ctx.synchronize()
 

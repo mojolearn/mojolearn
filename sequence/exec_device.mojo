@@ -737,7 +737,7 @@ struct DeviceExec(Exec):
                             a.p7, a.p5, Int32(a.i3), grid_dim=(1, 1, 1), block_dim=(MOE_RT, 1, 1),
                         )
                         comptime if MOE_STABLE_PACK:
-                            self.ctx.enqueue_function[moe_group_stable_scatter_kernel](
+                            self.ctx.enqueue_function[moe_group_stable_all_kernel](
                                 a.p2, a.p5, a.p4, Int32(npairs), Int32(a.i3),
                                 grid_dim=((a.i3 + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                             )

@@ -17,6 +17,7 @@ from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GAMMA,
     CRITERION_GINI,
+    CRITERION_MSE,
     CRITERION_INVERSE_GAUSSIAN,
     CRITERION_POISSON,
     DecisionTreeParams,
@@ -2168,12 +2169,14 @@ def small_node_raw_split_kernel[CLASSIFICATION: Bool](
             Int64(Int(histogram[unsafe_offset=32])),Int(left_count),
             Int(right_count),length,SCORE_SAB_NONE,numerator,denominator):
             return
+    # The canonical helpers accept generic device pointers. Shared storage is
+    # live through this finalization, after the block barrier above.
     var gain = Float32(0)
     if criterion == CRITERION_ENTROPY:
         # T06's parent cache belongs to the separate multi-feature score
         # pass. A fused feature already consumes its exact counts once.
-        gain = entropy_gain_per_split(histogram.unsafe_origin_cast[MutAnyOrigin](),
-            histogram.unsafe_offset(32).unsafe_origin_cast[MutAnyOrigin](),
+        gain = entropy_gain_per_split(histogram.unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
+            histogram.unsafe_offset(32).unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
             0,Int(n_acc),Int32(length),left_count,min_samples_leaf)
         numerator = float_gain_key(gain)
         denominator = Int64(1)
@@ -2183,8 +2186,8 @@ def small_node_raw_split_kernel[CLASSIFICATION: Bool](
         numerator = float_gain_key(gain)
         denominator = Int64(1)
     else:
-        gain = gain_per_split(histogram.unsafe_origin_cast[MutAnyOrigin](),
-            histogram.unsafe_offset(32).unsafe_origin_cast[MutAnyOrigin](),
+        gain = gain_per_split(histogram.unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
+            histogram.unsafe_offset(32).unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
             0,Int(n_acc),Int32(length),left_count,min_samples_leaf)
         comptime if T14 and not T14_EXACT and not CLASSIFICATION:
             if criterion == CRITERION_MSE:

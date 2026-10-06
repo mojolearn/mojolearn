@@ -2532,7 +2532,7 @@ def mamba3_owned_weights_enabled_binding() raises -> PythonObject:
     return PythonObject(NN40_OWNED_WEIGHTS)
 
 
-def mamba3_prefill_session_install_weights_binding(session: PythonObject, addrs: PythonObject, d_model: Int) raises -> PythonObject:
+def mamba3_prefill_session_install_weights_binding(session: PythonObject, addrs: PythonObject, d_model: PythonObject) raises -> PythonObject:
     """Copy nine tensors into an immutable session-owned generation.
     Complete all uploads before replacing the previous snapshot. External
     arrays may mutate afterwards: owned calls no longer consult them."""
@@ -2543,7 +2543,8 @@ def mamba3_prefill_session_install_weights_binding(session: PythonObject, addrs:
         raise Error("mamba3 owned weights: session is busy or unusable")
     if len(addrs) != 9:
         raise Error("mamba3 owned weights: expected nine weight addresses")
-    var dims = Mamba3Dims.of(d_model)
+    var native_d_model = Int(py=d_model)
+    var dims = Mamba3Dims.of(native_d_model)
     var a = List[Int]()
     a.append(0)
     for i in range(9):
@@ -2563,7 +2564,7 @@ def mamba3_prefill_session_install_weights_binding(session: PythonObject, addrs:
             owner[].drop_stages()
             owner[].w = fresh^
             owner[].w_host = List[Float32]()
-            owner[].dm = d_model
+            owner[].dm = native_d_model
             owner[].owned_weights = True
             owner[].weight_generation += 1
             owner[].weight_uploads += 1
@@ -3193,11 +3194,11 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
             # lane/neural-net-experiment: the fresh prefill on a session.
             _ = m.add_type[Mamba3PrefillSession]("_Mamba3PrefillSession")
             m.def_function[mamba3_prefill_session_create_binding]("mamba3_prefill_session_create")
-        m.def_function[mamba3_prefill_session_export_weights_binding]("mamba3_prefill_session_export_weights")
-        m.def_function[mamba3_owned_weights_enabled_binding]("mamba3_owned_weights_enabled")
-        m.def_function[mamba3_prefill_session_install_weights_binding]("mamba3_prefill_session_install_weights")
-        m.def_function[mamba3_prefill_session_forward_owned_binding]("mamba3_prefill_session_forward_owned")
-        m.def_function[mamba3_prefill_session_backward_owned_binding]("mamba3_prefill_session_backward_owned")
+            m.def_function[mamba3_prefill_session_export_weights_binding]("mamba3_prefill_session_export_weights")
+            m.def_function[mamba3_owned_weights_enabled_binding]("mamba3_owned_weights_enabled")
+            m.def_function[mamba3_prefill_session_install_weights_binding]("mamba3_prefill_session_install_weights")
+            m.def_function[mamba3_prefill_session_forward_owned_binding]("mamba3_prefill_session_forward_owned")
+            m.def_function[mamba3_prefill_session_backward_owned_binding]("mamba3_prefill_session_backward_owned")
             m.def_function[mamba3_prefill_session_close_binding]("mamba3_prefill_session_close")
             m.def_function[mamba3_prefill_session_forward_binding]("mamba3_prefill_session_forward")
             m.def_function[mamba3_prefill_session_backward_binding]("mamba3_prefill_session_backward")
@@ -3218,10 +3219,10 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
         abort(String("failed to create _mojolearn_mamba: ", e))
 
 
-def mamba3_prefill_session_export_weights_binding(session: PythonObject, addrs: PythonObject, generation: Int) raises -> PythonObject:
+def mamba3_prefill_session_export_weights_binding(session: PythonObject, addrs: PythonObject, generation: PythonObject) raises -> PythonObject:
     """Download the installed immutable generation, never borrowed arrays."""
     var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    if owner[].busy or not owner[].usable or not owner[].owned_weights or not owner[].w or generation != owner[].weight_generation:
+    if owner[].busy or not owner[].usable or not owner[].owned_weights or not owner[].w or Int(py=generation) != owner[].weight_generation:
         raise Error("mamba3 owned export: missing, busy, unusable or stale generation")
     if len(addrs) != 9:
         raise Error("mamba3 owned export: expected nine writable buffers")

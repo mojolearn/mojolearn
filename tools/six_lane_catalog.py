@@ -54,7 +54,7 @@ def normalize(lane, source, e, path, *, original=None, workloads=None, bindings=
     ident=original or e['id']; key=lane+'.'+ident
     paths=unique(seq(e.get('implementation_paths'))+seq(e.get('source_paths'))+seq(e.get('production_paths'))+seq(e.get('primary_source_paths'))+seq(e.get('shared_source_paths')))
     calls=unique(seq(callers)+seq(e.get('production_callers'))+seq(e.get('caller_paths')))
-    gaps=seq(e.get('source_gaps'))+seq(e.get('remaining_gaps'))+seq(e.get('remaining_work'))+seq(e.get('limitations'))+seq(e.get('remaining_integration_limitations'))
+    gaps=seq(e.get('source_gaps'))+seq(e.get('remaining_gaps'))+seq(e.get('remaining_work'))+seq(e.get('limitations'))+seq(e.get('remaining_integration_limitations'))+seq(e.get('remaining_source_gaps'))
     variant_rows=variants
     if variant_rows is None:
         variant_rows=[('default', e)]
@@ -84,7 +84,10 @@ def normalize(lane, source, e, path, *, original=None, workloads=None, bindings=
                          parameters=v.get('parameters',e.get('required_compile_parameters',{})),
                          workloads=workloads if workloads is not None else v.get('required_workload_keys',e.get('workloads',[]))))
     paths=unique(p.split(':')[0] for p in paths+calls if (ROOT/p.split(':')[0]).is_file())
-    status=e.get('source_status',e.get('implementation_status',e.get('status','idea')))
+    status=e.get('source_integration',e.get('source_status',e.get('implementation_status',e.get('status','idea'))))
+    scope=e.get('implemented_scope',e.get('caller_integration',e.get('source_integration','retained source paths; callable scope must be checked per arm')))
+    partial=bool(gaps) or 'partial' in status.lower()
+    wiring_claim=bool(calls or e.get('caller_integration') or 'wired' in status or 'integrated' in status or status=='production_source_draft')
     role='incumbent_dependency' if status in ('reused_existing','existing_candidate_unverified') else 'source_rejected' if status=='rejected_source' else 'new_candidate'
     return dict(id=key,lane=lane,source_id=source,original_id=ident,title=e.get('title',ident),campaign_role=role,
                 source_record=reference(path,ident),implementation_paths=paths,production_callers=calls,
@@ -92,7 +95,7 @@ def normalize(lane, source, e, path, *, original=None, workloads=None, bindings=
                 affected_estimators=e.get('estimators',e.get('affected_estimators',e.get('intended_models',[]))),
                 prerequisites=seq(e.get('dependencies'))+seq(e.get('prerequisites')),
                 conflicts=seq(e.get('mutually_exclusive_with'))+seq(e.get('incompatible_defines')),
-                gaps=gaps,implementation=dict(idea=True,programmed=bool(paths),production_wired=bool(calls or e.get('caller_integration')),harness_wired='master_planner; execution adapter requires concrete saved recipe',compiled=[],runtime_reach='unverified'),
+                gaps=gaps,implementation=dict(idea=True,programmed='source_present_partial_or_unverified' if paths else 'idea_only',source_files_present=bool(paths),production_wired='source_claim_present' if wiring_claim else 'source_mapping_requires_review',implemented_scope=scope,coverage='partial_or_unverified' if partial else 'source_scope_only',harness_wired='master_planner; execution adapter requires concrete saved recipe',compiled=[],runtime_reach='unverified'),
                 source_status=status,
                 qualification=dict(QUALIFICATION),mode='fast' if lane.startswith('AF.') else 'identical',
                 vendors=['apple'] if lane.startswith('AF.') else ['nvidia','amd','apple','host'],
@@ -169,6 +172,8 @@ def discover():
             routes=[]
             for name2,v in vs: routes+=afn.target_routes(e['id'],name2,v.get('candidate_defines',[]))
             item=normalize('AF.N','apple_fast.neural',e,p,variants=vs,bindings=unique([r['binding'] for r in routes]),workloads=routes)
+            item['implementation']['production_wired']='authored_call_site_map';item['implementation']['implemented_scope']=routes
+            item['production_route_source']='tools/apple_fast_neural_ideas.py:target_routes'
             if name=='interactions':item['kind']='interaction';interactions.append(item)
             else:entries.append(item)
     # Explicit equivalence after source reconciliation; narrower subarms keep IDs.

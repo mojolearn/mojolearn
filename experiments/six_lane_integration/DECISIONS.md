@@ -36,3 +36,15 @@
 ## D025 — NVIDIA compile-only rental authorized
 
 The owner requested a fast rented RunPod NVIDIA worker during integration. This supersedes the initial remote-job exclusion only for NVIDIA compilation and its setup/teardown. Use a frozen tracked-source archive, native supported CUDA targets, complete retained logs, artifact/source hashes, and a bounded self-deleting lease. Never import bindings or launch estimators, measurements, identity or quality checks. Do not modify any other rental or session. AMD remains uncompiled.
+
+## D026 — Stage claims describe retained source scope
+
+Catalog stage labels now distinguish source-file presence, authored caller maps, partial or unverified coverage, and exact compile receipts. A filename or metadata claim is not evidence that the full idea is programmed or reachable. Classical source-integration ledger status takes precedence over an old planned catalog tag, with every remaining-source gap retained. Apple FAST neural caller maps are retained explicitly rather than reported absent because their schema lacks a caller_paths field.
+
+## D027 — Native NVIDIA archive scope
+
+RunPod H100 SXM worker mf7ill27pzepp7 was provisioned for compile-only work at the API-reported $3.49/hour. The cgroup CPU quota is 22.1 CPUs; visible affinity has 208 CPUs and is not the allocation. The first 32-vCPU request had no capacity and created no pod. A source manifest initially included files omitted by repository export-ignore rules; admission correctly refused before compilation. The repaired manifest hashes the actual git archive, lists every omitted path, and retains the original failed admission logs. No compiler source was modified remotely.
+
+## D028 — Repairs from the native NVIDIA compile round
+
+Repair source/API mismatches reported by frozen native builds: Mamba registration indentation and PythonObject scalar admission, transformer profile raises annotations, reconciled MoE helper names, sparse-code pointer types, stale ByteLM table lifetime and cache keyword, lifetime/optimizer metadata borrowing, shared histogram pointer admission, missing criterion/numeric imports, and device-passable integer Boolean metadata. No generated compiler output or toolchain internals were changed. The supported pointer cast is documented at https://mojolang.static.modular.com/docs/std/memory/pointer/Pointer/ . Baselines and dependent candidate artifacts require new source-matched compile evidence. Original errors remain under the prior freeze.

@@ -179,7 +179,7 @@ struct ByteLayerPool(Movable):
                     self.caches[owner], self.ropes[owner], layer.weights, layer.input,
                     self.config.batch, self.config.length, 0, trace,
                     String("byte.block")+String(i)+".forward",
-                    retain_decode_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
                 self.contexts[owner].synchronize()
                 if i < len(self.layers):
                     layer.forward.residual2.enqueue_copy_to(self.layers[i].input)

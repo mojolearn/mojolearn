@@ -48,7 +48,7 @@ struct NeuralLifetimeArena(Movable):
         # Metadata only: each range describes a model tensor, not a data row.
         # First fit is deterministic and entirely driven by live byte intervals.
         for i in range(len(ranges)):
-            var item = ranges[i]
+            ref item = ranges[i]
             if item.cells < 1 or item.cells > capacity or item.first_stage < 0 or item.last_stage < item.first_stage:
                 raise Error("NN62 invalid live range or insufficient byte budget")
             var candidate = 0
@@ -56,7 +56,7 @@ struct NeuralLifetimeArena(Movable):
             while moved:
                 moved = False
                 for j in range(i):
-                    var previous = ranges[j]
+                    ref previous = ranges[j]
                     var live_overlap = item.first_stage <= previous.last_stage and previous.first_stage <= item.last_stage
                     if live_overlap:
                         var end = self.offsets[j] + previous.cells
@@ -73,7 +73,7 @@ struct NeuralLifetimeArena(Movable):
     def view(mut self, slot: Int, stage: Int) raises -> DeviceBuffer[DType.float32]:
         if slot < 0 or slot >= len(self.ranges):
             raise Error("NN62 unknown scratch slot")
-        var live = self.ranges[slot]
+        ref live = self.ranges[slot]
         if stage < live.first_stage or stage > live.last_stage:
             raise Error("NN62 scratch accessed outside declared lifetime")
         # Producers must initialize every consumed cell. No implicit clear is

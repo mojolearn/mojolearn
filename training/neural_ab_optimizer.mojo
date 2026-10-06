@@ -70,7 +70,7 @@ def nn_adam_scalar_table(ctx: DeviceContext, configs: List[OptimizerConfig],
     for group in range(len(configs)):
         if steps[group] < 1:
             raise Error("NN56 optimizer step must be positive")
-        var cfg = configs[group]
+        ref cfg = configs[group]
         metadata.append(cfg.lr)
         metadata.append(cfg.beta1)
         metadata.append(cfg.beta2)

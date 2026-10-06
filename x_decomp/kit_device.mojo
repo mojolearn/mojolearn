@@ -684,7 +684,7 @@ struct DKit(Movable):
             if kind != 0:
                 var wsub = self._sub(W)
                 enqueue_fill(self.ctx, wsub, Float32(0.0))
-            launch_classical_code_rows(self.ctx, G.p(), Q.p(), W.p(), ds.unsafe_ptr(), dn.unsafe_ptr(),
+            launch_classical_code_rows(self.ctx, G.p(), Q.p(), W.p(), rebind[F32Ptr](ds.unsafe_ptr()), rebind[F32Ptr](dn.unsafe_ptr()),
                                        n, k, kind, a, b, Float32(alpha), Float32(tol))
         elif kind == 0:
             self.ctx.enqueue_function[lasso_rows_kernel](

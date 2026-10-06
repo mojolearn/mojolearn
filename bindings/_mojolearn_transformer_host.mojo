@@ -122,7 +122,7 @@ from training.neural_identical_experiments import IDN_ATTENTION_V2
 from transformer.impl.llama.attention_v2_model_contract import ATTENTION_MODEL_V2_PROFILE
 
 
-def transformer_attention_profile_binding() -> PythonObject:
+def transformer_attention_profile_binding() raises -> PythonObject:
     """Exact attention graph for this native binary's ordinary fp32 model path."""
     return PythonObject(String(ATTENTION_MODEL_V2_PROFILE) if IDN_ATTENTION_V2 else String("attention-eager.fp32.v1"))
 

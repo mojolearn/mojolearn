@@ -135,6 +135,7 @@ from isolation_forest.impl.rng.xorwow import (
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_log,
     identical_mul_add,

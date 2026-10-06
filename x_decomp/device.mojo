@@ -155,6 +155,8 @@ from x_decomp.lle_device import (
     mlle_weights_kernel,
 )
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
+
+comptime U32Ptr = MutPointer[UInt32, MutAnyOrigin]
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import (
     ts_apply_device, ts_factor_device, ts_free_device, ts_pack_center_device, ts_pack_device,

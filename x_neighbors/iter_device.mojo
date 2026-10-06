@@ -116,10 +116,10 @@ def _c33_stop(sum: FP, state: IP, threshold: Float32, iteration: Int32):
         state[2] = iteration % 2
 
 
-def _c33_product(state: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Bool, variant: Int32):
+def _c33_product(state: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Int32, variant: Int32):
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if state[0] == 0 and t < Int(n)*Int(c):
-        if raw_graph:
+        if raw_graph != 0:
             classical_graph_product(t,graph,degree,cur,nxt,Int(n),Int(c),Int(variant))
         else:
             matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
@@ -227,7 +227,7 @@ def op_lp_iterate(
                 n_iter = it
                 _absdiff_launch(ctx,cur,prev,_p(d_s),_p(d_part),nc)
                 ctx.enqueue_function[_c33_stop](_p(d_s),state.unsafe_ptr(),threshold,Int32(it),grid_dim=1,block_dim=1)
-                ctx.enqueue_function[_c33_product](state.unsafe_ptr(),_p(d_g),cur,_p(d_nxt),Int32(n),Int32(c),_p(d_degree),raw_graph,Int32(clamp_variant),grid_dim=_grid(nc),block_dim=BLOCK)
+                ctx.enqueue_function[_c33_product](state.unsafe_ptr(),_p(d_g),cur,_p(d_nxt),Int32(n),Int32(c),_p(d_degree),Int32(raw_graph),Int32(clamp_variant),grid_dim=_grid(nc),block_dim=BLOCK)
                 ctx.enqueue_function[_c33_clamp](state.unsafe_ptr(),_p(d_nxt),_p(d_ys),d_unl.unsafe_ptr(),prev,Int32(n),Int32(c),Int32(clamp_variant),alpha,grid_dim=_grid(nc),block_dim=BLOCK)
                 var tmp = cur
                 cur = prev

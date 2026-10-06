@@ -2062,7 +2062,6 @@ def _byte_neural_group_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step
         tr.live_status_steps += 1
     _ = offsets
     _ = kinds
-    _ = table
     _ = d_offsets^
     _ = d_kinds^
     _ = d_table^

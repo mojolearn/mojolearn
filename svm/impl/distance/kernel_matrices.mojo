@@ -686,7 +686,7 @@ def _kernel_rows(ctx: DeviceContext, kp: KernelParams,
     def task(rank: Int) {imm sp, imm fp, imm kp, imm n, imm k}:
         try:
             ref shard = sp[rank]
-            kernel_op(shard.ctx, kp, shard.output, shard.a, shard.b, shard.rows, n, k,
+            kernel_op(shard.ctx, kp, shard.out, shard.a, shard.b, shard.rows, n, k,
                       shard.norm_a, shard.norm_b, shard.ws, False)
             shard.ctx.synchronize()
         except:
@@ -701,7 +701,7 @@ def _kernel_rows(ctx: DeviceContext, kp: KernelParams,
     for rank in range(active):
         ref shard = shards[rank]
         var destination = output.create_sub_buffer[DType.float32](shard.first * n, shard.rows * n)
-        shard.output.enqueue_copy_to(destination)
+        shard.out.enqueue_copy_to(destination)
         shard.ctx.synchronize()
     _ = shards^
     ctx.synchronize()
