@@ -6,6 +6,7 @@ batch-step fusion and independent OvR scheduling. Device qualification
 is pending; compilation never establishes numerical identity or speed.
 """
 from std.memory import bitcast
+from std.os import setenv,unsetenv
 from x_linear.ops import FP,IP
 from x_linear.team import solo
 from x_linear.sgd import sgd_fit,L_HINGE,L_LOG,L_SQUARED,P_L2,P_EN,LR_CONSTANT,LR_PA1
@@ -17,6 +18,9 @@ def ip(mut x: List[Int32]) -> IP:
     return x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 def check(n: Int,d: Int,k: Int,batch: Int,loss: Int,rate: Int,penalty: Int,weighted: Bool) raises:
+    var chunk=64 if k>2 else 1
+    if not setenv("MOJOLEARN_X_LINEAR_SGD_CHUNK",String(chunk),True) or _sgd_chunk()!=chunk:
+        raise Error("I12 SGD attribution chunk setup failed")
     var problems=k if k>2 else 1
     var x=List[Float32](length=n*d,fill=Float32(0))
     var y=List[Float32](length=n*(2 if weighted else 1),fill=Float32(0))
@@ -41,7 +45,7 @@ def check(n: Int,d: Int,k: Int,batch: Int,loss: Int,rate: Int,penalty: Int,weigh
             if bitcast[DType.uint32](actual[i])!=bitcast[DType.uint32](expected[i]):
                 print("I12 SGD mismatch n,d,k,batch,loss,rate,word",n,d,k,batch,loss,rate,i,bitcast[DType.uint32](actual[i]),bitcast[DType.uint32](expected[i]))
                 raise Error("I12 SGD full coefficient/intercept/epoch/status identity failed")
-    print("I12 SGD_CALL_PASS",n,d,k,batch,loss,rate,"ovr_admitted",_sgd_mb_ovr_applies(problems,n,d,batch,_sgd_chunk()))
+    print("I12 SGD_CALL_PASS",n,d,k,batch,loss,rate,"chunk",chunk,"ovr_admitted",_sgd_mb_ovr_applies(problems,n,d,batch,_sgd_chunk()))
 
 def main() raises:
     check(257,7,3,16,L_HINGE,LR_CONSTANT,P_L2,False)
@@ -49,4 +53,5 @@ def main() raises:
     check(257,7,3,16,L_HINGE,LR_PA1,P_L2,True)
     check(257,7,2,16,L_LOG,LR_CONSTANT,P_L2,False)
     check(257,7,0,16,L_SQUARED,LR_CONSTANT,P_L2,False)
+    _ = unsetenv("MOJOLEARN_X_LINEAR_SGD_CHUNK")
     print("I12 SGD_PASS actual_minibatch_fusion OVR_independence tail shuffled repeated_fits complete_words")
