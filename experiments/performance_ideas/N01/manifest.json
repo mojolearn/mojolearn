@@ -29,6 +29,8 @@
     "{repo}/experiments/performance_ideas/N01/campaign.json",
     "--evidence",
     "{output}",
+    "--vendor",
+    "{vendor}",
     "--build-only"
   ],
   "run_argv": [
@@ -37,6 +39,8 @@
     "{repo}/experiments/performance_ideas/N01/campaign.json",
     "--evidence",
     "{output}",
+    "--vendor",
+    "{vendor}",
     "--run-only"
   ],
   "validation_paths": [
@@ -47,9 +51,20 @@
   "quality_gates": [
     "same-version NVIDIA/AMD/Apple/host output bits",
     "exact intermediate outputs and poison control",
-    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower"
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Campaign receipt contains explicit baseline and independently compiled candidate arms; do not rebuild for run-only"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
   "blocker": null,
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/N01/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ]
 }

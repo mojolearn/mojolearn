@@ -18,6 +18,8 @@ def main():
     parser.add_argument('config', type=Path)
     parser.add_argument('--evidence', required=True, type=Path)
     parser.add_argument('--mojo', default='mojo')
+    parser.add_argument('--vendor', choices=['nvidia','amd','apple'], required=True)
+    parser.add_argument('--accelerator')
     parser.add_argument('--mojo-include', action='append', default=[])
     parser.add_argument('--build-only', action='store_true')
     parser.add_argument('--run-only', action='store_true')
@@ -35,6 +37,10 @@ def main():
     for arm in cfg['arms']:
         binary = args.evidence / (cfg['id']+'-'+arm['name'])
         argv = [args.mojo,'build','-j1','-D','MOJOLEARN_NUMERIC_IDENTICAL=1','-I',str(repo)]
+        argv += ['-D','MOJOLEARN_COLUMN_'+args.vendor.upper()+'=1']
+        accelerator = args.accelerator or {'nvidia':'sm_89','amd':'gfx942'}.get(args.vendor)
+        if accelerator:
+            argv += ['--target-accelerator',accelerator]
         for include in args.mojo_include:
             argv += ['-I',include]
         for define in arm.get('defines',[]):
@@ -62,7 +68,7 @@ def main():
         if args.build_only:
             continue
         for index, fixture in enumerate(cfg.get('fixtures',[{}])):
-            runenv = env | {key:str(value) for key,value in fixture.items()}
+            runenv = env | {key:str(value) for key,value in arm.get('environment',{}).items()} | {key:str(value) for key,value in fixture.items()}
             runlog = binary.parent/(binary.name+f'.fixture-{index}.log')
             with runlog.open('w') as log:
                 result = subprocess.run([str(binary)],cwd=repo,env=runenv,stdout=log,stderr=subprocess.STDOUT)
