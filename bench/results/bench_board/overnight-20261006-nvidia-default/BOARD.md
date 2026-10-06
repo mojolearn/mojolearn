@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T08:13:13Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T08:14:04Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T08:13:13Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 96 done, 3 failed, 0 unsupported, 14 pending. Cells: 195 (REFUSED 3, ok 192).
+Races: 113 planned, 98 done, 3 failed, 0 unsupported, 12 pending. Cells: 204 (REFUSED 3, ok 201).
 
 Inference cells: 140 (REFUSED 2, ok 138).
 
@@ -180,6 +180,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | tsvd | taxi | relative_reconstruction_error (lower is better) | - | - | cuml-gpu 0.003257 |
 | classical2 | umap | taxi | trustworthiness_k15 (higher is better, 1 at most) | - | - | cuml-gpu 0.992305 |
 | neural | gemm-int8 | gaussian | max_rel_err_vs_fp64 (lower is better) | - | - | torch-eager-int8 0.000000; torch-compile-int8 0.000000 |
+| neural | lm-forward | bytes | mean_nll (lower is better) | - | - | torch-eager-fp32 9.018733; torch-eager-tf32 9.018733; torch-compile-fp32 9.018733; torch-compile-tf32 9.018732; torch-eager-bf16 9.018664; torch-compile-bf16 9.018669 |
 
 ## Inference at a glance
 
@@ -1110,6 +1111,51 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 |---|---||---|---|
 | library (source) | torch (declared) | torch (declared) |
 | seed | 7 | 7 |
+
+### lm-forward / bytes (neural shape full: B1 L2048 DM384 H6 KV6 HD64 FF1024 layers8 V8192)
+
+race: done, driver rc 0, log `logs/neural.lm-forward.bytes.shape-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 46.5 | 46.5..46.5 | 1 | - | - | 1107.8 | 173.2 | mean_nll=9.018733 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 45.2 | 45.2..45.2 | 1 | - | - | 1105.0 | 173.2 | mean_nll=9.018733 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 45.8 | 45.8..45.8 | 1 | - | - | 1206.6 | 154.7 | mean_nll=9.018733 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 44.1 | 44.1..44.1 | 1 | - | - | 1208.3 | 154.7 | mean_nll=9.018732 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 44.3 | 44.3..44.3 | 1 | - | - | 1233.3 | 192.5 | mean_nll=9.018664 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 42.5 | 42.5..42.5 | 1 | - | - | 1378.4 | 192.5 | mean_nll=9.018669 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-eager-tf32, torch-compile-fp32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+
+### mamba1-forward / gaussian (neural shape full: B1 L2048 DM384)
+
+race: done, driver rc 0, log `logs/neural.mamba1-forward.gaussian.shape-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 150.9 | 150.9..150.9 | 1 | - | - | 1062.2 | 354.3 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 152.3 | 152.3..152.3 | 1 | - | - | 1041.6 | 354.3 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 193.2 | 193.2..193.2 | 1 | - | - | 1189.9 | 307.1 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-eager-tf32, torch-eager-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) |
+| seed | 7 | 7 | 7 |
 
 ## Algorithm expansion
 
