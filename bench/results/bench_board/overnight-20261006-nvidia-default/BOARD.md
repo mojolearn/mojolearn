@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:41:56Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:43:28Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T07:41:56Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 29 done, 1 failed, 0 unsupported, 83 pending. Cells: 80 (REFUSED 1, ok 79).
+Races: 113 planned, 31 done, 1 failed, 0 unsupported, 81 pending. Cells: 82 (REFUSED 1, ok 81).
 
-Inference cells: 67 (REFUSED 1, ok 66).
+Inference cells: 69 (REFUSED 1, ok 68).
 
 ## Quality at a glance
 
@@ -90,6 +90,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | gru-reg | synthetic | rmse (lower is better) | - | - | torch-eager-fp32 0.155672; torch-compile-fp32 0.155672; torch-eager-tf32 0.155672; torch-compile-tf32 0.155672; torch-eager-bf16 0.155878; torch-compile-bf16 0.155878 |
 | algos | incremental-pca | istella | explained_variance_fraction | - | - | cuml-gpu 1.000000 |
 | algos | ivf-pq | istella | recall_at_10 (higher is better) | - | - | cuvs-gpu 0.791300 |
+| algos | ivf-refine | istella | recall_at_10 (higher is better) | - | - | cuvs-gpu 0.993625 |
+| algos | ivf-sq | istella | recall_at_10 (higher is better) | - | - | cuvs-gpu 0.469725 |
 
 ## Inference at a glance
 
@@ -119,6 +121,8 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | gru-reg | synthetic | Xq | - | - | - | - | torch-eager-fp32 3.0 ms (IDENTICAL/arm -); torch-compile-fp32 3.2 ms (IDENTICAL/arm -); torch-eager-tf32 2.6 ms (IDENTICAL/arm -); torch-compile-tf32 3.2 ms (IDENTICAL/arm -); torch-eager-bf16 3.4 ms (IDENTICAL/arm -); torch-compile-bf16 3.6 ms (IDENTICAL/arm -) |
 | algos | incremental-pca | istella | Xq | - | - | - | - | cuml-gpu 6.1 ms (IDENTICAL/arm -) |
 | algos | ivf-pq | istella | Xq | - | - | - | - | cuvs-gpu 11.8 ms (IDENTICAL/arm -) |
+| algos | ivf-refine | istella | Xq | - | - | - | - | cuvs-gpu 82.4 ms (IDENTICAL/arm -) |
+| algos | ivf-sq | istella | Xq | - | - | - | - | cuvs-gpu 6.0 ms (IDENTICAL/arm -) |
 
 ## Algorithm expansion
 
@@ -1247,6 +1251,74 @@ Inference (each arm predicts with its own model from the fit rounds above):
 | arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | cuvs-gpu | Xq | - | 11.8 | 11.8..11.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuvs-gpu: search(queries)(Xq)
+
+### ivf-refine / istella (rows full, shape index 400000x220; queries 4000x220)
+
+race: done, driver rc 0, log `logs/algos.ivf-refine.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuvs-gpu | cuvs | gpu | opponent | 1255.0 | 1255.0..1255.0 | 1 | - | - | 1815.7 | 822.0 | recall_at_10=0.993625 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'kmeans_n_iters': 20, 'n_lists': 1024, 'n_neighbors': 10, 'n_probes': 32, 'pq_bits': 8, 'random_state': 7, 'refine_ratio': 4}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuvs-gpu`, seed 7): MATCHED
+
+| parameter | cuvs-gpu |
+|---|---|
+| library (source) | cuvs (declared) |
+| n_neighbors | 10 |
+| nlist | 1024 |
+| nprobe | 32 |
+| seed | "none (no argument; draws random numbers, see exceptions)" |
+
+accepted difference: cuvs-gpu seed: cuVS IndexParams take no seed and the index build samples rows; ours and faiss get 7
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuvs-gpu | Xq | - | 82.4 | 82.4..82.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuvs-gpu: search(queries)(Xq)
+
+### ivf-sq / istella (rows full, shape index 400000x220; queries 4000x220)
+
+race: done, driver rc 0, log `logs/algos.ivf-sq.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuvs-gpu | cuvs | gpu | opponent | 266.7 | 266.7..266.7 | 1 | - | - | 1765.1 | 904.0 | recall_at_10=0.469725 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'kmeans_n_iters': 20, 'n_lists': 1024, 'n_neighbors': 10, 'n_probes': 32, 'random_state': 7}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuvs-gpu`, seed 7): MATCHED
+
+| parameter | cuvs-gpu |
+|---|---|
+| library (source) | cuvs (declared) |
+| n_neighbors | 10 |
+| nlist | 1024 |
+| nprobe | 32 |
+| seed | "none (no argument; draws random numbers, see exceptions)" |
+
+accepted difference: cuvs-gpu seed: cuVS IndexParams take no seed and the index build samples rows; ours and faiss get 7
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuvs-gpu | Xq | - | 6.0 | 6.0..6.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, cuvs-gpu: search(queries)(Xq)
 
