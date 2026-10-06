@@ -142,10 +142,10 @@ comptime IDN_M2_SSD_TILES = (
 )
 
 comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 28/28 metrics within the existing bands; PASS.
 # F10/chunk-scan M3 2026-10-06: 35 retained public-caller timings;
-# B/A range 0.8921..1.0660, mixed/regressing; retain OFF.
+# B/A range 0.8921..1.0660, mixed/regressing; FAST candidate stays OFF.
 # One excluded warmup/one score; caller67d0efb29; compile/identity reused.
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/chunk-scan.
@@ -153,10 +153,10 @@ comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"]()
 )
 comptime AFN_MAMBA1_FUSE_IN = AFN_MAMBA_ALL or (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 28/28 metrics within the existing bands; PASS.
 # F10/mamba1-input M3 2026-10-06: 35 retained public-caller timings;
-# B/A range 0.8297..1.4946, mixed/regressing; retain OFF.
+# B/A range 0.8297..1.4946, mixed/regressing; FAST candidate stays OFF.
 # One excluded warmup/one score; caller67d0efb29; compile/identity reused.
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/mamba1-input.
@@ -164,10 +164,10 @@ comptime AFN_MAMBA1_FUSE_IN = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_FUSE_IN"]()
 )
 comptime AFN_MAMBA2_SSD_MMA = AFN_MAMBA_ALL or (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 29/29 metrics within the existing bands; PASS.
 # F10/default M3 2026-10-06: 37 retained public-caller timings;
-# B/A range 0.8310..2.2935, mixed/regressing; retain OFF.
+# B/A range 0.8310..2.2935, mixed/regressing; FAST candidate stays OFF.
 # One excluded warmup/one score; caller67d0efb29; compile/identity reused.
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default.
@@ -175,10 +175,10 @@ comptime AFN_MAMBA2_SSD_MMA = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA2_SSD_MMA"]()
 )
 comptime AFN_MAMBA3_SISO_FUSED = AFN_MAMBA_ALL or (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 17/17 metrics within the existing bands; PASS.
 # F10/mamba3-elementwise M3 2026-10-06: 19 retained public-caller timings;
-# B/A range 0.6775..1.0143, mixed/regressing; retain OFF.
+# B/A range 0.6775..1.0143, mixed/regressing; FAST candidate stays OFF.
 # One excluded warmup/one score; caller67d0efb29; compile/identity reused.
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/mamba3-elementwise.
@@ -186,10 +186,10 @@ comptime AFN_MAMBA3_SISO_FUSED = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA3_SISO_FUSED"]()
 )
 comptime AFN_MAMBA_ARENA = AFN_MAMBA_ALL or (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 29/29 metrics within the existing bands; PASS.
 # F10/arena M3 2026-10-06: 37 retained public-caller timings;
-# B/A range 0.4768..0.8485, mixed/regressing; retain OFF.
+# B/A range 0.4768..0.8485, mixed/regressing; FAST candidate stays OFF.
 # One excluded warmup/one score; caller67d0efb29; compile/identity reused.
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena.

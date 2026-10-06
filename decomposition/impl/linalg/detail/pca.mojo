@@ -77,10 +77,10 @@ from decomposition.checks.jacobi_eigh_device import (
 # Default-off FAST experiment: compensate only centered covariance products.
 # One writer per covariance cell; no atomic/split-policy race, host arithmetic,
 # or input shift/restore pass. Performance admission belongs to full PCA fit.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 12/12 metrics within the existing bands; PASS.
 # F11/compensated-pca M3 2026-10-06: 12 retained public-caller timings;
-# B/A range 0.8987..2.1360, mixed/regressing; retain OFF.
+# B/A range 0.8987..2.1360, mixed/regressing; FAST candidate stays OFF.
 # One excluded warmup/one score; caller67d0efb29; compile/identity reused.
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F11/compensated-pca.

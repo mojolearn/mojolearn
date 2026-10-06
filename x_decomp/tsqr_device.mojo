@@ -94,10 +94,10 @@ comptime TS_SMEM_BYTES = 4 * (TS_PART + 3 * _TT + TS_TPB + TS_P)
 # IDENTICAL builds only: a FAST build keeps its launches as they were.
 comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 9/9 metrics within the existing bands; PASS.
 # F11/grid M3 2026-10-06: 6 retained public-caller timings;
-# B/A range 0.9642..0.9882, mixed/regressing; retain OFF.
+# B/A range 0.9642..0.9882, small gains; FAST candidate stays OFF pending confirmation.
 # One excluded warmup/one score; caller67d0efb29; compile/identity reused.
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F11/grid.
@@ -105,7 +105,7 @@ comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_
 comptime TS_GRID_UPDATE = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_GRID"]())
 # Scored FAST quality: 9/9 metrics within the existing bands; PASS.
 # F11/default M3 2026-10-06: 6 retained public-caller timings;
-# B/A range 0.9704..1.0015, mixed/regressing; retain OFF.
+# B/A range 0.9704..1.0015, mixed/regressing; FAST candidate stays OFF.
 # One excluded warmup/one score; caller67d0efb29; compile/identity reused.
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F11/default.

@@ -46,6 +46,14 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: the bundle is compiled in (FAST + Apple, not opted out)
+# F12/ordered-storage M3 2026-10-06 confirms this already-ON Apple FAST
+# bundle vs ORD_ALL_OFF: 24-tree fit+first-predict B/A0.7802 (511x11,
+# depth4),0.8846 (1023x17,depth5); repeated predict0.9203,0.9955.
+# Seed7, lr0.08, four permutations, bootstrapNo; task errors exactly equal
+# (0.7239750566,0.6157665953). One warmup/one score; caller67d0efb29,
+# reused per-arm hashes/builds: ~/mojolearn-evidence/ab-overnight-20261006/
+# m3/artifacts/results/F12/ordered-storage. Keep existing default ON;
+# these public caller cases do not claim full-dataset/opponent admission.
 comptime ORD_ALL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
@@ -54,7 +62,8 @@ comptime ORD_ALL = (
 #: LEGACY, default OFF: the old width gate admitted only data with more than
 #: 32 compressed-index features, chosen between taxi (11, auc -0.0003 in one
 #: run) and istella (220). Removed as benchmark-tuned on 2026-10-04; the
-#: bundle now runs at every width, and that is UNMEASURED (taxi quality owed).
+#: bundle now runs at every width; generic 11/17-width M3 caller evidence
+#: is recorded above. Full-dataset taxi quality admission remains separate.
 comptime ORD_ALL_LEGACY_WIDTH = is_defined["MOJOLEARN_LEGACY_NARROW_ORD_ALL"]()
 comptime ORD_ALL_MIN_FEATURES = 32
 
