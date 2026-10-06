@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "I18",
+  "mode": "identical",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "DeviceContext oracle is GPU-only",
+  "status": "pending",
+  "default_enabled": false,
+  "arms": [
+    {
+      "name": "baseline",
+      "source": "experiments/performance_ideas/I18/forest_check.mojo",
+      "defines": [
+        "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT=1"
+      ]
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I18/forest_check.mojo",
+      "defines": [
+        "MOJOLEARN_TREE_EXACT_SIBLING_HIST=1",
+        "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT=1"
+      ]
+    },
+    {
+      "name": "cell-oracle",
+      "source": "experiments/performance_ideas/I18/check.mojo",
+      "defines": [
+        "MOJOLEARN_TREE_EXACT_SIBLING_HIST=1",
+        "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT=1"
+      ]
+    }
+  ]
+}
