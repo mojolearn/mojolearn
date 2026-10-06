@@ -9,7 +9,7 @@ from core.stable_radix_sort import stable_radix_sort_pairs_u32, stable_radix_cou
 def check(ctx: DeviceContext,n: Int,bits: Int,all_equal: Bool) raises:
     var keys = List[UInt32]()
     var values = List[UInt32]()
-    var mask = UInt32(0xffffffff) if bits==32 else (UInt32(1)<<bits)-UInt32(1)
+    var mask = UInt32(0xffffffff) if bits==32 else (UInt32(1)<<UInt32(bits))-UInt32(1)
     for i in range(n+17):
         keys.append((UInt32(7) if all_equal else UInt32((i*40503)^((i%29)*65537))) & mask if i<n else UInt32(0xdeadbeef))
         values.append(UInt32(i) if i<n else UInt32(0xcafebabe))
