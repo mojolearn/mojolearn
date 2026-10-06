@@ -42,7 +42,12 @@ def cholesky(args):
     from mojolearn import _mojolearn_gp as binding
     before=int(binding.gp_shared_sub_count())
     cases = {}
-    for n in (301, 1027, 2053):
+    # The promoted FAST panel is 256 wide and the lower-blocked subtract
+    # entrance requires n_trail > 2048. Keep two fallback controls and a
+    # genuine admitted shape (2309 - 256 = 2053), rather than testing only
+    # full-square product launches that never call that entrance.
+    for n in (301, 1027, 2309):
+        case_before=int(binding.gp_shared_sub_count())
         rng = np.random.default_rng(772)
         m = rng.normal(size=(n,n)).astype('float32')
         a = np.ascontiguousarray((m + m.T)*np.float32(.5))
@@ -59,10 +64,11 @@ def cholesky(args):
         ld = lower.astype(float)
         factor_error = float(np.linalg.norm(ld @ ld.T-a)/np.linalg.norm(a))
         solve_error = float(np.linalg.norm(a.astype(float) @ solved-rhs)/np.linalg.norm(rhs))
-        cases[str(n)] = dict(contract=dict(n=n,rhs=3,seed=772,operation='triangular-subtract'),
+        cases[str(n)] = dict(contract=dict(n=n,rhs=3,seed=772,operation='triangular-subtract',panel_width=int(model.nb_)),
             metrics=dict(factor_error=dict(value=factor_error,rtol=.1,atol=5e-8),
                          solve_error=dict(value=solve_error,rtol=.1,atol=5e-8)),
-            fit_ms=fit_ms,solve_ms=solve_ms,logdet=float(model.logdet_))
+            fit_ms=fit_ms,solve_ms=solve_ms,logdet=float(model.logdet_),
+            shared_products=int(binding.gp_shared_sub_count())-case_before)
     reached=int(binding.gp_shared_sub_count())-before
     if args.arm=='B': assert reached>0,'Cholesky did not reach triangular shared subtract'
     return dict(binding=binding_check(binding,'gp'),cases=cases,shared_products=reached)
