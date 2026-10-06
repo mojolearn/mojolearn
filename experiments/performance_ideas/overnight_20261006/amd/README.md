@@ -40,3 +40,21 @@ receipts were copied to
 worker's `results/repairs/OPPONENTS_DONE` marker was cleared to queue this
 retry; no cloud owner or idle policy changed. Active tail work removes DONE
 and protects capture. No identity or compilation validation was performed.
+
+## Deferred LM compiler import repair
+
+The immutable loader repair freeze is `59fd136091514ddbbca6e75ba7493684a048e9b2`.
+The scoped adapter is `selective-neural-repair.py` (separate commit `eef36a327`);
+it preserves successful cells and archives earlier raw receipts. The selection
+contains only LM-forward torch-compile FP32/BF16. Transformer compiled BF16's
+backend dtype failure remains preserved; no dtype/compiler workaround is applied.
+
+`defer-neural-loader-repair.py` runs as
+`overnight-amd-lm-repair-queue.service`. It waits at most four hours for the
+existing tail's DONE/OPPONENTS_DONE markers, then installs
+`neural-loader-repair-tail.py` as the existing worker's controller and clears
+only its opponent completion marker. It does not launch GPU work itself. The
+existing serial worker executes the two selected failed arms; all other arms
+are reused from their original receipts. The admission receipt is retained in
+`results/opponents/loader-repair-admission.json`; a queued marker prevents
+duplicate admission. No HOLD or cloud lease extension is introduced.
