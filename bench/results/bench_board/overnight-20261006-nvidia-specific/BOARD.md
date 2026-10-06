@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T05:37:36Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T05:41:06Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T05:37:36Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 114 planned, 78 done, 3 failed, 0 unsupported, 33 pending. Cells: 170 (REFUSED 1, ok 169).
+Races: 114 planned, 98 done, 6 failed, 0 unsupported, 10 pending. Cells: 219 (REFUSED 1, UNKNOWN 18, ok 200).
 
 Inference cells: 134 (REFUSED 1, ok 133).
 
@@ -148,6 +148,44 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical | pca | istella | explained_variance_ratio_sum (higher is better) | - | - | cuml-gpu 1.000000; torch-gpu 1.000000 |
 | classical | svc | istella | accuracy (higher is better) | - | - | cuml-gpu 0.922200 |
 | classical | svc | istella | n_support | - | - | cuml-gpu 2401 |
+| classical2 | agglomerative | istella | n_clusters | - | - | cuml-gpu 8 |
+| classical2 | agglomerative | istella | silhouette (higher is better) | - | - | cuml-gpu 0.716728 |
+| classical2 | arima | synthetic | forecast_rmse (lower is better) | - | - | cuml-gpu 1.515427 |
+| classical2 | arima | synthetic | insample_rmse (lower is better) | - | - | cuml-gpu 0.999338 |
+| classical2 | arima | synthetic | mean_aic (lower is better) | - | - | cuml-gpu 5680.957154 |
+| classical2 | arima | synthetic | mean_llf (higher is better) | - | - | cuml-gpu -2836.478577 |
+| classical2 | elasticnet | taxi | r2 (higher is better) | - | - | cuml-gpu 0.907378 |
+| classical2 | elasticnet | taxi | rmse (lower is better) | - | - | cuml-gpu 4.847224 |
+| classical2 | ivf | istella | recall_at_k (higher is better) | - | - | cuvs-gpu 0.999975 |
+| classical2 | ivf | istella | rows_with_repeated_ids | - | - | cuvs-gpu 0 |
+| classical2 | kernel-ridge | istella | r2 (higher is better) | - | - | cuml-gpu 0.385427 |
+| classical2 | kernel-ridge | istella | rmse (lower is better) | - | - | cuml-gpu 0.646407 |
+| classical2 | knn-clf | istella | accuracy (higher is better) | - | - | cuml-gpu 0.926250 |
+| classical2 | knn-reg | istella | r2 (higher is better) | - | - | cuml-gpu 0.418145 |
+| classical2 | knn-reg | istella | rmse (lower is better) | - | - | cuml-gpu 0.625388 |
+| classical2 | lasso | istella | r2 (higher is better) | - | - | cuml-gpu 0.310837 |
+| classical2 | lasso | istella | rmse (lower is better) | - | - | cuml-gpu 0.693460 |
+| classical2 | linearsvc | istella | accuracy (higher is better) | - | - | cuml-gpu 0.922860 |
+| classical2 | linearsvr | istella | r2 (higher is better) | - | - | cuml-gpu -0.106761 |
+| classical2 | linearsvr | istella | rmse (lower is better) | - | - | cuml-gpu 0.878795 |
+| classical2 | logreg | istella | accuracy (higher is better) | - | - | cuml-gpu 0.924430 |
+| classical2 | logreg | istella | logloss (lower is better) | - | - | cuml-gpu 0.181268 |
+| classical2 | logreg | istella | nonfinite_proba_rows | - | - | cuml-gpu 0 |
+| classical2 | ridge | istella | r2 (higher is better) | - | - | cuml-gpu -0.251259 |
+| classical2 | ridge | istella | rmse (lower is better) | - | - | cuml-gpu 0.934403 |
+| classical2 | spectral-embedding | istella | trustworthiness_k15 (higher is better, 1 at most) | - | - | cuml-gpu 0.882904 |
+| classical2 | spectral | istella | n_clusters | - | - | cuml-gpu 8 |
+| classical2 | spectral | istella | silhouette (higher is better) | - | - | cuml-gpu 0.147757 |
+| classical2 | svr | istella | r2 (higher is better) | - | - | cuml-gpu 0.318232 |
+| classical2 | svr | istella | rmse (lower is better) | - | - | cuml-gpu 0.680829 |
+| classical2 | tsvd | istella | explained_variance_ratio_sum (higher is better) | - | - | cuml-gpu 1.000000 |
+| classical2 | tsvd | istella | relative_reconstruction_error (lower is better) | - | - | cuml-gpu 0.0001472 |
+| classical2 | umap | istella | trustworthiness_k15 (higher is better, 1 at most) | - | - | cuml-gpu 0.979912 |
+| neural | gemm-bf16 | gaussian | max_rel_err_vs_fp64 (lower is better) | - | - | torch-eager-bf16 0.002764; torch-compile-bf16 0.002764 |
+| neural | gemm | gaussian | max_rel_err_vs_fp64 (lower is better) | - | - | torch-eager-fp32 1.401e-06; torch-eager-tf32 0.0002784; torch-compile-fp32 1.401e-06; torch-compile-tf32 0.0002784; torch-eager-bf16 0.003752; torch-compile-bf16 0.003752 |
+| neural | mlp-train-step | gaussian | loss_first_step (same init and batches on every arm) | - | - | torch-eager-fp32 1.160401; torch-eager-tf32 1.160392; torch-compile-fp32 1.160401; torch-compile-tf32 1.160392; torch-eager-bf16 1.160498; torch-compile-bf16 1.160498 |
+| neural | mlp-train-step | gaussian | loss_last_step (same init and batches on every arm) | - | - | torch-eager-fp32 1.123361; torch-eager-tf32 1.123355; torch-compile-fp32 1.123361; torch-compile-tf32 1.123355; torch-eager-bf16 1.123461; torch-compile-bf16 1.123462 |
+| neural | mlp-train-step | gaussian | steps | - | - | torch-eager-fp32 2; torch-eager-tf32 2; torch-compile-fp32 2; torch-compile-tf32 2; torch-eager-bf16 2; torch-compile-bf16 2 |
 
 ## Inference at a glance
 
@@ -525,6 +563,659 @@ Inference (each arm predicts with its own model from the fit rounds above):
 | cuml-gpu | Xq | 10000 | 4.6 | 4.6..4.6 | 1 | - | - | accuracy_eval=0.922200 | yes | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, cuml-gpu: cuml SVC.predict(Xq on the device, output_type cupy); Xq uploaded before the clock, which ends at the device synchronize
+
+## Classical, wave 2
+
+### agglomerative / istella (rows full, shape X 10000x220)
+
+race: done, driver rc 0, log `logs/classical2.agglomerative.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 54.3 | 54.3..54.3 | 1 | - | - | 1705.1 | 440.0 | n_clusters=8, silhouette=0.716728 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_clusters=8, linkage='single', metric='euclidean' (ours and cuML connectivity='pairwise'). Rows: 10000 stride rows of the cls block (standardized by the fit rows); O(n^2). Timed: fit.
+
+mismatch: single linkage only: ours and cuML implement no other linkage
+
+mismatch: seed: no arm has a seed argument (deterministic)
+
+config: cuML benchmark (RAPIDS), AgglomerativeClustering (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| linkage | "single" |
+| metric | "euclidean" |
+| n_clusters | 8 |
+| seed | "none (deterministic)" |
+
+### arima / synthetic (rows full, shape Yfit 64x2000; Yhold 64x100)
+
+race: done, driver rc 0, log `logs/classical2.arima.synthetic.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 787.6 | 787.6..787.6 | 1 | - | - | 822.4 | 812.0 | forecast_rmse=1.515427, insample_rmse=0.999338, mean_aic=5680.957154, mean_llf=-2836.478577 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: order=(1,0,1), seasonal_order=(0,0,0,0), trend='c' (cuML fit_intercept=True), maxiter=1000, maximum likelihood. Rows: 64 synthetic ARMA(1,1) series, 2000 fit points, 100 held out. Timed: fit of every series.
+
+mismatch: ours and cuML fit the whole batch in one call; statsmodels fits one series per call (the state-space model, L-BFGS), spread over every core with joblib
+
+mismatch: statsmodels enforce_stationarity and enforce_invertibility at its default (True); ours and cuML have no such parameter
+
+mismatch: seed: no arm has a seed argument (maximum likelihood)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | ? (unreadable (NotImplementedError('ARIMA is unable to be cloned via `get_params` and `set_params`.'))) |
+| seed | "none (deterministic)" |
+
+### elasticnet / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.elasticnet.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 5.8 | 5.8..5.8 | 1 | - | - | 968.0 | 498.0 | finite=True, r2=0.907378, rmse=4.847224 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=0.1, l1_ratio=0.5 (the cuML benchmark's ElasticNet), fit_intercept=True, max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; ours and cuML solver='cd'. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: seed: ours refuses random_state (it selects nothing with selection='cyclic'), cuML has none; scikit-learn random_state=7
+
+mismatch: tol: each library's own stopping rule reads it
+
+config: cuML benchmark (RAPIDS), ElasticNet (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 0.1 |
+| fit_intercept | true |
+| l1_ratio | 0.5 |
+| max_iter | 1000 |
+| seed | "none (deterministic)" |
+| selection | "cyclic" |
+| solver | "cd" |
+| tol | 0.0001 |
+
+### ivf / istella (rows full, shape index 400000x220; queries 4000x220)
+
+race: done, driver rc 0, log `logs/classical2.ivf.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuvs-gpu | cuvs | gpu | opponent | 301.6 | 301.6..301.6 | 1 | - | - | 1730.7 | 770.0 | recall_at_k=0.999975, rows_with_repeated_ids=0 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: IVF-Flat, n_lists=1024, n_probes=32, k=10, squared L2, k-means 20 iterations, seed 7. Rows: the classical knn lane's block (tools/knn_datasets.real_block): 400000 index rows, 4000 queries, raw. Timed: build + search of every query.
+
+mismatch: quantizer training set: each library's own (FAISS subsamples to 256 rows per list; cuVS kmeans_trainset_fraction 0.5; ours its own)
+
+mismatch: seed: ours random_state=7, faiss cp.seed=7; cuVS IndexParams takes none
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuvs-gpu`, seed 7): MATCHED
+
+| parameter | cuvs-gpu |
+|---|---|
+| library (source) | cuvs (declared) |
+| metric | "sqeuclidean" |
+| n_neighbors | 10 |
+| nlist | 1024 |
+| nprobe | 32 |
+| seed | "none (no argument; draws random numbers, see exceptions)" |
+
+accepted difference: cuvs-gpu seed: cuVS ivf_flat IndexParams takes no seed and its k-means training samples rows; ours and faiss get 7
+
+### kernel-ridge / istella (rows full, shape X 10000x220; Xq 10000x220; y 10000; yq 10000)
+
+race: done, driver rc 0, log `logs/classical2.kernel-ridge.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 324.3 | 324.3..324.3 | 1 | - | - | 1840.5 | 494.0 | finite=True, r2=0.385427, rmse=0.646407 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=1.0, kernel='rbf', gamma=1/d, degree=3, coef0=1.0. Rows: 10000 fit and 10000 held-out stride rows of the reg block (standardized by the fit rows). Timed: fit.
+
+mismatch: seed: no arm has a seed argument (closed-form fit)
+
+config: cuML benchmark (RAPIDS), KernelRidge (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 1.0 |
+| coef0 | 1.0 |
+| degree | 3 |
+| gamma | 0.004545454545454545 |
+| kernel | "rbf" |
+| seed | "none (deterministic)" |
+
+### knn-clf / istella (rows full, shape X 200000x220; Xq 4000x220; y 200000; yq 4000)
+
+race: done, driver rc 0, log `logs/classical2.knn-clf.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 40.2 | 40.2..40.2 | 1 | - | - | 2095.5 | 602.0 | accuracy=0.926250 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_neighbors=10, weights='uniform', metric='euclidean', algorithm='brute'. Rows: 200000 fit rows, 4000 queries (stride subsets of the cls block, standardized by the fit rows). Timed: fit + predict of the queries.
+
+mismatch: seed: no arm has a seed argument (exact search)
+
+config: cuML benchmark (RAPIDS), KNeighborsClassifier (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| algorithm | "brute" |
+| metric | "euclidean" |
+| n_neighbors | 10 |
+| p | 2 |
+| seed | "none (deterministic)" |
+| weights | "uniform" |
+
+### knn-reg / istella (rows full, shape X 200000x220; Xq 4000x220; y 200000; yq 4000)
+
+race: done, driver rc 0, log `logs/classical2.knn-reg.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 36.6 | 36.6..36.6 | 1 | - | - | 1969.1 | 602.0 | finite=True, r2=0.418145, rmse=0.625388 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_neighbors=10, weights='uniform', metric='euclidean', algorithm='brute'. Rows: 200000 fit rows, 4000 queries (stride subsets of the reg block, standardized by the fit rows). Timed: fit + predict of the queries.
+
+mismatch: seed: no arm has a seed argument (exact search)
+
+config: cuML benchmark (RAPIDS), KNeighborsRegressor (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| algorithm | "brute" |
+| metric | "euclidean" |
+| n_neighbors | 10 |
+| p | 2 |
+| seed | "none (deterministic)" |
+| weights | "uniform" |
+
+### lasso / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.lasso.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 935.1 | 935.1..935.1 | 1 | - | - | 2918.9 | 1374.0 | finite=True, r2=0.310837, rmse=0.693460 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; ours and cuML solver='cd'. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: seed: ours refuses random_state (it selects nothing with selection='cyclic'), cuML has none; scikit-learn random_state=7
+
+mismatch: tol: each library's own stopping rule reads it
+
+config: cuML benchmark (RAPIDS), Lasso (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 0.01 |
+| fit_intercept | true |
+| max_iter | 1000 |
+| seed | "none (deterministic)" |
+| selection | "cyclic" |
+| solver | "cd" |
+| tol | 0.0001 |
+
+### linearsvc / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.linearsvc.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 248.1 | 248.1..248.1 | 1 | - | - | 3028.1 | 1366.0 | accuracy=0.922860 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: penalty='l2', loss='squared_hinge', C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True, class_weight=None; ours and cuML penalized_intercept=False; scikit-learn intercept_scaling=1.0, random_state=7. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: solver: ours and cuML L-BFGS on the primal with an unpenalized intercept; scikit-learn liblinear (dual='auto'), which penalizes the intercept
+
+mismatch: seed: ours and cuML LinearSVC have no seed argument
+
+config: cuML benchmark (RAPIDS), LinearSVC (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| C | 1.0 |
+| class_weight | null |
+| fit_intercept | true |
+| loss | "squared_hinge" |
+| max_iter | 1000 |
+| penalized_intercept | false |
+| penalty | "l2" |
+| seed | "none (deterministic)" |
+| tol | 0.0001 |
+
+### linearsvr / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.linearsvr.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 83.7 | 83.7..83.7 | 1 | - | - | 2937.3 | 1374.0 | finite=True, r2=-0.106761, rmse=0.878795 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: penalty='l2', loss='epsilon_insensitive', epsilon=0.0, C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: penalty='l2' set on ours and cuML (their default is 'l1'); scikit-learn has only l2
+
+mismatch: solver: ours and cuML L-BFGS on the primal; scikit-learn liblinear dual coordinate descent (dual=True, the only form for this loss)
+
+mismatch: intercept: ours and cuML penalized_intercept=False; scikit-learn intercept_scaling=1.0 (liblinear penalizes it)
+
+mismatch: seed: ours and cuML LinearSVR have no seed argument; scikit-learn 7
+
+config: cuML benchmark (RAPIDS), LinearSVR (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| C | 1.0 |
+| epsilon | 0.0 |
+| fit_intercept | true |
+| loss | "epsilon_insensitive" |
+| max_iter | 1000 |
+| penalized_intercept | false |
+| penalty | "l2" |
+| seed | "none (deterministic)" |
+| tol | 0.0001 |
+
+### logreg / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.logreg.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 1854.6 | 1854.6..1854.6 | 1 | - | - | 3047.8 | 1374.0 | accuracy=0.924430, logloss=0.181268, nonfinite_proba_rows=0 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: penalty='l2', C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True, class_weight=None; scikit-learn random_state=7. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: solver: ours 'qn' (L-BFGS, cuML's), scikit-learn 'lbfgs', cuML 'qn'; each library's own stopping rule reads tol
+
+mismatch: seed: ours and cuML LogisticRegression have no seed argument
+
+mismatch: l1_ratio: ours None, scikit-learn None or 0.0 (its l2 spelling from 1.8)
+
+config: cuML benchmark (RAPIDS), LogisticRegression (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| C | 1.0 |
+| class_weight | null |
+| fit_intercept | true |
+| l1_ratio | null |
+| max_iter | 1000 |
+| penalty | "l2" |
+| seed | "none (deterministic)" |
+| solver | "qn" |
+| tol | 0.0001 |
+
+### ridge / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.ridge.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 48.2 | 48.2..48.2 | 1 | - | - | 2969.7 | 1410.0 | finite=True, r2=-0.251259, rmse=0.934403 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=1.0, fit_intercept=True; scikit-learn positive=False, random_state=7. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: solver, named on every arm: ours and cuML 'eig' (eigendecomposition of the normal equations), scikit-learn 'cholesky' (it has no 'eig')
+
+mismatch: seed: ours and cuML Ridge have no seed argument
+
+config: cuML benchmark (RAPIDS), Ridge (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 1.0 |
+| fit_intercept | true |
+| max_iter | null |
+| seed | "none (deterministic)" |
+| solver | "eig" |
+| tol | 0.0001 |
+
+### spectral-embedding / istella (rows full, shape X 20000x220)
+
+race: done, driver rc 0, log `logs/classical2.spectral-embedding.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 137.8 | 137.8..137.8 | 1 | - | - | 1016.9 | 496.0 | trustworthiness_k15=0.882904 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_components=2, affinity='nearest_neighbors', n_neighbors=10, random_state=7. Rows: the umap block (20000 stride rows, standardized by the fit rows). Timed: fit_transform.
+
+mismatch: eigensolver: ours Lanczos (default tolerance); scikit-learn arpack (its default); cuML its own
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| affinity | "nearest_neighbors" |
+| n_components | 2 |
+| n_neighbors | 10 |
+| seed | 7 |
+
+### spectral / istella (rows full, shape X 10000x220)
+
+race: done, driver rc 0, log `logs/classical2.spectral.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 112.5 | 112.5..112.5 | 1 | - | - | 1939.7 | 490.0 | n_clusters=8, silhouette=0.147757 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_clusters=8, affinity='nearest_neighbors', n_neighbors=10, n_init=1, random_state=42 (the cuML benchmark's SpectralClustering), assign_labels='kmeans', n_components=8. Rows: 10000 stride rows of the cls block (standardized by the fit rows); O(n^2) affinity. Timed: fit.
+
+mismatch: eigensolver: ours Lanczos eigen_tol 1e-5 (its default); scikit-learn arpack eigen_tol='auto'; each library's own k-means on the embedding
+
+mismatch: gamma, degree, coef0: not read by the nearest_neighbors affinity; ours refuses any value (None), scikit-learn holds 1.0, 3, 1
+
+config: cuML benchmark (RAPIDS), SpectralClustering (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 42): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| affinity | "nearest_neighbors" |
+| n_clusters | 8 |
+| n_components | 8 |
+| n_init | 1 |
+| n_neighbors | 10 |
+| seed | 42 |
+
+### svr / istella (rows full, shape X 10000x220; Xq 10000x220; y 10000; yq 10000)
+
+race: done, driver rc 0, log `logs/classical2.svr.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 40.5 | 40.5..40.5 | 1 | - | - | 1813.6 | 462.0 | finite=True, r2=0.318232, rmse=0.680829 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: kernel='rbf', gamma=1/d, C=1.0, epsilon=0.1, tol=1e-3, degree=3, coef0=0.0, max_iter=-1, cache_size=2000 MB. Rows: 10000 fit and 10000 held-out stride rows of the reg block (standardized by the fit rows). Timed: fit.
+
+mismatch: cache_size=2000 on every arm; ours honors it at predict only (DEVIATION 871); libsvm is single-threaded; shrinking=True is scikit-learn's only
+
+mismatch: seed: no arm has a seed argument
+
+config: cuML benchmark (RAPIDS), SVR-RBF (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| C | 1.0 |
+| coef0 | 0.0 |
+| degree | 3 |
+| epsilon | 0.1 |
+| gamma | 0.004545454545454545 |
+| kernel | "rbf" |
+| max_iter | -1 |
+| seed | "none (deterministic)" |
+| tol | 0.001 |
+
+### tsvd / istella (rows full, shape X 1000000x220)
+
+race: done, driver rc 0, log `logs/classical2.tsvd.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 35.3 | 35.3..35.3 | 1 | - | - | 2749.0 | 1314.0 | explained_variance_ratio_sum=1.000000, relative_reconstruction_error=0.0001472 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7. Rows: 1000000 stride rows of the train split, raw (sentinel cleaned, not scaled). Timed: fit.
+
+mismatch: algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'
+
+config: cuML benchmark (RAPIDS), tSVD (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| algorithm | "full" |
+| n_components | 10 |
+| n_iter | 15 |
+| seed | 7 |
+| tol | 1e-07 |
+
+### umap / istella (rows full, shape X 20000x220)
+
+race: done, driver rc 0, log `logs/classical2.umap.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 502.3 | 502.3..502.3 | 1 | - | - | 1035.8 | 606.0 | trustworthiness_k15=0.979912 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_neighbors=5, n_epochs=500 (the cuML benchmark's UMAP), n_components=2, min_dist=0.1, spread=1.0, metric='euclidean', init='spectral', learning_rate=1.0, repulsion_strength=1.0, negative_sample_rate=5, set_op_mix_ratio=1.0, local_connectivity=1.0, random_state=7. Rows: 20000 stride rows of the train split, standardized by the fit rows. Timed: fit (ours fit_transform) from host rows to the embedding.
+
+mismatch: neighbors: ours exact brute force; umap-learn NN-descent (its choice above 4,096 rows); cuML build_algo='brute_force_knn' (exact)
+
+mismatch: umap-learn-cpu: random_state=7 makes umap-learn run one thread (its rule)
+
+mismatch: umap-learn-cpu-unseeded: random_state=None and n_jobs=-1, the every-core setting; the seed is the one parameter that differs
+
+mismatch: spectral init: each library's own eigensolver and tolerance (ours: Lanczos, at most 20 basis vectors)
+
+config: cuML benchmark (RAPIDS), UMAP-Unsupervised (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| init | "spectral" |
+| learning_rate | 1.0 |
+| local_connectivity | 1.0 |
+| metric | "euclidean" |
+| min_dist | 0.1 |
+| n_components | 2 |
+| n_epochs | 500 |
+| n_neighbors | 5 |
+| negative_sample_rate | 5 |
+| repulsion_strength | 1.0 |
+| seed | 7 |
+| set_op_mix_ratio | 1.0 |
+| spread | 1.0 |
+
+## Neural
+
+### gemm-bf16 / gaussian (neural shape full: 4096x4096x4096)
+
+race: done, driver rc 0, log `logs/neural.gemm-bf16.gaussian.shape-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-bf16 | torch | gpu | opponent | 44.0 | 44.0..44.0 | 1 | - | - | 1226.8 | 176.2 | max_rel_err_vs_fp64=0.002764 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 65.8 | 65.8..65.8 | 1 | - | - | 1445.1 | 176.2 | max_rel_err_vs_fp64=0.002764 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-bf16`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-eager-bf16 |
+|---|---||---|---|
+| library (source) | torch (declared) | torch (declared) |
+| seed | 7 | 7 |
+
+### gemm / gaussian (neural shape full: 4096x4096x4096)
+
+race: done, driver rc 0, log `logs/neural.gemm.gaussian.shape-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 50.2 | 50.2..50.2 | 1 | - | - | 933.6 | 200.1 | max_rel_err_vs_fp64=1.401e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 46.8 | 46.8..46.8 | 1 | - | - | 938.7 | 200.1 | max_rel_err_vs_fp64=0.0002784 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 49.2 | 49.2..49.2 | 1 | - | - | 1146.1 | 200.1 | max_rel_err_vs_fp64=1.401e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 47.6 | 47.6..47.6 | 1 | - | - | 1144.8 | 200.1 | max_rel_err_vs_fp64=0.0002784 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 45.3 | 45.3..45.3 | 1 | - | - | 1174.9 | 240.2 | max_rel_err_vs_fp64=0.003752 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 47.4 | 47.4..47.4 | 1 | - | - | 1422.4 | 240.2 | max_rel_err_vs_fp64=0.003752 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-eager-tf32, torch-compile-fp32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+
+### lm-train-step / bytes (neural shape full: -)
+
+race: failed, driver rc 1, log `logs/neural.lm-train-step.bytes.shape-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
+
+### mamba2-forward / gaussian (neural shape full: -)
+
+race: failed, driver rc 1, log `logs/neural.mamba2-forward.gaussian.shape-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
+
+### mlp-train-step / gaussian (neural shape full: rows256 8-16-3)
+
+race: done, driver rc 0, log `logs/neural.mlp-train-step.gaussian.shape-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 1.5 | 1.5..1.5 | 1 | - | - | 1015.5 | 16.3 | loss_first_step=1.160401, loss_last_step=1.123361, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 1.9 | 1.9..1.9 | 1 | - | - | 1016.6 | 16.3 | loss_first_step=1.160392, loss_last_step=1.123355, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 2.0 | 2.0..2.0 | 1 | - | - | 1104.5 | 16.3 | loss_first_step=1.160401, loss_last_step=1.123361, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 1.7 | 1.7..1.7 | 1 | - | - | 1049.0 | 16.3 | loss_first_step=1.160392, loss_last_step=1.123355, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 2.0 | 2.0..2.0 | 1 | - | - | 1229.1 | 16.3 | loss_first_step=1.160498, loss_last_step=1.123461, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 2.4 | 2.4..2.4 | 1 | - | - | 1295.1 | 16.3 | loss_first_step=1.160498, loss_last_step=1.123462, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-eager-tf32, torch-compile-fp32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| amsgrad | false | false | false | false | false | false |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+| weight_decay | 0.01 | 0.01 | 0.01 | 0.01 | 0.01 | 0.01 |
+
+### samba-train-step / bytes (neural shape full: -)
+
+race: failed, driver rc 1, log `logs/neural.samba-train-step.bytes.shape-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
 
 ## Algorithm expansion
 
