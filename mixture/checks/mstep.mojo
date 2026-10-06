@@ -2094,7 +2094,9 @@ def gmm_m_step(
             continue
         if paired:
             if kc%2==0:
-                ctx.enqueue_function[center_pair_kernel](x.unsafe_ptr(),means.unsafe_ptr(),resp.unsafe_ptr(),pair_buffers[0].unsafe_ptr(),pair_buffers[1].unsafe_ptr(),Int32(n),Int32(d),Int32(kc),Int32(ncomp),Int32(min(2,ncomp_loop-kc)),grid_dim=(grid_nd,1,1),block_dim=(elem_tpb,1,1))
+                var pair_diff_ptr=pair_buffers[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                var pair_scaled_ptr=pair_buffers[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                ctx.enqueue_function[center_pair_kernel](x.unsafe_ptr(),means.unsafe_ptr(),resp.unsafe_ptr(),pair_diff_ptr,pair_scaled_ptr,Int32(n),Int32(d),Int32(kc),Int32(ncomp),Int32(min(2,ncomp_loop-kc)),grid_dim=(grid_nd,1,1),block_dim=(elem_tpb,1,1))
         elif sabotage == GMM_SAB_COV_PRESCALE:
             ctx.enqueue_function[sabotage_center_scale_kernel](
                 x.unsafe_ptr(),
