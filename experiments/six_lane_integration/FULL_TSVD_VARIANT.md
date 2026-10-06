@@ -119,11 +119,11 @@ any future declared model-operation timing.
 ## Review and remaining integration
 
 Projection is not execution admission. Recipe proposals intentionally retain
-`changes_frozen_race: true` and `execution_authorized: false`. The existing
-master's guard therefore refuses to run them as the historical 1M-row race.
+`changes_frozen_race: true` and `execution_authorized: false`. The master refuses to run them as the historical 1M-row race; the explicit
+registration below is required for the distinct variant.
 The campaign root must review and register the distinct full variant with its
 own matrix/evidence identity and accepted A/B deployments. Do not simply clear
-the guard or rename an old measurement. This helper does not modify the master,
+the guard or rename an old measurement. This projector does not modify the master,
 stagers, opponent roster, existing quality gates or historical boards.
 
 Whole-operation timing must include loading/preparation, the original split,
@@ -144,3 +144,46 @@ Validation for this change is source parsing, whitespace checks and planning
 from retained real metadata only. No fixture arrays, data projection, estimator
 execution, compilation, quality evaluation or identity comparison was performed.
 The data-copy path and future harness execution remain unverified.
+
+## Explicit execution registration
+
+`tools/six_lane_full_variants.py` now registers distinct matrix cells for only
+these 12 NVIDIA complete-proposed and two Apple FAST complete-proposed variants.
+The original cell keys and workload IDs remain unchanged. Each new cell retains
+its original links and receives the deterministic `@input=tsvd-full-v1` identity.
+No other configuration, lane, vendor, input variant or changed race is admitted.
+
+After the owner reviews this registration and projection completes under the
+canonical lock, materialize the separate queue with accepted deployments:
+
+```sh
+python3 tools/six_lane_register_full_tsvd.py \
+  --projection /evidence/tsvd-full-v1/nvidia/taxi \
+  --projection /evidence/tsvd-full-v1/nvidia/istella \
+  --vendor nvidia --target-track nvidia-native \
+  --deployments /evidence/accepted-workload-deployments.json \
+  --output /evidence/registered-tsvd-full-v1
+```
+
+Deployment entries use the existing materializer schema and the distinct
+variant workload IDs. Keep required loaded core/validation and numerical
+bindings explicitly scoped to each workload, with their original receipts.
+The command writes an **unauthorized** queue; it never runs a model or a build.
+The owning controller records the already granted measurement authorization
+before launching under its canonical device lock.
+
+`changes_frozen_race: true` stays present throughout. Materialization, queue
+creation and every worker independently check the explicit registration,
+original/variant cell identities, retained proposal and projection receipt
+hashes, original full raw regression metadata, X-only projection and typed-array
+hash, exact original split, source-derived settings, output paths, inference
+boundary and capture limitations. A changed seed, shape, constructor, input
+roster, original cell relabeling, erased change marker or unknown variant remains
+an error. Ordinary original-race admission is unchanged.
+
+These additional cells provide full-input timing coverage only. Randomized SVD
+still omits returned U/singular-value identity, and complete fitted model-state
+coverage remains pending as recorded in each proposal and worker. Registration
+neither qualifies output identity nor promotes a candidate or synthesizes an
+opponent comparison. Apple scheduling still waits for CPU14 and failed-only
+quality retries before any input projection or execution.

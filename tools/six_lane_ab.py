@@ -191,6 +191,8 @@ def matrix(doc):
                 key=sha_value([c['id'],vendor,w])[:20]
                 cells.append(dict(key=key,configuration=c['id'],implementation_ids=c['members'],vendor=vendor,mode=c['mode'],workload=w,workload_id=work_id(w),status='INCOMPATIBLE' if c['problems'] else 'ALIAS' if c.get('alias_of') else 'RETAINED_DEPENDENCY' if c['campaign_role']=='incumbent_dependency' else 'SOURCE_REJECTED' if c['campaign_role']=='source_rejected' else 'PENDING_COVERAGE',blockers=gaps,source_coverage_pending=c.get('source_gaps',[]),
                     campaign_role=c['campaign_role'],alias_of=c.get('alias_of'),promotion_vote=c['mode']=='fast' or vendor in ('nvidia','amd'),identity_group='same-arm-across-columns' if c['mode']=='identical' else 'task-quality',planned_excluded_warmups=1,planned_scored_samples=1,actual_samples=0))
+    from six_lane_full_variants import append_registered_cells
+    cells = append_registered_cells(cells)
     return dict(schema='mojolearn.six-lane-matrix/1',base_main=doc['base_main'],configurations=configs,cells=cells,execution='NOT EXECUTED',qualification=doc['qualification'])
 
 
@@ -407,6 +409,8 @@ def runtime_requirements(configuration, workload_id, configurations):
     Combined candidates include controls for unrelated estimators. Keep unknown
     member mappings blocked, and never invent an operation to reach a control.
     """
+    from six_lane_full_variants import original_id
+    workload_id = original_id(workload_id)
     pending = {}
     targets = [w for value in configuration.get('workloads', []) for w in expand_workload(value) if work_id(w)==workload_id]
     target_harnesses = {w['harness'] for w in targets if isinstance(w, dict) and w.get('harness')}
@@ -468,7 +472,9 @@ def queue(args):
             if absent:raise ValueError('Recipe missing '+','.join(absent))
             if recipe['benchmark_sha256']!=digest(STORE/'benchmark.json'):raise ValueError('Recipe benchmark specification drift')
             if recipe.get('source_sha')!=source:raise ValueError('Recipe names a different source freeze')
-            if recipe.get('changes_frozen_race') or recipe['full_dataset_coverage'] is not True:raise ValueError('Recipe changes frozen race or lacks full coverage')
+            from six_lane_full_variants import validate_variant
+            validate_variant(recipe, cell)
+            if recipe['full_dataset_coverage'] is not True:raise ValueError('Recipe lacks full coverage')
             if c['problems'] or cell['status']!='PENDING_COVERAGE':raise ValueError('Incompatible, historical, rejected or alias-only selection')
             if runtime_requirements(c,cell['workload_id'],configs):raise ValueError('This source API needs a saved matching race; the master never alters one')
             resolutions=recipe['coverage_resolutions']
@@ -478,6 +484,8 @@ def queue(args):
             work=recipe['workload']
             if work['actual_shapes']!=recipe['dimensions'] or work['estimator_settings_record']!=recipe['estimator_settings']:raise ValueError('Recipe dimensions/settings differ from worker admission facts')
             for field in ('dataset_sha256','dimensions','estimator_settings','timed_boundary','intrinsic_caps','full_dataset_coverage','artifact_provenance'):job[field]=recipe[field]
+            if recipe.get('registered_input_variant'):
+                job.update(registered_input_variant=recipe['registered_input_variant'], changes_frozen_race=True)
             job['blocked']=[]
             worker=dict(recipe,job=job,source_sha=source,vendor=args.vendor,execution_authorized=False)
             worker_path=args.output.resolve().parent/(args.output.stem+'-workers')/(cell['key']+'.json')

@@ -48,8 +48,10 @@ FACT_FIELDS=('dataset_sha256','dimensions','estimator_settings','timed_boundary'
 def validate_facts(facts, cell):
     absent=[k for k in FACT_FIELDS if k not in facts]
     if absent:raise ValueError('Missing saved recipe fields: '+','.join(absent))
-    if facts.get('changes_frozen_race') or facts['full_dataset_coverage'] is not True:
-        raise ValueError('Changed or incomplete frozen workload')
+    from six_lane_full_variants import validate_variant
+    validate_variant(facts, cell)
+    if facts['full_dataset_coverage'] is not True:
+        raise ValueError('Incomplete frozen workload')
     work=facts['workload']
     required=('harness','harness_sha256','lane','input_files','actual_shapes',
               'estimator_settings_record','intrinsic_cap_audit','inference',

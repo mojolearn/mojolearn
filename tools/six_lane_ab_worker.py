@@ -121,7 +121,9 @@ def run(args):
     if recipe['source_sha']!=git('rev-parse','HEAD') or git('status','--porcelain','--untracked-files=no'):raise ValueError('Worker source freeze changed')
     if not recipe.get('execution_authorized'):raise ValueError('Later measurement authorization must be recorded in the resolved recipe')
     if job.get('blocked') or not job.get('full_dataset_coverage'):raise ValueError('Incomplete full workload recipe')
-    if recipe.get('changes_frozen_race') or work.get('overrides') or work.get('adapter'):raise ValueError('Frozen race settings cannot change to reach a candidate')
+    from six_lane_full_variants import validate_variant
+    validate_variant(recipe)
+    if work.get('overrides') or work.get('adapter'):raise ValueError('Frozen race settings cannot change to reach a candidate')
     configs={c['id']:c for c in json.loads((STORE/'matrix.json').read_text())['configurations']}
     if runtime_requirements(job['master_selection'],job['workload_id'],configs):raise ValueError('Supplemental public operation has no unchanged incumbent race adapter; coverage remains missing')
     harness=work['harness'];family=HARNESS_FAMILIES[harness]
