@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/root/integrated-neural-a006-v2/run.py", line 31, in <module>
+    board=json.loads((out/'board.json').read_text());summaries[arm]=inspect(board,manifest);(C/(arm+'-audit.json')).write_text(json.dumps({'status':'PASS','board_sha256':sha(out/'board.json'),'rows':summaries[arm]},indent=2))
+                                                                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/integrated-neural-a006-v2/validate.py", line 19, in inspect
+    assert c['status']=='ok' and c['rounds']==1 and len(c['times_ms'])==1 and c.get('hash'),key
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: neural/mlp-train-step/gaussian/shape=full

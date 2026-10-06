@@ -19,6 +19,7 @@ from x_decomp.rr_block import (
     RB_W,
     rb_blocks,
     rb_gather_cell,
+    rb_pivot_shift,
     rb_hi,
     rb_idx,
     rb_is_pad,
@@ -152,8 +153,9 @@ def host_eigh_rb_sorted(mut a_in: List[Float32], n: Int, mut w: List[Float32], m
                 for i in range(RB_W):
                     dg.append(pl[i * RB_W + i])
                 var srt = eigh_ascending(dg, vr, RB_W, True, got[1])
+                var shift = rb_pivot_shift(pa, nn, lo, hi)
                 for i in range(RB_W):
-                    wll[g * RB_W + i] = srt.w[i]
+                    wll[g * RB_W + i] = ftz(srt.w[i] + shift)
                 for i in range(ww):
                     wvl[g * ww + i] = srt.v[i]
             var vsrc = pv0 if cur == 0 else pv1

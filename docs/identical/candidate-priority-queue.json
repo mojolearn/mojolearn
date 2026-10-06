@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "scope": "First three meaningful opt-in candidates after core wave, not75blind builds. No jobs queued by this plan.",
+  "scope": "Reconciled against optimization-ledger.json. Historical decisions are not new experiment requests. Current next timing scope is the two promising GEMM screens; frozen running builds remain at a006da73d.",
   "queue": [
     {
       "priority": 1,
@@ -27,8 +27,9 @@
       "eligibility": "8,800,000-byte stacked n*K*d float32 operand is below the 1GiB source cap; all four component blocks are nonempty.",
       "required_targeted_gate": "Read back GMM_ESTEP_STACK and actual stack dispatch. Compare means, covariances, weights, per-row likelihood/responsibilities and finite/convergence state with host; means_ alone is insufficient.",
       "reason": "Fixed launch/iteration savings; same arithmetic; existing canonical medium fixture and mixture host twin.",
-      "status": "READY_FOR_ROOT_SELECTED_TARGETED_COMPILE_AND_IDENTITY; NOT_READY_FOR_TIMING",
-      "timing_condition": "Core wave green; eligible route and targeted same-version NVIDIA/AMD/host identity plus quality pass. Then one baseline and one candidate measurement only; both recipe roles use master armON."
+      "status": "HISTORICAL_DROP_DO_NOT_REPEAT_UNCHANGED",
+      "timing_condition": "No unchanged rerun. A changed implementation or explicit new experimental question requires a separately justified freeze.",
+      "recorded_evidence": "bench/results/identical-integration-20261004 (AMD a4d: fit 19.91 -> 24.06 ms, slower)"
     },
     {
       "priority": 2,
@@ -42,21 +43,25 @@
         "n_init": 1,
         "random_state": 7
       },
-      "baseline_defines": [],
-      "candidate_defines": [
-        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1"
+      "baseline_defines": [
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1"
       ],
+      "candidate_defines": [],
       "builders": [
         "base",
         "base_host",
         "estimators",
         "estimators_host"
       ],
-      "eligibility": "50k rows spans196 candidate accumulator chunks versus49 default1024-row chunks; skinny11-feature data matches the candidate rationale.",
+      "eligibility": "256 rows is already the default; the old enable flag is a no-op. A deliberate future comparison would use OFF for the 1024-row baseline.",
       "required_targeted_gate": "Read actual accumulator block rows256 versus1024. Compare centers, labels, inertia and iteration state across GPU/host and validate unchanged integer-total range.",
       "reason": "Simple integer regrouping, small bounded memory footprint, existing classical driver and host identity path.",
-      "status": "READY_FOR_ROOT_SELECTED_TARGETED_COMPILE_AND_IDENTITY; NOT_READY_FOR_TIMING",
-      "timing_condition": "Core wave green; eligible route and targeted same-version NVIDIA/AMD/host identity plus quality pass. Then one baseline and one candidate measurement only; both recipe roles use master armON."
+      "status": "HISTORICAL_KEEP_DO_NOT_REPEAT_UNCHANGED",
+      "timing_condition": "No unchanged rerun. A changed implementation or explicit new experimental question requires a separately justified freeze.",
+      "recorded_evidence": {
+        "timing": "bench/results/box-run-2-20261005/candidate/",
+        "identity": "base == candidate == host digest 0454b9f3 on NVIDIA and AMD"
+      }
     },
     {
       "priority": 3,
@@ -83,13 +88,32 @@
       "eligibility": "Board SUB[quad]=10000 on canonical50k source. Resident Gram about400MB fits both rented devices; candidate is active with IDENTICAL resident/default2-launch solver.",
       "required_targeted_gate": "Read OCSVM_CHUNK_RUN256 versus64; record actual iteration count. Compare dual coefficients, intercept, decision scores and labels; include a convergence-boundary fixture. If all fixtures stop<=64 iterations, skip candidate timing rather than claiming a useful comparison.",
       "reason": "Targets fixed host-poll overhead in an already resident algorithm; use existing exact medium row and refuse timing if iteration eligibility is not demonstrated.",
-      "status": "READY_FOR_ROOT_SELECTED_TARGETED_COMPILE_AND_IDENTITY; NOT_READY_FOR_TIMING",
-      "timing_condition": "Core wave green; eligible route and targeted same-version NVIDIA/AMD/host identity plus quality pass. Then one baseline and one candidate measurement only; both recipe roles use master armON."
+      "status": "HISTORICAL_DROP_DO_NOT_REPEAT_UNCHANGED",
+      "timing_condition": "No unchanged rerun. A changed implementation or explicit new experimental question requires a separately justified freeze.",
+      "recorded_evidence": "bench/results/identical-integration-20261004 (AMD a4d: fit 19.75 -> 19.75 ms, no gain)"
     }
   ],
   "deferred": {
     "rf_device_level_loop": "Promising but requires explicit max_leaves=-1, single sampling round and dedicated queue/tail state gate; DART255-leaf fixture is ineligible.",
     "extra_trees_u16_bins": "Taxi11features is ineligible; requires wide canonical fixture and model-changing predictive-quality gate.",
     "block_eigh": "Quarantined after strict convergence failure; no timing until algorithm repaired."
+  },
+  "current_selected_gemm": {
+    "source": "a006da73d78634683cfc77a12dcb99666c55748c",
+    "scope": "Actual full-workload A/B, not default promotion",
+    "nvidia": [
+      "group-slack2",
+      "body-tiles"
+    ],
+    "amd": [
+      "group-slack2"
+    ],
+    "held_after_screen": [
+      "one-page",
+      "group-slack8",
+      "packed64"
+    ],
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/identical-speed-ab-20261005/gpu-queue/nvidia/managed/artifacts/speed-ab-a006da73/results/results.json",
+    "note": "Single-sample synthetic leads require actual workload validation. Additional unmeasured candidates remain backlog, not scheduled by this file."
   }
 }

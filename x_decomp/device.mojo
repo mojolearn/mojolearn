@@ -2988,7 +2988,8 @@ struct DevExec(Exec):
                     Int32(RR_EIGH_SWEEPS), tl, grid_dim=h, block_dim=RR_OFF_TPB,
                 )
                 ctx.enqueue_function[rb_bad_kernel](
-                    _p(dinfo), _p(dbad), Int32(h), grid_dim=_pj_blocks(h), block_dim=PJ_TPB
+                    _p(dinfo), _p(dbad), Int32(h), pa, _p(dwl), Int32(nn), Int32(m), Int32(rd),
+                    grid_dim=_pj_blocks(h), block_dim=PJ_TPB
                 )
                 ctx.enqueue_function[rb_right_kernel](
                     pa, _p(dwv), pt, Int32(nn), Int32(m), Int32(rd), grid_dim=cells, block_dim=PJ_TPB

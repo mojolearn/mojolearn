@@ -1,0 +1,40 @@
+{
+  "numerical_source": "a006da73d78634683cfc77a12dcb99666c55748c",
+  "harness_source": "5e04c02c1ca98838a8e31011ff833e758d929977",
+  "policy": "Direct Linux full measurements with retained scored model, predictions and data/settings evidence. Apple identity is secondary and never a speed vote. No default promotion from compile or identity alone.",
+  "current_main_reconciliation": "RF/ET public API and candidate builder files match main770711 byte-for-byte; numerical A/B pin remainsa006. Historical KMeansKEEP(default256), GMMstackDROP, OCSVMchunk256DROP unchanged.",
+  "apple_build": {
+    "expected": 11,
+    "captured_hash_verified": 11,
+    "collision": "ETu16host first attempt refused existing baseline output before compile. Retried only that job in uniqueMOJOLEARN_TREES_HOST_OUTDIR. Original failure+10green artifacts retained.",
+    "evidence": "non-gemm-backlog/apple/capture-verification.json"
+  },
+  "rf_apple_identity": {
+    "captured_fits": 30,
+    "gpu_vs_default_host_comparisons": 24,
+    "model_bits": "IDENTICAL",
+    "prediction_bits": "IDENTICAL",
+    "profiles": [
+      "k4",
+      "k1",
+      "k2",
+      "k8"
+    ],
+    "cases_per_profile": 6,
+    "evidence": "non-gemm-backlog/apple/identity/rf-comparison.json"
+  },
+  "et_apple_identity": {
+    "status": "SAME_ARM_APPLE_HOST_IDENTICAL",
+    "failure": "Original sharedmax_leaves keyword is RF-only; ET ref uses distinctmax_leaf_nodes. All failures occurred before fit, not numerical mismatches.",
+    "corrected_commit": "5e04c02c1ca98838a8e31011ff833e758d929977",
+    "gate": "Same ET arm model/pred bytes across vendors/host; baseline vsu16 RMSE/R2 separately. No asserted baseline/candidate model equality.",
+    "coverage": "6active k=d plus6inactive k=floor((d-1)/2); exactceil(d/2) boundary NOT covered. Full eligible regression fixtures istellareg/year; ETn_bins is not constructor parameter.",
+    "captured_fits": 48,
+    "apple_vs_host_comparisons": 24,
+    "model_bits": "IDENTICAL within each arm",
+    "prediction_bits": "IDENTICAL within each arm",
+    "baseline_vs_candidate_changed_model_cases": 6,
+    "baseline_vs_candidate_rmse_delta_on_these_fixtures": 0.0,
+    "evidence": "non-gemm-backlog/apple/identity-et-retry/comparison.json"
+  }
+}

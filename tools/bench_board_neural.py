@@ -965,6 +965,41 @@ class OursSamba(Ours):
         return None if self.lane == "samba-train-step" else Ours.digest(self)
 
 
+def mlp_state_evidence(state):
+    """Untimed, complete public trainer snapshot; no training/inference calls."""
+    import numpy as np
+    optimizer = state["optimizer"]
+    arrays = {"state.weight." + name: np.asarray(state["weights"][name]).copy()
+              for name in MLP_NAMES}
+    arrays.update({"state.optimizer." + name: np.asarray(optimizer[name]).copy()
+                   for name in ("m", "v", "flags")})
+    arrays["state.optimizer.step"] = np.asarray([optimizer["step"]], dtype=np.int64)
+    metadata = {k: v for k, v in state.items() if k not in ("weights", "optimizer")}
+    metadata["optimizer"] = {k: v for k, v in optimizer.items()
+                             if k not in ("m", "v", "flags", "step")}
+    raw = json.dumps(metadata, sort_keys=True, separators=(",", ":"),
+                     allow_nan=False).encode("utf-8")
+    arrays["state.metadata_json"] = np.frombuffer(raw, dtype=np.uint8).copy()
+    return arrays
+
+
+def mlp_state_digest(arrays):
+    """SHA256 over named, typed, shaped state bytes (not an NPZ container)."""
+    import numpy as np
+    h = hashlib.sha256(b"mojolearn.board.mlp-state.v1\0")
+    for name in sorted(arrays):
+        array = np.ascontiguousarray(arrays[name])
+        if array.dtype.hasobject or not np.isfinite(array).all():
+            raise ValueError("invalid MLP state array: " + name)
+        header = json.dumps([name, array.dtype.str, list(array.shape)],
+                            separators=(",", ":")).encode("ascii")
+        payload = array.tobytes(order="C")
+        for part in (header, payload):
+            h.update(len(part).to_bytes(8, "little"))
+            h.update(part)
+    return h.hexdigest()
+
+
 class OursMLP(Ours):
     def __init__(self, lane, shape, data):
         import numpy as np
@@ -989,6 +1024,7 @@ class OursMLP(Ours):
         self.x0 = np.ascontiguousarray(self.X[0])
         self.k = 0
         self.losses = []
+        self._state_evidence = None
 
     def call(self):
         np = self.np
@@ -997,16 +1033,25 @@ class OursMLP(Ours):
                                         np.ascontiguousarray(self.y[self.k]))
             self.losses.append(float(res["loss"]))
             self.k += 1
+            self._state_evidence = None
         else:
             self.out = self.model.predict_logits(self.x0)
 
     def outputs(self):
         if self.lane == "mlp-train-step":
-            return {"losses": self.np.array(self.losses, dtype=self.np.float64)}
+            return {"losses": self.np.array(self.losses, dtype=self.np.float64),
+                    **self._snapshot()}
         return {"y": self.np.asarray(self.out)}
 
+    def _snapshot(self):
+        if self._state_evidence is None:
+            self._state_evidence = mlp_state_evidence(self.model.state_dict())
+        return self._state_evidence
+
     def digest(self):
-        return None if self.lane == "mlp-train-step" else Ours.digest(self)
+        # Worker invokes this only AFTER stopping the round timer and memory probe.
+        return (mlp_state_digest(self._snapshot()) if self.lane == "mlp-train-step"
+                else Ours.digest(self))
 
 
 OURS = {"lm": OursLM, "gemm": OursGEMM, "transformer": OursBlock, "mamba1": OursBlock,
@@ -1726,8 +1771,9 @@ def race(args):
             if msg is not None and msg.get("event") == "saved":
                 with np.load(path) as z:
                     outs[arm] = {k: z[k] for k in z.files}
-                if getattr(args, "keep_outputs", False) or lane in FORWARD_REFERENCE_LANES:
-                    # Forward quality can be re-evaluated without retiming the GPU.
+                if (getattr(args, "keep_outputs", False)
+                        or lane in FORWARD_REFERENCE_LANES or lane == "mlp-train-step"):
+                    # Retain forward outputs and trainer state for independent checks.
                     # tools/afn_ab.sh's judge compares two builds' outputs
                     keep = os.path.join(args.out, "%s-%s.outputs.npz" % (tag, arm))
                     os.replace(path, keep)

@@ -42,10 +42,13 @@ the columns; the tail finds them by their pad-row cell and ranks the real
 columns only (`rb_rank_real`).
 
 EXPERIMENTAL ONLY: the default is disabled after the IDENTICAL 4096 rank-one
-quality fixture produced an intrinsically unconverged local pivot (outer
+quality fixture produced an unconverged uncentered local pivot (outer
 sweep 0, round 183, group 71). Exact-word host replay also refuses after
 60/120/180/240 sweeps at the required local tolerance. Do not relax that
 tolerance or the final convergence/accuracy gates to enable this candidate.
+The guarded centering repair below passes the retained pivot and host block
+cases through 513, with shifts restored before outer updates. Original4096
+quality and GPU identity remain unqualified; the default stays disabled.
 
 BITS: a different solver, so different words from the rotation solver at
 n >= RB_MIN_N, on NVIDIA, AMD, Apple and the host column together (the gate
@@ -136,11 +139,38 @@ def rb_idx(lo: Int, hi: Int, x: Int) -> Int:
 
 
 @always_inline
+def rb_pivot_shift(a: F32Ptr, nn: Int, lo: Int, hi: Int) -> Float32:
+    """Common spectral translation with a nonincreasing rounded local norm.
+
+    Captured near-repeated diagonal-2 pivot: original60/120/180/240 sweeps
+    refused; centered solve converged4, residual4.2e-10, orthogonality2.4e-6.
+    No tolerance relaxation: each diagonal magnitude is checked separately.
+    The shift MUST be restored to local eigenvalues before outer updates.
+    """
+    var first = rb_idx(lo, hi, 0)
+    var shift = a.unsafe_load(first * nn + first)
+    for k in range(RB_W):
+        var index = rb_idx(lo, hi, k)
+        var diagonal = a.unsafe_load(index * nn + index)
+        if abs(ftz(diagonal - shift)) > abs(diagonal):
+            return Float32(0.0)
+    return shift
+
+
+@always_inline
 def rb_gather_cell(a: F32Ptr, nn: Int, lo: Int, hi: Int, x: Int, y: Int) -> Float32:
-    """Cell (x, y) of the pair's pivot problem, read from A's upper triangle."""
+    """Symmetric block pivot, centered only on its diagonal.
+
+    Subtracting one scalar preserves eigenvectors. Off-diagonals stay exact;
+    the guarded smaller norm makes the same relative stopping test at least
+    as strict. Sweep budget and outer convergence/Frobenius gates unchanged.
+    """
     var i = rb_idx(lo, hi, min(x, y))
     var j = rb_idx(lo, hi, max(x, y))
-    return a.unsafe_load(i * nn + j)
+    var value = a.unsafe_load(i * nn + j)
+    if x != y:
+        return value
+    return ftz(value - rb_pivot_shift(a, nn, lo, hi))
 
 
 @always_inline

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "base": "acbac52213651b3f1e2598309e3436d16d59272d",
+  "profiles": {
+    "one-page": {"define": "MOJOLEARN_GEMM_ONE_PAGE", "mask": 1, "vendors": ["nvidia", "amd"], "hypothesis": "Lower shared-memory use can admit more resident blocks; loses double-buffer prefetch."},
+    "group-slack2": {"define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2", "mask": 2, "vendors": ["nvidia", "amd"], "hypothesis": "Coarser aligned leaf groups reduce workspace and fold traffic, at the cost of fewer blocks."},
+    "group-slack8": {"define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8", "mask": 4, "vendors": ["nvidia", "amd"], "hypothesis": "Finer aligned leaf groups expose more parallelism, at the cost of workspace and fold traffic."},
+    "body-tiles": {"define": "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY", "mask": 8, "vendors": ["nvidia"], "hypothesis": "Count actual packed-body tiles when choosing group size, reducing unnecessary split workspace."},
+    "packed64": {"define": "MOJOLEARN_GEMM_KPACK_RPT4", "mask": 16, "vendors": ["nvidia"], "hypothesis": "A shorter packed tile reduces per-thread register demand and increases the number of independent blocks."}
+  }
+}
