@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "F14",
-  "title": "Reuse streamed index rows across four exact query accumulators",
+  "title": "Compare exact grouped query rows and fixed-probe bounded IVF list tasks",
   "mode": "fast",
   "vendors": [
     "apple"
@@ -9,7 +9,10 @@
   "status": "source_ready",
   "implementation_paths": [
     "neighbors/impl/detail/fast_topk_knn.mojo",
-    "experiments/performance_ideas/F14/caller.py"
+    "experiments/performance_ideas/F14/caller.py",
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+    "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo",
+    "experiments/performance_ideas/F14/ann_caller.py"
   ],
   "candidate_defines": [
     "MOJOLEARN_KNN_FAST_QUERY_GROUP4"
@@ -36,7 +39,8 @@
     "{output}/run"
   ],
   "validation_paths": [
-    "experiments/performance_ideas/F14/caller.py"
+    "experiments/performance_ideas/F14/caller.py",
+    "experiments/performance_ideas/F14/ann_caller.py"
   ],
   "depends_on": [],
   "quality_gates": [
