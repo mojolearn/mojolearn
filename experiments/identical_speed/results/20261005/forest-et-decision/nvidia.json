@@ -1,0 +1,827 @@
+{
+  "schema": "mojolearn.forest-experiment-board/1",
+  "promotion": false,
+  "rows": [
+    {
+      "vendor": "nvidia",
+      "family": "et",
+      "dataset": "istellareg",
+      "profile": "et-float",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/nvidia/forest-ab-consolidated-v3/et-istellareg-et-float",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/nvidia/packet.json",
+      "packet_sha256": "1febd8a290e465b983cebb896ff315320e5d4e82c3f4806cc49630d6aca029c1",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 30634.269,
+      "warmup_ms": 32974.8,
+      "state": {
+        "input_hash": "9de72e6b5983532a6e46e14253488d140f83eb44812e1e01da4092fb1472710a",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              2043304,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "ede1e209046596315f3ade11f017c3539c4ce4c0e69c26cc96ad437130eb5cb5"
+          },
+          "y_train": {
+            "shape": [
+              2043304
+            ],
+            "dtype": "<f4",
+            "sha256": "a044facecf84e9d071304f02133569f54316faa98e1767b7f372b997e4746afa"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "00c23955b8eef89ee8d927606f1825702a7371a47484f9873dde43341bba2b91"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "b03e9910aa421133f2dc9b2ad52da50a16c96dca876453d2abd8d5936adfef99"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 100,
+            "criterion": "squared_error",
+            "max_depth": 16,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": 1.0,
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": false,
+            "oob_score": false,
+            "random_state": 7,
+            "ccp_alpha": 0.0,
+            "max_samples": null,
+            "monotonic_cst": null,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "n_estimators": 100,
+          "max_depth": 16,
+          "min_samples_split": 2,
+          "min_samples_leaf": 1,
+          "min_weight_fraction_leaf": 0.0,
+          "max_features": null,
+          "max_leaf_nodes": null,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": false,
+          "oob_score": false,
+          "random_state": 7,
+          "warm_start": false,
+          "class_weight": null,
+          "ccp_alpha": 0.0,
+          "max_samples": null,
+          "monotonic_cst": null
+        },
+        "model_state_hash": "2533d94a8395e1b4b8421e22d06a1a84c3a2dac55226a46432d6993ff9b027cb",
+        "prediction_hash": "cf992db5f4d7c1803eca466d50061261c9c17adc71e0cd1d3930107b1b05b65c",
+        "model_file_sha256": "93180e0df085dce3957046728429cc3d2c86c19e354d3306b161bf7cfb2249df",
+        "metrics": [
+          {
+            "metric": "rmse",
+            "value": 0.5645249224974281
+          }
+        ],
+        "state_members": {
+          "colid": {
+            "shape": [
+              4742526
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U19"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "leaves": {
+            "shape": [
+              4742526
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              4742526
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              6
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              101
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              4742526
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "GPU-971d1e03-c1b5-c8f4-a8db-3e1e345e6b5a, NVIDIA GeForce RTX 4090, 8.9, 580.159.04",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_trees.so": "d6917e5abb2688f4c59d3945c2c94d86ec2ea8ca9818d23fb90ecefc13778263",
+          "identical/_mojolearn.so": "2aebb8fca9601ac0d0be464218d80da4d1d8dc86bc59fa48f27395eead11970a"
+        },
+        "vendor": "cuda",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/et-float/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+        }
+      },
+      "snapshot_sha256": "b1ac1a887106bc035a0c99fa571582f206aaa953fdde8dcc78c877c141d62019",
+      "prediction_digest": "81b2c8e31bb2e9ff"
+    },
+    {
+      "vendor": "nvidia",
+      "family": "et",
+      "dataset": "istellareg",
+      "profile": "et-u16",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/nvidia/forest-ab-consolidated-v3/et-istellareg-et-u16",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/nvidia/packet.json",
+      "packet_sha256": "1febd8a290e465b983cebb896ff315320e5d4e82c3f4806cc49630d6aca029c1",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 29712.217,
+      "warmup_ms": 31170.616,
+      "state": {
+        "input_hash": "9de72e6b5983532a6e46e14253488d140f83eb44812e1e01da4092fb1472710a",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              2043304,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "ede1e209046596315f3ade11f017c3539c4ce4c0e69c26cc96ad437130eb5cb5"
+          },
+          "y_train": {
+            "shape": [
+              2043304
+            ],
+            "dtype": "<f4",
+            "sha256": "a044facecf84e9d071304f02133569f54316faa98e1767b7f372b997e4746afa"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "00c23955b8eef89ee8d927606f1825702a7371a47484f9873dde43341bba2b91"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "b03e9910aa421133f2dc9b2ad52da50a16c96dca876453d2abd8d5936adfef99"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 100,
+            "criterion": "squared_error",
+            "max_depth": 16,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": 1.0,
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": false,
+            "oob_score": false,
+            "random_state": 7,
+            "ccp_alpha": 0.0,
+            "max_samples": null,
+            "monotonic_cst": null,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "n_estimators": 100,
+          "max_depth": 16,
+          "min_samples_split": 2,
+          "min_samples_leaf": 1,
+          "min_weight_fraction_leaf": 0.0,
+          "max_features": null,
+          "max_leaf_nodes": null,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": false,
+          "oob_score": false,
+          "random_state": 7,
+          "warm_start": false,
+          "class_weight": null,
+          "ccp_alpha": 0.0,
+          "max_samples": null,
+          "monotonic_cst": null
+        },
+        "model_state_hash": "a450b446c1eac95164dfec64ff861f2f204c730410aa4460573a7592af3c8802",
+        "prediction_hash": "570f9c3a24031f46f97d924ce3862eed65ab4b40f0a216b0ca54b7826bb434e9",
+        "model_file_sha256": "625cc7973ad9fb967f9d7551c1c6e8fec94361afa1aff6e5670aa4f5c64bd025",
+        "metrics": [
+          {
+            "metric": "rmse",
+            "value": 0.5649949312706894
+          }
+        ],
+        "state_members": {
+          "colid": {
+            "shape": [
+              4736418
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U19"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "leaves": {
+            "shape": [
+              4736418
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              4736418
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              6
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              101
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              4736418
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "GPU-971d1e03-c1b5-c8f4-a8db-3e1e345e6b5a, NVIDIA GeForce RTX 4090, 8.9, 580.159.04",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_trees.so": "b0d91fdc884eebe141db6eaa4bd6736f042d6d5999822512f4d03f4ae3ed1d1d",
+          "identical/_mojolearn.so": "2aebb8fca9601ac0d0be464218d80da4d1d8dc86bc59fa48f27395eead11970a"
+        },
+        "vendor": "cuda",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/et-u16/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+        }
+      },
+      "snapshot_sha256": "73aedad58eea15bce104d03ce2918188a9ab28643aff988e15a9103e6da6774d",
+      "prediction_digest": "d7b28dbc282068eb"
+    },
+    {
+      "vendor": "nvidia",
+      "family": "et",
+      "dataset": "year",
+      "profile": "et-float",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/nvidia/forest-ab-consolidated-v3/et-year-et-float",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/nvidia/packet.json",
+      "packet_sha256": "1febd8a290e465b983cebb896ff315320e5d4e82c3f4806cc49630d6aca029c1",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 3282.053,
+      "warmup_ms": 4617.257,
+      "state": {
+        "input_hash": "0a57c5cf9c9597646a8012496f750442a9710ff8459036f925e1988eb987e315",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              463715,
+              90
+            ],
+            "dtype": "<f4",
+            "sha256": "5beeba27bbcdc754a4e66b45f6c346a81142d577a0d73d6f269f3721cd9646e1"
+          },
+          "y_train": {
+            "shape": [
+              463715
+            ],
+            "dtype": "<f4",
+            "sha256": "ab44e4786be92bef062bdae3ea01d0defa0cfec8295ab7d234817ad776137db2"
+          },
+          "X_test": {
+            "shape": [
+              51630,
+              90
+            ],
+            "dtype": "<f4",
+            "sha256": "9381f866d9683d65940847de04e2126024a21b1842f025b07a9eab4e42a39329"
+          },
+          "y_test": {
+            "shape": [
+              51630
+            ],
+            "dtype": "<f4",
+            "sha256": "acb755e9d0229919f8b5783a8b1343579bfc5bce67e68262aaa275484ead238f"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 100,
+            "criterion": "squared_error",
+            "max_depth": 16,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": 1.0,
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": false,
+            "oob_score": false,
+            "random_state": 7,
+            "ccp_alpha": 0.0,
+            "max_samples": null,
+            "monotonic_cst": null,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "n_estimators": 100,
+          "max_depth": 16,
+          "min_samples_split": 2,
+          "min_samples_leaf": 1,
+          "min_weight_fraction_leaf": 0.0,
+          "max_features": null,
+          "max_leaf_nodes": null,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": false,
+          "oob_score": false,
+          "random_state": 7,
+          "warm_start": false,
+          "class_weight": null,
+          "ccp_alpha": 0.0,
+          "max_samples": null,
+          "monotonic_cst": null
+        },
+        "model_state_hash": "f04dbc5f3a0acb8122e412f0bb57fee5a2012469e4ddf4f17593aae0f956ee85",
+        "prediction_hash": "cc238bbff4fad970bc588fbbb47cf46e171173487978a31436340656a65593b0",
+        "model_file_sha256": "d4e293efa46cb485bce4300e7b08f43c39c53a6e17a586c7e5c4448bb3c4e692",
+        "metrics": [
+          {
+            "metric": "rmse",
+            "value": 9.323387009681644
+          }
+        ],
+        "state_members": {
+          "colid": {
+            "shape": [
+              3813782
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U19"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "leaves": {
+            "shape": [
+              3813782
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              3813782
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              6
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              101
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              3813782
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "GPU-971d1e03-c1b5-c8f4-a8db-3e1e345e6b5a, NVIDIA GeForce RTX 4090, 8.9, 580.159.04",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_trees.so": "d6917e5abb2688f4c59d3945c2c94d86ec2ea8ca9818d23fb90ecefc13778263",
+          "identical/_mojolearn.so": "2aebb8fca9601ac0d0be464218d80da4d1d8dc86bc59fa48f27395eead11970a"
+        },
+        "vendor": "cuda",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/et-float/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+        }
+      },
+      "snapshot_sha256": "36368ea8c6254be3ac71777036437008bb1ab302252bf91b25e539e9708c192f",
+      "prediction_digest": "8b0d254f516ba163"
+    },
+    {
+      "vendor": "nvidia",
+      "family": "et",
+      "dataset": "year",
+      "profile": "et-u16",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/nvidia/forest-ab-consolidated-v3/et-year-et-u16",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/nvidia/packet.json",
+      "packet_sha256": "1febd8a290e465b983cebb896ff315320e5d4e82c3f4806cc49630d6aca029c1",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 3831.254,
+      "warmup_ms": 5148.569,
+      "state": {
+        "input_hash": "0a57c5cf9c9597646a8012496f750442a9710ff8459036f925e1988eb987e315",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              463715,
+              90
+            ],
+            "dtype": "<f4",
+            "sha256": "5beeba27bbcdc754a4e66b45f6c346a81142d577a0d73d6f269f3721cd9646e1"
+          },
+          "y_train": {
+            "shape": [
+              463715
+            ],
+            "dtype": "<f4",
+            "sha256": "ab44e4786be92bef062bdae3ea01d0defa0cfec8295ab7d234817ad776137db2"
+          },
+          "X_test": {
+            "shape": [
+              51630,
+              90
+            ],
+            "dtype": "<f4",
+            "sha256": "9381f866d9683d65940847de04e2126024a21b1842f025b07a9eab4e42a39329"
+          },
+          "y_test": {
+            "shape": [
+              51630
+            ],
+            "dtype": "<f4",
+            "sha256": "acb755e9d0229919f8b5783a8b1343579bfc5bce67e68262aaa275484ead238f"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 100,
+            "criterion": "squared_error",
+            "max_depth": 16,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": 1.0,
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": false,
+            "oob_score": false,
+            "random_state": 7,
+            "ccp_alpha": 0.0,
+            "max_samples": null,
+            "monotonic_cst": null,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "n_estimators": 100,
+          "max_depth": 16,
+          "min_samples_split": 2,
+          "min_samples_leaf": 1,
+          "min_weight_fraction_leaf": 0.0,
+          "max_features": null,
+          "max_leaf_nodes": null,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": false,
+          "oob_score": false,
+          "random_state": 7,
+          "warm_start": false,
+          "class_weight": null,
+          "ccp_alpha": 0.0,
+          "max_samples": null,
+          "monotonic_cst": null
+        },
+        "model_state_hash": "3250048561808b79d8cf06c526da9836eb65a0aa143ba9b28ff56b7fa3d51c36",
+        "prediction_hash": "cc377c394b673134cae959085a8da9bdb3a4c1ef27b3c39e852420515f75d213",
+        "model_file_sha256": "aefd403c5370aa2288675963ac66a498ac9713db03e639c1b15e4b8c0f6df5d0",
+        "metrics": [
+          {
+            "metric": "rmse",
+            "value": 9.323469898551933
+          }
+        ],
+        "state_members": {
+          "colid": {
+            "shape": [
+              3873104
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U19"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "leaves": {
+            "shape": [
+              3873104
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              3873104
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              6
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              101
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              3873104
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "GPU-971d1e03-c1b5-c8f4-a8db-3e1e345e6b5a, NVIDIA GeForce RTX 4090, 8.9, 580.159.04",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_trees.so": "b0d91fdc884eebe141db6eaa4bd6736f042d6d5999822512f4d03f4ae3ed1d1d",
+          "identical/_mojolearn.so": "2aebb8fca9601ac0d0be464218d80da4d1d8dc86bc59fa48f27395eead11970a"
+        },
+        "vendor": "cuda",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/et-u16/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+        }
+      },
+      "snapshot_sha256": "efb4d1be8a10137d48497ac6e8f87a389b570081f422a162a075ed2774f2cad6",
+      "prediction_digest": "52201680d0355a45"
+    }
+  ],
+  "decisions": [
+    {
+      "family": "et",
+      "profile": "et-u16",
+      "baseline": "et-float",
+      "status": "REJECTED_KEEP_DEFAULT_OFF",
+      "promoted": false,
+      "ratios": {
+        "nvidia/istellareg": 0.9699012893044714,
+        "amd/istellareg": 1.033971510380581,
+        "nvidia/year": 1.1673345920982994,
+        "amd/year": 1.0164993212283713
+      },
+      "checks": [
+        {
+          "vendor": "nvidia",
+          "dataset": "istellareg",
+          "baseline_metrics": [
+            {
+              "metric": "rmse",
+              "value": 0.5645249224974281
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "rmse",
+              "value": 0.5649949312706894
+            }
+          ],
+          "baseline_candidate_bits_equal": false
+        },
+        {
+          "vendor": "amd",
+          "dataset": "istellareg",
+          "baseline_metrics": [
+            {
+              "metric": "rmse",
+              "value": 0.564524922497428
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "rmse",
+              "value": 0.5649949312706893
+            }
+          ],
+          "baseline_candidate_bits_equal": false
+        },
+        {
+          "vendor": "nvidia",
+          "dataset": "year",
+          "baseline_metrics": [
+            {
+              "metric": "rmse",
+              "value": 9.323387009681644
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "rmse",
+              "value": 9.323469898551933
+            }
+          ],
+          "baseline_candidate_bits_equal": false
+        },
+        {
+          "vendor": "amd",
+          "dataset": "year",
+          "baseline_metrics": [
+            {
+              "metric": "rmse",
+              "value": 9.323387009681644
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "rmse",
+              "value": 9.323469898551933
+            }
+          ],
+          "baseline_candidate_bits_equal": false
+        }
+      ],
+      "missing": [],
+      "combined_ratio": 1.0444427494979254,
+      "vendor_ratios": {
+        "nvidia": 1.0640485543084253,
+        "amd": 1.0251981947269193
+      },
+      "limitations": "One warmup/sample; Apple/host identity and ET quality decision must be linked before promotion; no automatic material-regression threshold.",
+      "reason": "Slower combined and on both vendors overall; slightly worse RMSE. Single sample per full fit; no promotion."
+    }
+  ],
+  "failures": [],
+  "pending": [],
+  "historical_attempts": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v2",
+      "status": "FOUR_AMD_TAXI_TIMINGS_RETAINED_BUT_FINAL_EVIDENCE_FAILED; scoped repairs queued"
+    }
+  ]
+}

@@ -2090,6 +2090,16 @@ def transpose_to_row_major_kernel(
 #: the M4 at 1M rows: istellareg 86 -> 67 s, year 23.2 -> 18.0 s, RMSE equal
 #: to float X (8-bit codes from 1024 sampled rows, or thresholds drawn in
 #: code space, both moved RMSE). `-D MOJOLEARN_ET_BINNED_OFF` keeps float X.
+#: 2026-10-05 full-harness IDENTICAL A/B decision: REJECT et-u16; keep OFF.
+#: Frozen numerical source a006da73d, harness e5f3b578b; et-float baseline.
+#: Full Istella regression / Year, one excluded warmup and one scored fit each:
+#: candidate/baseline time NVIDIA 0.969901 / 1.167335; AMD 1.033972 / 1.016499.
+#: Geometric ratios: NVIDIA 1.064049, AMD 1.025198, combined 1.044443 (slower).
+#: Same-arm full model and prediction bits match NVIDIA/AMD; candidate vs float
+#: changes bits as designed. RMSE worsens: Istella .5645249225 -> .5649949313,
+#: Year 9.3233870097 -> 9.3234698986. No net performance win; not promoted.
+#: Single-sample results do not establish variance or Apple/host qualification.
+#: Evidence: experiments/identical_speed/results/20261005/forest-et-decision/board.json.
 comptime IDN_ET_BINNED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_ET_BINNED_U16"]()
