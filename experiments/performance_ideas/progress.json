@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "user_plan": "finish candidates; compile each distinct configuration once; collect available IDENTICAL GPU witnesses; keep new experiments off and pending; merge main after compile success",
-  "compile_repetition_policy": "only repeat configurations affected by a source fix",
+  "user_plan": "finish and merge all 60 candidates on dedicated integration branch; freeze ONE commit; run ONE full compile campaign; retry only compiler failures requiring source fixes; collect available IDENTICAL GPU witnesses; keep all new experiments default off and pending; merge main after compile success",
+  "compile_repetition_policy": "one full campaign after all source merges; retry only failures with relevant fixes",
   "performance_timing_required_before_merge": false,
   "new_experiment_defaults": "off",
   "qualification": "pending",
@@ -10,8 +10,8 @@
   "hardware": {
     "nvidia": "guarded rented NVIDIA RTX 4090 builder",
     "apple": "retained M3 Ultra",
-    "m2_instance": "retirement_backup_in_progress",
-    "m2_dedicated_host": "retirement_pending"
+    "m2_instance": "termination_requested_after_internal_SSD_backup_verification; EBS_data_preserved",
+    "m2_dedicated_host": "release_requested"
   },
   "cards": [
     {
@@ -434,5 +434,7 @@
       "gpu_witness": "pending",
       "performance_qualification": "pending"
     }
-  ]
+  ],
+  "source_freeze": "waiting_for_final_F06_F12_source_merges",
+  "preliminary_campaigns": "stopped at owner request; retained evidence is not final all-60 compile proof"
 }

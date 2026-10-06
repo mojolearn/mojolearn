@@ -13,9 +13,11 @@ completed public calls on the M3 Ultra.
 
 ## Requested completion plan
 
-Finish all supported candidates, then compile each distinct source/define/target
-configuration once. Retain successful artifact receipts; repeat a build only
-when a relevant source fix invalidates it. Compilation runs on the rented
+Finish and merge all supported candidates into the dedicated integration
+branch first. Freeze ONE commit, then run ONE exhaustive compile campaign for
+the distinct source/define/target configurations. Retry only compiler failures
+that require source fixes. Preliminary campaigns were stopped at the owner's
+request and do not establish final all-card compilation. Compilation runs on the rented
 NVIDIA builder and the retained M3 Ultra for Apple Metal. The M2 instance and
 its Dedicated Host are being retired after preserving their work.
 
