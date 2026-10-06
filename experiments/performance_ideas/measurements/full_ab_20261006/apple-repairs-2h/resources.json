@@ -1,0 +1,15 @@
+{
+  "cpu_count": 28,
+  "thread_caps": {
+    "OMP_NUM_THREADS": null,
+    "OPENBLAS_NUM_THREADS": null,
+    "MKL_NUM_THREADS": null,
+    "NUMEXPR_NUM_THREADS": null,
+    "VECLIB_MAXIMUM_THREADS": null,
+    "BLIS_NUM_THREADS": null
+  },
+  "hardware": "Mac15,14",
+  "harness_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+  "source_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+  "policy": "Serial full-machine uncapped CPU; worker resource readback retained."
+}

@@ -9,7 +9,7 @@ Generated from board.json by tools/af_board_render.py; do not edit. Source: `ben
 
 Our FAST arm on the M3 Ultra Metal GPU at head 0150b04c1, 05cd07fbb, 05fffc97d, 0e743cac9, 22b3be501, 2432d5753, 24ed76679, 2dcdd949f, 37c65a3af, 3c6fb879b, 413da4d18, 417ba1ded, 4198d5a9c, 423305583, 42b6db46c, 443384b59, 4b1311c12, 550806bc0, 5990c5946, 661b818c2, 69f7a41fd, 6c0ba4379, 6c54b7e87, 6d4d55c99, 73f3a856d, 77da4a641, 7ba385b30, 829c3fb4a, 8432822f9, 8b9c91b9c, 8d43ec357, 94cb5ba59, 9525ed958, 9722e5a2b, a717feb53, a72b1deba, a7b8b9513, a8e9ee5a3, af01c6a54, b2dd5dfe5, c48ede3c1, c55b8c377, c5e1bbeb6, c65e09904, d05835681, d1fa9223b, dbe2ab85a, deee07721, e0c848afe, e2bfb8422, eb3fca1ac, ed49f2b11, f419ea9f1, f6a9e7c04, fc6c6837f, 1 warm-up + 3 timed rounds at board size (rows-full; trees MOJOLEARN_SPEED_SIZE=shipped). Opponents are not re-raced: classical times come from the M3 0.8.34 board (`~/mojolearn-evidence/board-0834-times.tsv`, quality from its board.json), trees from the 2026-09-29 M3 board (older tree params on some lanes); an opponent marked (fill) comes from the M3 opponent fill on the 0.8.34 kit. Ratio = our FAST ms / best opponent ms; below 1 is faster. Rows sort worst ratio after first. First written by `tools/af_board_merge.py`; now carried in board.json.
 
-Quality (2026-10-05, computed): of 478 lane/dataset rows, FAST quality is WORSE than an opponent on 56 (38 by more than 1%) and FAST after is WORSE than FAST before on 9 (6 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 102 have no parseable FAST quality. Tolerance rel 1e-3, abs 1e-6.
+Quality (2026-10-05, computed): of 480 lane/dataset rows, FAST quality is WORSE than an opponent on 56 (38 by more than 1%) and FAST after is WORSE than FAST before on 9 (6 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 104 have no parseable FAST quality. Tolerance rel 1e-3, abs 1e-6.
 
 Canonical full-board summary (2026-10-05): 442 FAST rows, 431 eligible opponent comparisons, 367 faster, geometric-mean ratio 0.308. Eligible = a ratio after and a status without HOLD or "excluded"; faster = ratio below 1. Ratio = FAST ms / best opponent ms.
 
@@ -495,7 +495,9 @@ Canonical full-board summary (2026-10-05): 442 FAST rows, 431 eligible opponent 
 | poisson | istella | algos | - | - | sklearn-cpu | 112432 | - | - |  | - | - | r2=0.2513, rmse=0.7228 | Opponent full measurement; no matching own cell |
 | poisson | taxi | algos | - | - | sklearn-cpu | 430 | - | - |  | - | - | r2=0.03621, rmse=15.64 | Opponent full measurement; no matching own cell |
 | qn-reg | istella | algos | 427 | 427 | - | - | - | - |  | r2=0.3276, rmse=0.685 | r2=0.3276, rmse=0.685 | - | ok |
+| qn-reg | istella | algos | - | - | sklearn-cpu | 3222 | - | - |  | - | - | r2=0.2553, rmse=0.7201 | Opponent full measurement; no matching own cell |
 | qn-reg | taxi | algos | 25.8 | 25.8 | - | - | - | - |  | r2=0.909, rmse=4.805 | r2=0.909, rmse=4.805 | - | ok |
+| qn-reg | taxi | algos | - | - | sklearn-cpu | 322 | - | - |  | - | - | r2=0.823, rmse=6.544 | Opponent full measurement; no matching own cell |
 | quantile | istella | algos | - | 764 | sklearn-cpu: too slow to measure (216 s on taxi) | - | - | - |  | r2=-0.0399981, rmse=0.851877 | - | - | ok |
 | rf | istella | trees | - | - | lightgbm-cpu | 67953 | - | - |  | - | - | auc=0.9454, logloss=0.1954 | Opponent full measurement; no matching own cell |
 | rf | taxi | trees | - | - | lightgbm-cpu | 54952 | - | - |  | - | - | auc=0.617, logloss=0.5264 | Opponent full measurement; no matching own cell |

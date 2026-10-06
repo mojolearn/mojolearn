@@ -42,7 +42,7 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 1 planned, 426 done, 29 failed, 0 unsupported, 0 pending. Cells: 1544 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 28, ok 1510).
+Races: 1 planned, 428 done, 29 failed, 0 unsupported, 0 pending. Cells: 1546 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 28, ok 1512).
 
 Inference cells: 923 (REFUSED 48, ok 875).
 
@@ -454,8 +454,12 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | qda | taxi | logloss (lower is better) | 1.059270 | 1.059260 | sklearn-cpu 1.059265 |
 | algos | qn-reg | istella | r2 (higher is better) | 0.327599 | 0.327491 | sklearn-cpu - |
 | algos | qn-reg | istella | rmse (lower is better) | 0.684975 | 0.685030 | sklearn-cpu - |
+| algos | qn-reg | istella | r2 (higher is better) | - | - | sklearn-cpu 0.255327 |
+| algos | qn-reg | istella | rmse (lower is better) | - | - | sklearn-cpu 0.720076 |
 | algos | qn-reg | taxi | r2 (higher is better) | 0.908983 | 0.908983 | sklearn-cpu - |
 | algos | qn-reg | taxi | rmse (lower is better) | 4.805040 | 4.805040 | sklearn-cpu - |
+| algos | qn-reg | taxi | r2 (higher is better) | - | - | sklearn-cpu 0.823006 |
+| algos | qn-reg | taxi | rmse (lower is better) | - | - | sklearn-cpu 6.543975 |
 | algos | qr | istella | relative_gram_difference | 0.0009027 | 1.539e-07 | numpy-cpu 2.472e-08; torch-gpu - |
 | algos | qr | taxi | relative_gram_difference | 5.579e-07 | 5.579e-07 | numpy-cpu 3.024e-08; torch-gpu - |
 | algos | quantile | istella | r2 (higher is better) | -0.039998 | -0.039998 | - |
@@ -16131,6 +16135,32 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | seed | "none (deterministic)" | "none (deterministic)" |
 | tol | 0.0001 | 0.0001 |
 
+### qn-reg / istella (rows full, shape X 2043304x220; Xq 500000x220; y 2043304; yq 500000)
+
+race: done, driver rc 0, log `logs/algos.qn-reg.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 3221.7 | 3221.7..3221.7 | 1 | - | - | 5741.6 | - | finite=True, r2=0.255327, rmse=0.720076 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '04cb22566b51db89582cb2fcbcee0a26ab621846db900084a0242b825da71eb4', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/completed-board.json', 'finished': '2026-10-06T13:43:03Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'fit_intercept': True, 'l1_strength': 0.0, 'l2_strength': 0.0, 'lbfgs_memory': 5, 'linesearch_max_iter': 50, 'loss': 'squared_error', 'max_iter': 1000, 'penalty_normalized': True, 'tol': 0.0001}. Rows: None. Timed: None.
+
+mismatch: scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| fit_intercept | true |
+| positive | false |
+| seed | "none (deterministic)" |
+| tol | 1e-06 |
+
 ### qn-reg / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
 
 race: done, driver rc 0, log `logs/algos.qn-reg.taxi.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
@@ -16161,6 +16191,32 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | max_iter | 1000 | 1000 |
 | seed | "none (deterministic)" | "none (deterministic)" |
 | tol | 0.0001 | 0.0001 |
+
+### qn-reg / taxi (rows full, shape X 5250086x11; Xq 500000x11; y 5250086; yq 500000)
+
+race: done, driver rc 0, log `logs/algos.qn-reg.taxi.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 321.9 | 321.9..321.9 | 1 | - | - | 529.3 | - | finite=True, r2=0.823006, rmse=6.543975 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '04cb22566b51db89582cb2fcbcee0a26ab621846db900084a0242b825da71eb4', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/completed-board.json', 'finished': '2026-10-06T13:42:54Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'fit_intercept': True, 'l1_strength': 0.0, 'l2_strength': 0.0, 'lbfgs_memory': 5, 'linesearch_max_iter': 50, 'loss': 'squared_error', 'max_iter': 1000, 'penalty_normalized': True, 'tol': 0.0001}. Rows: None. Timed: None.
+
+mismatch: scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| fit_intercept | true |
+| positive | false |
+| seed | "none (deterministic)" |
+| tol | 1e-06 |
 
 ### qr / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 

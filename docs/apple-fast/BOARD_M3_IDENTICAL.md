@@ -9,7 +9,7 @@ Generated from board.json by tools/af_board_render.py; do not edit. Source: `ben
 
 Our IDENTICAL arm on the M3 Ultra Metal GPU at head cf94a6be6, 1 unscored warm-up + 1 scored round at board size (the 2026-10-04 ident-* sweep, 350 jobs, AFC_ARM=ours) (rows-full; trees MOJOLEARN_SPEED_SIZE=shipped). Opponents are not re-raced: classical times come from the M3 0.8.34 board (`~/mojolearn-evidence/board-0834-times.tsv`, quality from its board.json), trees from the 2026-09-29 M3 board (older tree params on some lanes); an opponent marked (fill) comes from the M3 opponent fill on the 0.8.34 kit. Ratio = our IDENTICAL ms / best opponent ms; below 1 is faster. Rows sort worst ratio after first. First written by `tools/af_board_merge.py`; now carried in board.json.
 
-Quality (2026-10-04, computed): of 463 lane/dataset rows, IDENTICAL quality is WORSE than an opponent on 69 (49 by more than 1%) and IDENTICAL after is WORSE than IDENTICAL before on 0 (0 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 115 have no parseable IDENTICAL quality. Tolerance rel 1e-3, abs 1e-6.
+Quality (2026-10-04, computed): of 465 lane/dataset rows, IDENTICAL quality is WORSE than an opponent on 69 (49 by more than 1%) and IDENTICAL after is WORSE than IDENTICAL before on 0 (0 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 117 have no parseable IDENTICAL quality. Tolerance rel 1e-3, abs 1e-6.
 
 Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 414 eligible opponent comparisons, 272 faster, geometric-mean ratio 0.482. Eligible = a ratio after and a status without HOLD or "excluded"; faster = ratio below 1. Ratio = IDENTICAL ms / best opponent ms.
 
@@ -469,7 +469,9 @@ Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 414 eligible oppo
 | poisson | istella | algos | - | - | sklearn-cpu | 112432 | - | - |  | - | - | r2=0.2513, rmse=0.7228 | Opponent full measurement; no matching own cell |
 | poisson | taxi | algos | - | - | sklearn-cpu | 430 | - | - |  | - | - | r2=0.03621, rmse=15.64 | Opponent full measurement; no matching own cell |
 | qn-reg | istella | algos | 371 | 437 | - | - | - | - |  | finite=1, r2=0.327491, rmse=0.68503 | - | - | ok |
+| qn-reg | istella | algos | - | - | sklearn-cpu | 3222 | - | - |  | - | - | r2=0.2553, rmse=0.7201 | Opponent full measurement; no matching own cell |
 | qn-reg | taxi | algos | 18.2 | 21.1 | - | - | - | - |  | finite=1, r2=0.908983, rmse=4.80504 | - | - | ok |
+| qn-reg | taxi | algos | - | - | sklearn-cpu | 322 | - | - |  | - | - | r2=0.823, rmse=6.544 | Opponent full measurement; no matching own cell |
 | quantile | istella | algos | - | 806 | sklearn-cpu: too slow to measure (216 s on taxi) | - | - | - |  | finite=1, r2=-0.0399981, rmse=0.851877 | - | - | ok |
 | rf | istella | trees | - | - | lightgbm-cpu | 67953 | - | - |  | - | - | auc=0.9454, logloss=0.1954 | Opponent full measurement; no matching own cell |
 | rf | taxi | trees | - | - | lightgbm-cpu | 54952 | - | - |  | - | - | auc=0.617, logloss=0.5264 | Opponent full measurement; no matching own cell |

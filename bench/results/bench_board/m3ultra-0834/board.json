@@ -391628,6 +391628,570 @@
    "identical_page": {
     "status": "Opponent full measurement; no matching own cell"
    }
+  },
+  "algos/qn-reg/istella/rows=full/workload=2e6d04ce2f8d70b7": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/source-6897b8da0/tools/bench_board_algos.py",
+    "race",
+    "--lane",
+    "qn-reg",
+    "--dataset",
+    "istella",
+    "--data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data/rows-full",
+    "--arms",
+    "sklearn-cpu",
+    "--rounds",
+    "1",
+    "--out",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-02/board/raw/algos/rows-full",
+    "--work",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-02/board/work",
+    "--ours-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--theirs-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--ready-seconds",
+    "600",
+    "--warmup-seconds",
+    "600",
+    "--round-seconds",
+    "600"
+   ],
+   "dataset": "istella",
+   "env": {},
+   "family": "algos",
+   "finished": "2026-10-06T13:43:03Z",
+   "host": {
+    "hostname": "ip-172-31-43-215.ec2.internal",
+    "pod_id": null
+   },
+   "id": "algos/qn-reg/istella/rows=full/workload=2e6d04ce2f8d70b7",
+   "lane": "qn-reg",
+   "lane_config": {
+    "block": "reg",
+    "datasets": [
+     "taxi",
+     "istella"
+    ],
+    "expansion_lane": "linear",
+    "kind": "extra",
+    "mismatches": [
+     "scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings"
+    ],
+    "notes": [
+     "ours and cuML: the quasi-Newton solver on the squared loss, no penalty (cuml.solvers.QN(loss='l2'), present in the pinned cuML 26.08); scikit-learn LinearRegression is the CPU estimator with the same loss and penalty"
+    ],
+    "ours_class": "mojolearn.QNRegressor",
+    "params": {
+     "fit_intercept": true,
+     "l1_strength": 0.0,
+     "l2_strength": 0.0,
+     "lbfgs_memory": 5,
+     "linesearch_max_iter": 50,
+     "loss": "squared_error",
+     "max_iter": 1000,
+     "penalty_normalized": true,
+     "tol": 0.0001
+    },
+    "quality": "held-out R2 and RMSE",
+    "task": "qn",
+    "timed_fit": "fit(X, y)",
+    "timed_infer": null
+   },
+   "log": "logs/algos.qn-reg.istella.rows-full.log",
+   "our_arms": {},
+   "params": {
+    "arms": {
+     "sklearn-cpu": {
+      "library": "sklearn",
+      "params": {
+       "fit_intercept": true,
+       "positive": false,
+       "seed": "none (deterministic)",
+       "tol": 1e-06
+      },
+      "source": "get_params"
+     }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/qn-reg",
+    "problems": [],
+    "reference": "sklearn-cpu",
+    "seed": 7,
+    "seed_none_deterministic": [
+     "sklearn-cpu"
+    ],
+    "verdict": "MATCHED"
+   },
+   "params_check": "MATCHED",
+   "race_json": "raw/algos/rows-full/qn-reg-istella.json",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T13:42:55Z",
+   "status": "done",
+   "stored_arms": [],
+   "stored_now": 1,
+   "wall_s": 9.2,
+   "original_race_id": "algos/qn-reg/istella/rows=full",
+   "comparison_note": "Separate measured workload: historical own shape differs; no own/opponent ratio",
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit(X, y)",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "algos",
+     "hash": "f6284436fd274b0c",
+     "hash_stable": null,
+     "lane": "qn-reg",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 3221.7428750591353,
+     "median_ms": 3221.7428750591353,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 5741.6,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 5756.4
+     },
+     "min_ms": 3221.7428750591353,
+     "mode": "opponent",
+     "neural_shape": null,
+     "operations": [
+      {
+       "dataset_load_included": false,
+       "fresh_process": false,
+       "ms": 3179.037292022258,
+       "preparation_ms": 0.0030830269679427147,
+       "round": 0,
+       "scope": "call-consume",
+       "startup_probe_preparation_excluded": true,
+       "warmup": true
+      },
+      {
+       "dataset_load_included": false,
+       "fresh_process": false,
+       "ms": 3221.7535000527278,
+       "preparation_ms": 0.001250067725777626,
+       "round": 1,
+       "scope": "call-consume",
+       "startup_probe_preparation_excluded": true,
+       "warmup": false
+      }
+     ],
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "fit_intercept": true,
+       "positive": false,
+       "seed": "none (deterministic)",
+       "tol": 1e-06
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 5741.6,
+     "quality": {
+      "finite": true,
+      "r2": 0.25532687328632353,
+      "rmse": 0.7200755473383585
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_algos.py",
+      "interleaved": true,
+      "lane_config": {
+       "block": "reg",
+       "datasets": [
+        "taxi",
+        "istella"
+       ],
+       "expansion_lane": "linear",
+       "kind": "extra",
+       "mismatches": [
+        "scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings"
+       ],
+       "notes": [
+        "ours and cuML: the quasi-Newton solver on the squared loss, no penalty (cuml.solvers.QN(loss='l2'), present in the pinned cuML 26.08); scikit-learn LinearRegression is the CPU estimator with the same loss and penalty"
+       ],
+       "ours_class": "mojolearn.QNRegressor",
+       "params": {
+        "fit_intercept": true,
+        "l1_strength": 0.0,
+        "l2_strength": 0.0,
+        "lbfgs_memory": 5,
+        "linesearch_max_iter": 50,
+        "loss": "squared_error",
+        "max_iter": 1000,
+        "penalty_normalized": true,
+        "tol": 0.0001
+       },
+       "quality": "held-out R2 and RMSE",
+       "task": "qn",
+       "timed_fit": "fit(X, y)",
+       "timed_infer": null
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000",
+     "source": {
+      "opponent_snapshot_sha256": "04cb22566b51db89582cb2fcbcee0a26ab621846db900084a0242b825da71eb4",
+      "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/completed-board.json",
+      "finished": "2026-10-06T13:43:03Z",
+      "original_source": "measured this run"
+     },
+     "state_receipts": [
+      {
+       "model": {
+        "reason": "runner does not retain an exportable model",
+        "status": "unavailable"
+       },
+       "output_sha256": "aecd83985504c0007de3e853e0bc91ad76c55fca168744bb50f5ccf610af4009",
+       "output_status": "ok",
+       "schema": "mojolearn-scored-receipt/1"
+      }
+     ],
+     "status": "ok",
+     "times_ms": [
+      3221.7428750591353
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 3179.024000070058,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null,
+       "BLIS_NUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5"
+     }
+    }
+   ],
+   "infer_cells": [],
+   "fast_page": {
+    "status": "Opponent full measurement; no matching own cell"
+   },
+   "identical_page": {
+    "status": "Opponent full measurement; no matching own cell"
+   }
+  },
+  "algos/qn-reg/taxi/rows=full/workload=345686832f7ca5e2": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/source-6897b8da0/tools/bench_board_algos.py",
+    "race",
+    "--lane",
+    "qn-reg",
+    "--dataset",
+    "taxi",
+    "--data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data/rows-full",
+    "--arms",
+    "sklearn-cpu",
+    "--rounds",
+    "1",
+    "--out",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-01/board/raw/algos/rows-full",
+    "--work",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-01/board/work",
+    "--ours-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--theirs-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--ready-seconds",
+    "300",
+    "--warmup-seconds",
+    "300",
+    "--round-seconds",
+    "300"
+   ],
+   "dataset": "taxi",
+   "env": {},
+   "family": "algos",
+   "finished": "2026-10-06T13:42:54Z",
+   "host": {
+    "hostname": "ip-172-31-43-215.ec2.internal",
+    "pod_id": null
+   },
+   "id": "algos/qn-reg/taxi/rows=full/workload=345686832f7ca5e2",
+   "lane": "qn-reg",
+   "lane_config": {
+    "block": "reg",
+    "datasets": [
+     "taxi",
+     "istella"
+    ],
+    "expansion_lane": "linear",
+    "kind": "extra",
+    "mismatches": [
+     "scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings"
+    ],
+    "notes": [
+     "ours and cuML: the quasi-Newton solver on the squared loss, no penalty (cuml.solvers.QN(loss='l2'), present in the pinned cuML 26.08); scikit-learn LinearRegression is the CPU estimator with the same loss and penalty"
+    ],
+    "ours_class": "mojolearn.QNRegressor",
+    "params": {
+     "fit_intercept": true,
+     "l1_strength": 0.0,
+     "l2_strength": 0.0,
+     "lbfgs_memory": 5,
+     "linesearch_max_iter": 50,
+     "loss": "squared_error",
+     "max_iter": 1000,
+     "penalty_normalized": true,
+     "tol": 0.0001
+    },
+    "quality": "held-out R2 and RMSE",
+    "task": "qn",
+    "timed_fit": "fit(X, y)",
+    "timed_infer": null
+   },
+   "log": "logs/algos.qn-reg.taxi.rows-full.log",
+   "our_arms": {},
+   "params": {
+    "arms": {
+     "sklearn-cpu": {
+      "library": "sklearn",
+      "params": {
+       "fit_intercept": true,
+       "positive": false,
+       "seed": "none (deterministic)",
+       "tol": 1e-06
+      },
+      "source": "get_params"
+     }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/qn-reg",
+    "problems": [],
+    "reference": "sklearn-cpu",
+    "seed": 7,
+    "seed_none_deterministic": [
+     "sklearn-cpu"
+    ],
+    "verdict": "MATCHED"
+   },
+   "params_check": "MATCHED",
+   "race_json": "raw/algos/rows-full/qn-reg-taxi.json",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T13:42:51Z",
+   "status": "done",
+   "stored_arms": [],
+   "stored_now": 1,
+   "wall_s": 2.7,
+   "original_race_id": "algos/qn-reg/taxi/rows=full",
+   "comparison_note": "Separate measured workload: historical own shape differs; no own/opponent ratio",
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit(X, y)",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "algos",
+     "hash": "5eca1f3daf417147",
+     "hash_stable": null,
+     "lane": "qn-reg",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 321.93841598927975,
+     "median_ms": 321.93841598927975,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 529.3,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 960.9
+     },
+     "min_ms": 321.93841598927975,
+     "mode": "opponent",
+     "neural_shape": null,
+     "operations": [
+      {
+       "dataset_load_included": false,
+       "fresh_process": false,
+       "ms": 264.55633295699954,
+       "preparation_ms": 0.0029999064281582832,
+       "round": 0,
+       "scope": "call-consume",
+       "startup_probe_preparation_excluded": true,
+       "warmup": true
+      },
+      {
+       "dataset_load_included": false,
+       "fresh_process": false,
+       "ms": 321.94787496700883,
+       "preparation_ms": 0.0011670636013150215,
+       "round": 1,
+       "scope": "call-consume",
+       "startup_probe_preparation_excluded": true,
+       "warmup": false
+      }
+     ],
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "fit_intercept": true,
+       "positive": false,
+       "seed": "none (deterministic)",
+       "tol": 1e-06
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 529.3,
+     "quality": {
+      "finite": true,
+      "r2": 0.8230055550833815,
+      "rmse": 6.543974991608481
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_algos.py",
+      "interleaved": true,
+      "lane_config": {
+       "block": "reg",
+       "datasets": [
+        "taxi",
+        "istella"
+       ],
+       "expansion_lane": "linear",
+       "kind": "extra",
+       "mismatches": [
+        "scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings"
+       ],
+       "notes": [
+        "ours and cuML: the quasi-Newton solver on the squared loss, no penalty (cuml.solvers.QN(loss='l2'), present in the pinned cuML 26.08); scikit-learn LinearRegression is the CPU estimator with the same loss and penalty"
+       ],
+       "ours_class": "mojolearn.QNRegressor",
+       "params": {
+        "fit_intercept": true,
+        "l1_strength": 0.0,
+        "l2_strength": 0.0,
+        "lbfgs_memory": 5,
+        "linesearch_max_iter": 50,
+        "loss": "squared_error",
+        "max_iter": 1000,
+        "penalty_normalized": true,
+        "tol": 0.0001
+       },
+       "quality": "held-out R2 and RMSE",
+       "task": "qn",
+       "timed_fit": "fit(X, y)",
+       "timed_infer": null
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 5250086x11; Xq 500000x11; y 5250086; yq 500000",
+     "source": {
+      "opponent_snapshot_sha256": "04cb22566b51db89582cb2fcbcee0a26ab621846db900084a0242b825da71eb4",
+      "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/completed-board.json",
+      "finished": "2026-10-06T13:42:54Z",
+      "original_source": "measured this run"
+     },
+     "state_receipts": [
+      {
+       "model": {
+        "reason": "runner does not retain an exportable model",
+        "status": "unavailable"
+       },
+       "output_sha256": "dd012cf3e598cba6d7a9a2fcf45063d5b66a998760a0f3f9537f7e09118f3690",
+       "output_status": "ok",
+       "schema": "mojolearn-scored-receipt/1"
+      }
+     ],
+     "status": "ok",
+     "times_ms": [
+      321.93841598927975
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 264.5412079291418,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null,
+       "BLIS_NUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5"
+     }
+    }
+   ],
+   "infer_cells": [],
+   "fast_page": {
+    "status": "Opponent full measurement; no matching own cell"
+   },
+   "identical_page": {
+    "status": "Opponent full measurement; no matching own cell"
+   }
   }
  },
  "fast_page": {
@@ -392061,6 +392625,31 @@
     "python": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
     "source": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/source-0f779ed5d",
     "source_sha": "0f779ed5d3f0a2ab2f418e054d3af950a766e5f1"
+   }
+  },
+  "04cb22566b51db89582cb2fcbcee0a26ab621846db900084a0242b825da71eb4": {
+   "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/completed-board.json",
+   "counts": {
+    "imported": 2,
+    "successful": 2,
+    "failed": 0,
+    "stored_skipped": 0,
+    "already_current": 0
+   },
+   "resource_policy": {
+    "cpu_count": 28,
+    "thread_caps": {
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "MKL_NUM_THREADS": null,
+     "NUMEXPR_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "BLIS_NUM_THREADS": null
+    },
+    "hardware": "Mac15,14",
+    "harness_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+    "source_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+    "policy": "Serial full-machine uncapped CPU; worker resource readback retained."
    }
   }
  },

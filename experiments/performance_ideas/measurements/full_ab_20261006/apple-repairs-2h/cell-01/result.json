@@ -1,0 +1,186 @@
+{
+  "race": "algos/qn-reg/taxi/rows=full",
+  "arm": "sklearn-cpu",
+  "allocation_seconds": 300,
+  "returncode": 0,
+  "elapsed_seconds": 4.0314130783081055,
+  "status": "MEASURED",
+  "killed_owned_pids": [],
+  "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/source-6897b8da0/experiments/performance_ideas/apple_repair_20261006/selected_board.py",
+    "--vendor",
+    "apple",
+    "--modes",
+    "identical",
+    "--families",
+    "algos,classical2",
+    "--rows",
+    "full",
+    "--rounds",
+    "1",
+    "--python-env",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--skip-install",
+    "--no-smoke-gate",
+    "--opponents-only",
+    "--skip-failed",
+    "--round-seconds",
+    "300",
+    "--cache",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cache",
+    "--algos-data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data",
+    "--more-data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data",
+    "--data-root",
+    "/Users/ec2-user/datasets/gbm-bench",
+    "--opponent-store",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-01/opponent-store.jsonl",
+    "--out",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-01/board"
+  ],
+  "race_status": "done",
+  "cells": [
+    {
+      "arm": "sklearn-cpu",
+      "comparability": {
+        "span": {
+          "input_home": "host",
+          "inside_clock": "fit(X, y)",
+          "pre_clock_fit": false,
+          "upload_ms_untimed": null
+        },
+        "span_asymmetry": []
+      },
+      "dataset": "taxi",
+      "device": "cpu",
+      "device_name": "arm",
+      "family": "algos",
+      "hash": "5eca1f3daf417147",
+      "hash_stable": null,
+      "lane": "qn-reg",
+      "library": "scikit-learn",
+      "library_version": "1.7.2",
+      "max_ms": 321.93841598927975,
+      "median_ms": 321.93841598927975,
+      "memory": {
+        "children_mb": 1.7,
+        "gpu_method": "cpu arm: no device memory",
+        "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+        "peak_gpu_mb": null,
+        "peak_host_mb": 529.3,
+        "rounds_sampled": 1,
+        "warmup_gpu_mb": null,
+        "warmup_host_mb": 960.9
+      },
+      "min_ms": 321.93841598927975,
+      "mode": "opponent",
+      "neural_shape": null,
+      "operations": [
+        {
+          "dataset_load_included": false,
+          "fresh_process": false,
+          "ms": 264.55633295699954,
+          "preparation_ms": 0.0029999064281582832,
+          "round": 0,
+          "scope": "call-consume",
+          "startup_probe_preparation_excluded": true,
+          "warmup": true
+        },
+        {
+          "dataset_load_included": false,
+          "fresh_process": false,
+          "ms": 321.94787496700883,
+          "preparation_ms": 0.0011670636013150215,
+          "round": 1,
+          "scope": "call-consume",
+          "startup_probe_preparation_excluded": true,
+          "warmup": false
+        }
+      ],
+      "params": {
+        "library": "sklearn",
+        "params": {
+          "fit_intercept": true,
+          "positive": false,
+          "seed": "none (deterministic)",
+          "tol": 1e-06
+        },
+        "source": "get_params"
+      },
+      "peak_gpu_mb": null,
+      "peak_host_mb": 529.3,
+      "quality": {
+        "finite": true,
+        "r2": 0.8230055550833815,
+        "rmse": 6.543974991608481
+      },
+      "ratio_ours_fast_over": null,
+      "ratio_ours_identical_over": null,
+      "rounds": 1,
+      "rows": null,
+      "rows_tag": "full",
+      "settings": {
+        "config": "the board's own settings (no NVIDIA harness entry)",
+        "driver": "tools/bench_board_algos.py",
+        "interleaved": true,
+        "lane_config": {
+          "block": "reg",
+          "datasets": [
+            "taxi",
+            "istella"
+          ],
+          "expansion_lane": "linear",
+          "kind": "extra",
+          "mismatches": [
+            "scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings"
+          ],
+          "notes": [
+            "ours and cuML: the quasi-Newton solver on the squared loss, no penalty (cuml.solvers.QN(loss='l2'), present in the pinned cuML 26.08); scikit-learn LinearRegression is the CPU estimator with the same loss and penalty"
+          ],
+          "ours_class": "mojolearn.QNRegressor",
+          "params": {
+            "fit_intercept": true,
+            "l1_strength": 0.0,
+            "l2_strength": 0.0,
+            "lbfgs_memory": 5,
+            "linesearch_max_iter": 50,
+            "loss": "squared_error",
+            "max_iter": 1000,
+            "penalty_normalized": true,
+            "tol": 0.0001
+          },
+          "quality": "held-out R2 and RMSE",
+          "task": "qn",
+          "timed_fit": "fit(X, y)",
+          "timed_infer": null
+        },
+        "rounds": 1,
+        "rows_cap": null,
+        "seed": 7,
+        "warmup_rounds": 1
+      },
+      "shape": "X 5250086x11; Xq 500000x11; y 5250086; yq 500000",
+      "source": "measured this run",
+      "state_receipts": [
+        {
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "output_sha256": "dd012cf3e598cba6d7a9a2fcf45063d5b66a998760a0f3f9537f7e09118f3690",
+          "output_status": "ok",
+          "schema": "mojolearn-scored-receipt/1"
+        }
+      ],
+      "status": "ok",
+      "times_ms": [
+        321.93841598927975
+      ],
+      "verdict": "LIKE-FOR-LIKE-SPAN",
+      "warmup_ms": 264.5412079291418
+    }
+  ]
+}
