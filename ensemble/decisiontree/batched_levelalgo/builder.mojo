@@ -3,7 +3,7 @@
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
 from std.gpu import WARP_SIZE
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from std.math import ceildiv
 from std.memory import memcpy
 from std.sys.info import has_apple_gpu_accelerator, size_of
@@ -83,6 +83,13 @@ from ensemble.decisiontree.decisiontree import (
     TreeMetaDataNode,
 )
 from ensemble.flatnode import SparseTreeNode
+from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import RetainedCountHistograms
+
+# I18: real forest caller, restricted to exact unweighted integer counts.
+# No feature resampling or weighted/fixed-point algebra is admitted. The
+# cache's byte cap is a resource bound; it never selects benchmark shapes.
+comptime RETAINED_COUNT_HIST = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST"]()
+comptime RETAINED_COUNT_HIST_BYTES = get_defined_int["MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES", 8*1024*1024]()
 
 # `builder.cuh:161` -- "default threads per block for most kernels in here"
 comptime TPB_DEFAULT = 128
@@ -1294,6 +1301,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     var split_cand: DeviceBuffer[DType.uint8]
     """HIST_SPLIT_CANDIDATES_DEFAULT: one `Split` slot per (node, column
     block) of a round; one byte otherwise."""
+    var retained_counts: Optional[RetainedCountHistograms]
+    var retained_counts_reset: Bool
+    var retained_counts_phase: Bool
 
     # --- DEVIATION 128a's argument blobs, one per launcher --------------
     # DEVIATION 1909: staged PER TREE, not per round/batch. Inside one
@@ -1407,6 +1417,16 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.n_cols = n_cols
         self.num_outputs = num_outputs
         self.scales = scales
+        self.retained_counts = None
+        self.retained_counts_reset = True
+        self.retained_counts_phase = False
+        comptime if RETAINED_COUNT_HIST and Self.O.BinT.is_classification and not Self.O.BinT.weighted:
+            if n_sampled_rows > 0 and n_sampled_rows <= 2147483647 and n_cols > 0 and Int(params.max_n_bins) > 0 and num_outputs > 0 and n_sampled_cols_for(params.max_features,n_cols) == n_cols:
+                var slots = Int(params.max_n_bins)*Int(num_outputs)
+                var bytes_per_node = n_cols*(4*slots+2)+17
+                var capacity = min(2*n_sampled_rows-1, RETAINED_COUNT_HIST_BYTES//bytes_per_node)
+                if capacity >= 3:
+                    self.retained_counts = RetainedCountHistograms(ctx,capacity,n_cols,slots)
 
         # `decisiontree.cuh:251-256`. CRITERION_END is the "unset" sentinel
         # their header defaults `split_criterion` to (`decisiontree.hpp:89`),
@@ -1735,6 +1755,8 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.treeid = treeid
         # DEVIATION 401 -- per-tree batch numbering restarts with the tree.
         self.trace_batch = -1
+        self.retained_counts_reset = True
+        self.retained_counts_phase = False
         self._invalidate_args_cache()
 
     def stage_sampled_order[
@@ -2161,24 +2183,34 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # the launchers take the device pointers. The objective their
         # `:592-596` builds per column block is built at the staging
         # site -- same value, `params` still the only source.
-        launch_build_histograms_kernel[
-            Self.O, sampled_labels = Self.sampled_labels
-        ](
-            ctx,
-            self._hist_ptr(),
-            n_bins,
-            dataset,
-            self._work_items_ptr(),
-            col,
-            self.column_samples.unsafe_ptr()
-            .unsafe_origin_cast[MutUntrackedOrigin](),
-            self._workload_ptr(),
-            n_blocks_dimx,
-            n_blocks_dimy,
-            smem_config,
-            hist_argsp,
-            n_classes,
-        )
+        var retained = False
+        comptime if RETAINED_COUNT_HIST and Self.O.BinT.is_classification and not Self.O.BinT.weighted:
+            if self.retained_counts_phase:
+                ref cache = self.retained_counts.value()
+                if dataset.has_bins:
+                    cache.enqueue[Self.O,True,Self.sampled_labels](ctx,self._hist_ptr().unsafe_origin_cast[MutAnyOrigin](),self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),self._workload_ptr().unsafe_origin_cast[MutAnyOrigin](),self.column_samples.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hist_argsp.unsafe_origin_cast[MutAnyOrigin](),col,n_bins,n_blocks_dimx,n_blocks_dimy,n_work_items)
+                else:
+                    cache.enqueue[Self.O,False,Self.sampled_labels](ctx,self._hist_ptr().unsafe_origin_cast[MutAnyOrigin](),self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),self._workload_ptr().unsafe_origin_cast[MutAnyOrigin](),self.column_samples.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hist_argsp.unsafe_origin_cast[MutAnyOrigin](),col,n_bins,n_blocks_dimx,n_blocks_dimy,n_work_items)
+                retained = True
+        if not retained:
+            launch_build_histograms_kernel[
+                Self.O, sampled_labels = Self.sampled_labels
+            ](
+                ctx,
+                self._hist_ptr(),
+                n_bins,
+                dataset,
+                self._work_items_ptr(),
+                col,
+                self.column_samples.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin](),
+                self._workload_ptr(),
+                n_blocks_dimx,
+                n_blocks_dimy,
+                smem_config,
+                hist_argsp,
+                n_classes,
+            )
         instr.times.stop_host("host_hist_launch", t_h)
         # DEVIATION 401 -- the column block's REDUCED histograms, hashed
         # between the histogram kernel and the split kernel so the record
@@ -2367,6 +2399,18 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             self.n_cols,
             n_sampled_cols,
         )
+        self.retained_counts_phase = False
+        comptime if RETAINED_COUNT_HIST and Self.O.BinT.is_classification and not Self.O.BinT.weighted:
+            # The host queue's work-item count is exact. Device-loop padded
+            # batches, partial feature rounds and unbounded/weighted cases
+            # retain the incumbent, including its small-node fused route.
+            if dev_n < 0 and n > 0 and sample_offset == 0 and n_sampled_cols == self.n_cols and Int(dataset.n_sampled_cols) == self.n_cols and self.retained_counts:
+                ref cache = self.retained_counts.value()
+                if self.retained_counts_reset:
+                    cache.reset(ctx)
+                    self.retained_counts_reset = False
+                cache.prepare(ctx,self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),n)
+                self.retained_counts_phase = True
         # DEVIATION 401 (added with the 2026-08-22 identity audit) -- the
         # round's sampled COLUMNS, the per-node feature-sample RNG's
         # (`fnv1a32_hash(seed, treeid, nodeid)` -> minstd_rand ->
@@ -2390,7 +2434,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         instr.times.stop_host("host_launch_setup", t_h)
         var small_batch = False
         comptime if SMALL_NODE_FUSED_DEFAULT:
-            if dev_n < 0 and dataset.has_bins and not instr.trace.enabled and Int(
+            if dev_n < 0 and not self.retained_counts_phase and dataset.has_bins and not instr.trace.enabled and Int(
                 self.params.max_n_bins
             ) * Int(
                 self.num_outputs
@@ -3531,6 +3575,8 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # DEVIATION 1909 -- this dataset is the one the cached args
         # blobs will embed; drop whatever an earlier drive staged.
         self._invalidate_args_cache()
+        self.retained_counts_reset = True
+        self.retained_counts_phase = False
         var ds = dataset.copy()
         ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
         var smem_config = self.shared_memory_config()
