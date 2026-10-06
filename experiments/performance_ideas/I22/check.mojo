@@ -5,6 +5,7 @@ residual and signed-zero/pivot gates protect downstream solve quality.
 Changed combine arity requires its own numerical profile; this harness
 attributes existing trailing-grid and norm-fusion scheduling separately."""
 from std.memory import bitcast
+from experiments.performance_ideas.I22.reuse_check import check_factor_reuse
 from max.gpu.host import DeviceContext
 from metrics.checks.device_io import upload_f32, download_f32
 from x_decomp.tsqr_device import ts_pack_device, ts_factor_device, ts_apply_device, ts_free_device
@@ -48,6 +49,7 @@ def main() raises:
     for rows in [257,513,1031]:
         for d in [7,17]:
             check(ctx,rows,d)
+            check_factor_reuse(ctx,rows,d)
     check_cho_solve_residual()
     check_pivot_failure_is_identical()
     check_signed_zero_and_denormal()

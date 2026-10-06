@@ -694,13 +694,24 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
     _ = dtau^
 
 
-def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int) raises -> DeviceBuffer[DType.float32]:
+def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep: Bool = False) raises -> DeviceBuffer[DType.float32]:
     """Q c (m x k) on the device for the kept factorization (c: host n x k);
-    the state is released. The caller downloads and frees the result."""
+    the state is released by default. Explicit guarded keep=True retains
+    the same immutable factor words for another RHS; caller must free that
+    state before replacing/closing the factor context. No content cache is
+    inferred and no different factorization is reused."""
     var st = TS_DEV_STATE.get_or_create_ptr()
     if len(st[].bufs) != 4 or st[].m != m or st[].n != n:
         ts_free_device()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
+    if keep:
+        comptime if not is_defined["MOJOLEARN_IDN_TSQR_REUSE"]():
+            raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
+        var retained_bytes = 0
+        for i in range(len(st[].bufs)):
+            retained_bytes += len(st[].bufs[i])*4
+        if retained_bytes>16*1024*1024:
+            raise Error("x_decomp tsqr: retained factor state exceeds16 MiB experiment budget")
     var da = st[].bufs[0]
     var dt = st[].bufs[1]
     var dtl = st[].bufs[2]
@@ -753,5 +764,6 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int) raise
     _ = dt^
     _ = dtl^
     _ = dtau^
-    ts_free_device()
+    if not keep:
+        ts_free_device()
     return dq^
