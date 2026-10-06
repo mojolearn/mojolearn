@@ -63,5 +63,8 @@
     "{mojo}",
     "--output",
     "{output}"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
