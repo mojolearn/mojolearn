@@ -38,10 +38,10 @@ INTERACTIONS = {
 }
 
 
-def load_cards() -> dict[str, dict]:
+def load_cards(root: Path = ROOT) -> dict[str, dict]:
     cards = {}
     for lane in LANES:
-        document = json.loads((CATALOG / f"{lane}.json").read_text())
+        document = json.loads((root / "experiments/apple_fast_trees" / f"{lane}.json").read_text())
         for card in document["cards"]:
             cards[card["id"]] = card
     return cards
@@ -68,14 +68,23 @@ def selection(cards: dict[str, dict], ids: list[str]) -> dict:
     # If a prerequisite enables another member's experiment, an isolated A/B
     # comparison is ambiguous. Require separate selections instead of hiding it.
     selected_defines = {f"MOJOLEARN_AFT_{ident}" for ident in ids}
-    if baseline & selected_defines:
+    if {value.split("=", 1)[0] for value in baseline} & selected_defines:
         raise ValueError("a selected candidate is another card's baseline prerequisite; select it separately")
     candidate.update(baseline)
+    for arm in (baseline, candidate):
+        spellings = {}
+        for define in arm:
+            name = define.split("=", 1)[0]
+            if name in spellings and spellings[name] != define:
+                raise ValueError(f"conflicting spellings/values for {name}")
+            spellings[name] = define
+    candidate_names = {value.split("=", 1)[0] for value in candidate}
     for card in selected:
-        conflicts = set(card.get("conflicting_defines", []))
-        if conflicts & candidate:
-            raise ValueError(f"{card['id']} conflicts with {sorted(conflicts & candidate)}")
-    if {"MOJOLEARN_AFT_P07", "MOJOLEARN_SHAP_FAST_ROW_PAIR"} <= candidate:
+        conflicts = set(card.get("conflicting_defines", [])) | set(card.get("excluded_defines", []))
+        conflicts = {value.split("=", 1)[0] for value in conflicts}
+        if conflicts & candidate_names:
+            raise ValueError(f"{card['id']} conflicts with {sorted(conflicts & candidate_names)}")
+    if {"MOJOLEARN_AFT_P07", "MOJOLEARN_SHAP_FAST_ROW_PAIR"} <= candidate_names:
         raise ValueError("P07 and the pre-existing SHAP row-pair arm are alternatives")
     return {
         "status": "source_selection_only_not_executed",
@@ -87,7 +96,7 @@ def selection(cards: dict[str, dict], ids: list[str]) -> dict:
         "cards": selected,
         "quality_status": "pending",
         "full_workload_status": "pending_recipe_binding_and_dataset_provenance",
-        "execution": "not provided by this source-only selector",
+        "execution": "not performed by this selector; explicit pipeline commands are available separately",
         "required_future_record": [
             "frozen source SHA, compiler, binary hashes and Apple hardware",
             "full dataset hash/version/split and actual rows/features/classes/query dimensions",
@@ -104,6 +113,16 @@ def define_argv(defines: set[str]) -> list[str]:
     return [word for define in sorted(defines) for word in ("-D", define)]
 
 
+def interaction_selection(cards: dict[str, dict], group: tuple[str, ...]) -> dict:
+    # For example P02 needs ordered traversal while P01/P03 need the grove
+    # route in both arms. Preserve that blocked cell instead of dropping the
+    # entire interaction inventory or emitting an inert combined experiment.
+    try:
+        return selection(cards, list(group))
+    except ValueError as error:
+        return {"ids": list(group), "status": "blocked_incompatible_selection", "reason": str(error)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -113,6 +132,10 @@ def main() -> None:
     show.add_argument("id")
     select = sub.add_parser("select", help="print complete A/B defines and obligations; never run")
     select.add_argument("ids", help="comma-separated individual card IDs")
+    pipeline = sub.add_parser("pipeline-plan", help="emit binding closure and shared-runner commands; never run")
+    pipeline.add_argument("ids", help="comma-separated individual card IDs")
+    workloads = sub.add_parser("workload-template", help="print unfilled full-workload contract; never load data or run")
+    workloads.add_argument("ids", help="comma-separated individual card IDs")
     interaction = sub.add_parser("interaction", help="print singles/pairs/combined metadata, never run")
     interaction.add_argument("id", choices=tuple(INTERACTIONS))
     interaction.add_argument("--members", help="explicit future qualified members for X11/X12 only")
@@ -127,6 +150,22 @@ def main() -> None:
             ]
         elif args.command == "show":
             result = cards[args.id.upper()]
+        elif args.command == "workload-template":
+            from apple_fast_tree_integration import workload_template
+            ids = ids_from_text(args.ids)
+            selection(cards, ids)
+            result = workload_template(ids)
+        elif args.command == "pipeline-plan":
+            from apple_fast_tree_integration import closure, PIPELINE
+            ids = ids_from_text(args.ids)
+            result = selection(cards, ids)
+            result["integration"] = closure(ids)
+            result["shared_catalog_ids"] = ["AFT_" + ident for ident in ids]
+            result["pipeline_argv"] = {
+                "build": ["{python}", PIPELINE, "build", "--ids", ",".join(ids), "--source-sha", "{source_sha}", "--output", "{output}/arms"],
+                "run": ["{python}", PIPELINE, "run", "--ids", ",".join(ids), "--arms", "{output}/arms", "--output", "{output}/run", "--stage", "run"],
+            }
+            result["workload_input"] = "MOJOLEARN_AFT_WORKLOADS: complete frozen full-workload recipe JSON; absent recipes are refused"
         elif args.command == "select":
             result = selection(cards, ids_from_text(args.ids))
         else:
@@ -143,7 +182,8 @@ def main() -> None:
                 "id": args.id,
                 "status": "planned_source_selections_only",
                 "note": "Evaluate per affected caller; emitted combinations are unqualified hypotheses.",
-                "selections": [selection(cards, list(group)) for group in distinct],
+                "selections": [interaction_selection(cards, group) for group in distinct],
+                "pipeline": "experiments/apple_fast_trees/pipeline.py accepts --ids for each complete selection; no job is submitted here",
             }
     except (KeyError, ValueError) as error:
         parser.error(str(error))

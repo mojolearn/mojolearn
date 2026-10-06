@@ -2407,7 +2407,13 @@ def fit_ordered(
     # per-task trace records wanted
     var fast_on = False
     comptime if ORDERED_BATCH_EST:
-        fast_on = batch and not trace.enabled
+        # The fused task kernel below implements exactly one Newton/Gradient
+        # step. estimate_can_batch also admits multi-iteration walkers, so
+        # its predicate alone must not select the one-step implementation.
+        # Preserve every requested iteration via the existing batched walker
+        # when the count exceeds one. Found while wiring G11/G12; source-only
+        # repair, uncompiled/unverified/unmeasured.
+        fast_on = batch and opts.leaf_iterations == 1 and not trace.enabled
     var n_slots = learn_count * n_folds + 1 if batch else n_folds + 1
     for _ in range(n_slots):  # small-loop(n_slots: estimation tasks, permutations times folds): empty workspace lists per task
         est_pools.append(List[TEstimationWorkspace]())

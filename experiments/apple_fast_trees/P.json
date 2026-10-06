@@ -3,17 +3,61 @@
   "lane": "P",
   "base_commit": "07f2b3c00",
   "status": "source_only",
+  "integration_status": "Source-level caller and launch connections recorded by reading only; no runtime proof",
+  "integration_groups": [
+    {
+      "ids": ["P01", "P02", "P03", "P04"],
+      "required_bindings": ["rf", "trees"],
+      "public_harness": "bench/speed/forest_speed_arm.py",
+      "public_harness_lanes": ["rf", "et"],
+      "expanded_harness": "tools/bench_board_algos.py",
+      "expanded_harness_lanes": ["decision-tree-clf", "decision-tree-reg", "bagging-clf", "bagging-reg", "adaboost-clf", "adaboost-reg"],
+      "expanded_support_bindings": ["x_trees"],
+      "caller_chain": ["python/mojolearn/_forest_protocol.py", "bindings/forest_inference_binding.mojo imported by rf/trees extensions", "core/forest_inference_model.mojo:ResidentForest prediction methods", "core/forest_inference.mojo:launch_forest_inference/launch_forest_argmax"],
+      "scope_notes": ["Public FAST auto names parallel_groves but accepts the compiled resident ordered policy; P01/P03 need the explicit equal-arm OFF prerequisite recorded below", "P02 uses ordered resident traversal; P01/P03 use lane-grove traversal. Separate route-specific A/B cells are required, and their combination alone does not prove both routes ran", "P04 public class-code entry is FAST and requires the Python parallel_groves engine name; probability-only consumption will miss it", "Transient forest_predict_gpu also reaches the shared dispatcher but is not a substitute for public full-workload coverage", "No GPU forest extension exists; these shared kernels are compiled into rf and trees"]
+    },
+    {
+      "ids": ["P05", "P06"],
+      "required_bindings": ["gbdt"],
+      "public_harness": "bench/speed/forest_speed_arm.py",
+      "public_harness_lanes": ["gbdt-symmetric", "gbdt-symmetric-1000", "gbdt-ordered", "gbdt-multiclass", "gbdt-rank-pairlogit", "gbdt-rank-yetirank", "gbdt-depthwise", "gbdt-lossguide", "gbdt-categorical"],
+      "alternate_public_harness": "tools/speed_gbdt_arm.py",
+      "caller_chain": ["bindings/_mojolearn_gbdt.mojo:gbdt_resident_predict_binding", "gbdt/resident_model.mojo:gbdt_resident_predict/ResidentGbdtModel._predict_device", "gbdt/models/kernel/add_bin_values.mojo:compute_bins_and_add_all_kernel", "gbdt/models/kernel/resident_link.mojo:resident_link_kernel"],
+      "scope_notes": ["P05 only reaches oblivious models with the equal-arm packed-prediction prerequisite; non-oblivious models retain _apply", "P06 also reaches gbdt/train.mojo's shared resident-link launcher, whose grid and block already derive from LINK_BLOCK", "Categorical/multiclass/ranking resident callers require their actual full saved recipes; a symmetric regression result alone cannot qualify their outputs", "Fit, first prediction and repeated prediction need distinct consumed-output coverage"]
+    },
+    {
+      "ids": ["P07", "P08", "P09", "P10"],
+      "required_bindings": ["x_trees"],
+      "support_bindings": ["rf"],
+      "public_harness": "tools/bench_board_algos.py",
+      "public_harness_lanes": ["tree-shap"],
+      "caller_chain": ["python/mojolearn/_expansion_trees.py:TreeExplainer", "bindings/_mojolearn_x_trees.mojo:tree_shap_prepare_binding/tree_shap_binding", "xtrees/shap_device.mojo:shap_prepare/tree_shap_values", "tree_kernel/table_row_kernel/tab_row_kernel and fold_kernel"],
+      "scope_notes": ["The saved tree-shap board recipe fits an RF model and consumes explanations; other supported model families need their own full recipes", "All direct, leaf-table and decision-table branches share the tile mapping; tail row count is the current chunk rc", "P08 includes preparation kernels; P09 can be inert if the existing units cap or small input determines chunk size", "P07 keeps the previously losing pair arm and its evidence separate"]
+    },
+    {
+      "ids": ["P11", "P12"],
+      "required_bindings": ["x_trees"],
+      "support_bindings": ["rf"],
+      "public_harness": "tools/bench_board_algos.py",
+      "public_harness_lanes": ["dart", "dart-reg"],
+      "caller_chain": ["python/mojolearn/_expansion_trees.py:DARTClassifier/DARTRegressor", "bindings/_mojolearn_x_trees.mojo:dart_step_binding/dart_add_binding/dart_predict_binding", "xtrees/dart_device.mojo:dart_step/dart_add/dart_predict", "dart_row_kernel/dart_add_kernel/dart_predict_kernel"],
+      "scope_notes": ["Training requires the normal DART_DEVICE entry; do not disable it in either arm", "Member trees are still trained through rf, so x_trees-only runtime availability is insufficient for full DART fitting", "P11 needs both training residual and consumed prediction coverage; P12 only changes the score-add stage after the existing leaf/Newton work"]
+    }
+  ],
   "cards": [
     {
       "id": "P01",
+      "caller_integration": "ResidentForest with ordered=False reaches launch_forest_inference[GROVE=True] and _launch_grove_lanes; scalar/vector launch grids, block dimensions and shared reductions use AFT_GROVE_BLOCK/AFT_GROVES_PER_BLOCK together",
+      "source_evidence": ["python/mojolearn/_forest_protocol.py:_prediction_engine returns parallel_groves for FAST auto", "python/mojolearn/_forest_protocol.py:_resident_ordered_flag returns None for FAST parallel_groves, accepting the compiled policy", "core/forest_inference_model.mojo:forest_ordered_resident_policy returns not disabled and a supported FAST/IDENTICAL GPU condition; disabled is MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF", "core/forest_inference_model.mojo:ResidentForest branches on self.ordered before selecting GROVE=False/True"],
       "title": "Two logical forest groves per block",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
       "vendor": "apple",
       "candidate_defines": [
+        "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF",
         "MOJOLEARN_AFT_P01"
       ],
-      "baseline_defines": [],
+      "baseline_defines": ["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"],
       "source_paths": [
         "core/apple_fast_tree_experiments.mojo",
         "core/forest_inference.mojo"
@@ -31,7 +75,7 @@
         "C",
         "R"
       ],
-      "prerequisites": [],
+      "prerequisites": ["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF in both arms for public FAST resident callers", "Public inference_engine auto or parallel_groves; no forced row-thread schedule"],
       "limitations": [
         "Only public callers selecting the grove inference engine reach this candidate.",
         "Existing row-thread schedule overrides still route to their original kernel."
@@ -52,6 +96,9 @@
     },
     {
       "id": "P02",
+      "caller_integration": "ResidentForest ordered paths and transient GROVE=False callers launch forest_ordered_kernel; dispatcher grid uses AFT_ORDERED_ITEMS and kernel item/second-plane indices use the same row/output tile",
+      "conflicting_defines": ["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"],
+      "source_evidence": ["core/forest_inference_model.mojo:FOREST_ORDERED_RESIDENT uses forest_ordered_resident_policy[TARGET_COLUMN, GLOBAL_NUMERIC_MODE, forced, disabled]", "core/forest_inference_model.mojo:forest_ordered_resident_policy returns not disabled and ((mode FAST or IDENTICAL) and supported GPU column, or forced IDENTICAL)", "python/mojolearn/_forest_protocol.py:_resident_ordered_flag returns None for FAST parallel_groves, making the OFF define bypass ordered traversal in the common experiment route", "Explicit public inference_engine=sequential can still force ordered traversal, but that is a separate route-specific experiment rather than a P01/P03 combination"],
       "title": "Paired ordered forest output traversal",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
@@ -65,6 +112,8 @@
         "core/forest_inference.mojo"
       ],
       "affected_estimators": [
+        "RandomForestClassifier/Regressor with ordered resident prediction",
+        "ExtraTreesClassifier/Regressor with ordered resident prediction",
         "exported forest ordered engine",
         "tree wrappers selecting ordered forest inference"
       ],
@@ -95,14 +144,17 @@
     },
     {
       "id": "P03",
+      "caller_integration": "The public resident OFF prerequisite selects _launch_grove_lanes; forest_grove32_kernel and forest_vector_grove32_kernel allocate the selected capacity and stage rows before their unchanged traversals when feature bytes fit",
+      "source_evidence": ["core/forest_inference_model.mojo:forest_ordered_resident_policy returns False when disabled=MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF", "python/mojolearn/_forest_protocol.py:_resident_ordered_flag lets FAST parallel_groves accept that compiled False", "core/forest_inference.mojo:launch_forest_inference[GROVE=True] selects _launch_grove_lanes unless the existing row-thread override applies"],
       "title": "Forest shared rows with a two KiB block budget",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
       "vendor": "apple",
       "candidate_defines": [
+        "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF",
         "MOJOLEARN_AFT_P03"
       ],
-      "baseline_defines": [],
+      "baseline_defines": ["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"],
       "source_paths": [
         "core/apple_fast_tree_experiments.mojo",
         "core/forest_inference.mojo"
@@ -120,7 +172,7 @@
         "C",
         "R"
       ],
-      "prerequisites": [],
+      "prerequisites": ["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF in both arms for public FAST resident callers", "Public inference_engine auto or parallel_groves; no forced row-thread schedule"],
       "limitations": [
         "Extends existing staging code with a different storage budget; existing 256-feature staging outcome is not claimed as new evidence.",
         "With P01, per-row capacity increases because fewer rows share the same fixed byte budget.",
@@ -142,6 +194,8 @@
     },
     {
       "id": "P04",
+      "caller_integration": "_predict_forest_labels calls forest_predict_resident_labels_gpu_binding, then resident_predict_labels and ResidentForest's label methods; launch_forest_argmax and forest_argmax_kernel share AFT_ARGMAX_ROWS for complete class-code output coverage",
+      "source_evidence": ["python/mojolearn/_forest_protocol.py:_predict_forest_labels returns None unless effective mode is fast and _prediction_engine() is parallel_groves; FAST auto resolves to that name", "bindings/_mojolearn_rf.mojo and bindings/_mojolearn_trees.mojo register forest_predict_resident_labels_gpu", "core/forest_inference_model.mojo:ResidentForest label paths call launch_forest_argmax after either ordered or grove traversal, so the default ordered resident policy does not bypass P04"],
       "title": "Paired row forest class argmax",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
@@ -182,6 +236,7 @@
     },
     {
       "id": "P05",
+      "caller_integration": "gbdt_resident_predict_binding reaches _predict_device; GBDT_PREDICT_PACKED with a nonempty oblivious model selects _apply_all. Its grid covers 512 rows/block under P05, matching two 256-lane planes in compute_bins_and_add_all_kernel and its doubled grid stride",
       "title": "Two rows reuse packed GBDT split descriptors",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
@@ -232,6 +287,7 @@
     },
     {
       "id": "P06",
+      "caller_integration": "Both gbdt/resident_model.mojo and gbdt/train.mojo import LINK_BLOCK and use it in grid construction and resident_link_kernel block_dim; the kernel derives its index/stride from actual block_dim/grid_dim",
       "title": "Smaller GBDT resident link block",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
@@ -275,6 +331,7 @@
     },
     {
       "id": "P07",
+      "caller_integration": "tree_shap_values computes row_units=n_trees*ceil(rc/SHAP_ROW_TILE) for each chunk and uses it for every direct/table/decision-table row launch; each kernel reverses that mapping to the same tree*rc+row unit before calling the original unit implementation",
       "title": "TreeSHAP four-row tree tiles",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
@@ -316,6 +373,7 @@
     },
     {
       "id": "P08",
+      "caller_integration": "shap_prepare, _Forest preparation and tree_shap_values launches use TPB and _grid; kernel _uid or explicit indexing uses that same TPB, including P07/P10 combinations",
       "title": "TreeSHAP smaller worker block",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
@@ -355,6 +413,7 @@
     },
     {
       "id": "P09",
+      "caller_integration": "tree_shap_values uses _rows_per_chunk(BUF_BYTES) for its contribution allocation and per-iteration rc; it launches and folds every rc-row chunk before advancing r0 by rc",
       "title": "TreeSHAP contribution scratch budget",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
@@ -395,6 +454,7 @@
     },
     {
       "id": "P10",
+      "caller_integration": "tree_shap_values launches fold_kernel with ceil(fu/AFT_SHAP_FOLD_ITEMS) logical workers; fold_kernel uses TPB*AFT_SHAP_FOLD_ITEMS for each block base and invokes shap_fold_unit for both guarded output-cell planes",
       "title": "Paired TreeSHAP output-cell folding",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
@@ -435,6 +495,7 @@
     },
     {
       "id": "P11",
+      "caller_integration": "dart_step launches dart_row_kernel for n rows and dart_predict launches dart_predict_kernel for k*n class/row cells; both callers divide logical work by AFT_DART_ROWS and kernels multiply block bases and capped-grid strides by the same factor",
       "title": "Paired DART residual and prediction scheduling",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",
@@ -478,6 +539,7 @@
     },
     {
       "id": "P12",
+      "caller_integration": "dart_add performs existing apply/leaf-sum/Newton work, then launches dart_add_kernel with ceil(n/AFT_DART_ADD_ROWS) logical workers; the kernel applies the original dart_add_unit to the same two row planes and uses a matching multiplied grid stride",
       "title": "Paired DART score addition scheduling",
       "status": "source_added_uncompiled_unverified_unmeasured",
       "mode": "fast",

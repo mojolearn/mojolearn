@@ -34,3 +34,23 @@ worktree at:
 Command-local `git -c core.hooksPath=/dev/null` prevents commit/push hooks from
 running code verification forbidden by the owner. The commit also requests CI
 skip. Neither hook files nor shared repository configuration are changed.
+
+## Integration follow-up
+
+The first source delivery is commit `fef052a4e46e721456dce9c84f79285c3a078b1b`.
+The follow-up on the same branch connects all 48 candidates to the shared A/B
+catalog with namespaced IDs, paired binding artifacts, the existing full A/B
+queue and full-workload public-caller capture adapters. See
+[INTEGRATION.md](INTEGRATION.md) for the source connections, repaired routing,
+explicit recipe contracts and remaining coverage obligations.
+
+This is programmed integration only. No compilation, verification, tests,
+selector execution, measurement or quality admission was performed. Full
+dataset recipes require real dataset provenance and caller settings before a
+future authorized campaign; pending variants remain documented in the lane
+records. All candidate defaults remain off. The branch has not merged to main.
+
+The follow-up commit/push logs, exit codes and resulting commit ID are retained
+outside the worktree at:
+
+`/Users/andrewhendel/mojolearn-evidence/apple-fast-trees-ideas-20261006/integration-IvD3y1/`

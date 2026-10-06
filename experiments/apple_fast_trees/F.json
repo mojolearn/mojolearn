@@ -3,9 +3,46 @@
   "lane": "F",
   "scope": "Apple GPU FAST trees only; all switches are opt-in and require both mode and vendor guards",
   "validation": "No compilation, verification, testing, linting, import, candidate execution or measurement performed",
+  "integration_status": "Source-level caller connections recorded by reading only; no runtime proof",
+  "integration_groups": [
+    {
+      "ids": ["F01", "F02", "F03", "F04", "F05"],
+      "required_bindings": ["rf"],
+      "build_source": "bindings/build_rf.sh -> bindings/_mojolearn_rf.mojo",
+      "public_harness": "bench/speed/forest_speed_arm.py",
+      "public_harness_lanes": ["rf"],
+      "expanded_harness": "tools/bench_board_algos.py",
+      "expanded_harness_lanes": ["decision-tree-clf", "decision-tree-reg", "bagging-clf", "bagging-reg", "adaboost-clf", "adaboost-reg", "dart", "dart-reg"],
+      "expanded_support_bindings": ["x_trees"],
+      "caller_chain": ["python/mojolearn/randomforest.py", "bindings/_mojolearn_rf.mojo", "ensemble/randomforest.mojo:fit_forest_prepared", "ensemble/decisiontree/batched_levelalgo/builder.mojo:Builder"],
+      "scope_notes": ["Expanded DecisionTree rows use splitter=best; splitter=random reaches the ExtraTrees group instead", "DART residual/member training reaches rf_regressor_fit_dart_binding in the rf extension; compiling only x_trees would omit F01-F05", "Composite wrappers also need their ordinary support extensions; AFT defines must reach rf for the member builds", "No forest GPU extension exists; forest_host is an unrelated CPU binding", "Mixed-model voting/stacking wrappers can contain affected tree members but their complete mixed-model campaigns are outside this tree-only selection"]
+    },
+    {
+      "ids": ["F06", "F07", "F08", "F09"],
+      "required_bindings": ["trees"],
+      "build_source": "bindings/build_trees.sh -> bindings/_mojolearn_trees.mojo",
+      "public_harness": "bench/speed/forest_speed_arm.py",
+      "public_harness_lanes": ["et"],
+      "expanded_harness": "tools/bench_board_algos.py",
+      "expanded_harness_lanes": ["random-trees-embedding"],
+      "expanded_support_bindings": ["x_trees", "rf"],
+      "caller_chain": ["python/mojolearn/extratrees.py", "bindings/_mojolearn_trees.mojo", "extratrees/estimator.mojo", "extratrees/impl/randomforest/randomforest.mojo", "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:train_forest_classification_device/train_forest_regression_device"],
+      "scope_notes": ["RandomTreesEmbedding creates an ExtraTreesRegressor; its expansion module also imports rf and x_trees support", "DecisionTree(splitter=random) reaches this same ExtraTrees route, but the saved decision-tree board recipes currently specify the best splitter", "F08 needs enough tree-row slots to make the baseline group budget active; a saved full workload that fits one group does not establish this candidate's effect", "F09 needs the existing tiled-range admission and preserves the untiled fallback"]
+    },
+    {
+      "ids": ["F10", "F11", "F12"],
+      "required_bindings": ["svm"],
+      "build_source": "bindings/build_svm.sh -> bindings/_mojolearn_svm.mojo",
+      "public_harness": "bench/speed/forest_speed_arm.py",
+      "public_harness_lanes": ["iforest"],
+      "caller_chain": ["python/mojolearn/_iforest_impl.py", "bindings/_mojolearn_svm.mojo:iforest_run_binding", "isolation_forest/estimator.mojo:iforest_run_host/iforest_run_resident", "isolation_forest/impl/isolation_forest.mojo:IsolationForest.fit/compute_path_lengths", "isolation_forest/impl/isolation_tree_builder.mojo"],
+      "scope_notes": ["The extension name svm is packaging; these candidates affect isolation trees only, with no SVM algorithm change", "The existing Python shell probes iforest_resident. The older forest_speed_arm.our_iforest_arm docstring describes rebuild-every-score behavior; later experiment provenance must report the actual selected binding path", "F11 requires full score/predict consumption and separate first/repeated prediction reporting; fit-only timing is incomplete coverage", "F10 and F12 feed the existing build kernel used by both one-shot and resident estimator entries"]
+    }
+  ],
   "cards": [
     {
       "id": "F01",
+      "caller_integration": "Builder workspace uses blk_cols_for; enqueue_best_splits advances complete feature rounds by N_BLKS_FOR_COLS and _compute_split launches their histograms and split search",
       "title": "RF histogram passes with 32 column slots",
       "candidate_defines": ["MOJOLEARN_AFT_F01"],
       "baseline_defines": [],
@@ -19,6 +56,7 @@
     },
     {
       "id": "F02",
+      "caller_integration": "Builder._enqueue_loop_batches passes HIST_WORKLOAD_GRANULARITY and its TPB ratio to launch_loop_pop/launch_loop_retry_next; enqueue_best_splits consumes that device-built workload map",
       "title": "RF histogram work descriptors covering eight rows per lane",
       "candidate_defines": ["MOJOLEARN_AFT_F02"],
       "baseline_defines": [],
@@ -32,6 +70,7 @@
     },
     {
       "id": "F03",
+      "caller_integration": "Builder._compute_split passes n_classes to launch_find_best_splits_kernel; its byte-budget-admitted branch launches find_best_splits_warp_kernel using FBS_WARP_CELLS for shared allocation and grid/block geometry",
       "title": "RF two small-histogram split cells per threadgroup",
       "candidate_defines": ["MOJOLEARN_AFT_F03"],
       "baseline_defines": [],
@@ -45,6 +84,7 @@
     },
     {
       "id": "F04",
+      "caller_integration": "Builder owns NodeSplitScratch and calls launch_node_split_kernel from both replay and device-loop partition paths; the scratch constructor and both sampled/plain scan launches use the same AFT_RF_SCAN_WIDTH_SCALE",
       "title": "RF partition scan at double cooperative width",
       "candidate_defines": ["MOJOLEARN_AFT_F04"],
       "baseline_defines": [],
@@ -58,6 +98,7 @@
     },
     {
       "id": "F05",
+      "caller_integration": "fit_forest_prepared calls Builder.stage_sampled_order before begin_tree when separate gather is needed; stage_sampled_order calls launch_gather_sampled_order_kernel, whose launch and device stripe indexing both use AFT_RF_GATHER_ROWS",
       "title": "RF sampled-label and weight gather with four row stripes per lane",
       "candidate_defines": ["MOJOLEARN_AFT_F05"],
       "baseline_defines": [],
@@ -71,6 +112,7 @@
     },
     {
       "id": "F06",
+      "caller_integration": "DEVICE_TPB is shared by make_level_workspace callers, search_batch_enqueue/search_batch_regression_enqueue and _et_run_depthwise/_et_run_bestfirst; score reductions and partition launches therefore consume the same selected block geometry",
       "title": "ExtraTrees 64-thread coupled frontier geometry",
       "candidate_defines": ["MOJOLEARN_AFT_F06"],
       "baseline_defines": [],
@@ -84,6 +126,7 @@
     },
     {
       "id": "F07",
+      "caller_integration": "Both device grow loops derive tile_p from DEVICE_TPB*PART_ROWS_PER_THREAD; EtDeviceLoop.enqueue_stage builds that partition map and _et_enqueue_partition supplies the same template value to count, scan, scatter and copy-back kernels",
       "title": "ExtraTrees partition tile twice the search row budget",
       "candidate_defines": ["MOJOLEARN_AFT_F07"],
       "baseline_defines": [],
@@ -97,6 +140,7 @@
     },
     {
       "id": "F08",
+      "caller_integration": "train_forest_classification_device and train_forest_regression_device default row_slot_cap to FOREST_ROW_SLOT_CAP; their timed implementations compute group_cap from slot_rows and allocate both row planes for each resulting group",
       "title": "ExtraTrees more concurrent trees under a 1 GiB row-plane budget",
       "candidate_defines": ["MOJOLEARN_AFT_F08"],
       "baseline_defines": [],
@@ -110,6 +154,7 @@
     },
     {
       "id": "F09",
+      "caller_integration": "search_batch_enqueue launches the float tiled range kernel; search_batch_regression_enqueue launches either float or uint16-code tiled range kernel. All instantiate node_feature_range_tiled_kernel containing the paired-row loop",
       "title": "ExtraTrees tiled feature ranges with paired row-address staging",
       "candidate_defines": ["MOJOLEARN_AFT_F09"],
       "baseline_defines": [],
@@ -123,6 +168,7 @@
     },
     {
       "id": "F10",
+      "caller_integration": "IsolationForestEstimator initializes IFLaunchKnobs.default; IsolationForest.fit launches build_isolation_trees_global_kernel with knobs.build_tpb, whose default is the candidate-dependent IF_BUILD_TPB",
       "title": "Isolation forest 64-thread tree build",
       "candidate_defines": ["MOJOLEARN_AFT_F10"],
       "baseline_defines": [],
@@ -136,6 +182,7 @@
     },
     {
       "id": "F11",
+      "caller_integration": "IsolationForest.compute_path_lengths launches compute_path_lengths_global_kernel with threads*AFT_IF_PATH_ROWS rows per block; _pooled_path_lengths likewise adjusts its compute_path_lengths_range_kernel grid. Both kernels use identical stripe indexing",
       "title": "Isolation forest paired-row path traversal",
       "candidate_defines": ["MOJOLEARN_AFT_F11"],
       "baseline_defines": [],
@@ -149,6 +196,7 @@
     },
     {
       "id": "F12",
+      "caller_integration": "IsolationForest.fit always launches build_isolation_trees_global_kernel; its AFT_IF_GATHER_TILE branch runs after the existing row/feature selection barriers and before build_tree_iterative_global consumes the sampled matrix",
       "title": "Isolation forest flattened four-cell sampled gather",
       "candidate_defines": ["MOJOLEARN_AFT_F12"],
       "baseline_defines": [],

@@ -24,6 +24,13 @@ import sys
 import time
 from typing import Any
 
+# Keep sibling orchestration modules available when this tool is loaded by path
+# as well as when it is executed directly. No estimator module is imported.
+_TOOLS = str(Path(__file__).resolve().parent)
+if _TOOLS not in sys.path:
+    sys.path.insert(0, _TOOLS)
+from apple_fast_tree_integration import TREE_IDS, manifests as tree_manifests, manifest_path as tree_manifest_path
+
 
 ROOT = Path(__file__).resolve().parent.parent
 EXPECTED = tuple(
@@ -32,6 +39,7 @@ EXPECTED = tuple(
     + [f"N{n:02d}" for n in range(1, 9)]
     + [f"F{n:02d}" for n in range(1, 21)]
 )
+ALL_EXPECTED = EXPECTED + TREE_IDS
 STATUSES = {"source_ready", "build_passed", "blocked_toolchain", "blocked_prerequisite"}
 STAGES = {"build": "build_argv", "validate": "validation_argv", "time": "timing_argv", "run": "run_argv"}
 
@@ -41,9 +49,9 @@ class ExperimentError(ValueError):
 
 
 def mode_for(idea: str) -> str:
-    if idea not in EXPECTED:
+    if idea not in ALL_EXPECTED:
         raise ExperimentError(f"Unknown idea: {idea}")
-    return "fast" if idea.startswith("F") else "identical"
+    return "fast" if idea.startswith(("F", "AFT_")) else "identical"
 
 
 def digest(path: Path) -> str:
@@ -65,15 +73,15 @@ def require_string_list(value: Any, name: str, *, allow_empty: bool = True) -> l
     return value
 
 
-def read_manifest(path: Path, root: Path = ROOT) -> dict[str, Any]:
+def read_manifest(path: Path, root: Path = ROOT, *, document: dict | None = None) -> dict[str, Any]:
     try:
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text()) if document is None else document
     except (OSError, json.JSONDecodeError) as exc:
         raise ExperimentError(f"Cannot read {path}: {exc}") from exc
     if not isinstance(record, dict) or record.get("schema") != 1:
         raise ExperimentError(f"{path}: expected schema 1 object")
     idea = record.get("id")
-    if idea not in EXPECTED or path.parent.name != idea:
+    if idea not in ALL_EXPECTED or (document is None and path.parent.name != idea):
         raise ExperimentError(f"{path}: ID does not match its idea directory")
     if record.get("mode") != mode_for(idea):
         raise ExperimentError(f"{idea}: incorrect numeric mode")
@@ -107,7 +115,7 @@ def read_manifest(path: Path, root: Path = ROOT) -> dict[str, Any]:
                 if not inside(root, name).is_file():
                     raise ExperimentError(f"{idea}: missing validation source: {name}")
         elif key == "depends_on":
-            if any(value not in EXPECTED or value == idea for value in values):
+            if any(value not in ALL_EXPECTED or value == idea for value in values):
                 raise ExperimentError(f"{idea}: invalid dependency")
         elif key.endswith("_defines"):
             if any(not re.fullmatch(r"MOJOLEARN_[A-Z0-9_]+(?:=[A-Za-z0-9_.+-]+)?", x) for x in values):
@@ -137,6 +145,16 @@ def catalog(root: Path = ROOT) -> tuple[dict[str, dict[str, Any]], list[str]]:
             records[record["id"]] = record
         except ExperimentError as exc:
             problems.append(str(exc))
+    # Namespaced Apple tree IDs are projections of the lane cards, not copied
+    # manifests that can drift from the ideas. Older roots need not have them.
+    if (root / "experiments/apple_fast_trees").is_dir():
+        try:
+            for document in tree_manifests(root):
+                path = tree_manifest_path(document["id"], root)
+                record = read_manifest(path, root, document=document)
+                records[record["id"]] = record
+        except (ExperimentError, OSError, ValueError, KeyError) as exc:
+            problems.append("Apple FAST trees: " + str(exc))
     return records, problems
 
 
@@ -287,6 +305,8 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
     environment["MOJOLEARN_COMPILE_JOBS"] = "1"
     environment["MOJOLEARN_NUMERIC_MODE"] = record["mode"]
     environment["MOJOLEARN_VENDOR"] = vendor
+    if record["id"] in TREE_IDS and quality is not None:
+        environment["MOJOLEARN_AFT_QUALITY_RECEIPT"] = str(quality.resolve())
     if stage == "build":
         defines = record["baseline_defines" if arm == "baseline" else "candidate_defines"]
         flags = " ".join(
@@ -353,7 +373,7 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument("--require-ready", action="store_true")
     for name in ["plan", "execute"]:
         command = commands.add_parser(name)
-        command.add_argument("id", choices=EXPECTED)
+        command.add_argument("id", choices=ALL_EXPECTED)
         command.add_argument("--stage", choices=STAGES, required=True)
         command.add_argument("--vendor", choices=["nvidia", "amd", "apple", "host"], required=True)
         command.add_argument("--output", type=Path, required=True)
@@ -371,7 +391,8 @@ def main(argv: list[str] | None = None) -> int:
     records, errors = catalog(root)
     errors.extend(validate_dependencies(records))
     if args.command == "check":
-        missing = [idea for idea in EXPECTED if idea not in records]
+        expected = ALL_EXPECTED if (root / "experiments/apple_fast_trees").is_dir() else EXPECTED
+        missing = [idea for idea in expected if idea not in records]
         if args.require_all and missing:
             errors.append("Missing ideas: " + ", ".join(missing))
         if args.require_ready:
@@ -384,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
         raise ExperimentError("; ".join(errors))
     if args.command == "list":
         rows = [{"id": idea, "mode": mode_for(idea), **records.get(idea, {"status": "missing"})}
-                for idea in EXPECTED if args.mode is None or mode_for(idea) == args.mode]
+                for idea in ALL_EXPECTED if (idea in EXPECTED or idea in records) and (args.mode is None or mode_for(idea) == args.mode)]
         if args.json:
             print(json.dumps(rows, indent=2))
         else:
@@ -394,7 +415,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.id not in records:
         raise ExperimentError(f"No implementation manifest for {args.id}")
     record = records[args.id]
-    manifest = root / f"experiments/performance_ideas/{args.id}/manifest.json"
+    manifest = (tree_manifest_path(args.id, root) if args.id in TREE_IDS
+                else root / f"experiments/performance_ideas/{args.id}/manifest.json")
     if args.command == "plan":
         source = git(root, "rev-parse", "HEAD")
         command = command_for(record, args.stage, args.vendor, args.output.resolve(), source, root, args.arm)

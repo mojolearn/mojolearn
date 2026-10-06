@@ -7,11 +7,11 @@
   "evidence": "Source implementation only. No compilation, syntax/import checks, verification, tests, lint, diff checks, timing, benchmarking, queue launch or quality measurement performed.",
   "future_qualification": "Not authorized in this session. Map all reachable estimator/representation paths to retained full datasets, versions/hashes, actual dimensions/settings and timed boundaries. Full fit/preparation/synchronization/consumed-output A/B plus neighboring shapes/non-board data and applicable quality gates remain pending.",
   "interactions": [
-    "N01 through N06 per non-symmetric grow policy",
-    "N03 plus N06 partition/copy geometry",
-    "N07 plus N08 for implicit-group and explicit-pair representations separately",
-    "N09 plus N10 on the default block32k Yeti route",
-    "N11 plus N12 and relevant tree-growth candidates"
+    "N01/N02/N04 on Lossguide; N02 through N06 on Depthwise with actual path prerequisites",
+    "N03 plus N06 on Depthwise vector partition/copy",
+    "N07 plus N08 on each PairLogit representation",
+    "N09 plus N10 on nonfused block32KiB Yeti",
+    "N11 plus N12 on ranking search and the applicable estimation routes"
   ],
   "cards": [
     {
@@ -27,7 +27,7 @@
       ],
       "affected_estimators": [
         "GBDT Lossguide classifier/regressor",
-        "Lossguide categorical, multiclass and ranking callers"
+        "categorical pointwise-loss Lossguide callers"
       ],
       "mechanism": "Select LG_EXACT_BATCH_WIDTH=256 instead of the Apple FAST default128. Existing exact speculative scoring, strict winner order, rollback/replay and final leaf budget remain in control; extra slots trade scratch footprint for fewer batch rounds.",
       "prerequisites": [
@@ -37,14 +37,52 @@
       "limitations": [
         "More candidate scratch may regress memory pressure",
         "Only workloads that use the additional speculative width can change work scheduling",
-        "No compile, quality or timing evidence"
+        "No compile, quality or timing evidence",
+        "Ranking and multiclass objectives currently refuse non-symmetric growth; they are not claimed as affected callers."
       ],
       "quality_gates": [
         "C",
-        "R",
-        "Q"
+        "R"
       ],
-      "status": "source_added_uncompiled_unverified_unmeasured"
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "source_route": [
+          "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+          "gbdt/train.mojo",
+          "gbdt/methods/doc_parallel_boosting.mojo",
+          "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+        ],
+        "harness_lanes": [
+          "gbdt-lossguide",
+          "gbdt-categorical"
+        ],
+        "runtime_requirements": {
+          "grow_policy": "Lossguide",
+          "score_noise_condition": "random_strength=0 OR score_function=L2/NewtonL2",
+          "batch_condition": "LG_EXACT_BATCH and runtime lg_exact remain active"
+        }
+      },
+      "conflicting_defines": [
+        "MOJOLEARN_GBDT_LG_BATCH",
+        "MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF",
+        "MOJOLEARN_GBDT_LG_EXACT_BATCH32",
+        "MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF"
+      ],
+      "pending_full_workloads": [
+        "Pointwise regression and categorical Lossguide; full dataset and speculative capacity metadata required",
+        "Cases using extra speculative slots, not only already-constrained tiny leaf budgets"
+      ]
     },
     {
       "id": "N02",
@@ -56,31 +94,86 @@
       "source_paths": [
         "gbdt/apple_fast_tree_experiments.mojo",
         "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
-        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo"
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo",
+        "gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo"
       ],
       "affected_estimators": [
         "GBDT Depthwise classifier/regressor",
         "GBDT Lossguide classifier/regressor",
-        "categorical/multiclass/ranking callers reaching the shared non-symmetric driver"
+        "categorical pointwise-loss callers of those two grow policies"
       ],
-      "mechanism": "The non-symmetric driver passes nonsymmetric_work to the standard histogram launcher. With N02, halve the existing hardware/group/leaf-derived replica count, rounding upward to at least one; each replica retains the exhaustive strided row traversal. Explicit replicas_override retains precedence.",
+      "mechanism": "Halve the final occupancy/work-derived row replica count, rounding upward to at least one, in BOTH Apple-default quantized_hist_launcher.qh_replicas and the standard histogram fallback selected by the non-symmetric driver. Every row/feature/bin remains in the strided work. Explicit replicas_override retains precedence in the generic launcher.",
       "prerequisites": [
         "Apple FAST",
-        "Standard launch_histograms_for_blocks path, not quantized_hist_launcher",
-        "No explicit replicas_override for the measured arm"
+        "Non-symmetric Depthwise or Lossguide pointwise objective",
+        "For generic fallback, no explicit replicas_override for the measured arm"
       ],
       "limitations": [
         "Already-one-replica work is unchanged",
         "Reduced parallelism may lose on sparse active-leaf sets",
-        "Floating accumulation order can change",
-        "Alternative quantized-histogram route is outside this candidate"
+        "Generic floating accumulation order can change; quantized addends and precision remain the same",
+        "No new shape-dependent route rule; each existing histogram family receives its own complete work"
       ],
       "quality_gates": [
         "C",
-        "R",
-        "Q"
+        "R"
       ],
-      "status": "source_added_uncompiled_unverified_unmeasured"
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "source_route": [
+          "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+          "gbdt/train.mojo",
+          "gbdt/methods/doc_parallel_boosting.mojo",
+          "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+        ],
+        "harness_lanes": [
+          "gbdt-depthwise",
+          "gbdt-lossguide",
+          "gbdt-categorical"
+        ],
+        "runtime_requirements": {
+          "grow_policy": [
+            "Depthwise",
+            "Lossguide"
+          ],
+          "default_route": "quantized family for two-stat one-byte layouts; generic fallback otherwise"
+        }
+      },
+      "conflicting_defines": [],
+      "pending_full_workloads": [
+        "Both default quantized layouts and natural sub-byte/generic fallback layouts",
+        "Full regression and categorical workloads"
+      ],
+      "experiment_variants": [
+        {
+          "name": "default_quantized_or_natural_fallback",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFT_N02"
+          ]
+        },
+        {
+          "name": "generic_histogram_control",
+          "baseline_defines": [
+            "MOJOLEARN_2045_FAST_NO_QUANT_HIST"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_2045_FAST_NO_QUANT_HIST",
+            "MOJOLEARN_AFT_N02"
+          ]
+        }
+      ]
     },
     {
       "id": "N03",
@@ -94,7 +187,8 @@
         "gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo"
       ],
       "affected_estimators": [
-        "GBDT Depthwise and exact-Lossguide callers reaching the DW2 fused row-index partition chain"
+        "GBDT Depthwise classifier/regressor",
+        "categorical pointwise-loss Depthwise callers"
       ],
       "mechanism": "Use DW2_PART_BLOCK=256 instead of512 with four contiguous rows per lane. DW2_PART_CHUNK, chunk-table sizing, flag counts, prefix scans and stable scatters derive from the same constant. All rows and both children remain present.",
       "prerequisites": [
@@ -105,14 +199,49 @@
       "limitations": [
         "More chunk records/scan work may offset occupancy gains",
         "Legacy scalar/stat-moving partition is unchanged",
-        "No partition-order or quality evidence has been collected"
+        "No partition-order or quality evidence has been collected",
+        "Ranking and multiclass objectives currently refuse non-symmetric growth; they are not claimed as affected callers.",
+        "Lossguide explicitly bypasses the DW fused partition chain, including exact-batch Lossguide."
       ],
       "quality_gates": [
         "C",
-        "R",
-        "Q"
+        "R"
       ],
-      "status": "source_added_uncompiled_unverified_unmeasured"
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "source_route": [
+          "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+          "gbdt/train.mojo",
+          "gbdt/methods/doc_parallel_boosting.mojo",
+          "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+        ],
+        "harness_lanes": [
+          "gbdt-depthwise"
+        ],
+        "runtime_requirements": {
+          "grow_policy": "Depthwise",
+          "route": "use_ridx AND DW_FUSED_CHAIN AND DW2_PART_VEC4"
+        }
+      },
+      "conflicting_defines": [
+        "MOJOLEARN_2044_FAST_NO_RIDX_ONLY",
+        "MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF",
+        "MOJOLEARN_GBDT_DW2_PART_VEC4_OFF"
+      ],
+      "pending_full_workloads": [
+        "Depthwise regression and categorical public callers; categorical board recipe currently uses Lossguide"
+      ]
     },
     {
       "id": "N04",
@@ -128,7 +257,7 @@
       "affected_estimators": [
         "GBDT Depthwise classifier/regressor",
         "GBDT Lossguide classifier/regressor",
-        "categorical/multiclass/ranking callers reaching the shared non-symmetric driver"
+        "categorical pointwise-loss callers of those two grow policies"
       ],
       "mechanism": "DW2_SCAN_FT changes16 to8 and its shared slab changes4096+8 to2048+8 floats. Each feature still folds every bin in its original order; more independent leaf/stat/feature tiles trade launch count against shared memory residency.",
       "prerequisites": [
@@ -138,15 +267,52 @@
       "limitations": [
         "This is prefix-scan work decomposition, not a replacement for partition-statistics reduction",
         "Noncontiguous or oversized spans retain the existing fallback",
-        "Small feature sets can receive no parallelism benefit"
+        "Small feature sets can receive no parallelism benefit",
+        "Ranking and multiclass objectives currently refuse non-symmetric growth; they are not claimed as affected callers."
       ],
       "quality_gates": [
         "C",
-        "R",
-        "Q"
+        "R"
       ],
       "status": "source_added_uncompiled_unverified_unmeasured",
-      "idea_revision": "N04 is narrowed to the non-symmetric shared histogram prefix scan; shared partition-statistics ownership stays in lane G."
+      "idea_revision": "N04 is narrowed to the non-symmetric shared histogram prefix scan; shared partition-statistics ownership stays in lane G.",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "source_route": [
+          "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+          "gbdt/train.mojo",
+          "gbdt/methods/doc_parallel_boosting.mojo",
+          "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+        ],
+        "harness_lanes": [
+          "gbdt-depthwise",
+          "gbdt-lossguide",
+          "gbdt-categorical"
+        ],
+        "runtime_requirements": {
+          "grow_policy": [
+            "Depthwise",
+            "Lossguide"
+          ],
+          "route": "DW2_SCAN_SMEM"
+        }
+      },
+      "conflicting_defines": [
+        "MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF"
+      ],
+      "pending_full_workloads": [
+        "Full regression and categorical workloads; varied bin layouts and feature tails"
+      ]
     },
     {
       "id": "N05",
@@ -160,25 +326,65 @@
         "gbdt/methods/greedy_subsets_searcher/kernel/split_chain_fused.mojo"
       ],
       "affected_estimators": [
-        "GBDT Depthwise callers using the device winner-selection/no-level-sync route"
+        "GBDT Depthwise classifier/regressor with min_split_gain unset",
+        "categorical pointwise-loss Depthwise callers with min_split_gain unset"
       ],
       "mechanism": "DW_SELECT_BLOCK changes64 to128. Each worker performs the existing strict-gain leaf selection and ordered prefix rank, then packs its split descriptor. The complete multi-leaf list and creation-order tie semantics stay intact.",
       "prerequisites": [
         "Apple FAST",
-        "DW_NO_LEVEL_SYNC/device split descriptor selection active"
+        "DW_NO_LEVEL_SYNC/device split descriptor selection active",
+        "Public min_split_gain=None in BOTH arms; default board min_split_gain=0.0 is not this experiment"
       ],
       "limitations": [
         "This changes descriptor selection/packing geometry; it does not fuse partition or alter which leaves split",
         "Little benefit expected when very few leaves need descriptors",
-        "Larger blocks may lose occupancy"
+        "Larger blocks may lose occupancy",
+        "Ranking and multiclass objectives currently refuse non-symmetric growth; they are not claimed as affected callers."
       ],
       "quality_gates": [
         "C",
-        "R",
-        "Q"
+        "R"
       ],
       "status": "source_added_uncompiled_unverified_unmeasured",
-      "idea_revision": "The final N05 experiment targets the multi-leaf split descriptor stage rather than adding another already-fused row application kernel."
+      "idea_revision": "The final N05 experiment targets the multi-leaf split descriptor stage rather than adding another already-fused row application kernel.",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "source_route": [
+          "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+          "gbdt/train.mojo",
+          "gbdt/methods/doc_parallel_boosting.mojo",
+          "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+        ],
+        "harness_lanes": [
+          "gbdt-depthwise"
+        ],
+        "runtime_requirements": {
+          "grow_policy": "Depthwise",
+          "min_split_gain": null,
+          "route": "use_ridx AND DW_NO_LEVEL_SYNC; internal min_split_gain sentinel<0"
+        },
+        "board_default_exercises_candidate": false,
+        "required_recipe_adjustment": "Set min_split_gain=None identically in A and B; the current board value0.0 bypasses device selection. Do not silently label the unchanged board route as N05."
+      },
+      "conflicting_defines": [
+        "MOJOLEARN_2044_FAST_NO_RIDX_ONLY",
+        "MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF",
+        "MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC_OFF"
+      ],
+      "pending_full_workloads": [
+        "Saved full-dataset Depthwise public recipe with min_split_gain=None",
+        "Regression and categorical versions of that same supported route"
+      ]
     },
     {
       "id": "N06",
@@ -192,7 +398,8 @@
         "gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo"
       ],
       "affected_estimators": [
-        "Non-symmetric GBDT callers reaching dw2_copy_back_kernel"
+        "GBDT Depthwise classifier/regressor",
+        "categorical pointwise-loss Depthwise callers"
       ],
       "mechanism": "dw2_copy_back_kernel unrolls two existing strided four-row vector groups per worker iteration under N06. The leaf descriptor and stride are reused, and each group retains its exact boundary guards and copy destination.",
       "prerequisites": [
@@ -202,15 +409,50 @@
       "limitations": [
         "This copies the searcher row-index cursor, not numerical prediction values",
         "Each copy keeps four-wide alignment and scalar boundary stores",
-        "Register/code size may outweigh reduced loop control"
+        "Register/code size may outweigh reduced loop control",
+        "Ranking and multiclass objectives currently refuse non-symmetric growth; they are not claimed as affected callers.",
+        "Lossguide explicitly bypasses the DW fused partition chain, including exact-batch Lossguide."
       ],
       "quality_gates": [
         "C",
-        "R",
-        "Q"
+        "R"
       ],
       "status": "source_added_uncompiled_unverified_unmeasured",
-      "idea_revision": "N06 revised with root approval to searcher row-index cursor copy tiling; numerical leaf prediction application is owned by lane G/root."
+      "idea_revision": "N06 revised with root approval to searcher row-index cursor copy tiling; numerical leaf prediction application is owned by lane G/root.",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "source_route": [
+          "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+          "gbdt/train.mojo",
+          "gbdt/methods/doc_parallel_boosting.mojo",
+          "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+        ],
+        "harness_lanes": [
+          "gbdt-depthwise"
+        ],
+        "runtime_requirements": {
+          "grow_policy": "Depthwise",
+          "route": "use_ridx AND DW_FUSED_CHAIN AND DW2_PART_VEC4"
+        }
+      },
+      "conflicting_defines": [
+        "MOJOLEARN_2044_FAST_NO_RIDX_ONLY",
+        "MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF",
+        "MOJOLEARN_GBDT_DW2_PART_VEC4_OFF"
+      ],
+      "pending_full_workloads": [
+        "Depthwise regression and categorical public callers; categorical board recipe currently uses Lossguide"
+      ]
     },
     {
       "id": "N07",
@@ -225,7 +467,7 @@
         "gbdt/targets/kernel/pair_logit.mojo"
       ],
       "affected_estimators": [
-        "GBDT PairLogit ranker; all grow policies reaching PairwiseTargetBuffers"
+        "GBDT PairLogit ranker, SymmetricTree only; generated-group and explicit-pair representations"
       ],
       "mechanism": "The default implicit-group path selects64 physical threads rather than128 per complete-query block. Explicit-pair buffers select128 threads rather than256 for pair derivatives and function-value partials; pair_blocks and the pair reduction/launch widths use the same constant. Every pair, weight and query is retained.",
       "prerequisites": [
@@ -241,7 +483,72 @@
       "quality_gates": [
         "Q"
       ],
-      "status": "source_added_uncompiled_unverified_unmeasured"
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "harness_lanes": [
+          "gbdt-rank-pairlogit"
+        ],
+        "runtime_requirements": {
+          "loss": "PairLogit",
+          "grow_policy": "SymmetricTree",
+          "permutation_count": 1,
+          "eval_set": null,
+          "generated_pairs": "fit(group_id=...)",
+          "explicit_pairs": "fit(group_id=..., pairs=..., pairs_weight=...)"
+        },
+        "source_route": [
+          "gbdt/methods/doc_parallel_boosting.mojo:launch_pair_logit_with[False,...]",
+          "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:launch_pair_logit_with[True,False]",
+          "gbdt/targets/kernel/pair_logit.mojo:launch_pair_logit_with",
+          "gbdt/targets/kernel/pair_logit_group.mojo:launch_pair_logit_group"
+        ]
+      },
+      "conflicting_defines": [],
+      "pending_full_workloads": [
+        "Saved full explicit-pair dataset/version/hash and weights; the board normally generates pairs",
+        "Leaf estimation iterations>1 and unchanged required objective/backtracking settings",
+        "All query/pair resource limits retained and audited before any full-dataset claim"
+      ],
+      "experiment_variants": [
+        {
+          "name": "default_generated_group",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFT_N07"
+          ]
+        },
+        {
+          "name": "explicit_pair_representation",
+          "baseline_defines": [
+            "MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF",
+            "MOJOLEARN_AFT_N07"
+          ]
+        },
+        {
+          "name": "fresh_leaf_estimation",
+          "baseline_defines": [
+            "MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF",
+            "MOJOLEARN_AFT_N07"
+          ]
+        }
+      ]
     },
     {
       "id": "N08",
@@ -256,7 +563,7 @@
         "gbdt/targets/kernel/pair_logit.mojo"
       ],
       "affected_estimators": [
-        "GBDT PairLogit ranker; all grow policies reaching PairwiseTargetBuffers"
+        "GBDT PairLogit ranker, SymmetricTree only; generated-group and explicit-pair representations"
       ],
       "mechanism": "Group kernels unroll two ascending shared-memory opponent visits per loop; explicit row accumulation unrolls two ascending endpoint records. Each add, pair multiplicity, endpoint sign and tail visit remains in the original order. This is not the historical rejected each-pair-once algorithm.",
       "prerequisites": [
@@ -271,7 +578,74 @@
       "quality_gates": [
         "Q"
       ],
-      "status": "source_added_uncompiled_unverified_unmeasured"
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "harness_lanes": [
+          "gbdt-rank-pairlogit"
+        ],
+        "runtime_requirements": {
+          "loss": "PairLogit",
+          "grow_policy": "SymmetricTree",
+          "permutation_count": 1,
+          "eval_set": null,
+          "generated_pairs": "fit(group_id=...)",
+          "explicit_pairs": "fit(group_id=..., pairs=..., pairs_weight=...)"
+        },
+        "source_route": [
+          "gbdt/methods/doc_parallel_boosting.mojo:launch_pair_logit_with[False,...]",
+          "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:launch_pair_logit_with[True,False]",
+          "gbdt/targets/kernel/pair_logit.mojo:launch_pair_logit_with",
+          "gbdt/targets/kernel/pair_logit_group.mojo:launch_pair_logit_group"
+        ]
+      },
+      "conflicting_defines": [
+        "MOJOLEARN_PL_PAIRS_ONCE"
+      ],
+      "pending_full_workloads": [
+        "Saved full explicit-pair dataset/version/hash and weights; the board normally generates pairs",
+        "Leaf estimation iterations>1 and unchanged required objective/backtracking settings",
+        "All query/pair resource limits retained and audited before any full-dataset claim"
+      ],
+      "experiment_variants": [
+        {
+          "name": "default_generated_group",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFT_N08"
+          ]
+        },
+        {
+          "name": "explicit_pair_representation",
+          "baseline_defines": [
+            "MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF",
+            "MOJOLEARN_AFT_N08"
+          ]
+        },
+        {
+          "name": "fresh_leaf_estimation",
+          "baseline_defines": [
+            "MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF",
+            "MOJOLEARN_AFT_N08"
+          ]
+        }
+      ]
     },
     {
       "id": "N09",
@@ -285,7 +659,7 @@
         "gbdt/targets/kernel/yeti_rank.mojo"
       ],
       "affected_estimators": [
-        "GBDT YetiRank ranker; all grow policies reaching launch_yeti_rank_with"
+        "GBDT YetiRank ranker, SymmetricTree only"
       ],
       "mechanism": "Nonfused32KiB and16KiB block kernels compile-unroll two whole tasks per block with a grid of ceil(task_count/2). Shared allocation is reused with a barrier between tasks. Task IDs, task-derived seeds, four-lane ownership, number of permutations and query boundaries are unchanged; the odd last task is guarded.",
       "prerequisites": [
@@ -302,7 +676,73 @@
       "quality_gates": [
         "Q"
       ],
-      "status": "source_added_uncompiled_unverified_unmeasured"
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "harness_lanes": [
+          "gbdt-rank-yetirank"
+        ],
+        "runtime_requirements": {
+          "loss": "YetiRank",
+          "grow_policy": "SymmetricTree",
+          "permutation_count": 1,
+          "eval_set": null
+        },
+        "source_route": [
+          "gbdt/methods/doc_parallel_boosting.mojo:launch_yeti_rank_with[False]",
+          "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:YetiRank evaluation",
+          "gbdt/targets/kernel/yeti_rank.mojo:launch_yeti_rank_with / launch_yeti_rank_estimation_from_search"
+        ]
+      },
+      "conflicting_defines": [
+        "MOJOLEARN_3040_YETI_SEQUENTIAL",
+        "MOJOLEARN_YR_TASK_FUSED",
+        "MOJOLEARN_SYM_MULTI_ALL"
+      ],
+      "pending_full_workloads": [
+        "Additional estimation calls: public leaf_estimation_iterations>1 with settings held equal in both arms",
+        "Weighted/skewed full-query workload and full non-board dataset"
+      ],
+      "experiment_variants": [
+        {
+          "name": "default_search_and_reuse_estimation",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFT_N09"
+          ]
+        },
+        {
+          "name": "fresh_estimation_calls",
+          "baseline_defines": [
+            "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF",
+            "MOJOLEARN_AFT_N09"
+          ]
+        },
+        {
+          "name": "sixteen_kib_task_control",
+          "baseline_defines": [
+            "MOJOLEARN_YETI_FAST_SORT_OFF"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_YETI_FAST_SORT_OFF",
+            "MOJOLEARN_AFT_N09"
+          ],
+          "additional_conditions": "Keep MOJOLEARN_YETI_SEARCH_TASK16K_OFF absent; no task fusion."
+        }
+      ]
     },
     {
       "id": "N10",
@@ -316,7 +756,7 @@
         "gbdt/targets/kernel/yeti_rank.mojo"
       ],
       "affected_estimators": [
-        "GBDT YetiRank ranker; all grow policies reaching launch_yeti_rank_with"
+        "GBDT YetiRank ranker, SymmetricTree only"
       ],
       "mechanism": "After the existing128-key register sort, each active worker emits eight merged composite keys instead of four. Half of the workers perform co-rank searches; all workers still participate in every inter-pass barrier. The256-worker RNG and pair ownership is unchanged. Implemented in the32KiB block and task-fused kernels.",
       "prerequisites": [
@@ -332,7 +772,71 @@
       "quality_gates": [
         "Q"
       ],
-      "status": "source_added_uncompiled_unverified_unmeasured"
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "harness_lanes": [
+          "gbdt-rank-yetirank"
+        ],
+        "runtime_requirements": {
+          "loss": "YetiRank",
+          "grow_policy": "SymmetricTree",
+          "permutation_count": 1,
+          "eval_set": null
+        },
+        "source_route": [
+          "gbdt/methods/doc_parallel_boosting.mojo:launch_yeti_rank_with[False]",
+          "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:YetiRank evaluation",
+          "gbdt/targets/kernel/yeti_rank.mojo:launch_yeti_rank_with / launch_yeti_rank_estimation_from_search"
+        ]
+      },
+      "conflicting_defines": [
+        "MOJOLEARN_3040_YETI_SEQUENTIAL",
+        "MOJOLEARN_YETI_FAST_SORT_OFF"
+      ],
+      "pending_full_workloads": [
+        "Additional estimation calls: public leaf_estimation_iterations>1 with settings held equal in both arms",
+        "Weighted/skewed full-query workload and full non-board dataset"
+      ],
+      "experiment_variants": [
+        {
+          "name": "default_search_and_reuse_estimation",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFT_N10"
+          ]
+        },
+        {
+          "name": "fresh_estimation_calls",
+          "baseline_defines": [
+            "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF",
+            "MOJOLEARN_AFT_N10"
+          ]
+        },
+        {
+          "name": "fused_task_control",
+          "baseline_defines": [
+            "MOJOLEARN_YR_TASK_FUSED"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_YR_TASK_FUSED",
+            "MOJOLEARN_AFT_N10"
+          ]
+        }
+      ]
     },
     {
       "id": "N11",
@@ -346,7 +850,7 @@
         "gbdt/targets/kernel/yeti_rank.mojo"
       ],
       "affected_estimators": [
-        "GBDT YetiRank ranker; all grow policies reaching launch_yeti_rank_with"
+        "GBDT YetiRank ranker, SymmetricTree only"
       ],
       "mechanism": "yeti_rank_row_kernel uses128 physical workers for each original256-row logical partial tile, with two row stores per worker. Estimation/search plane layouts and function-value partial count are unchanged. The two-row magnitude sums feed a128-worker reduction, so their FAST fold order can change.",
       "prerequisites": [
@@ -356,12 +860,65 @@
       "limitations": [
         "Task-fused target evaluation bypasses this row scatter",
         "No estimation iteration, backtracking evaluation or pair sample is skipped",
-        "Magnitude fold changes need end-to-end quality qualification"
+        "Magnitude fold changes need end-to-end quality qualification",
+        "MOJOLEARN_YR_TASK_FUSED/SYM_MULTI_ALL bypass the search scatter but reuse estimation may still reach it; keep these absent for the primary full workload."
       ],
       "quality_gates": [
         "Q"
       ],
-      "status": "source_added_uncompiled_unverified_unmeasured"
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "harness_lanes": [
+          "gbdt-rank-yetirank"
+        ],
+        "runtime_requirements": {
+          "loss": "YetiRank",
+          "grow_policy": "SymmetricTree",
+          "permutation_count": 1,
+          "eval_set": null
+        },
+        "source_route": [
+          "gbdt/methods/doc_parallel_boosting.mojo:launch_yeti_rank_with[False]",
+          "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:YetiRank evaluation",
+          "gbdt/targets/kernel/yeti_rank.mojo:launch_yeti_rank_with / launch_yeti_rank_estimation_from_search"
+        ],
+        "estimation_reuse": "The default first estimation evaluation reaches launch_yeti_rank_estimation_from_search -> row kernel; fresh calls also reach it through the nonfused target."
+      },
+      "conflicting_defines": [],
+      "pending_full_workloads": [
+        "Additional estimation calls: public leaf_estimation_iterations>1 with settings held equal in both arms",
+        "Weighted/skewed full-query workload and full non-board dataset"
+      ],
+      "experiment_variants": [
+        {
+          "name": "default_search_and_reuse_estimation",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFT_N11"
+          ]
+        },
+        {
+          "name": "fresh_estimation_calls",
+          "baseline_defines": [
+            "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF",
+            "MOJOLEARN_AFT_N11"
+          ]
+        }
+      ]
     },
     {
       "id": "N12",
@@ -376,8 +933,8 @@
         "gbdt/targets/kernel/yeti_rank.mojo"
       ],
       "affected_estimators": [
-        "GBDT QueryRMSE regressor/ranker",
-        "GBDT YetiRank ranker, nonfused query centering"
+        "GBDT YetiRank ranker, SymmetricTree only",
+        "GBDT QueryRMSE regressor/ranker, SymmetricTree only"
       ],
       "mechanism": "A local launch_aft_group_means wrapper selects one128-thread block per complete query. Lanes retain all weighted target terms with strided FMA, then reduce target and weight sums and preserve zero-total-weight behavior. QueryRMSE evaluation and nonfused Yeti centering call the wrapper; the baseline delegates to the original query helper.",
       "prerequisites": [
@@ -388,13 +945,93 @@
         "A query remains whole regardless of length; no query-size cap or routing threshold",
         "More blocks and idle workers can regress singleton/short queries",
         "Weighted mean reduction order changes, including Yeti centering and downstream sort keys",
-        "All full-query quality coverage remains pending"
+        "All full-query quality coverage remains pending",
+        "Yeti task fusion bypasses this centering wrapper; QueryRMSE remains reachable. Keep MOJOLEARN_YR_TASK_FUSED and SYM_MULTI_ALL absent for the primary Yeti comparison."
       ],
       "quality_gates": [
         "Q",
         "R"
       ],
-      "status": "source_added_uncompiled_unverified_unmeasured"
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "integration": {
+        "binding_builder": "bindings/build_gbdt.sh",
+        "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+        "binding_module": "mojolearn._mojolearn_gbdt",
+        "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+        "numeric_mode": "fast",
+        "public_estimator": "mojolearn.GradientBoosting",
+        "public_source": "python/mojolearn/ensemble.py",
+        "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+        "main_harness": "bench/speed/forest_speed_arm.py",
+        "recipe_source": "tools/speed_gbdt_arm.py",
+        "integration_status": "source_wired_not_executed",
+        "harness_lanes": [
+          "gbdt-rank-yetirank"
+        ],
+        "runtime_requirements": {
+          "loss": "YetiRank",
+          "grow_policy": "SymmetricTree",
+          "permutation_count": 1,
+          "eval_set": null
+        },
+        "source_route": [
+          "gbdt/methods/doc_parallel_boosting.mojo:launch_yeti_rank_with[False]",
+          "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:YetiRank evaluation",
+          "gbdt/targets/kernel/yeti_rank.mojo:launch_yeti_rank_with / launch_yeti_rank_estimation_from_search",
+          "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:launch_query_rmse_with[True] -> query_rmse.launch_aft_group_means"
+        ],
+        "additional_full_data_caller": {
+          "source": "tools/speed_gbdt_rank.py",
+          "arguments": [
+            "--library",
+            "ours",
+            "--loss",
+            "QueryRMSE"
+          ],
+          "full_rows_setting": "Omit --rows (default None), then audit loader intrinsic caps and actual dataset manifest before qualifying",
+          "numeric_mode_environment": "MOJOLEARN_NUMERIC_MODE=fast",
+          "status": "legacy_full_data_recipe_available_but_not_run_or_qualified"
+        },
+        "queryrmse_requirements": {
+          "loss": "QueryRMSE",
+          "grow_policy": "SymmetricTree",
+          "permutation_count": 1,
+          "eval_set": null,
+          "fit_argument": "group_id"
+        }
+      },
+      "conflicting_defines": [],
+      "pending_full_workloads": [
+        "Additional estimation calls: public leaf_estimation_iterations>1 with settings held equal in both arms",
+        "Weighted/skewed full-query workload and full non-board dataset",
+        "QueryRMSE is absent from the main board lane registry; retain it separately until a full recipe and result destination are selected"
+      ],
+      "experiment_variants": [
+        {
+          "name": "default_search_and_reuse_estimation",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFT_N12"
+          ]
+        },
+        {
+          "name": "fresh_estimation_calls",
+          "baseline_defines": [
+            "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF",
+            "MOJOLEARN_AFT_N12"
+          ]
+        }
+      ]
     }
+  ],
+  "source_integration_notes": [
+    "N08 grouped-loop scope repaired from frozen base source; no compiler or checker run.",
+    "N02 now covers Apple-default quantized histogram replicas as well as generic fallback.",
+    "Public non-symmetric routing rejects ranking and multiclass; manifests now state actual affected objectives.",
+    "Default board min_split_gain=0.0 bypasses N05; an explicit same-settings A/B recipe using min_split_gain=None is required.",
+    "No build, import, selector, harness, validation or measurement was executed."
   ]
 }

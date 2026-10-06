@@ -13,6 +13,11 @@ comptime AFT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_
 
 # P01: two rather than four logical 32-tree groves per threadgroup; less
 # shared reduction state, more independently schedulable blocks.
+# Public FAST resident snapshots default to ordered arithmetic even when
+# their Python engine name is parallel_groves. Hold
+# MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF in BOTH P01/P03 arms so those
+# public callers reach the lane-grove kernels; this prerequisite is not a
+# promoted default. See P.json for the complete A and B define lists.
 comptime AFT_P01 = AFT_APPLE_FAST and is_defined["MOJOLEARN_AFT_P01"]()
 comptime AFT_GROVE_BLOCK = 64 if AFT_P01 else 128
 comptime AFT_GROVES_PER_BLOCK = AFT_GROVE_BLOCK // 32

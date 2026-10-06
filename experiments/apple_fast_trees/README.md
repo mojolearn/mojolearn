@@ -20,10 +20,16 @@ Bits may change across versions; that permission does not relax task quality.
 The new worktree branches from local `main` at `07f2b3c00`. All work is retained
 on `ideas/apple-fast-trees-20261006`; there is no merge into `main`.
 
+The [integration follow-up](INTEGRATION.md) connects these records and actual
+callers to the shared A/B catalog, paired binding builds and full-workload queue.
+It also records source-level connection/correctness repairs. The integration
+code itself remains unexecuted and unqualified.
+
 ## Selecting future experiments
 
 `tools/apple_fast_tree_ideas.py` is a metadata selector. Its `list`, `show`,
-`select`, and `interaction` commands emit cards and complete A/B define sets.
+`select`, `pipeline-plan`, `workload-template`, and `interaction` commands emit
+cards, complete A/B define sets and future orchestration contracts.
 It has no compiler, executor, benchmark, queue or verification command. **The
 selector itself was not run or checked in this session.** Examples for later:
 
@@ -36,6 +42,9 @@ python3 tools/apple_fast_tree_ideas.py interaction X09
 ```
 
 P05's existing packed-prediction prerequisite belongs in both A and B.
+P01/P03 likewise require the existing ordered-resident OFF switch in both arms
+to reach grove kernels. P02 retains ordered traversal and conflicts with that
+shared prerequisite; such combinations are reported as blocked.
 Other prerequisites and source-reading revisions are specified per card.
 An experiment that is not reached by a caller cannot provide evidence for
 that caller; fit and inference paths, modes and public engine selection matter.

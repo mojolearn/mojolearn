@@ -5,6 +5,14 @@ This directory implements the cards in
 Each card has its own source changes and manifest. Candidates remain opt-in;
 source availability and a successful build do not establish a performance win.
 
+The same runner also exposes the 48 namespaced `AFT_F01`–`AFT_P12`
+[Apple FAST tree candidates](../apple_fast_trees/README.md). Their manifests
+are derived directly from the idea records, with paired-binding and full-workload
+integration described [here](../apple_fast_trees/INTEGRATION.md). They remain
+uncompiled, unverified and unmeasured; no new defaults are enabled. Legacy F/N
+experiment IDs keep their original meanings. The original `EXPECTED` roster is
+retained; the complete CLI roster additionally includes `TREE_IDS`.
+
 See the [implementation ledger](IMPLEMENTATION_STATUS.md) for individual source
 commits and remaining sub-arms, and [Apple FAST coverage](apple_fast/coverage.md)
 for the public callers and transport dependency attestations.

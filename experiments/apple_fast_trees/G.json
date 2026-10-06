@@ -54,6 +54,33 @@
         "C",
         "R",
         "O"
+      ],
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-symmetric",
+        "gbdt-symmetric-1000",
+        "gbdt-ordered"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+        "Plain pointwise oblivious search or fit_ordered",
+        "pointwise_kernels::compute_hist2_dev -> scan_pointwise_histograms",
+        "AFT_G01 -> aft_cooperative_scan_kernel (AFT_SCAN_LANES block; feature_count x partitions x folds grid)"
+      ],
+      "conflicting_defines": [
+        "MOJOLEARN_SYM_SCAN_SUB_FUSED"
+      ],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Default gbdt-categorical uses Lossguide and does not cover pointwise oblivious search. Symmetric categorical fit remains a separately saved full-workload recipe requirement."
       ]
     },
     {
@@ -98,6 +125,33 @@
         "C",
         "R",
         "O"
+      ],
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-symmetric",
+        "gbdt-symmetric-1000",
+        "gbdt-ordered"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+        "Plain pointwise oblivious search or fit_ordered",
+        "pointwise histogram launchers -> pw_block_multiplier",
+        "AFT_G02 -> occupancy/partition-row-budget multiplier -> unchanged binary/half-byte/one-byte multiplier launch ladder"
+      ],
+      "conflicting_defines": [
+        "MOJOLEARN_SYM_HIST_MULT"
+      ],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Default gbdt-categorical uses Lossguide and does not cover pointwise oblivious search. Symmetric categorical fit remains a separately saved full-workload recipe requirement."
       ]
     },
     {
@@ -130,8 +184,9 @@
       "mechanism": "B has lane zero run the original r0/r1/r2 winner folds in their original serial record order, then broadcasts feature, bin, score and gain through sixteen shared bytes and one barrier. Each row continues using the unchanged descriptor and bin predicate. A repeats the winner folds in each thread. This differs from the old SYM_RESOLVE_BLOCK parallel tree reduction.",
       "prerequisites": [
         "PW_FUSED_SEARCH resolve/pack/bins path active",
-        "MOJOLEARN_GBDT_FUSED_LEVEL_OFF and MOJOLEARN_GBDT_FUSED_SEARCH_OFF absent",
-        "Keep MOJOLEARN_SYM_RESOLVE_BLOCK and MOJOLEARN_SYM_HIST_ALL absent to compare against the original per-thread fold"
+        "MOJOLEARN_GBDT_FUSED_LEVEL_OFF and MOJOLEARN_GBDT_FUSED_PW_OFF absent",
+        "Keep MOJOLEARN_SYM_RESOLVE_BLOCK and MOJOLEARN_SYM_HIST_ALL absent to compare against the original per-thread fold",
+        "At most three live feature-policy helpers; additional helpers use the existing unfused chain."
       ],
       "limitations": [
         "Leader latency may dominate long record arrays",
@@ -142,6 +197,36 @@
         "C",
         "R",
         "O"
+      ],
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-symmetric",
+        "gbdt-symmetric-1000",
+        "gbdt-ordered"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+        "oblivious_tree_doc_parallel_structure_searcher: fused_pw=PW_FUSED_SEARCH and live_helpers<=3",
+        "enqueue pw_resolve_pack_bins_kernel with PW_SPLIT_BLOCK_SIZE",
+        "AFT_G03 -> leader fold/shared broadcast -> existing descriptor and grid-stride bins apply"
+      ],
+      "conflicting_defines": [
+        "MOJOLEARN_GBDT_FUSED_LEVEL_OFF",
+        "MOJOLEARN_GBDT_FUSED_PW_OFF",
+        "MOJOLEARN_SYM_RESOLVE_BLOCK",
+        "MOJOLEARN_SYM_HIST_ALL"
+      ],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Default gbdt-categorical uses Lossguide and does not cover pointwise oblivious search. Symmetric categorical fit remains a separately saved full-workload recipe requirement."
       ]
     },
     {
@@ -185,6 +270,33 @@
         "C",
         "R",
         "O"
+      ],
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-symmetric",
+        "gbdt-symmetric-1000",
+        "gbdt-ordered"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+        "pointwise_optimization_subsets::update_subsets_stats",
+        "update_partition_props -> partition_update_kernel[AFT_PARTITION_BLOCK]",
+        "AFT_G04 -> AFT_PARTITION_BLOCK=512; launch and shared reduction specialization agree"
+      ],
+      "conflicting_defines": [
+        "MOJOLEARN_SYM_PART_STATS_PAR"
+      ],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Default gbdt-categorical uses Lossguide and does not cover pointwise oblivious search. Symmetric categorical fit remains a separately saved full-workload recipe requirement."
       ]
     },
     {
@@ -223,7 +335,8 @@
       "limitations": [
         "Does not change border selection or promise border-search acceleration",
         "More blocks replicate border staging; tiny and full row counts must both be covered",
-        "Cold/preparation and prediction effects must be measured separately in a future authorized campaign"
+        "Cold/preparation and prediction effects must be measured separately in a future authorized campaign",
+        "Packed-word defines can bypass per-feature float quantization; selector must not label a fully packed float workload as G05 coverage. Categorical and CTR per-feature tails are separate retained paths."
       ],
       "quality_gates": [
         "C",
@@ -231,7 +344,40 @@
         "O",
         "P"
       ],
-      "plan_revision": "G05 implements quantization block/row tiling only; device border-search algorithms are unchanged."
+      "plan_revision": "G05 implements quantization block/row tiling only; device border-search algorithms are unchanged.",
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-symmetric",
+        "gbdt-symmetric-1000",
+        "gbdt-depthwise",
+        "gbdt-lossguide",
+        "gbdt-rank-yetirank",
+        "gbdt-rank-pairlogit",
+        "gbdt-multiclass",
+        "gbdt-categorical",
+        "gbdt-ordered"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit float-column compression",
+        "or resident_model raw-float prediction preparation",
+        "train/resident launchers import BINARIZE_BLOCK_SIZE and BINARIZE_DOCS_PER_THREAD",
+        "AFT_G05 -> binarize_float_feature_kernel block=512 and matching rows/grid"
+      ],
+      "conflicting_defines": [
+        "MOJOLEARN_GBDT_INDEX_PACK_DEVICE",
+        "MOJOLEARN_SYM_FEAT_ALL"
+      ],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage."
+      ]
     },
     {
       "numeric_mode": "FAST",
@@ -267,7 +413,8 @@
       "prerequisites": [
         "MOJOLEARN_GBDT_INDEX_PACK_DEVICE in BOTH A and B (implies existing GBDT_QUANT_DEVICE route)",
         "Packed table must fit existing PACK_MAX_ENTRIES/PACK_BORDER_CAP guards; fallback remains per-feature",
-        "Resident packed prediction needs its existing route prerequisite identically in both arms"
+        "Resident packed prediction needs its existing route prerequisite identically in both arms",
+        "MOJOLEARN_GBDT_PREDICT_PACKED must also be equal in both arms when assessing packed resident-prediction preparation; it is not silently enabled by this training recipe."
       ],
       "limitations": [
         "Existing packed-index prerequisite source is historically uncompiled/untimed; this candidate is not a promotion of it",
@@ -279,6 +426,37 @@
         "R",
         "O",
         "P"
+      ],
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-symmetric",
+        "gbdt-symmetric-1000",
+        "gbdt-depthwise",
+        "gbdt-lossguide",
+        "gbdt-rank-yetirank",
+        "gbdt-rank-pairlogit",
+        "gbdt-multiclass",
+        "gbdt-categorical",
+        "gbdt-ordered"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding (or gbdt_fit_rowmajor when enabled) -> gbdt/train.mojo::gbdt_fit",
+        "GBDT_INDEX_PACK_DEVICE -> device column packing route after existing word-table guards",
+        "train/resident launchers import PACK_BLOCK/PACK_DOCS",
+        "AFT_G06 -> pack_cindex_words_kernel block=128/docs=16 and matching shared-load stride/row grid"
+      ],
+      "conflicting_defines": [],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Packing fallbacks and non-float categorical columns do not exercise PACK_BLOCK/PACK_DOCS; confirm route from future execution evidence before admitting a cell."
       ]
     },
     {
@@ -304,14 +482,16 @@
         "gbdt/methods/leaves_estimation/apple_fast_est.mojo"
       ],
       "affected_estimators": [
-        "Plain symmetric pointwise GBDT classifiers using Apple fast estimator",
-        "Plain symmetric pointwise GBDT regressors using Apple fast estimator"
+        "Plain symmetric pointwise GBDT classifier/regressor using Apple fast estimator",
+        "Depthwise and Lossguide single-target pointwise GBDT using shared _estimate_and_apply",
+        "Categorical/nonbatched ordered callers only where their existing route reaches _estimate_and_apply; default categorical permutation batching and default ordered batching may bypass it"
       ],
       "mechanism": "B changes EST_WALK_BLOCK from 256 to 128 for the Apple device leaf walker. The same objective partials are reduced, and every leaf direction, regularization, iteration, step decision and acceptance comparison executes with a narrower grid-stride traversal. A retains the original 256-thread walker.",
       "prerequisites": [
         "Existing Apple fast leaf-estimator route with supported pointwise objective",
         "Keep existing EST_ALL/EST_ITERS_DEVICE routing identical in A and B",
-        "No EST_REUSE_PART prerequisite; its recorded wrong-leaf rejection remains untouched"
+        "No EST_REUSE_PART prerequisite; its recorded wrong-leaf rejection remains untouched",
+        "Eligible objectives exclude MultiClass, MultiClassOneVsAll, MultiRMSE, PairLogit, YetiRank and QueryRMSE; require one-dimensional Newton/Gradient and no query/pair/yeti state."
       ],
       "limitations": [
         "Floating objective reduction order may move a line-search acceptance boundary; weighted and multiple-iteration cases require full quality gates",
@@ -322,7 +502,38 @@
         "C",
         "R"
       ],
-      "plan_revision": "Source reading exposed a fused-level equality contract on shared STATS_BLOCK. G07 therefore uses the Apple leaf walker objective-reduction/leaf-direction tile instead of changing shared stats geometry."
+      "plan_revision": "Source reading exposed a fused-level equality contract on shared STATS_BLOCK. G07 therefore uses the Apple leaf walker objective-reduction/leaf-direction tile instead of changing shared stats geometry.",
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-symmetric",
+        "gbdt-symmetric-1000",
+        "gbdt-depthwise",
+        "gbdt-lossguide"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+        "doc_parallel_boosting::_estimate_and_apply -> apple_est_handles",
+        "apple_fast_estimate_and_apply::_walk -> enqueue est_walk_kernel",
+        "AFT_G07 -> EST_WALK_BLOCK=128 for objective-partial reduction, leaf traversal and launch"
+      ],
+      "conflicting_defines": [
+        "MOJOLEARN_SYM_EST_ALL_OFF",
+        "MOJOLEARN_SYM_LEAF_FROM_STATS",
+        "MOJOLEARN_EST_REUSE_PART"
+      ],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Default categorical CTR_PERM_BATCH can bypass apple_fast_estimate_and_apply; isolated coverage requires its existing MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF prerequisite in both A and B or a saved eligible one-permutation recipe. Do not change defaults or claim default categorical coverage.",
+        "Main harness pins one estimation iteration; weighted multiple-iteration and Gradient walker recipes remain pending and cannot be inferred from default lanes."
+      ]
     },
     {
       "numeric_mode": "FAST",
@@ -347,8 +558,10 @@
         "gbdt/methods/kernel_add_model_value.mojo"
       ],
       "affected_estimators": [
-        "GBDT classifier/regressor training paths using partition-indexed add_model_value_kernel",
-        "Multidimensional/tree-objective callers of the same shared cursor-update kernel"
+        "Plain GBDT classifier/regressor shared partition-indexed cursor updates",
+        "Ranking and multiclass GBDT device-walker cursor updates",
+        "Categorical GBDT batched-permutation completion using add_model_value_kernel",
+        "Nondefault ordered walker completion when the fused one-step apply route is not used"
       ],
       "mechanism": "B unrolls four independent grid-stride rows per leaf-update iteration. A leaf/dimension raw value and partition metadata are loaded once as before; four cursor operations share loop control and expose independent loads/stores. The outer stride becomes four grid strides, so every row appears once and odd tails are guarded. A keeps one row per iteration.",
       "prerequisites": [
@@ -367,7 +580,41 @@
         "Q",
         "P"
       ],
-      "plan_revision": "Existing kernel already hoists each leaf value; G08 adds independent grid-stride rows and loop unrolling instead of claiming a new metadata-hoisting optimization."
+      "plan_revision": "Existing kernel already hoists each leaf value; G08 adds independent grid-stride rows and loop unrolling instead of claiming a new metadata-hoisting optimization.",
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-symmetric",
+        "gbdt-symmetric-1000",
+        "gbdt-depthwise",
+        "gbdt-lossguide",
+        "gbdt-rank-yetirank",
+        "gbdt-rank-pairlogit",
+        "gbdt-multiclass",
+        "gbdt-categorical"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+        "doc_parallel_boosting direct/shared/batched-estimator completion or apple_fast_estimate_and_apply",
+        "enqueue add_model_value_kernel with original occupancy-sized grid",
+        "AFT_G08 -> four complete grid-stride rows per loop; no caller signature/grid change required"
+      ],
+      "conflicting_defines": [
+        "MOJOLEARN_SYM_LEAF_FROM_STATS",
+        "MOJOLEARN_EST_REUSE_PART",
+        "MOJOLEARN_EST_SHRINK_FUSED"
+      ],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Default ordered one-step batching uses _ord_bat_apply_kernel, so gbdt-ordered is deliberately absent from default G08 lane mapping. That path is G12; alternate ordered walker coverage requires a separately frozen matched route prerequisite."
+      ]
     },
     {
       "numeric_mode": "FAST",
@@ -410,7 +657,30 @@
         "C",
         "R"
       ],
-      "plan_revision": "G09 is scoped to exact target-hit/sum preparation rather than rewriting the segmented count/sum scan, preserving the prefix-exclusion mechanism."
+      "plan_revision": "G09 is scoped to exact target-hit/sum preparation rather than rewriting the segmented count/sum scan, preserving the prefix-exclusion mechanism.",
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-categorical"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit with declared categorical columns",
+        "ctrs/ctr_calcers::visit_cat_feature_ctr or ctrs/fast_prep target-dependent preparation",
+        "launch_fill_binarized_targets_stats -> fill_binarized_targets_stats_kernel",
+        "AFT_G09 -> AFT_CTR_TARGET_DOCS=8 in kernel tile AND launcher ceiling"
+      ],
+      "conflicting_defines": [],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Default gbdt-ordered taxi/istella have no declared categorical features, so they cannot cover CTR. Ordered categorical and categorical regression full-workload recipes remain pending."
+      ]
     },
     {
       "numeric_mode": "FAST",
@@ -455,7 +725,30 @@
         "C",
         "R"
       ],
-      "plan_revision": "G10 tiles exact weighted-frequency lookup and mean scatter, without modifying border-selection/binarization semantics."
+      "plan_revision": "G10 tiles exact weighted-frequency lookup and mean scatter, without modifying border-selection/binarization semantics.",
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-categorical"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit with declared categorical columns",
+        "ctrs/fast_prep weighted frequency or ctrs/ctr_calcers/fast_prep target mean-scatter outputs",
+        "launch_compute_weighted_bin_freq_ctr or launch_make_means_and_scatter",
+        "AFT_G10 -> AFT_CTR_LOOKUP_DOCS=4 in both kernel bodies AND both launcher ceilings"
+      ],
+      "conflicting_defines": [],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Default gbdt-ordered taxi/istella have no declared categorical features, so they cannot cover CTR. Ordered categorical and categorical regression full-workload recipes remain pending."
+      ]
     },
     {
       "numeric_mode": "FAST",
@@ -487,7 +780,8 @@
       "prerequisites": [
         "Existing ORDERED_BATCH_EST route active (MOJOLEARN_ORDERED_BATCH_EST_OFF absent)",
         "Supported batched objective and one leaf-estimation iteration; other cases keep existing route",
-        "Fixed seed, permutations, task descriptors and weights"
+        "Fixed seed, permutations, task descriptors and weights",
+        "MOJOLEARN_IDENTITY_TRACE must be unset: tracing selects the existing per-task walker and bypasses these candidates."
       ],
       "limitations": [
         "FAST sums differ in association; causality and quality remain unproved",
@@ -498,6 +792,31 @@
         "O",
         "C",
         "R"
+      ],
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-ordered"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit -> fit_ordered",
+        "fast_on requires estimate_can_batch, exactly one leaf iteration and tracing disabled",
+        "_ord_fast_estimate_tree -> _launch_ord_bat_reduce -> _ord_bat_reduce_kernel",
+        "AFT_G11 -> AFT_ORDERED_REDUCE_BLOCK=128 in all three reductions AND launch"
+      ],
+      "conflicting_defines": [
+        "MOJOLEARN_ORDERED_BATCH_EST_OFF"
+      ],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Exactly one leaf-estimation iteration and Newton/Gradient pointwise objective required for the fused fast route. Multi-iteration tasks intentionally retain every iteration in the existing batched walker."
       ]
     },
     {
@@ -530,7 +849,8 @@
       "prerequisites": [
         "Existing ORDERED_BATCH_EST single-iteration apply route",
         "Same prefix tasks, folds, permutations, leaf values and rate",
-        "Off/task descriptors remain the existing model buffers"
+        "Off/task descriptors remain the existing model buffers",
+        "MOJOLEARN_IDENTITY_TRACE must be unset: tracing selects the existing per-task walker and bypasses these candidates."
       ],
       "limitations": [
         "Rows striding across many tiny tasks get less descriptor reuse; all such boundaries are retained",
@@ -542,6 +862,31 @@
         "C",
         "R",
         "P"
+      ],
+      "binding_source": "bindings/_mojolearn_gbdt.mojo",
+      "binding_build_script": "bindings/build_gbdt.sh",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "harness_script": "bench/speed/forest_speed_arm.py",
+      "harness_spec": "tools/speed_gbdt_arm.py",
+      "harness_lanes": [
+        "gbdt-ordered"
+      ],
+      "source_call_chain": [
+        "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit -> fit_ordered",
+        "fast_on requires estimate_can_batch, exactly one leaf iteration and tracing disabled",
+        "_ord_fast_estimate_tree -> fold-buffer and estimation-buffer _ord_bat_apply_kernel launches",
+        "AFT_G12 -> four-row cached-task traversal AND reduced grid at both launches"
+      ],
+      "conflicting_defines": [
+        "MOJOLEARN_ORDERED_BATCH_EST_OFF"
+      ],
+      "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+      "coverage_gaps": [
+        "No runtime evidence that any card was entered; source routes only.",
+        "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+        "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+        "Exactly one leaf-estimation iteration and Newton/Gradient pointwise objective required for the fused fast route. Multi-iteration tasks intentionally retain every iteration in the existing batched walker."
       ]
     }
   ],
@@ -558,5 +903,16 @@
     "All full-dataset end-to-end timing",
     "Hardware/source/binary/dataset provenance for future measurements",
     "Winner/loser decisions and board entries"
-  ]
+  ],
+  "integration_repairs": [
+    {
+      "source": "gbdt/methods/ordered_boosting.mojo",
+      "mechanism": "fast_on now additionally requires opts.leaf_iterations == 1 before selecting the one-step ordered batched estimator.",
+      "reason": "estimate_can_batch accepts every positive iteration count; the fused estimator computes one Newton/Gradient step. Dispatch previously admitted multi-iteration tasks into that one-step path.",
+      "fallback": "Multi-iteration batchable tasks use the existing _ordered_estimate_prepare/estimate_advance/_estimate_complete batched walker, retaining all requested iterations.",
+      "scope": "Existing ordered Apple FAST correctness dispatch; no new experiment is enabled by default.",
+      "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+  ],
+  "source_wiring_scope": "Read switches, changed kernels, real launch sites, shared training dispatch, public binding exports, and harness configuration source. No compiler, interpreter import of repository modules, selector, harness, verification tool or measurement ran."
 }
