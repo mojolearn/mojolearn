@@ -111,6 +111,7 @@ def check_stages(ctx: DeviceContext, lean: Bool) raises:
 
 
 def main() raises:
+    # I02 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     comptime assert is_defined["MOJOLEARN_STEP_PHASE_TIMERS"](), "enable the wait counter"
     var ctx = DeviceContext()
     var lengths: List[Int] = [0, 1, 7, 256, 513]
