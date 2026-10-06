@@ -120,7 +120,13 @@ comptime SYM_ITER_ALL = (
 #: pooled fold dummies now sit in front of main's ORD_ALL observation
 #: scratch.
 comptime SYM_BUF_ARENA = SYM_ITER_FAST_APPLE and (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # MEASURED M3 FAST; broader workload evidence remains separate.
+# F12/arena M3 2026-10-06: 6 scored caller times; B/A
+# 0.9336..1.0082 (mixed/regressing); FAST candidate remains OFF.
+# Scored FAST quality 3/3 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/arena.
+# Compilation/identity reused. No combined-toggle/full-board claim.
     is_defined["MOJOLEARN_SYM_BUF_ARENA"]() or SYM_ITER_ALL
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
@@ -129,7 +135,13 @@ comptime SYM_BUF_ARENA = SYM_ITER_FAST_APPLE and (
 #: apple-fast LEDGER 2026-10-03: DROP sym-iter leaf-1000 (-0.2%, noise), old base;
 #: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
 comptime SYM_LEAF_FROM_STATS = SYM_ITER_FAST_APPLE and (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # MEASURED M3 FAST; broader workload evidence remains separate.
+# F12/leaf-inputs M3 2026-10-06: 6 scored caller times; B/A
+# 0.9627..1.0146 (mixed/regressing); FAST candidate remains OFF.
+# Scored FAST quality 3/3 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/leaf-inputs.
+# Compilation/identity reused. No combined-toggle/full-board claim.
     is_defined["MOJOLEARN_SYM_LEAF_FROM_STATS"]()
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
@@ -138,7 +150,25 @@ comptime SYM_LEAF_FROM_STATS = SYM_ITER_FAST_APPLE and (
 #: apple-fast LEDGER 2026-10-03: DROP sym-iter reuse-1000 (+0.3%, noise), old base;
 #: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
 comptime SYM_REUSE_PARTITION = SYM_ITER_FAST_APPLE and (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # MEASURED M3 FAST; broader workload evidence remains separate.
+# F12/categorical M3 2026-10-06: 4 scored caller times; B/A
+# 0.9445..1.0349 (mixed/regressing); FAST candidate remains OFF.
+# Scored FAST quality 2/2 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/categorical.
+# Compilation/identity reused. No combined-toggle/full-board claim.
+# F12/default M3 2026-10-06: 6 scored caller times; B/A
+# 0.9547..1.0050 (mixed/regressing); FAST candidate remains OFF.
+# Scored FAST quality 3/3 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/default.
+# Compilation/identity reused. No combined-toggle/full-board claim.
+# F12/ranking M3 2026-10-06: 4 scored caller times; B/A
+# 0.9972..1.0304 (mixed/regressing); FAST candidate remains OFF.
+# Scored FAST quality 2/2 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/ranking.
+# Compilation/identity reused. No combined-toggle/full-board claim.
     is_defined["MOJOLEARN_SYM_REUSE_PARTITION"]() or SYM_LEAF_FROM_STATS
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source

@@ -161,7 +161,13 @@ comptime IDN_DBSCAN_DIRECT_OUT = (
         is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# MEASURED M3 FAST; broader workload evidence remains separate.
+# F15/dbscan-outputs M3 2026-10-06: 6 scored caller times; B/A
+# 0.9371..1.7658 (mixed/regressing); FAST candidate remains OFF.
+# Scored FAST quality 3/3 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/dbscan-outputs.
+# Compilation/identity reused. No combined-toggle/full-board claim.
 ) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"]())
 
 comptime COSINE_TPB = 256

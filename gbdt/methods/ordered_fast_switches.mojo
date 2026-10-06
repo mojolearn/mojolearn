@@ -84,7 +84,13 @@ def ord_all_on(n_features: Int) -> Bool:
 # promotion is unchanged; IDENTICAL/non-Apple builds cannot admit this candidate.
 comptime ORD_DOC_ID_STORAGE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # MEASURED M3 FAST; broader workload evidence remains separate.
+# F12/ordered-docids M3 2026-10-06: 4 scored caller times; B/A
+# 0.8957..1.0334 (mixed/regressing); FAST candidate remains OFF.
+# Scored FAST quality 2/2 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/ordered-docids.
+# Compilation/identity reused. No combined-toggle/full-board claim.
     and is_defined["MOJOLEARN_ORD_DOC_ID_STORAGE"]()
 )
 

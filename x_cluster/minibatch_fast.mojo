@@ -68,7 +68,13 @@ comptime MBF_MAX_BATCH = 4096
 # Bound speculative stopping work more tightly while retaining the same
 # batch schedule and convergence tests; group size is independent of data
 # dimensions. Qualification must compare reported completed iterations.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# MEASURED M3 FAST; broader workload evidence remains separate.
+# F15/stopping M3 2026-10-06: 6 scored caller times; B/A
+# 0.9557..0.9820 (small single-sample gains); FAST candidate remains OFF.
+# Scored FAST quality 3/3 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/stopping.
+# Compilation/identity reused. No combined-toggle/full-board claim.
 comptime MBF_GROUP = 8 if (MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_CLUSTER_FAST_STOP_GROUP8"]()) else 32
 """Steps enqueued between two reads of the batch inertias."""
 
@@ -78,6 +84,12 @@ comptime MBF_GROUP = 8 if (MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_CLUSTER_
 # default since the M3 A/B (n=1, quality identical): minibatch-kmeans istella
 # 256.7 -> 170.7 ms, taxi 42.5 -> 38.1 ms. -D MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF
 # turns it off; the old -D name stays harmless.
+# F15/scratch-reuse M3 2026-10-06: 6 scored caller times; B/A
+# 0.9673..1.0293 (mixed/regressing); existing default retained.
+# Scored FAST quality 3/3 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/scratch-reuse.
+# Compilation/identity reused. No combined-toggle/full-board claim.
 comptime MBK_CLS2_POOL = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"]()
 
 comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
@@ -108,6 +120,12 @@ comptime MBF_RG_MAXK = 16
 # M3, one run per arm: istella 147.2 -> 144.7 ms, taxi 43.9 -> 39.9 ms;
 # w2-mbk-sumcmp-q exact (centers, counts, labels, inertia identical).
 # MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF restores the full-chunk walk.
+# F15/center-accumulation M3 2026-10-06: 6 scored caller times; B/A
+# 0.9863..1.0222 (mixed/regressing); existing default retained.
+# Scored FAST quality 3/3 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/center-accumulation.
+# Compilation/identity reused. No combined-toggle/full-board claim.
 comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"]()
 # DROP-speed, 2026-10-04, lane/apple-fast-w2-clres@4d80737b1:
 # w2-mbk-labrg-* quality PASS; istella146.6->144.0ms, taxi45.3->46.3ms.
@@ -121,7 +139,13 @@ comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUS
 # coalesced reads, one pass over X. k <= MBF_RG_MAXK, else the old pass.
 # FAST: the distance's summation order changes (labels may flip only at
 # near-ties; quality checked against main).
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# MEASURED M3 FAST; broader workload evidence remains separate.
+# F15/default M3 2026-10-06: 6 scored caller times; B/A
+# 0.9470..1.1250 (mixed/regressing); FAST candidate remains OFF.
+# Scored FAST quality 3/3 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/default.
+# Compilation/identity reused. No combined-toggle/full-board claim.
 comptime MBK_W2_LABRG = MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"]()
 
 
