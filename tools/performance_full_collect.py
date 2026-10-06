@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect frozen full PCA/resample evidence through the board tool.
+"""Collect frozen full PCA/resample/kNN evidence through the board tool.
 
 Only JSON/log files are fetched. Every attempt has its own immutable identity;
 failed attempts survive later successful freezes. This never runs a workload.
@@ -52,6 +52,9 @@ def normalized(receipt, path, run):
                 warmup_scope=receipt.get('warmup_scope'), steady_state_claim=False,
                 model_hash_policy='FAST hashes are reported separately; equality is not required',
                 promotion=False)
+    for field in ('variant', 'interaction_candidates', 'comparison_scope', 'adapter_variant_note'):
+        if field in workload:
+            cell[field] = workload[field]
     records = receipt.get('runs', [])
     cell['retained_runs'] = [{k: r.get(k) for k in ('phase', 'arm', 'returncode', 'error', 'log', 'output')}
                              for r in records]
@@ -71,8 +74,8 @@ def normalized(receipt, path, run):
     try:
         if source != run['source_sha']:
             raise ValueError('Receipt differs from configured source freeze')
-        if workload.get('mode') != 'fast' or idea not in ('F01', 'F11', 'F04', 'F19'):
-            raise ValueError('Collector supports only declared FAST PCA/resample workloads')
+        if workload.get('mode') != 'fast' or idea not in ('F01', 'F11', 'F04', 'F19', 'F14'):
+            raise ValueError('Collector supports only declared FAST PCA/resample/kNN workloads')
         counts = [(r.get('phase'), r.get('arm')) for r in records]
         if sorted(counts) != sorted((phase, arm) for phase in ('warmup', 'scored') for arm in ('A', 'B')):
             raise ValueError('Require exactly one excluded warmup and scored run per arm')
@@ -87,6 +90,13 @@ def normalized(receipt, path, run):
         if a.get('idea') != idea or b.get('idea') != idea:
             raise ValueError('Result candidate differs from receipt')
         if idea in ('F04', 'F19'):
+            cell['adapter_variants'] = {arm: scored[arm]['result'].get('variant') for arm in ('A', 'B')}
+            variant = workload.get('variant', 'default')
+            if variant != 'default' and not (idea == 'F19' and variant == 'wait-pair+tiled'
+                    and workload.get('interaction_candidates') == ['F04', 'F19']):
+                raise ValueError('Unknown resample experiment variant metadata')
+            if 'combined' in workload['key'] and variant == 'default':
+                raise ValueError('Combined resample cell lacks explicit experiment variant metadata')
             if any(data.get('variant') != 'default' for data in (a, b)):
                 raise ValueError('Only the default replacement-resample variant is covered')
             for data in (a, b):
@@ -111,6 +121,46 @@ def normalized(receipt, path, run):
                                    scope='all gathered rows, public seeded indices, cold/repeated A/B output')
             cell['indices_hashes'] = {arm: scored[arm]['result']['indices_sha256'] for arm in ('A', 'B')}
             cell['model_hash_policy'] = 'Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim'
+        elif idea == 'F14':
+            if any(data.get('variant') != 'default' for data in (a, b)):
+                raise ValueError('Only the full brute-force kNN F14 variant is covered')
+            cell['native_dispatch'] = {arm: scored[arm]['result'].get('native_dispatch') for arm in ('A', 'B')}
+            cell['grouping'] = {arm: scored[arm]['result'].get('grouping') for arm in ('A', 'B')}
+            for arm, data in (('A', a), ('B', b)):
+                for name in ('indices_sha256', 'distances_sha256', 'repeated_output_sha256'):
+                    if not sha256_value(data.get(name)):
+                        raise ValueError('Missing complete kNN hash: ' + name)
+                for phase in ('cold', 'repeated'):
+                    evidence = data.get('native_dispatch', {}).get(phase, {})
+                    count = evidence.get('native_dispatch_records')
+                    if (type(count) is not int or count < 1 or not sha256_value(evidence.get('log_sha256'))
+                            or not any(line.startswith('FAST_TOPK_KNN ') for line in evidence.get('examples', []))):
+                        raise ValueError('Actual native FAST_TOPK_KNN dispatch evidence missing: ' + phase)
+                accepted = [entry['defines'] for entry in workload['artifact_provenance'][arm]]
+                if data.get('accepted_artifact_defines') not in accepted:
+                    raise ValueError('kNN artifact control defines differ from accepted provenance')
+                grouped = any(flag.split('=')[0] == 'MOJOLEARN_KNN_FAST_QUERY_GROUP4'
+                              and flag.split('=')[-1] != '0' for flag in data['accepted_artifact_defines'])
+                if grouped != (arm == 'B'):
+                    raise ValueError('kNN A/B grouped-query controls differ')
+            exact = {
+                'complete_output_equal': a['output_sha256'] == b['output_sha256'],
+                'public_indices_equal': a['indices_sha256'] == b['indices_sha256'],
+                'distances_equal': a['distances_sha256'] == b['distances_sha256'],
+                'repeated_output_equal': a['repeated_output_sha256'] == b['repeated_output_sha256'],
+                'cold_equals_repeated': all(data['output_sha256'] == data['repeated_output_sha256'] for data in (a, b)),
+                'model_state_contract_equal': a['model_state'] == b['model_state'],
+                'all_outputs_finite_and_in_range': all(data['quality'].get('all_outputs_finite_and_in_range') is True for data in (a, b)),
+                'neighbors_unique_and_distance_sorted': all(data['quality'].get('neighbors_unique_and_distance_sorted') is True for data in (a, b)),
+                'own_repeated_oracle': all(data['quality'].get('repeated_output_exact') is True for data in (a, b)),
+                'candidate_baseline_oracle': b['quality'].get('baseline_exact_match') is True,
+            }
+            quality = dict(ok=all(exact.values()), **exact)
+            cell['quality'] = dict(exact_knn=quality, actual_native_dispatch=True,
+                scope='all saved query outputs and fitted-state contract; accepted prior oracle quality reused, no new FP64 oracle')
+            cell['indices_hashes'] = {arm: scored[arm]['result']['indices_sha256'] for arm in ('A', 'B')}
+            cell['distances_hashes'] = {arm: scored[arm]['result']['distances_sha256'] for arm in ('A', 'B')}
+            cell['model_hash_policy'] = 'Exact F14 A/B fitted-state contract; missing public exports remain UNAVAILABLE, never a captured hash'
         else:
             errors = []
             for data in (a, b):
@@ -140,10 +190,13 @@ def normalized(receipt, path, run):
                     baseline_source_sha=source, candidate_source_sha=source,
                     artifact_hashes=dict(baseline=artifacts['A'], candidate=artifacts['B']))
         if idea in ('F04', 'F19'):
-            cell['variant'] = 'default'
+            cell['variant'] = workload.get('variant', 'default')
             cell['pending_coverage'] = ['other affected public operations and interacting candidate combinations']
             if idea == 'F19':
                 cell['pending_coverage'].append('F19 permutation variant is separate and remains unmeasured here')
+        elif idea == 'F14':
+            cell['variant'] = workload.get('variant', 'default')
+            cell['pending_coverage'] = ['other affected full workloads and original k coverage; no altered shapes to force applicability']
         else:
             cell['pending_coverage'] = ['all affected estimator workloads and interacting configurations',
                                         'full-data singular/noise oracle quality']
@@ -207,7 +260,7 @@ def collect(config):
         outcomes.append(outcome)
     index = dict(cells=sorted(cells.values(), key=lambda c: c['measurement_id']),
                  machines=sorted(set(prior.get('machines', [])) | {run['machine'] for run in config['runs']}),
-                 notes=['Full PCA/resample scored execution only; original failed attempts retained.',
+                 notes=['Full PCA/resample/kNN scored execution only; original failed attempts retained.',
                         'FAST PCA state/output hashes may differ. Stateless resample requires exact seeded indices and outputs; no model identity claim.',
                         'No opponent ratios or default promotions. F11 downstream LLE and auxiliary oracle quality remain pending.'])
     atomic(prior_path, index)
