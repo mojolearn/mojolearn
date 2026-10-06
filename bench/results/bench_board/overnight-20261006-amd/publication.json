@@ -20,6 +20,7 @@
       "archive_sha256": "b8b768cf6ddab6552de0ddbd5d9a5bbbd6a514c9750a91a5b0a0b2cacadf5993",
       "base_sha": "b0f5242d244ef75cd9ba7d78ca92e10008d75510",
       "before": "2026-10-06T07:27:12Z",
+      "completion_note": "Eight missing-resource races retried; later LM loader repair is separate. Backend failures retained; earlier cells retain original provenance.",
       "file_sha256": {
         "mamba/corpus/gen_corpus.py": "453bcb7ee31d89d24606a57642c208ed5be3d3181d3c5d95a19a829af725a285",
         "tools/bench_board.py": "0a741f9ea50b9986765a6928b32e24a65176c4e623f536521e0c589cd6a57d06",
@@ -44,7 +45,7 @@
       "reason": "Missing frozen corpus resources and opponent-only binding prerequisite",
       "scope": "Only selected failed neural races after cutoff; earlier cells retain their original b0f harness and raw history",
       "source_sha": "3e55ba47e581fa75dffba286327d023f96801831",
-      "status": "ACTIVE_RESOURCE_RETRY"
+      "status": "COMPLETED"
     },
     {
       "adapter_commit": "eef36a327",
@@ -56,6 +57,9 @@
         ]
       },
       "before": "2026-10-06T07:35:13Z",
+      "completed_at": "2026-10-06T08:47:35Z",
+      "completion_note": "Only two LM compile arms executed successfully; both eager cell dictionaries identical to retained prior receipt.",
+      "final_audit": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/neural-repair-final-audit.json",
       "races": [
         "neural/lm-forward/bytes/shape=full"
       ],
@@ -63,12 +67,12 @@
       "remote_harness": "/root/opponent-harness-neural-59fd136091",
       "scope": "Applies only to fresh LM compile receipts carrying isolated_neural_repair.source selection; earlier successful arms retain original provenance",
       "source_sha": "59fd136091514ddbbca6e75ba7493684a048e9b2",
-      "status": "DEFERRED_SELECTIVE_RETRY"
+      "status": "COMPLETED"
     }
   ],
-  "harness_source_sha": "3e55ba47e581fa75dffba286327d023f96801831",
+  "harness_source_sha": "59fd136091514ddbbca6e75ba7493684a048e9b2",
   "policy": "Exact opponent-only source files, hardware and failures retained. No A/B component ratios are derived.",
-  "published_at": 1791276534.33087,
+  "published_at": 1791276594.5112782,
   "schema": "mojolearn-opponent-publication/1",
   "source_directory": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/opponents/board",
   "source_sha256": {
