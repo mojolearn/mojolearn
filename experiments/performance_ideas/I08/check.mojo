@@ -6,6 +6,7 @@ from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
 from mamba.checks.mamba2_check import run_pair, compare_dumps, total_moved
 
+# NEVER RUN — PENDING VALIDATION
 def main() raises:
     var ctx = DeviceContext()
     var lengths: List[Int] = [63, 65, 131, 63]

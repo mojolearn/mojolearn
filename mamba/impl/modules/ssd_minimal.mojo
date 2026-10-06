@@ -681,6 +681,7 @@ comptime M2_CS_IC = 32
 # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
 comptime M2_RETAIN_GL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    # NEVER RUN — PENDING VALIDATION
     and is_defined["MOJOLEARN_IDN_M2_RETAIN_GL"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not SSD_ANY_SABOTAGE
