@@ -164,12 +164,13 @@ def committed(root):
                     "commit", "--quiet", "-m", "fixture"], cwd=root, check=True)
 
 
-def test_build_receipt_records_process_completion_not_quality(tmp_path):
+def test_build_receipt_records_process_completion_not_quality(tmp_path, monkeypatch):
     root = tmp_path / "source"
     artifact = tmp_path / "binary"
     evidence_dir = tmp_path / "evidence"
+    monkeypatch.setenv("MOJOLEARN_BUILD_EXTRA_DEFINES", "-D MOJOLEARN_STALE=1")
     manifest, record = recipe(root, build_uses_compile_slot=True, build_argv=[
-        sys.executable, "-c", "import os,pathlib,sys; assert os.environ['MOJOLEARN_SKIP_BUILD_GATE']=='1'; assert os.environ['MOJOLEARN_MOJO_BUILD_FLAGS']==os.environ['MOJOLEARN_BUILD_EXTRA_DEFINES']; pathlib.Path(sys.argv[1]).write_text(os.environ['MOJOLEARN_BUILD_EXTRA_DEFINES'])",
+        sys.executable, "-c", "import os,pathlib,sys; assert os.environ['MOJOLEARN_SKIP_BUILD_GATE']=='1'; assert os.environ['MOJOLEARN_BUILD_EXTRA_DEFINES']==''; pathlib.Path(sys.argv[1]).write_text(os.environ['MOJOLEARN_MOJO_BUILD_FLAGS'])",
         "{output}",
     ])
     committed(root)

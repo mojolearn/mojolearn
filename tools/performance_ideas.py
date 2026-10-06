@@ -292,8 +292,9 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
         flags = " ".join(
             shlex.quote(value) for flag in defines for value in ("-D", flag)
         )
-        # The existing binding builders use either of these public inputs.
-        environment["MOJOLEARN_BUILD_EXTRA_DEFINES"] = flags
+        # Every declared binding builder accepts this input. Some also append
+        # EXTRA_DEFINES; populating both defines the same Mojo name twice.
+        environment["MOJOLEARN_BUILD_EXTRA_DEFINES"] = ""
         environment["MOJOLEARN_MOJO_BUILD_FLAGS"] = flags
         # Build-only execution must not invoke a builder's device smoke gate.
         # Those checks belong to the explicit queued validation stage.
