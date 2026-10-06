@@ -12,9 +12,9 @@ from x_linear.sgd import sgd_fit,L_HINGE,L_LOG,L_SQUARED,P_L2,P_EN,LR_CONSTANT,L
 from x_linear.device import _sgd_mb_grid,_sgd_mb_ovr_applies,_sgd_chunk
 
 def fp(mut x: List[Float32]) -> FP:
-    return x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    return x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 def ip(mut x: List[Int32]) -> IP:
-    return x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    return x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 def check(n: Int,d: Int,k: Int,batch: Int,loss: Int,rate: Int,penalty: Int,weighted: Bool) raises:
     var problems=k if k>2 else 1
