@@ -770,12 +770,14 @@ def finish_sum_kernel(
 comptime BLOCK_ACC_ROWS = (
     4096
     if (
+        # A08 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096"]()
         and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
     else (
         1024
         if (
+            # A08 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
             is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF"]()
             or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
         )
