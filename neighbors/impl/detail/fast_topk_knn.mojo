@@ -65,7 +65,13 @@ def _worse(da: Float32, ia: UInt32, db: Float32, ib: UInt32) -> Bool:
 # Four query accumulators reuse one staged index row more widely, trading
 # register pressure for input bandwidth. All neighboring eligible shapes use
 # the same rule; no task or benchmark dimensions participate.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# MEASURED M3 FAST; broader workload evidence remains separate.
+# F14/default M3 2026-10-06: 3 scored caller times; B/A
+# 0.4242..1.2074 (mixed/regressing); FAST candidate remains OFF.
+# Scored FAST quality 6/6 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F14/default.
+# Compilation/identity reused. No combined-toggle/full-board claim.
 comptime FKT_QPT = 4 if (FAST_TOPK_KNN_ENABLED and is_defined["MOJOLEARN_KNN_FAST_QUERY_GROUP4"]()) else 2
 """Queries per thread: each loaded index row is reused across them."""
 

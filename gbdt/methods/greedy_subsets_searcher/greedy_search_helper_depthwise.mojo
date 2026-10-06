@@ -270,6 +270,12 @@ comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
 comptime DW_FUSED_CHAIN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
+# F12/depthwise M3 2026-10-06: 4 scored caller times; B/A
+# 0.8646..1.1062 (mixed/regressing); existing default retained.
+# Scored FAST quality 2/2 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/depthwise.
+# Compilation/identity reused. No combined-toggle/full-board claim.
     and not is_defined["MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF"]()
 )
 
@@ -1194,6 +1200,12 @@ comptime LG_EXACT_ID_MAX_CELLS = 2147483647
 comptime LG_EXACT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
+# F12/lossguide M3 2026-10-06: 4 scored caller times; B/A
+# 0.4561..1.0883 (mixed/regressing); existing default retained.
+# Scored FAST quality 2/2 within existing bands; PASS.
+# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/lossguide.
+# Compilation/identity reused. No combined-toggle/full-board claim.
     and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF"]()
     and not _LG_FAST_APPLE
 ) or LG_EXACT_ID
