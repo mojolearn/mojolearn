@@ -256,7 +256,7 @@ def certified_knn_reach_read() raises -> InlineArray[Int,3]:
     comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
         var p=_CERTIFIED_REACH.get_or_create_ptr()
         values[0]=p[].calls; values[1]=p[].queries; values[2]=p[].fallback
-    return values
+    return values^
 
 comptime CERT_MAX_K = 24
 comptime CERT_MAX_D = 32
