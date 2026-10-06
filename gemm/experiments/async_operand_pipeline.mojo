@@ -67,8 +67,10 @@ def pipeline_kernel[ASYNC: Bool](c: MutPointer[Float32,MutAnyOrigin],a: MutPoint
     c.unsafe_store(cell,ftz(_fold_drain(stack,occ)))
 
 
-# N03 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-# N03 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# N03 2026-10-06 L40S component LOSS: candidate 0.400-0.421 vs 0.185-0.190 ms
+# on 257x259x1025; 1023x1025x2049 loses two layouts (0.231x/0.236x),
+# third near parity (1.009x). One warmup/score per layout; default unchanged.
+# Evidence: overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json.
 # Explicit NVIDIA-only async adapter; no production default or unsupported vendor fallback.
 def pipeline_gemm[ASYNC: Bool](ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:

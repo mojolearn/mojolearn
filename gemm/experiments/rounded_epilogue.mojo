@@ -27,8 +27,10 @@ def fused_bias_kernel(c: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,
         c.unsafe_store(cell,ftz(ftz(c.unsafe_load(cell))+ftz(bias.unsafe_load(cell%Int(n)))))
 
 
-# I05 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-# I05 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# I05 2026-10-06 L40S component LOSS on both measured shapes/all layouts:
+# baseline/candidate 0.405x-0.962x, one same-process warmup/score.
+# Full AMD+NVIDIA workload promotion remains unqualified; default unchanged.
+# Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 # Explicit fused adapter only; rounded product seam must pass independent bits.
 def gemm_bias[FUSED: Bool](ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
