@@ -4,14 +4,17 @@
 thread a cell, every cell the pinned step of x_decomp/rr_block.mojo (read its
 header), which the host solver (`host_eigh_rb_sorted`) runs in the same order.
 Every kernel launches ceil(count / PJ_TPB) blocks of PJ_TPB; no shared
-memory. Each cell has one writer a launch and no launch reads a cell it
-writes (T, the second V buffer and the pivot stack are separate buffers)."""
+memory. Each cell has one writer. The pivot-status kernel restores its own
+eigenvalue cells in place before any outer matrix update; T, the second V
+buffer and the pivot stack are separate buffers."""
 from std.gpu import block_dim, block_idx, thread_idx
 
+from checks.numerics import ftz
 from x_decomp.cells import F32Ptr
 from x_decomp.rr_block import (
     RB_W,
     rb_gather_cell,
+    rb_pivot_shift,
     rb_hi,
     rb_idx,
     rb_is_pad,
@@ -52,7 +55,7 @@ def rb_gather_kernel(a: F32Ptr, p: F32Ptr, nn_in: Int32, m_in: Int32, round_in: 
         p.unsafe_store(t, rb_gather_cell(a, Int(nn_in), rb_lo(m, r, g), rb_hi(m, r, g), x, y))
 
 
-def rb_bad_kernel(info: F32Ptr, bad: F32Ptr, h_in: Int32):
+def rb_bad_kernel(info: F32Ptr, bad: F32Ptr, h_in: Int32, a: F32Ptr, wl: F32Ptr, nn_in: Int32, m_in: Int32, round_in: Int32):
     """The pivot solves' marks folded into two sticky flags (the driver reads
     them once a sweep): bad[0] = 1 when a problem did not converge, bad[1] = 1
     when its block did not run (info still -1). Every writer of a flag
@@ -64,6 +67,12 @@ def rb_bad_kernel(info: F32Ptr, bad: F32Ptr, h_in: Int32):
             bad.unsafe_store(1, Float32(1.0))
         elif x != Float32(1.0):
             bad.unsafe_store(0, Float32(1.0))
+        else:
+            # A is still the original matrix here: this kernel runs before
+            # any outer left update. One writer per eigenvalue, same host sum.
+            var shift = rb_pivot_shift(a, Int(nn_in), rb_lo(Int(m_in), Int(round_in), g), rb_hi(Int(m_in), Int(round_in), g))
+            for i in range(RB_W):
+                wl.unsafe_store(g * RB_W + i, ftz(wl.unsafe_load(g * RB_W + i) + shift))
 
 
 def rb_right_kernel(a: F32Ptr, wv: F32Ptr, tb: F32Ptr, nn_in: Int32, m_in: Int32, round_in: Int32):
