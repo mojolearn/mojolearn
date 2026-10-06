@@ -31,6 +31,13 @@ class Policy(unittest.TestCase):
         s=u.renew(self.c,self.s,10,captured='proof',done=True)
         self.assertEqual(u.decision(self.c,s,2709,True,'proof'),'KEEP')
         self.assertEqual(u.decision(self.c,s,2710,True,'proof'),'DELETE_IDLE')
+    def test_requested_30_minutes_requires_capture_and_stable_idle(self):
+        c=dict(self.c,idle_seconds=1800);u.validate(c);s=u.new_state(c,0)
+        s=u.renew(c,s,10,captured='proof',done=True)
+        self.assertEqual(u.decision(c,s,1809,True,'proof'),'KEEP')
+        self.assertEqual(u.decision(c,s,1810,True,'proof'),'DELETE_IDLE')
+        self.assertEqual(u.decision(c,s,1810,False,'proof'),'KEEP')
+        self.assertEqual(u.decision(c,s,1810,True,'changed'),'KEEP')
     def test_heartbeat_preserves_idle_deadline(self):
         s=u.renew(self.c,self.s,10,'proof',True);s=u.renew(self.c,s,1000,'proof',True)
         self.assertEqual(s['idle_since'],10)
