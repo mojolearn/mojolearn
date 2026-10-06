@@ -38,14 +38,14 @@ def histogram_kernel[CHUNK: Int,BINS: Int,REPLICAS: Int](
     for row in range(row_begin+tid,row_end,128):
         var weight=weights.unsafe_load(row)
         if Int64(weight)>Int64(max_abs) or Int64(weight)<-Int64(max_abs):
-            _=Atomic.fetch_or(status.unsafe_offset(tile*((Int(features)+CHUNK-1)//CHUNK)+fg),Int32(1))
+            _=Atomic.fetch_add(status.unsafe_offset(tile*((Int(features)+CHUNK-1)//CHUNK)+fg),Int32(1))
             continue
         comptime for f in range(CHUNK):
             var feature=fg*CHUNK+f
             if feature<Int(features):
                 var bin=Int(bins.unsafe_load(row*Int(features)+feature))
                 if bin<0 or bin>=BINS:
-                    _=Atomic.fetch_or(status.unsafe_offset(tile*((Int(features)+CHUNK-1)//CHUNK)+fg),Int32(1))
+                    _=Atomic.fetch_add(status.unsafe_offset(tile*((Int(features)+CHUNK-1)//CHUNK)+fg),Int32(1))
                 else:
                     _=Atomic.fetch_add[ordering=Ordering.RELAXED](hist.unsafe_offset((replica*CHUNK+f)*BINS+bin),weight)
     barrier()
