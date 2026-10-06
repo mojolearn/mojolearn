@@ -8,7 +8,7 @@ opt-in research adapter and never changes the production GEMM dispatcher.
 from std.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz
-from gemm.checks.gemm_identical import identical_gemm_flat_kernel,contract_partition,gemm_operand_strides
+from gemm.checks.gemm_identical import identical_gemm_flat_kernel,_flat_cell_body,contract_partition,gemm_operand_strides
 
 
 def bias_kernel(c: MutPointer[Float32,MutAnyOrigin],bias: MutPointer[Float32,MutAnyOrigin],m: Int32,n: Int32):
@@ -21,8 +21,10 @@ def fused_bias_kernel(c: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,
     b: MutPointer[Float32,MutAnyOrigin],bias: MutPointer[Float32,MutAnyOrigin],
     m: Int32,n: Int32,k: Int32,leaf: Int32,leaves: Int32,
     asi: Int32,asp: Int32,bsp: Int32,bsj: Int32):
-    identical_gemm_flat_kernel(c,a,b,m,n,k,leaf,leaves,asi,asp,bsp,bsj)
-    bias_kernel(c,bias,m,n)
+    var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    _flat_cell_body(c,a,b,m,n,k,leaf,leaves,asi,asp,bsp,bsj,Int32(cell))
+    if cell < Int(m)*Int(n):
+        c.unsafe_store(cell,ftz(ftz(c.unsafe_load(cell))+ftz(bias.unsafe_load(cell%Int(n)))))
 
 
 def gemm_bias[FUSED: Bool](ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
