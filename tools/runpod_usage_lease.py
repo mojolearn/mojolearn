@@ -334,16 +334,32 @@ def local_gone(c):
     except (OSError,ValueError,subprocess.SubprocessError):return False
 
 
+def error_diagnostic(exc, phase):
+    """Retain useful capture errors without command argv, stderr or secrets."""
+    detail = type(exc).__name__
+    if isinstance(exc, ValueError):
+        value = str(exc)
+        if value.startswith(('missing/size mismatch: ', 'capture hash mismatch: ')):
+            detail = value[:500]
+        elif value == 'unsafe captured path':
+            detail = value
+    elif isinstance(exc, subprocess.CalledProcessError):
+        detail = 'command failed with exit ' + str(exc.returncode)
+    return dict(error_type=type(exc).__name__, error_stage=phase, error_detail=detail)
+
+
 def manage(c, once=False):
     local=Path(c['local_out']);local.mkdir(parents=True,exist_ok=True)
     lock=(local/'manager.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     last_progress=None;progress_at=time.monotonic();failed_polls=0
     while True:
+        phase='probe';probe=None
         try:
             probe=remote_call(c,'probe')
             if probe.get('status')=='TERMINATED':
                 atomic(local/'manager-status.json',dict(status='TERMINATED',lease=probe,updated_at=time.time()));return
             if not probe.get('guardian_alive'):raise RuntimeError('guardian not alive; repair before renewing')
+            phase='owner_heartbeat'
             state=remote_call(c,'heartbeat') if failed_polls<c.get('max_failed_polls',3) else probe
             if probe['progress']!=last_progress:last_progress=probe['progress'];progress_at=time.monotonic()
             if probe.get('command_exit') not in (None,'0'):notify(c,local,'JOB_FAILED','command exit '+probe['command_exit'])
@@ -352,22 +368,38 @@ def manage(c, once=False):
             artifacts=local/'artifacts';artifacts.mkdir(exist_ok=True)
             # argv boundary: rsync transport options are shell-quoted as its -e value.
             target=c['ssh'][-1];ssh_opts=['ssh',*c['ssh'][:-1]]
+            phase='artifact_sync'
             run(['rsync','-az','--partial',*[arg for rel in c.get('exclude_relative',[]) for arg in ('--exclude','/'+rel.rstrip('/')+'/***')],'-e',shlex.join(ssh_opts),target+':'+c['remote_out'].rstrip('/')+'/',str(artifacts)+'/'],timeout=c.get('capture_timeout',1800))
             if probe['done']:
-                rows=remote_call(c,'inventory')['rows'];captured=verify_capture(rows,artifacts)
+                phase='remote_inventory';rows=remote_call(c,'inventory')['rows']
+                phase='local_capture_verify';captured=verify_capture(rows,artifacts)
+                phase='capture_ack'
                 state=remote_call(c,'heartbeat',dict(captured_manifest=captured))
                 atomic(local/'capture-receipt.json',dict(exclude_relative=c.get('exclude_relative',[]),pod_id=c['pod_id'],owner_id=c['owner_id'],manifest_sha256=captured,rows=rows,verified_at=time.time()))
                 notify(c,local,'JOB_DONE_CAPTURED',('All retained files verified; pending-work hold remains' if state.get('busy_hold') else 'All retained files verified;'+str(c.get('idle_seconds',2700)//60)+'-minute idle deletion armed')+'; capture '+captured[:16])
-            failed_polls=0;state=remote_call(c,'heartbeat')
+            phase='final_heartbeat';failed_polls=0;state=remote_call(c,'heartbeat')
             atomic(local/'manager-status.json',dict(status='MANAGING',lease=state,last_probe=probe,updated_at=time.time(),manager_pid=os.getpid()))
         except Exception as exc:
             failed_polls+=1
+            diagnostic=error_diagnostic(exc,phase)
+            if phase=='local_capture_verify' and probe is not None:
+                # Read-only evidence: a new worker may change files after rsync
+                # but before inventory/verification. Do not acknowledge a capture
+                # or change heartbeat/idle policy merely because it looks transient.
+                try:
+                    latest=remote_call(c,'probe')
+                    diagnostic['progress_changed_during_capture']=latest.get('progress')!=probe.get('progress')
+                    diagnostic['done_after_error']=latest.get('done')
+                except Exception:
+                    diagnostic['followup_probe_failed']=True
+            error_state=dict(status='ERROR',failed_polls=failed_polls,heartbeat_suspended=failed_polls>=c.get('max_failed_polls',3),updated_at=time.time(),manager_pid=os.getpid(),**diagnostic)
+            atomic(local/'last-error-retained.json',error_state)
             if local_gone(c):
                 atomic(local/'manager-status.json',dict(status='TERMINATED_VERIFIED',verified_at=time.time(),pod_id=c['pod_id']));notify(c,local,'POD_TERMINATED','Provider GET and listing both verify deletion');return
             # After repeated failed polls, preserve the last remote orphan deadline.
             notify(c,local,'MANAGER_ERROR',type(exc).__name__)
             if failed_polls>=c.get('max_failed_polls',3):notify(c,local,'HEARTBEAT_SUSPENDED','Repeated failed capture/control polls; repair before the retained90-minute orphan deadline')
-            atomic(local/'manager-status.json',dict(status='ERROR',failed_polls=failed_polls,heartbeat_suspended=failed_polls>=c.get('max_failed_polls',3),error_type=type(exc).__name__,updated_at=time.time(),manager_pid=os.getpid()))
+            atomic(local/'manager-status.json',error_state)
         if once:return
         time.sleep(c.get('poll_seconds',30))
 
