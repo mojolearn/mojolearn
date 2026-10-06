@@ -42,9 +42,9 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 1 planned, 422 done, 29 failed, 0 unsupported, 0 pending. Cells: 1540 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 54, ok 1480).
+Races: 1 planned, 422 done, 29 failed, 0 unsupported, 0 pending. Cells: 1540 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 34, UNKNOWN 10, ok 1490).
 
-Inference cells: 920 (REFUSED 80, ok 840).
+Inference cells: 920 (REFUSED 48, ok 872).
 
 ## Quality at a glance
 
@@ -142,7 +142,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | classical-mds | taxi | trustworthiness_k15 (higher is better, 1 at most) | 0.765649 | 0.765649 | sklearn-cpu 0.765649 |
 | algos | clip-grad-norm | synthetic | norm | 1.000000 | 1.000000 | torch-compile-fp32 1.000000; torch-eager-fp32 1.000000 |
 | algos | clip-grad-norm | synthetic | norm_rel_diff_vs_ours | 0.000000 | 0.000000 | torch-compile-fp32 0.000000; torch-eager-fp32 0.000000 |
-| algos | cnn-clf | synthetic | accuracy (higher is better) | 1.000000 | 1.000000 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
+| algos | cnn-clf | synthetic | accuracy (higher is better) | 1.000000 | 1.000000 | torch-eager-fp32 1.000000; torch-compile-fp32 1.000000; torch-eager-bf16 1.000000; torch-compile-bf16 1.000000 |
 | algos | complement-nb | istella | accuracy (higher is better) | 0.849190 | 0.849360 | sklearn-cpu 0.849350 |
 | algos | complement-nb | istella | logloss (lower is better) | 3.164680 | 3.762524 | sklearn-cpu 3.174763 |
 | algos | complement-nb | taxi | accuracy (higher is better) | 0.678030 | 0.678020 | sklearn-cpu 0.678030 |
@@ -235,14 +235,14 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | graphsage | istella | rel_fro_vs_torch_eager_fp32 | - | - | torch-compile-bf16 0.003054; torch-compile-fp32 7.998e-08; torch-eager-bf16 0.003366; torch-eager-fp32 - |
 | algos | graphsage | taxi | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-compile-bf16 4608.154297; torch-compile-fp32 0.119209; torch-eager-bf16 5460.333333; torch-eager-fp32 - |
 | algos | graphsage | taxi | rel_fro_vs_torch_eager_fp32 | - | - | torch-compile-bf16 0.003285; torch-compile-fp32 5.006e-08; torch-eager-bf16 0.003557; torch-eager-fp32 - |
-| algos | gru-clf | synthetic | accuracy (higher is better) | 0.971842 | 0.971842 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
+| algos | gru-clf | synthetic | accuracy (higher is better) | 0.971842 | 0.971842 | torch-eager-fp32 0.971842; torch-compile-fp32 0.971842; torch-eager-bf16 0.971734; torch-compile-bf16 0.971734 |
 | algos | gru-clf | synthetic | logloss (lower is better) | 0.065835 | 0.065835 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
 | algos | gru-clf | taxi-hourly | accuracy (higher is better) | 0.865668 | 0.865668 | torch-eager-fp32 0.865668; torch-compile-fp32 0.865668; torch-eager-bf16 0.865885; torch-compile-bf16 0.865885 |
 | algos | gru-clf | taxi-hourly | logloss (lower is better) | 0.305841 | 0.305841 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
-| algos | gru-reg | synthetic | r2 (higher is better) | 0.981946 | 0.981946 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
-| algos | gru-reg | synthetic | rmse (lower is better) | 0.155672 | 0.155672 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
-| algos | gru-reg | taxi-hourly | r2 (higher is better) | 0.748219 | 0.748219 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
-| algos | gru-reg | taxi-hourly | rmse (lower is better) | 0.544182 | 0.544182 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
+| algos | gru-reg | synthetic | r2 (higher is better) | 0.981946 | 0.981946 | torch-eager-fp32 0.981946; torch-compile-fp32 0.981946; torch-eager-bf16 0.981819; torch-compile-bf16 0.981819 |
+| algos | gru-reg | synthetic | rmse (lower is better) | 0.155672 | 0.155672 | torch-eager-fp32 0.155672; torch-compile-fp32 0.155672; torch-eager-bf16 0.156218; torch-compile-bf16 0.156218 |
+| algos | gru-reg | taxi-hourly | r2 (higher is better) | 0.748219 | 0.748219 | torch-eager-fp32 0.748219; torch-compile-fp32 0.748219; torch-eager-bf16 0.748254; torch-compile-bf16 0.748254 |
+| algos | gru-reg | taxi-hourly | rmse (lower is better) | 0.544182 | 0.544182 | torch-eager-fp32 0.544182; torch-compile-fp32 0.544182; torch-eager-bf16 0.544143; torch-compile-bf16 0.544143 |
 | algos | huber | istella | r2 (higher is better) | -0.006923 | -0.007193 | sklearn-cpu -0.010176 |
 | algos | huber | istella | rmse (lower is better) | 0.838221 | 0.838333 | sklearn-cpu 0.839574 |
 | algos | huber | taxi | r2 (higher is better) | 0.900215 | 0.900215 | sklearn-cpu 0.900215 |
@@ -483,14 +483,14 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | ridge-cv | taxi | r2 (higher is better) | 0.908983 | 0.908981 | sklearn-cpu 0.908988 |
 | algos | ridge-cv | taxi | rmse (lower is better) | 4.805050 | 4.805109 | sklearn-cpu 4.804917 |
 | algos | rmsprop | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-compile-fp32 0.000000; torch-eager-fp32 - |
-| algos | rnn-clf | synthetic | accuracy (higher is better) | 0.953559 | 0.953559 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
-| algos | rnn-clf | synthetic | logloss (lower is better) | 0.103698 | 0.103698 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
-| algos | rnn-clf | taxi-hourly | accuracy (higher is better) | 0.868056 | 0.868056 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
-| algos | rnn-clf | taxi-hourly | logloss (lower is better) | 0.304864 | 0.304864 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
-| algos | rnn-reg | synthetic | r2 (higher is better) | 0.977348 | 0.977348 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
-| algos | rnn-reg | synthetic | rmse (lower is better) | 0.174374 | 0.174374 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
-| algos | rnn-reg | taxi-hourly | r2 (higher is better) | 0.738796 | 0.738796 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
-| algos | rnn-reg | taxi-hourly | rmse (lower is better) | 0.554271 | 0.554271 | torch-compile-bf16 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-eager-fp32 - |
+| algos | rnn-clf | synthetic | accuracy (higher is better) | 0.953559 | 0.953559 | torch-eager-fp32 0.953559; torch-compile-fp32 0.953559; torch-eager-bf16 0.953830; torch-compile-bf16 0.953830 |
+| algos | rnn-clf | synthetic | logloss (lower is better) | 0.103698 | 0.103698 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
+| algos | rnn-clf | taxi-hourly | accuracy (higher is better) | 0.868056 | 0.868056 | torch-eager-fp32 0.868056; torch-compile-fp32 0.868056; torch-eager-bf16 0.867947; torch-compile-bf16 0.867947 |
+| algos | rnn-clf | taxi-hourly | logloss (lower is better) | 0.304864 | 0.304864 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
+| algos | rnn-reg | synthetic | r2 (higher is better) | 0.977348 | 0.977348 | torch-eager-fp32 0.977348; torch-compile-fp32 0.977348; torch-eager-bf16 0.977309; torch-compile-bf16 0.977309 |
+| algos | rnn-reg | synthetic | rmse (lower is better) | 0.174374 | 0.174374 | torch-eager-fp32 0.174374; torch-compile-fp32 0.174374; torch-eager-bf16 0.174521; torch-compile-bf16 0.174521 |
+| algos | rnn-reg | taxi-hourly | r2 (higher is better) | 0.738796 | 0.738796 | torch-eager-fp32 0.738796; torch-compile-fp32 0.738796; torch-eager-bf16 0.738830; torch-compile-bf16 0.738830 |
+| algos | rnn-reg | taxi-hourly | rmse (lower is better) | 0.554271 | 0.554271 | torch-eager-fp32 0.554271; torch-compile-fp32 0.554271; torch-eager-bf16 0.554235; torch-compile-bf16 0.554235 |
 | algos | select-chi2 | istella | n_selected | 110 | 110 | sklearn-cpu 110 |
 | algos | select-chi2 | istella | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
 | algos | select-chi2 | taxi | n_selected | 5 | 5 | sklearn-cpu 5 |
@@ -705,41 +705,19 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | umap | istella | trustworthiness_k15 (higher is better, 1 at most) | 0.982091 | 0.979535 | umap-learn-cpu 0.978822; umap-learn-cpu-unseeded 0.977646 |
 | classical2 | umap | taxi | trustworthiness_k15 (higher is better, 1 at most) | 0.991488 | 0.990403 | umap-learn-cpu 0.989525; umap-learn-cpu-unseeded 0.989467 |
 | neural | gemm-bf16 | gaussian | max_rel_err_vs_fp64 (lower is better) | - | 1.155e-07 | torch-eager-bf16 0.002759; torch-compile-bf16 0.002759 |
-| neural | gemm-bf16 | gaussian | max_abs_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-bf16 0.999023; torch-compile-bf16 0.999023 |
-| neural | gemm-bf16 | gaussian | max_rel_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-bf16 0.002759; torch-compile-bf16 0.002759 |
 | neural | gemm-int8 | gaussian | max_rel_err_vs_fp64 (lower is better) | - | 0.000000 | - |
 | neural | gemm | gaussian | max_rel_err_vs_fp64 (lower is better) | - | 2.399e-07 | torch-eager-fp32 2.843e-06; torch-compile-fp32 2.843e-06; torch-eager-bf16 0.003752; torch-compile-bf16 0.003752 |
-| neural | gemm | gaussian | max_abs_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 0.001038; torch-compile-fp32 0.001038; torch-eager-bf16 1.358337; torch-compile-bf16 1.358337 |
-| neural | gemm | gaussian | max_rel_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 2.866e-06; torch-compile-fp32 2.866e-06; torch-eager-bf16 0.003751; torch-compile-bf16 0.003751 |
 | neural | lm-forward | bytes | mean_nll (lower is better) | - | 9.018733 | torch-eager-fp32 9.018733; torch-compile-fp32 9.018733; torch-eager-bf16 9.018650; torch-compile-bf16 9.018662 |
-| neural | lm-forward | bytes | max_abs_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 1.252e-06; torch-compile-fp32 1.296e-06; torch-eager-bf16 0.006710; torch-compile-bf16 0.006710 |
-| neural | lm-forward | bytes | max_rel_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 1.718e-06; torch-compile-fp32 1.78e-06; torch-eager-bf16 0.009211; torch-compile-bf16 0.009211 |
 | neural | lm-train-step | bytes | loss_first_step (same init and batches on every arm) | - | 9.018733 | torch-eager-fp32 9.018733; torch-compile-fp32 9.018733; torch-eager-bf16 9.021973; torch-compile-bf16 9.018524 |
-| neural | lm-train-step | bytes | loss_last_step (same init and batches on every arm) | - | 8.418446 | torch-eager-fp32 8.418447; torch-compile-fp32 8.418447; torch-eager-bf16 8.414307; torch-compile-bf16 8.415909 |
+| neural | lm-train-step | bytes | loss_last_step (same init and batches on every arm) | - | 8.418446 | torch-eager-fp32 8.418447; torch-compile-fp32 8.418447; torch-eager-bf16 8.414307; torch-compile-bf16 8.415848 |
 | neural | lm-train-step | bytes | steps | - | 2 | torch-eager-fp32 2; torch-compile-fp32 2; torch-eager-bf16 2; torch-compile-bf16 2 |
-| neural | lm-train-step | bytes | loss_first_abs_diff_vs_ours (0 is our value exactly) | - | - | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.003240; torch-compile-bf16 0.0002089 |
-| neural | lm-train-step | bytes | loss_last_abs_diff_vs_ours (0 is our value exactly) | - | - | torch-eager-fp32 1.907e-06; torch-compile-fp32 9.537e-07; torch-eager-bf16 0.004139; torch-compile-bf16 0.002537 |
-| neural | mamba1-forward | gaussian | max_abs_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 2.384e-07; torch-eager-bf16 5.15e-05 |
-| neural | mamba1-forward | gaussian | max_rel_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 1.189e-07; torch-eager-bf16 2.568e-05 |
-| neural | mamba2-forward | gaussian | max_abs_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 2.027e-06; torch-compile-fp32 2.027e-06; torch-eager-bf16 0.007544; torch-compile-bf16 0.007544 |
-| neural | mamba2-forward | gaussian | max_rel_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 6.89e-07; torch-compile-fp32 6.89e-07; torch-eager-bf16 0.002565; torch-compile-bf16 0.002565 |
-| neural | mamba3-forward | gaussian | max_abs_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 8.345e-07; torch-compile-fp32 -; torch-eager-bf16 0.002095; torch-compile-bf16 - |
-| neural | mamba3-forward | gaussian | max_rel_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 3.651e-07; torch-compile-fp32 -; torch-eager-bf16 0.0009164; torch-compile-bf16 - |
 | neural | mlp-train-step | gaussian | loss_first_step (same init and batches on every arm) | - | 1.160401 | torch-eager-fp32 1.160401; torch-compile-fp32 1.160401; torch-eager-bf16 1.160498; torch-compile-bf16 1.160498 |
 | neural | mlp-train-step | gaussian | loss_last_step (same init and batches on every arm) | - | 1.123361 | torch-eager-fp32 1.123361; torch-compile-fp32 1.123361; torch-eager-bf16 1.123461; torch-compile-bf16 1.123461 |
 | neural | mlp-train-step | gaussian | steps | - | 2 | torch-eager-fp32 2; torch-compile-fp32 2; torch-eager-bf16 2; torch-compile-bf16 2 |
-| neural | mlp-train-step | gaussian | loss_first_abs_diff_vs_ours (0 is our value exactly) | - | - | torch-eager-fp32 3.576e-07; torch-compile-fp32 2.384e-07; torch-eager-bf16 9.656e-05; torch-compile-bf16 9.656e-05 |
-| neural | mlp-train-step | gaussian | loss_last_abs_diff_vs_ours (0 is our value exactly) | - | - | torch-eager-fp32 2.384e-07; torch-compile-fp32 2.384e-07; torch-eager-bf16 0.0001006; torch-compile-bf16 0.0001006 |
-| neural | samba-forward | bytes | mean_nll (lower is better) | - | 5.635910 | torch-eager-fp32 5.635910; torch-compile-fp32 -; torch-eager-bf16 5.636059; torch-compile-bf16 - |
-| neural | samba-forward | bytes | max_abs_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 2.503e-06; torch-compile-fp32 -; torch-eager-bf16 0.017546; torch-compile-bf16 - |
-| neural | samba-forward | bytes | max_rel_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 1.407e-06; torch-compile-fp32 -; torch-eager-bf16 0.009865; torch-compile-bf16 - |
-| neural | samba-train-step | bytes | loss_first_step (same init and batches on every arm) | - | 5.635910 | torch-eager-fp32 5.635910; torch-compile-fp32 -; torch-eager-bf16 5.636006; torch-compile-bf16 - |
-| neural | samba-train-step | bytes | loss_last_step (same init and batches on every arm) | - | 4.833934 | torch-eager-fp32 4.833934; torch-compile-fp32 -; torch-eager-bf16 4.833773; torch-compile-bf16 - |
-| neural | samba-train-step | bytes | steps | - | 2 | torch-eager-fp32 2; torch-compile-fp32 -; torch-eager-bf16 2; torch-compile-bf16 - |
-| neural | samba-train-step | bytes | loss_first_abs_diff_vs_ours (0 is our value exactly) | - | - | torch-eager-fp32 4.768e-07; torch-compile-fp32 -; torch-eager-bf16 9.632e-05; torch-compile-bf16 - |
-| neural | samba-train-step | bytes | loss_last_abs_diff_vs_ours (0 is our value exactly) | - | - | torch-eager-fp32 0.000000; torch-compile-fp32 -; torch-eager-bf16 0.0001612; torch-compile-bf16 - |
-| neural | transformer-forward | gaussian | max_abs_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 4.768e-07; torch-compile-fp32 4.768e-07; torch-eager-bf16 0.001819; torch-compile-bf16 0.001819 |
-| neural | transformer-forward | gaussian | max_rel_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 1.02e-07; torch-compile-fp32 1.02e-07; torch-eager-bf16 0.0003893; torch-compile-bf16 0.0003893 |
+| neural | samba-forward | bytes | mean_nll (lower is better) | - | 5.635910 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
+| neural | samba-train-step | bytes | loss_first_step (same init and batches on every arm) | - | 5.635910 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
+| neural | samba-train-step | bytes | loss_last_step (same init and batches on every arm) | - | 4.833934 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
+| neural | samba-train-step | bytes | steps | - | 2 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
 | trees | et | istella | logloss (lower is better) | 0.189989 | - | sklearn-et-cpu 0.190100 |
 | trees | et | istella | auc (higher is better) | 0.937987 | - | sklearn-et-cpu 0.937900 |
 | trees | et | istella | auc (higher is better) | - | - | sklearn-et-cpu 0.937904; lightgbm-cpu 0.948128 |
@@ -868,7 +846,7 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | categorical-nb | taxi | Xq | - | 6.4 | 25.7 | - | sklearn-cpu 12.3 ms (IDENTICAL/arm 2.107) |
 | algos | cca | istella | Xq | - | 42.7 | 46.5 | - | sklearn-cpu 57.5 ms (IDENTICAL/arm 0.762) |
 | algos | cca | taxi | Xq | - | 5.1 | 5.0 | - | sklearn-cpu 7.2 ms (IDENTICAL/arm 1.529) |
-| algos | cnn-clf | synthetic | Xq | - | 23.9 | 29.6 | - | torch-compile-bf16 - ms (IDENTICAL/arm -); torch-compile-fp32 - ms (IDENTICAL/arm -); torch-eager-bf16 - ms (IDENTICAL/arm -); torch-eager-fp32 - ms (IDENTICAL/arm -) |
+| algos | cnn-clf | synthetic | Xq | - | 23.9 | 29.6 | - | torch-eager-fp32 1.8 ms (IDENTICAL/arm -); torch-compile-fp32 1.9 ms (IDENTICAL/arm -); torch-eager-bf16 1.6 ms (IDENTICAL/arm -); torch-compile-bf16 1.6 ms (IDENTICAL/arm -) |
 | algos | complement-nb | istella | Xq | - | 38.9 | 38.3 | - | sklearn-cpu 47.1 ms (IDENTICAL/arm 0.712) |
 | algos | complement-nb | taxi | Xq | - | 4.8 | 4.9 | - | sklearn-cpu 9.6 ms (IDENTICAL/arm 0.508) |
 | algos | complement-nb | text | Xq | - | 64.3 | 67.1 | - | sklearn-cpu 66.7 ms (IDENTICAL/arm 0.769) |
@@ -905,10 +883,10 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | global-maxpool | synthetic | Xq | - | 0.6 | 0.6 | - | torch-compile-bf16 0.4 ms (IDENTICAL/arm 1.336); torch-compile-fp32 0.4 ms (IDENTICAL/arm 1.388); torch-eager-bf16 0.3 ms (IDENTICAL/arm 1.763); torch-eager-fp32 0.3 ms (IDENTICAL/arm 1.558) |
 | algos | graphsage | istella | Xq | - | 149.3 | 153.6 | - | torch-compile-bf16 8.0 ms (IDENTICAL/arm 17.764); torch-compile-fp32 8.5 ms (IDENTICAL/arm 16.631); torch-eager-bf16 44.2 ms (IDENTICAL/arm 3.205); torch-eager-fp32 44.4 ms (IDENTICAL/arm 3.191) |
 | algos | graphsage | taxi | Xq | - | 86.5 | 88.0 | - | torch-compile-bf16 3.5 ms (IDENTICAL/arm 25.371); torch-compile-fp32 5.2 ms (IDENTICAL/arm 16.966); torch-eager-bf16 5.8 ms (IDENTICAL/arm 15.218); torch-eager-fp32 5.1 ms (IDENTICAL/arm 17.403) |
-| algos | gru-clf | synthetic | Xq | - | 48.9 | 54.1 | - | torch-eager-fp32 - ms (IDENTICAL/arm -); torch-compile-fp32 - ms (IDENTICAL/arm -); torch-eager-bf16 - ms (IDENTICAL/arm -); torch-compile-bf16 - ms (IDENTICAL/arm -) |
+| algos | gru-clf | synthetic | Xq | - | 48.9 | 54.1 | - | torch-eager-fp32 22.7 ms (IDENTICAL/arm -); torch-compile-fp32 22.9 ms (IDENTICAL/arm -); torch-eager-bf16 27.6 ms (IDENTICAL/arm -); torch-compile-bf16 28.2 ms (IDENTICAL/arm -) |
 | algos | gru-clf | taxi-hourly | Xq | - | 48.8 | 54.0 | - | torch-eager-fp32 22.7 ms (IDENTICAL/arm -); torch-compile-fp32 22.9 ms (IDENTICAL/arm -); torch-eager-bf16 27.9 ms (IDENTICAL/arm -); torch-compile-bf16 28.3 ms (IDENTICAL/arm -) |
-| algos | gru-reg | synthetic | Xq | - | 24.5 | 27.1 | - | torch-compile-bf16 - ms (IDENTICAL/arm -); torch-compile-fp32 - ms (IDENTICAL/arm -); torch-eager-bf16 - ms (IDENTICAL/arm -); torch-eager-fp32 - ms (IDENTICAL/arm -) |
-| algos | gru-reg | taxi-hourly | Xq | - | 24.4 | 27.0 | - | torch-compile-bf16 - ms (IDENTICAL/arm -); torch-compile-fp32 - ms (IDENTICAL/arm -); torch-eager-bf16 - ms (IDENTICAL/arm -); torch-eager-fp32 - ms (IDENTICAL/arm -) |
+| algos | gru-reg | synthetic | Xq | - | 24.5 | 27.1 | - | torch-eager-fp32 21.6 ms (IDENTICAL/arm -); torch-compile-fp32 21.6 ms (IDENTICAL/arm -); torch-eager-bf16 27.6 ms (IDENTICAL/arm -); torch-compile-bf16 27.6 ms (IDENTICAL/arm -) |
+| algos | gru-reg | taxi-hourly | Xq | - | 24.4 | 27.0 | - | torch-eager-fp32 21.8 ms (IDENTICAL/arm -); torch-compile-fp32 21.7 ms (IDENTICAL/arm -); torch-eager-bf16 28.0 ms (IDENTICAL/arm -); torch-compile-bf16 27.3 ms (IDENTICAL/arm -) |
 | algos | huber | istella | Xq | - | 9.0 | 9.7 | - | sklearn-cpu 16.4 ms (IDENTICAL/arm 0.587) |
 | algos | huber | taxi | Xq | - | 1.5 | 1.7 | - | sklearn-cpu 1.0 ms (IDENTICAL/arm 1.792) |
 | algos | incremental-pca | istella | Xq | - | 23.4 | 24.9 | - | sklearn-cpu 8.2 ms (IDENTICAL/arm 3.027) |
@@ -1034,10 +1012,10 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | ridge-clf | taxi | Xq | - | 9.4 | 10.5 | - | sklearn-cpu 0.9 ms (IDENTICAL/arm 11.695) |
 | algos | ridge-cv | istella | Xq | - | - | - | - | sklearn-cpu 3.9 ms (IDENTICAL/arm -) |
 | algos | ridge-cv | taxi | Xq | - | - | - | - | sklearn-cpu 0.3 ms (IDENTICAL/arm -) |
-| algos | rnn-clf | synthetic | Xq | - | 22.4 | 24.4 | - | torch-compile-bf16 - ms (IDENTICAL/arm -); torch-compile-fp32 - ms (IDENTICAL/arm -); torch-eager-bf16 - ms (IDENTICAL/arm -); torch-eager-fp32 - ms (IDENTICAL/arm -) |
-| algos | rnn-clf | taxi-hourly | Xq | - | 22.4 | 24.6 | - | torch-compile-bf16 - ms (IDENTICAL/arm -); torch-compile-fp32 - ms (IDENTICAL/arm -); torch-eager-bf16 - ms (IDENTICAL/arm -); torch-eager-fp32 - ms (IDENTICAL/arm -) |
-| algos | rnn-reg | synthetic | Xq | - | 11.1 | 12.1 | - | torch-compile-bf16 - ms (IDENTICAL/arm -); torch-compile-fp32 - ms (IDENTICAL/arm -); torch-eager-bf16 - ms (IDENTICAL/arm -); torch-eager-fp32 - ms (IDENTICAL/arm -) |
-| algos | rnn-reg | taxi-hourly | Xq | - | 11.2 | 12.1 | - | torch-compile-bf16 - ms (IDENTICAL/arm -); torch-compile-fp32 - ms (IDENTICAL/arm -); torch-eager-bf16 - ms (IDENTICAL/arm -); torch-eager-fp32 - ms (IDENTICAL/arm -) |
+| algos | rnn-clf | synthetic | Xq | - | 22.4 | 24.4 | - | torch-eager-fp32 11.6 ms (IDENTICAL/arm -); torch-compile-fp32 12.8 ms (IDENTICAL/arm -); torch-eager-bf16 11.4 ms (IDENTICAL/arm -); torch-compile-bf16 11.2 ms (IDENTICAL/arm -) |
+| algos | rnn-clf | taxi-hourly | Xq | - | 22.4 | 24.6 | - | torch-eager-fp32 11.4 ms (IDENTICAL/arm -); torch-compile-fp32 11.5 ms (IDENTICAL/arm -); torch-eager-bf16 10.3 ms (IDENTICAL/arm -); torch-compile-bf16 10.8 ms (IDENTICAL/arm -) |
+| algos | rnn-reg | synthetic | Xq | - | 11.1 | 12.1 | - | torch-eager-fp32 12.7 ms (IDENTICAL/arm -); torch-compile-fp32 11.5 ms (IDENTICAL/arm -); torch-eager-bf16 10.6 ms (IDENTICAL/arm -); torch-compile-bf16 10.4 ms (IDENTICAL/arm -) |
+| algos | rnn-reg | taxi-hourly | Xq | - | 11.2 | 12.1 | - | torch-eager-fp32 12.7 ms (IDENTICAL/arm -); torch-compile-fp32 11.6 ms (IDENTICAL/arm -); torch-eager-bf16 10.6 ms (IDENTICAL/arm -); torch-compile-bf16 10.3 ms (IDENTICAL/arm -) |
 | algos | robust-scaler | istella | Xq | - | 80.3 | 64.2 | - | sklearn-cpu 19.7 ms (IDENTICAL/arm 3.261) |
 | algos | robust-scaler | taxi | Xq | - | 3.0 | 3.0 | - | sklearn-cpu 1.9 ms (IDENTICAL/arm 2.360) |
 | algos | sgd-clf | istella | Xq | - | - | - | - | sklearn-cpu 4.9 ms (IDENTICAL/arm -) |
@@ -5007,8 +4985,8 @@ race: done, driver rc 0, log `logs/neural.gemm-bf16.gaussian.shape-full.log`, ra
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 69.1 | 69.1..69.1 | 1 | - | - | 934.5 | - | max_rel_err_vs_fp64=1.155e-07 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-bf16 | torch | gpu | opponent | 14.8 | 14.8..14.8 | 1 | 4.653 | - | 1705.9 | 1032.7 | max_abs_diff_vs_ours=0.999023, max_rel_diff_vs_ours=0.002759, max_rel_err_vs_fp64=0.002759 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | 15.5 | 15.5..15.5 | 1 | 4.448 | - | 1865.5 | 1032.7 | max_abs_diff_vs_ours=0.999023, max_rel_diff_vs_ours=0.002759, max_rel_err_vs_fp64=0.002759 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 16.2 | 16.2..16.2 | 1 | 4.272 | - | 1708.8 | 1032.7 | max_rel_err_vs_fp64=0.002759 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:34Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 16.2 | 16.2..16.2 | 1 | 4.269 | - | 1866.5 | 1032.7 | max_rel_err_vs_fp64=0.002759 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:34Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -5049,10 +5027,10 @@ race: done, driver rc 0, log `logs/neural.gemm.gaussian.shape-full.log`, ran on 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 72.3 | 72.3..72.3 | 1 | - | - | 805.1 | - | max_rel_err_vs_fp64=2.399e-07 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | 15.6 | 15.6..15.6 | 1 | 4.637 | - | 1630.8 | 1024.5 | max_abs_diff_vs_ours=0.001038, max_rel_diff_vs_ours=2.866e-06, max_rel_err_vs_fp64=2.843e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 17.4 | 17.4..17.4 | 1 | 4.165 | - | 1789.5 | 1024.5 | max_abs_diff_vs_ours=0.001038, max_rel_diff_vs_ours=2.866e-06, max_rel_err_vs_fp64=2.843e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | 17.2 | 17.2..17.2 | 1 | 4.192 | - | 1645.6 | 1032.7 | max_abs_diff_vs_ours=1.358337, max_rel_diff_vs_ours=0.003751, max_rel_err_vs_fp64=0.003752 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | 11.5 | 11.5..11.5 | 1 | 6.303 | - | 1801.8 | 1032.7 | max_abs_diff_vs_ours=1.358337, max_rel_diff_vs_ours=0.003751, max_rel_err_vs_fp64=0.003752 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | 11.4 | 11.4..11.4 | 1 | 6.347 | - | 1626.8 | 1024.5 | max_rel_err_vs_fp64=2.843e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:23Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 12.5 | 12.5..12.5 | 1 | 5.771 | - | 1786.2 | 1024.5 | max_rel_err_vs_fp64=2.843e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:23Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 11.1 | 11.1..11.1 | 1 | 6.493 | - | 1646.2 | 1032.7 | max_rel_err_vs_fp64=0.003752 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:23Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 11.7 | 11.7..11.7 | 1 | 6.163 | - | 1798.0 | 1032.7 | max_rel_err_vs_fp64=0.003752 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:23Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -5074,10 +5052,10 @@ race: done, driver rc 0, log `logs/neural.lm-forward.bytes.shape-full.log`, ran 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 93.3 | 93.3..93.3 | 1 | - | - | 4784.0 | - | mean_nll=9.018733 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | 34.4 | 34.4..34.4 | 1 | 2.709 | - | 1633.0 | 1048.5 | max_abs_diff_vs_ours=1.252e-06, max_rel_diff_vs_ours=1.718e-06, mean_nll=9.018733 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 12.8 | 12.8..12.8 | 1 | 7.268 | - | 1795.1 | 1048.7 | max_abs_diff_vs_ours=1.296e-06, max_rel_diff_vs_ours=1.78e-06, mean_nll=9.018733 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | 17.7 | 17.7..17.7 | 1 | 5.279 | - | 1663.6 | 1080.7 | max_abs_diff_vs_ours=0.006710, max_rel_diff_vs_ours=0.009211, mean_nll=9.018650 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | 12.0 | 12.0..12.0 | 1 | 7.763 | - | 1796.1 | 1048.7 | max_abs_diff_vs_ours=0.006710, max_rel_diff_vs_ours=0.009211, mean_nll=9.018662 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | 27.3 | 27.3..27.3 | 1 | 3.421 | - | 1635.3 | 1048.5 | mean_nll=9.018733 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:19Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 17.9 | 17.9..17.9 | 1 | 5.224 | - | 1795.1 | 1048.7 | mean_nll=9.018733 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:19Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 17.8 | 17.8..17.8 | 1 | 5.241 | - | 1669.8 | 1080.7 | mean_nll=9.018650 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:19Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 11.9 | 11.9..11.9 | 1 | 7.827 | - | 1799.4 | 1048.7 | mean_nll=9.018662 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:19Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -5099,10 +5077,10 @@ race: done, driver rc 0, log `logs/neural.lm-train-step.bytes.shape-full.log`, r
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 184.9 | 184.9..184.9 | 1 | - | - | 4196.3 | - | loss_first_step=9.018733, loss_last_step=8.418446, steps=2 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | 77.9 | 77.9..77.9 | 1 | 2.372 | - | 3908.5 | 3226.7 | loss_first_abs_diff_vs_ours=0.000000, loss_first_step=9.018733, loss_last_abs_diff_vs_ours=1.907e-06, loss_last_step=8.418447, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 44.8 | 44.8..44.8 | 1 | 4.129 | - | 2952.2 | 2168.7 | loss_first_abs_diff_vs_ours=0.000000, loss_first_step=9.018733, loss_last_abs_diff_vs_ours=9.537e-07, loss_last_step=8.418447, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | 68.2 | 68.2..68.2 | 1 | 2.709 | - | 2909.4 | 2226.7 | loss_first_abs_diff_vs_ours=0.003240, loss_first_step=9.021973, loss_last_abs_diff_vs_ours=0.004139, loss_last_step=8.414307, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | 42.9 | 42.9..42.9 | 1 | 4.307 | - | 2968.4 | 2200.7 | loss_first_abs_diff_vs_ours=0.0002089, loss_first_step=9.018524, loss_last_abs_diff_vs_ours=0.002537, loss_last_step=8.415909, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | 84.3 | 84.3..84.3 | 1 | 2.192 | - | 3903.2 | 3226.7 | loss_first_step=9.018733, loss_last_step=8.418447, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:14Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 58.4 | 58.4..58.4 | 1 | 3.165 | - | 2926.4 | 2168.7 | loss_first_step=9.018733, loss_last_step=8.418447, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:14Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 69.0 | 69.0..69.0 | 1 | 2.678 | - | 2903.3 | 2226.7 | loss_first_step=9.021973, loss_last_step=8.414307, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:14Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 43.0 | 43.0..43.0 | 1 | 4.299 | - | 2958.3 | 2200.7 | loss_first_step=9.018524, loss_last_step=8.415848, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:14Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -5129,12 +5107,12 @@ race: done, driver rc 0, log `logs/neural.mamba1-forward.gaussian.shape-full.log
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 21.2 | 21.2..21.2 | 1 | - | - | 591.6 | - | - | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | 94.7 | 94.7..94.7 | 1 | 0.223 | - | 1741.3 | 1232.5 | max_abs_diff_vs_ours=2.384e-07, max_rel_diff_vs_ours=1.189e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | 100.4 | 100.4..100.4 | 1 | 0.211 | - | 1709.7 | 1200.7 | max_abs_diff_vs_ours=5.15e-05, max_rel_diff_vs_ours=2.568e-05 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-eager-fp32, torch-eager-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
+memory, torch-eager-fp32, torch-eager-bf16: host not sampled; GPU not sampled
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -5152,14 +5130,14 @@ race: done, driver rc 0, log `logs/neural.mamba2-forward.gaussian.shape-full.log
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 33.9 | 33.9..33.9 | 1 | - | - | 485.0 | - | - | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | 228.3 | 228.3..228.3 | 1 | 0.149 | - | 7750.2 | 7248.8 | max_abs_diff_vs_ours=2.027e-06, max_rel_diff_vs_ours=6.89e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 226.8 | 226.8..226.8 | 1 | 0.150 | - | 7850.9 | 7248.8 | max_abs_diff_vs_ours=2.027e-06, max_rel_diff_vs_ours=6.89e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | 189.7 | 189.7..189.7 | 1 | 0.179 | - | 6248.9 | 5744.8 | max_abs_diff_vs_ours=0.007544, max_rel_diff_vs_ours=0.002565 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | 152.9 | 152.9..152.9 | 1 | 0.222 | - | 6348.3 | 5744.8 | max_abs_diff_vs_ours=0.007544, max_rel_diff_vs_ours=0.002565 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host not sampled; GPU not sampled
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -5177,16 +5155,14 @@ race: done, driver rc 0, log `logs/neural.mamba3-forward.gaussian.shape-full.log
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 29.0 | 29.0..29.0 | 1 | - | - | 478.5 | - | - | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | 79.9 | 79.9..79.9 | 1 | 0.363 | - | 1637.9 | 1096.8 | max_abs_diff_vs_ours=8.345e-07, max_rel_diff_vs_ours=3.651e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "REFUSED: torch-compile-fp32 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/reduction_utils.h>\\n#include <c10/metal/utils) (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | 80.3 | 80.3..80.3 | 1 | 0.361 | - | 1641.9 | 1096.8 | max_abs_diff_vs_ours=0.002095, max_rel_diff_vs_ours=0.0009164 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "REFUSED: torch-compile-bf16 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/reduction_utils.h>\\n#include <c10/metal/utils) (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-eager-fp32, torch-eager-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
-
-memory, torch-compile-fp32, torch-compile-bf16: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host not sampled; GPU not sampled
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -5204,10 +5180,10 @@ race: done, driver rc 0, log `logs/neural.mlp-train-step.gaussian.shape-full.log
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 8.4 | 8.4..8.4 | 1 | - | - | 313.3 | - | loss_first_step=1.160401, loss_last_step=1.123361, steps=2 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | 4.1 | 4.1..4.1 | 1 | 2.028 | - | 516.6 | 18.7 | loss_first_abs_diff_vs_ours=3.576e-07, loss_first_step=1.160401, loss_last_abs_diff_vs_ours=2.384e-07, loss_last_step=1.123361, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 4.0 | 4.0..4.0 | 1 | 2.094 | - | 602.2 | 16.5 | loss_first_abs_diff_vs_ours=2.384e-07, loss_first_step=1.160401, loss_last_abs_diff_vs_ours=2.384e-07, loss_last_step=1.123361, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | 4.7 | 4.7..4.7 | 1 | 1.767 | - | 520.9 | 18.7 | loss_first_abs_diff_vs_ours=9.656e-05, loss_first_step=1.160498, loss_last_abs_diff_vs_ours=0.0001006, loss_last_step=1.123461, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | 4.3 | 4.3..4.3 | 1 | 1.936 | - | 601.7 | 16.7 | loss_first_abs_diff_vs_ours=9.656e-05, loss_first_step=1.160498, loss_last_abs_diff_vs_ours=0.0001006, loss_last_step=1.123461, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | 4.9 | 4.9..4.9 | 1 | 1.704 | - | 521.8 | 18.7 | loss_first_step=1.160401, loss_last_step=1.123361, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:31Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 5.2 | 5.2..5.2 | 1 | 1.605 | - | 597.9 | 16.5 | loss_first_step=1.160401, loss_last_step=1.123361, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:31Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 5.1 | 5.1..5.1 | 1 | 1.650 | - | 519.6 | 18.7 | loss_first_step=1.160498, loss_last_step=1.123461, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:31Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 4.2 | 4.2..4.2 | 1 | 2.005 | - | 602.7 | 16.7 | loss_first_step=1.160498, loss_last_step=1.123461, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:31Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -5234,16 +5210,14 @@ race: done, driver rc 0, log `logs/neural.samba-forward.bytes.shape-full.log`, r
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 55.8 | 55.8..55.8 | 1 | - | - | 717.7 | - | mean_nll=5.635910 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | 44.5 | 44.5..44.5 | 1 | 1.253 | - | 732.9 | 168.8 | max_abs_diff_vs_ours=2.503e-06, max_rel_diff_vs_ours=1.407e-06, mean_nll=5.635910 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "REFUSED: torch-compile-fp32 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/error.h>\\n#include <c10/metal/reduction_utils) (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | 115.3 | 115.3..115.3 | 1 | 0.483 | - | 734.7 | 168.8 | max_abs_diff_vs_ours=0.017546, max_rel_diff_vs_ours=0.009865, mean_nll=5.636059 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "REFUSED: torch-compile-bf16 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/error.h>\\n#include <c10/metal/reduction_utils) (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:27Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:27Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:27Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:27Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-eager-fp32, torch-eager-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
-
-memory, torch-compile-fp32, torch-compile-bf16: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host not sampled; GPU not sampled
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -5263,16 +5237,14 @@ race: done, driver rc 0, log `logs/neural.samba-train-step.bytes.shape-full.log`
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 339.0 | 339.0..339.0 | 1 | - | - | 1229.4 | - | loss_first_step=5.635910, loss_last_step=4.833934, steps=2 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | 106.6 | 106.6..106.6 | 1 | 3.180 | - | 1943.9 | 1322.8 | loss_first_abs_diff_vs_ours=4.768e-07, loss_first_step=5.635910, loss_last_abs_diff_vs_ours=0.000000, loss_last_step=4.833934, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "REFUSED: torch-compile-fp32 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/error.h>\\n#include <c10/metal/reduction_utils) (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | 106.3 | 106.3..106.3 | 1 | 3.190 | - | 1921.8 | 1295.9 | loss_first_abs_diff_vs_ours=9.632e-05, loss_first_step=5.636006, loss_last_abs_diff_vs_ours=0.0001612, loss_last_step=4.833773, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "REFUSED: torch-compile-bf16 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/error.h>\\n#include <c10/metal/reduction_utils) (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:26Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:26Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:26Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "FileNotFoundError(2, 'No such file or directory')", "event": "error", "stage": "ready"}) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:26Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-eager-fp32, torch-eager-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
-
-memory, torch-compile-fp32, torch-compile-bf16: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host not sampled; GPU not sampled
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -5296,14 +5268,14 @@ race: done, driver rc 0, log `logs/neural.transformer-forward.gaussian.shape-ful
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 14.1 | 14.1..14.1 | 1 | - | - | 523.4 | - | - | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-eager-fp32 | torch | gpu | opponent | 6.1 | 6.1..6.1 | 1 | 2.311 | - | 618.5 | 112.8 | max_abs_diff_vs_ours=4.768e-07, max_rel_diff_vs_ours=1.02e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | 5.1 | 5.1..5.1 | 1 | 2.787 | - | 1659.3 | 1064.5 | max_abs_diff_vs_ours=4.768e-07, max_rel_diff_vs_ours=1.02e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | 6.4 | 6.4..6.4 | 1 | 2.221 | - | 618.8 | 112.8 | max_abs_diff_vs_ours=0.001819, max_rel_diff_vs_ours=0.0003893 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | 4.7 | 4.7..4.7 | 1 | 2.995 | - | 639.5 | 40.7 | max_abs_diff_vs_ours=0.001819, max_rel_diff_vs_ours=0.0003893 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "SystemExit(\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "SystemExit(\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "SystemExit(\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "SystemExit(\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100) ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:09:25Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host not sampled; GPU not sampled
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -7408,14 +7380,14 @@ race: done, driver rc 0, log `logs/algos.cnn-clf.synthetic.rows-full.log`, ran o
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1106.2 | 1106.2..1106.2 | 1 | - | - | 1019.1 | - | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 1084.3 | 1084.3..1084.3 | 1 | - | - | 1017.7 | - | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T23:56:16Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T23:56:16Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T23:56:16Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T23:56:16Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
+| torch-eager-fp32 | torch | gpu | opponent | 289.5 | 289.5..289.5 | 1 | 3.820 | 3.745 | 1891.6 | 1034.8 | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:08:40Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 288.8 | 288.8..288.8 | 1 | 3.830 | 3.755 | 1953.9 | 1034.8 | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:08:40Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 295.1 | 295.1..295.1 | 1 | 3.748 | 3.674 | 1897.7 | 1042.8 | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:08:40Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 286.3 | 286.3..286.3 | 1 | 3.864 | 3.788 | 1993.9 | 1042.8 | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:08:40Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-compile-bf16, torch-compile-fp32, torch-eager-bf16, torch-eager-fp32: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
 
 settings: {'batch_size': 128, 'conv_channels': [8, 16], 'dampening': 0.0, 'input_shape': [1, 28, 28], 'kernel_size': 3, 'learning_rate': 0.01, 'max_iter': 2, 'momentum': 0.9, 'nesterov': False, 'optimizer': 'sgd', 'pool_size': 2, 'random_state': 7, 'shuffle': True, 'weight_decay': 0.0}. Rows: None. Timed: None.
 
@@ -7444,22 +7416,22 @@ Inference (each arm predicts with its own model from the fit rounds above):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | Xq | - | 29.6 | 29.6..29.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 | mojolearn FAST | Xq | - | 23.9 | 23.9..23.9 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
-| torch-compile-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-compile-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
+| torch-eager-fp32 | Xq | - | 1.8 | 1.8..1.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 1.9 | 1.9..1.9 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 1.6 | 1.6..1.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 1.6 | 1.6..1.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, ours: predict(Xq)(Xq)
 
 inference call, ours-fast: predict(Xq)(Xq)
 
-inference call, torch-compile-bf16: predict(Xq)(Xq)
+inference call, torch-eager-fp32: predict(Xq)(Xq)
 
 inference call, torch-compile-fp32: predict(Xq)(Xq)
 
 inference call, torch-eager-bf16: predict(Xq)(Xq)
 
-inference call, torch-eager-fp32: predict(Xq)(Xq)
+inference call, torch-compile-bf16: predict(Xq)(Xq)
 
 ### complement-nb / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
@@ -9750,14 +9722,14 @@ race: done, driver rc 0, log `logs/algos.gru-clf.synthetic.rows-full.log`, ran o
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1725.4 | 1725.4..1725.4 | 1 | - | - | 707.0 | - | accuracy=0.971842, logloss=0.065835 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 1653.0 | 1653.0..1653.0 | 1 | - | - | 716.3 | - | accuracy=0.971842, logloss=0.065835 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 1645.0082920200657, 'previous_quality': {'accuracy': 0.9718424479166666, 'logloss': 0.06583483284475074}, 'previous_status': 'ok', 'previous_hash': 'c6591bdab9db6bc7', 'baseline_ms': 1645.0082920200657, 'baseline_quality_text': 'accuracy=0.9718, logloss=0.06584', 'display_rounded': True}) |
-| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) ({'opponent_snapshot_sha256': '9a064b0c878de758e7bfb30c40101ed5e7444795f39527cb52f0e4f690fbdeeb', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/gpu-opponents/before-mps-metric-repair-board.json', 'finished': '2026-10-06T04:54:40Z', 'original_source': 'measured this run'}) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) ({'opponent_snapshot_sha256': '9a064b0c878de758e7bfb30c40101ed5e7444795f39527cb52f0e4f690fbdeeb', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/gpu-opponents/before-mps-metric-repair-board.json', 'finished': '2026-10-06T04:54:40Z', 'original_source': 'measured this run'}) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) ({'opponent_snapshot_sha256': '9a064b0c878de758e7bfb30c40101ed5e7444795f39527cb52f0e4f690fbdeeb', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/gpu-opponents/before-mps-metric-repair-board.json', 'finished': '2026-10-06T04:54:40Z', 'original_source': 'measured this run'}) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) ({'opponent_snapshot_sha256': '9a064b0c878de758e7bfb30c40101ed5e7444795f39527cb52f0e4f690fbdeeb', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/gpu-opponents/before-mps-metric-repair-board.json', 'finished': '2026-10-06T04:54:40Z', 'original_source': 'measured this run'}) |
+| torch-eager-fp32 | torch | gpu | opponent | 3162.4 | 3162.4..3162.4 | 1 | 0.546 | 0.523 | 1663.0 | 1114.7 | accuracy=0.971842 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:05:25Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 3173.4 | 3173.4..3173.4 | 1 | 0.544 | 0.521 | 1703.4 | 1114.7 | accuracy=0.971842 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:05:25Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 3352.5 | 3352.5..3352.5 | 1 | 0.515 | 0.493 | 1648.4 | 1106.7 | accuracy=0.971734 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:05:25Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 3411.1 | 3411.1..3411.1 | 1 | 0.506 | 0.485 | 1691.6 | 1106.7 | accuracy=0.971734 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:05:25Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
 
 settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
 
@@ -9781,10 +9753,10 @@ Inference (each arm predicts with its own model from the fit rounds above):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | Xq | - | 54.1 | 54.1..54.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 | mojolearn FAST | Xq | - | 48.9 | 48.9..48.9 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
-| torch-eager-fp32 | Xq | - | - | - | 0 | - | - | - | - | LIKE-FOR-LIKE-SPAN | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-compile-fp32 | Xq | - | - | - | 0 | - | - | - | - | LIKE-FOR-LIKE-SPAN | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-bf16 | Xq | - | - | - | 0 | - | - | - | - | LIKE-FOR-LIKE-SPAN | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-compile-bf16 | Xq | - | - | - | 0 | - | - | - | - | LIKE-FOR-LIKE-SPAN | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
+| torch-eager-fp32 | Xq | - | 22.7 | 22.7..22.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 22.9 | 22.9..22.9 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 27.6 | 27.6..27.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 28.2 | 28.2..28.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, ours: predict(Xq)(Xq)
 
@@ -9862,14 +9834,14 @@ race: done, driver rc 0, log `logs/algos.gru-reg.synthetic.rows-full.log`, ran o
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1720.5 | 1720.5..1720.5 | 1 | - | - | 697.5 | - | finite=True, r2=0.981946, rmse=0.155672 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 1629.0 | 1629.0..1629.0 | 1 | - | - | 700.1 | - | r2=0.981946, rmse=0.155672 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 1630.0470829883125, 'previous_quality': {'finite': True, 'r2': 0.9819458652389326, 'rmse': 0.15567234749138373}, 'previous_status': 'ok', 'previous_hash': '1f492f2063b73598', 'baseline_ms': 1630.0470829883125, 'baseline_quality_text': 'r2=0.9819, rmse=0.1557', 'display_rounded': True}) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:19:48Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:19:48Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:19:48Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-fp32 | torch | gpu | opponent | 3060.0 | 3060.0..3060.0 | 1 | 0.562 | 0.532 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True, 'replaced_status': 'REFUSED(error: {"error": "TypeError(\\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn\'t support float64. Please use float32 instead.\\")", "event": "error", "stage": "round 0"})'}) |
+| torch-eager-fp32 | torch | gpu | opponent | 3050.9 | 3050.9..3050.9 | 1 | 0.564 | 0.534 | 1651.5 | 1112.7 | finite=True, r2=0.981946, rmse=0.155672 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:06:27Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 3109.7 | 3109.7..3109.7 | 1 | 0.553 | 0.524 | 1707.9 | 1112.7 | finite=True, r2=0.981946, rmse=0.155672 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:06:27Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 3347.8 | 3347.8..3347.8 | 1 | 0.514 | 0.487 | 1641.4 | 1104.7 | finite=True, r2=0.981819, rmse=0.156218 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:06:27Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 3357.7 | 3357.7..3357.7 | 1 | 0.512 | 0.485 | 1690.5 | 1104.7 | finite=True, r2=0.981819, rmse=0.156218 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:06:27Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-compile-bf16, torch-compile-fp32, torch-eager-bf16, torch-eager-fp32: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
 
 settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
 
@@ -9893,22 +9865,22 @@ Inference (each arm predicts with its own model from the fit rounds above):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | Xq | - | 27.1 | 27.1..27.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 | mojolearn FAST | Xq | - | 24.5 | 24.5..24.5 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
-| torch-compile-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-compile-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
+| torch-eager-fp32 | Xq | - | 21.6 | 21.6..21.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 21.6 | 21.6..21.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 27.6 | 27.6..27.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 27.6 | 27.6..27.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, ours: predict(Xq)(Xq)
 
 inference call, ours-fast: predict(Xq)(Xq)
 
-inference call, torch-compile-bf16: predict(Xq)(Xq)
+inference call, torch-eager-fp32: predict(Xq)(Xq)
 
 inference call, torch-compile-fp32: predict(Xq)(Xq)
 
 inference call, torch-eager-bf16: predict(Xq)(Xq)
 
-inference call, torch-eager-fp32: predict(Xq)(Xq)
+inference call, torch-compile-bf16: predict(Xq)(Xq)
 
 ### gru-reg / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
@@ -9918,14 +9890,14 @@ race: done, driver rc 0, log `logs/algos.gru-reg.taxi-hourly.rows-full.log`, ran
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1726.9 | 1726.9..1726.9 | 1 | - | - | 707.9 | - | finite=True, r2=0.748219, rmse=0.544182 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 1627.0 | 1627.0..1627.0 | 1 | - | - | 708.4 | - | r2=0.748219, rmse=0.544182 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 1643.3527500194032, 'previous_quality': {'finite': True, 'r2': 0.7482189133535606, 'rmse': 0.5441818232814171}, 'previous_status': 'ok', 'previous_hash': 'd279df9e8083fcc4', 'baseline_ms': 1643.3527500194032, 'baseline_quality_text': 'r2=0.7482, rmse=0.5442', 'display_rounded': True}) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:19:21Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:19:21Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:19:21Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-fp32 | torch | gpu | opponent | 3072.0 | 3072.0..3072.0 | 1 | 0.562 | 0.530 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True, 'replaced_status': 'REFUSED(error: {"error": "TypeError(\\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn\'t support float64. Please use float32 instead.\\")", "event": "error", "stage": "round 0"})'}) |
+| torch-eager-fp32 | torch | gpu | opponent | 3061.3 | 3061.3..3061.3 | 1 | 0.564 | 0.531 | 1657.0 | 1112.7 | finite=True, r2=0.748219, rmse=0.544182 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:05:56Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 3089.4 | 3089.4..3089.4 | 1 | 0.559 | 0.527 | 1706.0 | 1112.7 | finite=True, r2=0.748219, rmse=0.544182 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:05:56Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 3284.0 | 3284.0..3284.0 | 1 | 0.526 | 0.495 | 1641.8 | 1104.7 | finite=True, r2=0.748254, rmse=0.544143 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:05:56Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 3367.8 | 3367.8..3367.8 | 1 | 0.513 | 0.483 | 1695.1 | 1104.7 | finite=True, r2=0.748254, rmse=0.544143 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:05:56Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-compile-bf16, torch-compile-fp32, torch-eager-bf16, torch-eager-fp32: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
 
 settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
 
@@ -9949,22 +9921,22 @@ Inference (each arm predicts with its own model from the fit rounds above):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | Xq | - | 27.0 | 27.0..27.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 | mojolearn FAST | Xq | - | 24.4 | 24.4..24.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
-| torch-compile-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-compile-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
+| torch-eager-fp32 | Xq | - | 21.8 | 21.8..21.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 21.7 | 21.7..21.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 28.0 | 28.0..28.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 27.3 | 27.3..27.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, ours: predict(Xq)(Xq)
 
 inference call, ours-fast: predict(Xq)(Xq)
 
-inference call, torch-compile-bf16: predict(Xq)(Xq)
+inference call, torch-eager-fp32: predict(Xq)(Xq)
 
 inference call, torch-compile-fp32: predict(Xq)(Xq)
 
 inference call, torch-eager-bf16: predict(Xq)(Xq)
 
-inference call, torch-eager-fp32: predict(Xq)(Xq)
+inference call, torch-compile-bf16: predict(Xq)(Xq)
 
 ### huber / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
@@ -16942,14 +16914,14 @@ race: done, driver rc 0, log `logs/algos.rnn-clf.synthetic.rows-full.log`, ran o
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1567.6 | 1567.6..1567.6 | 1 | - | - | 548.0 | - | accuracy=0.953559, logloss=0.103698 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 1483.0 | 1483.0..1483.0 | 1 | - | - | 551.8 | - | accuracy=0.953559, logloss=0.103698 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 1568.4316249971744, 'previous_quality': {'accuracy': 0.9535590277777778, 'logloss': 0.10369845061541666}, 'previous_status': 'ok', 'previous_hash': 'ff152b21c7f07ed7', 'baseline_ms': 1568.4316249971744, 'baseline_quality_text': 'accuracy=0.9536, logloss=0.1037', 'display_rounded': True}) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:20:31Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:20:31Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:20:31Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-fp32 | torch | gpu | opponent | 2088.0 | 2088.0..2088.0 | 1 | 0.751 | 0.710 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True, 'replaced_status': 'REFUSED(error: {"error": "TypeError(\\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn\'t support float64. Please use float32 instead.\\")", "event": "error", "stage": "round 0"})'}) |
+| torch-eager-fp32 | torch | gpu | opponent | 2083.0 | 2083.0..2083.0 | 1 | 0.753 | 0.712 | 1648.1 | 1106.7 | accuracy=0.953559 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:12Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 2112.1 | 2112.1..2112.1 | 1 | 0.742 | 0.702 | 1697.4 | 1106.7 | accuracy=0.953559 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:12Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 2174.0 | 2174.0..2174.0 | 1 | 0.721 | 0.682 | 599.1 | 66.7 | accuracy=0.953830 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:12Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 2189.6 | 2189.6..2189.6 | 1 | 0.716 | 0.677 | 646.3 | 66.7 | accuracy=0.953830 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:12Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-compile-bf16, torch-compile-fp32, torch-eager-bf16, torch-eager-fp32: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
 
 settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'nonlinearity': 'tanh', 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
 
@@ -16973,22 +16945,22 @@ Inference (each arm predicts with its own model from the fit rounds above):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | Xq | - | 24.4 | 24.4..24.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 | mojolearn FAST | Xq | - | 22.4 | 22.4..22.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
-| torch-compile-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-compile-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
+| torch-eager-fp32 | Xq | - | 11.6 | 11.6..11.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 12.8 | 12.8..12.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 11.4 | 11.4..11.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 11.2 | 11.2..11.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, ours: predict(Xq)(Xq)
 
 inference call, ours-fast: predict(Xq)(Xq)
 
-inference call, torch-compile-bf16: predict(Xq)(Xq)
+inference call, torch-eager-fp32: predict(Xq)(Xq)
 
 inference call, torch-compile-fp32: predict(Xq)(Xq)
 
 inference call, torch-eager-bf16: predict(Xq)(Xq)
 
-inference call, torch-eager-fp32: predict(Xq)(Xq)
+inference call, torch-compile-bf16: predict(Xq)(Xq)
 
 ### rnn-clf / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
@@ -16998,14 +16970,14 @@ race: done, driver rc 0, log `logs/algos.rnn-clf.taxi-hourly.rows-full.log`, ran
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1528.6 | 1528.6..1528.6 | 1 | - | - | 540.6 | - | accuracy=0.868056, logloss=0.304864 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 1484.0 | 1484.0..1484.0 | 1 | - | - | 550.8 | - | accuracy=0.868056, logloss=0.304864 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 1484.9352499877568, 'previous_quality': {'accuracy': 0.8680555555555556, 'logloss': 0.3048635237065171}, 'previous_status': 'ok', 'previous_hash': 'd425d2886c7b3c39', 'baseline_ms': 1484.9352499877568, 'baseline_quality_text': 'accuracy=0.8681, logloss=0.3049', 'display_rounded': True}) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:20:10Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:20:10Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:20:10Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-fp32 | torch | gpu | opponent | 2087.0 | 2087.0..2087.0 | 1 | 0.732 | 0.711 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True, 'replaced_status': 'REFUSED(error: {"error": "TypeError(\\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn\'t support float64. Please use float32 instead.\\")", "event": "error", "stage": "round 0"})'}) |
+| torch-eager-fp32 | torch | gpu | opponent | 2090.5 | 2090.5..2090.5 | 1 | 0.731 | 0.710 | 1650.9 | 1106.7 | accuracy=0.868056 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:06:50Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 2101.0 | 2101.0..2101.0 | 1 | 0.728 | 0.706 | 1697.2 | 1106.7 | accuracy=0.868056 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:06:50Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 2171.2 | 2171.2..2171.2 | 1 | 0.704 | 0.683 | 592.5 | 66.7 | accuracy=0.867947 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:06:50Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 2189.8 | 2189.8..2189.8 | 1 | 0.698 | 0.678 | 650.9 | 66.7 | accuracy=0.867947 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:06:50Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-compile-bf16, torch-compile-fp32, torch-eager-bf16, torch-eager-fp32: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
 
 settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'nonlinearity': 'tanh', 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
 
@@ -17029,22 +17001,22 @@ Inference (each arm predicts with its own model from the fit rounds above):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | Xq | - | 24.6 | 24.6..24.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 | mojolearn FAST | Xq | - | 22.4 | 22.4..22.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
-| torch-compile-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-compile-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
+| torch-eager-fp32 | Xq | - | 11.4 | 11.4..11.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 11.5 | 11.5..11.5 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 10.3 | 10.3..10.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 10.8 | 10.8..10.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, ours: predict(Xq)(Xq)
 
 inference call, ours-fast: predict(Xq)(Xq)
 
-inference call, torch-compile-bf16: predict(Xq)(Xq)
+inference call, torch-eager-fp32: predict(Xq)(Xq)
 
 inference call, torch-compile-fp32: predict(Xq)(Xq)
 
 inference call, torch-eager-bf16: predict(Xq)(Xq)
 
-inference call, torch-eager-fp32: predict(Xq)(Xq)
+inference call, torch-compile-bf16: predict(Xq)(Xq)
 
 ### rnn-reg / synthetic (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
@@ -17054,14 +17026,14 @@ race: done, driver rc 0, log `logs/algos.rnn-reg.synthetic.rows-full.log`, ran o
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1539.5 | 1539.5..1539.5 | 1 | - | - | 538.0 | - | finite=True, r2=0.977348, rmse=0.174374 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 1564.0 | 1564.0..1564.0 | 1 | - | - | 539.2 | - | r2=0.977348, rmse=0.174374 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 1497.1019999939017, 'previous_quality': {'finite': True, 'r2': 0.977347569990831, 'rmse': 0.17437351945148008}, 'previous_status': 'ok', 'previous_hash': '324e3f947df95de1', 'baseline_ms': 1497.1019999939017, 'baseline_quality_text': 'r2=0.9774, rmse=0.1744', 'display_rounded': True}) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:21:13Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:21:13Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:21:13Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-fp32 | torch | gpu | opponent | 2037.0 | 2037.0..2037.0 | 1 | 0.756 | 0.768 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True, 'replaced_status': 'REFUSED(error: {"error": "TypeError(\\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn\'t support float64. Please use float32 instead.\\")", "event": "error", "stage": "round 0"})'}) |
+| torch-eager-fp32 | torch | gpu | opponent | 2056.7 | 2056.7..2056.7 | 1 | 0.749 | 0.760 | 1638.7 | 1104.7 | finite=True, r2=0.977348, rmse=0.174374 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:57Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 2065.2 | 2065.2..2065.2 | 1 | 0.745 | 0.757 | 1693.8 | 1104.7 | finite=True, r2=0.977348, rmse=0.174374 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:57Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 2122.8 | 2122.8..2122.8 | 1 | 0.725 | 0.737 | 593.9 | 64.7 | finite=True, r2=0.977309, rmse=0.174521 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:57Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 2154.8 | 2154.8..2154.8 | 1 | 0.714 | 0.726 | 644.5 | 64.7 | finite=True, r2=0.977309, rmse=0.174521 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:57Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-compile-bf16, torch-compile-fp32, torch-eager-bf16, torch-eager-fp32: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
 
 settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'nonlinearity': 'tanh', 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
 
@@ -17085,22 +17057,22 @@ Inference (each arm predicts with its own model from the fit rounds above):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | Xq | - | 12.1 | 12.1..12.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 | mojolearn FAST | Xq | - | 11.1 | 11.1..11.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
-| torch-compile-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-compile-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
+| torch-eager-fp32 | Xq | - | 12.7 | 12.7..12.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 11.5 | 11.5..11.5 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 10.6 | 10.6..10.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 10.4 | 10.4..10.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, ours: predict(Xq)(Xq)
 
 inference call, ours-fast: predict(Xq)(Xq)
 
-inference call, torch-compile-bf16: predict(Xq)(Xq)
+inference call, torch-eager-fp32: predict(Xq)(Xq)
 
 inference call, torch-compile-fp32: predict(Xq)(Xq)
 
 inference call, torch-eager-bf16: predict(Xq)(Xq)
 
-inference call, torch-eager-fp32: predict(Xq)(Xq)
+inference call, torch-compile-bf16: predict(Xq)(Xq)
 
 ### rnn-reg / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
@@ -17110,14 +17082,14 @@ race: done, driver rc 0, log `logs/algos.rnn-reg.taxi-hourly.rows-full.log`, ran
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1571.1 | 1571.1..1571.1 | 1 | - | - | 546.7 | - | finite=True, r2=0.738796, rmse=0.554271 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 1560.0 | 1560.0..1560.0 | 1 | - | - | 545.6 | - | r2=0.738796, rmse=0.554271 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 1571.5006670216098, 'previous_quality': {'finite': True, 'r2': 0.7387958603223908, 'rmse': 0.55427144788308}, 'previous_status': 'ok', 'previous_hash': '532253325a0a8cf7', 'baseline_ms': 1571.5006670216098, 'baseline_quality_text': 'r2=0.7388, rmse=0.5543', 'display_rounded': True}) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:20:52Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:20:52Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) (stored (measured 2026-09-30T22:20:52Z on ip-172-31-43-215.ec2.internal, gpu (Apple M3 Ultra))) |
-| torch-eager-fp32 | torch | gpu | opponent | 2049.0 | 2049.0..2049.0 | 1 | 0.767 | 0.761 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True, 'replaced_status': 'REFUSED(error: {"error": "TypeError(\\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn\'t support float64. Please use float32 instead.\\")", "event": "error", "stage": "round 0"})'}) |
+| torch-eager-fp32 | torch | gpu | opponent | 2050.2 | 2050.2..2050.2 | 1 | 0.766 | 0.761 | 1640.1 | 1104.7 | finite=True, r2=0.738796, rmse=0.554271 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:34Z', 'original_source': 'measured this run'}) |
+| torch-compile-fp32 | torch | gpu | opponent | 2051.0 | 2051.0..2051.0 | 1 | 0.766 | 0.761 | 1685.7 | 1104.7 | finite=True, r2=0.738796, rmse=0.554271 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:34Z', 'original_source': 'measured this run'}) |
+| torch-eager-bf16 | torch | gpu | opponent | 2155.7 | 2155.7..2155.7 | 1 | 0.729 | 0.724 | 596.5 | 64.7 | finite=True, r2=0.738830, rmse=0.554235 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:34Z', 'original_source': 'measured this run'}) |
+| torch-compile-bf16 | torch | gpu | opponent | 2149.9 | 2149.9..2149.9 | 1 | 0.731 | 0.726 | 647.8 | 64.7 | finite=True, r2=0.738830, rmse=0.554235 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'd0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json', 'finished': '2026-10-06T05:07:34Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, torch-compile-bf16, torch-compile-fp32, torch-eager-bf16, torch-eager-fp32: host not sampled; GPU not sampled
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)
 
 settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'nonlinearity': 'tanh', 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
 
@@ -17141,22 +17113,22 @@ Inference (each arm predicts with its own model from the fit rounds above):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | Xq | - | 12.1 | 12.1..12.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 | mojolearn FAST | Xq | - | 11.2 | 11.2..11.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
-| torch-compile-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-compile-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-bf16 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
-| torch-eager-fp32 | Xq | - | - | - | 0 | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "TypeError(\"Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.\")", "event": "error", "stage": "round 0"}) |
+| torch-eager-fp32 | Xq | - | 12.7 | 12.7..12.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 11.6 | 11.6..11.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 10.6 | 10.6..10.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 10.3 | 10.3..10.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, ours: predict(Xq)(Xq)
 
 inference call, ours-fast: predict(Xq)(Xq)
 
-inference call, torch-compile-bf16: predict(Xq)(Xq)
+inference call, torch-eager-fp32: predict(Xq)(Xq)
 
 inference call, torch-compile-fp32: predict(Xq)(Xq)
 
 inference call, torch-eager-bf16: predict(Xq)(Xq)
 
-inference call, torch-eager-fp32: predict(Xq)(Xq)
+inference call, torch-compile-bf16: predict(Xq)(Xq)
 
 ### robust-scaler / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
