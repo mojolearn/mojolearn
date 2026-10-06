@@ -38849,6 +38849,1016 @@
       "stored_arms": [],
       "stored_now": 1,
       "wall_s": 29.5
+    },
+    "classical/dbscan/istella/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 643.7330543994904
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "7494ce8e17368282",
+          "hash_stable": true,
+          "lane": "dbscan",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 73482.08756372333,
+          "median_ms": 73482.08756372333,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 1272.0,
+            "peak_host_mb": 2599.3,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 1272.0,
+            "warmup_host_mb": 2599.2
+          },
+          "min_ms": 73482.08756372333,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "algorithm": "brute",
+              "eps": 3.0,
+              "metric": "euclidean",
+              "min_samples": 2,
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 1272.0,
+          "peak_host_mb": 2599.3,
+          "quality": {
+            "n_clusters": 40131,
+            "noise_fraction": 0.219391,
+            "rows": 1000000
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "dbscan",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "DBSCAN",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "dbscan_eps_min_samples": "eps=3, min_samples=2 (cuML benchmark DBSCAN)",
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "1000000x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            73482.08756372333
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 71470.7174114883
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "dbscan",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T05:35:04Z",
+      "host": {
+        "hostname": "24a11adce16e",
+        "pod_id": null
+      },
+      "id": "classical/dbscan/istella/rows=full",
+      "infer_cells": [],
+      "lane": "dbscan",
+      "lane_config": {
+        "mismatches": [
+          "seed: no arm has a seed argument (deterministic)",
+          "algorithm (an exact neighbor search on every arm, results unchanged): ours 'rbc' (its default), scikit-learn 'brute' (the cuML benchmark's cpu_args; it has no 'rbc'), cuml-gpu 'brute', cuml-gpu-rbc 'rbc'",
+          "leaf_size=30 and n_jobs=-1: scikit-learn only"
+        ],
+        "params": "eps=3, min_samples=2 (the cuML benchmark's DBSCAN) on every arm; metric='euclidean'",
+        "rows": "dbscan block: 1,000,000 rows, standardized",
+        "timed": "fit"
+      },
+      "log": "logs/classical.dbscan.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "algorithm": "brute",
+              "eps": 3.0,
+              "metric": "euclidean",
+              "min_samples": 2,
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "dbscan",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/dbscan-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T05:32:33Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 151.0
+    },
+    "classical/hdbscan/istella/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 92.66490489244461
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "53d70b2685220b45",
+          "hash_stable": true,
+          "lane": "hdbscan",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 899.7132051736116,
+          "median_ms": 899.7132051736116,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 526.0,
+            "peak_host_mb": 1866.3,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 522.0,
+            "warmup_host_mb": 1864.6
+          },
+          "min_ms": 899.7132051736116,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "allow_single_cluster": false,
+              "alpha": 1.0,
+              "cluster_selection_epsilon": 0.0,
+              "cluster_selection_method": "eom",
+              "max_cluster_size": 0,
+              "metric": "euclidean",
+              "min_cluster_size": 100,
+              "min_samples": 10,
+              "p": null,
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 526.0,
+          "peak_host_mb": 1866.3,
+          "quality": {
+            "n_clusters": 53,
+            "noise_fraction": 0.25628,
+            "rows": 100000
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "dbscan",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "HDBSCAN",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "1000000x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            899.7132051736116
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1136.3727897405624
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "hdbscan",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T05:35:11Z",
+      "host": {
+        "hostname": "24a11adce16e",
+        "pod_id": null
+      },
+      "id": "classical/hdbscan/istella/rows=full",
+      "infer_cells": [],
+      "lane": "hdbscan",
+      "lane_config": {
+        "mismatches": [
+          "seed: no arm has a seed argument (deterministic)",
+          "max_cluster_size: ours and cuML 0, scikit-learn None (both mean no limit)",
+          "min_samples: ours and cuML 10, scikit-learn 11. The SAME k-th neighbour: cuML's runner.h:68-80 (ours transcribes it) runs the k-NN at min_samples + 1 including the point itself; scikit-learn's kneighbors(X, min_samples) counts the point itself (its HDBSCAN Notes say so). tools/bench_board_params.py maps both to one canonical value",
+          "scikit-learn algorithm='auto', leaf_size=40, n_jobs=-1: its own; cuML build_algo at its default"
+        ],
+        "params": "min_samples=10 (scikit-learn 11: the same core distance, the 10th neighbour besides the point), min_cluster_size=100, metric='euclidean', cluster_selection_method='eom', cluster_selection_epsilon=0.0, alpha=1.0, allow_single_cluster=False",
+        "rows": "the dbscan block's first 100,000 rows",
+        "timed": "fit"
+      },
+      "log": "logs/classical.hdbscan.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "allow_single_cluster": false,
+              "alpha": 1.0,
+              "cluster_selection_epsilon": 0.0,
+              "cluster_selection_method": "eom",
+              "max_cluster_size": 0,
+              "metric": "euclidean",
+              "min_cluster_size": 100,
+              "min_samples": 10,
+              "p": null,
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "hdbscan",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/hdbscan-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T05:35:04Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 7.3
+    },
+    "classical/kde/istella/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": true,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 93.06863136589527
+            },
+            "span_asymmetry": [
+              "fit_before_its_clock"
+            ]
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "6c95cdadfc507b40",
+          "hash_stable": true,
+          "lane": "kde",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 6.572028622031212,
+          "median_ms": 6.572028622031212,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 514.0,
+            "peak_host_mb": 1001.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 514.0,
+            "warmup_host_mb": 1001.0
+          },
+          "min_ms": 6.572028622031212,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "bandwidth": 1.0,
+              "kernel": "gaussian",
+              "metric": "euclidean",
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 514.0,
+          "peak_host_mb": 1001.0,
+          "quality": {
+            "mean_log_likelihood": -222.27058193206787,
+            "rows_without_density": 0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "kde",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "KernelDensity",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "100000x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            6.572028622031212
+          ],
+          "verdict": "SPAN-ASYMMETRIC(fit_before_its_clock)",
+          "warmup_ms": 55.49904890358448
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "kde",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T05:35:15Z",
+      "host": {
+        "hostname": "24a11adce16e",
+        "pod_id": null
+      },
+      "id": "classical/kde/istella/rows=full",
+      "infer_cells": [],
+      "lane": "kde",
+      "lane_config": {
+        "mismatches": [
+          "seed: no arm has a seed argument (exact density)",
+          "cuML has no atol, rtol, algorithm, leaf_size or breadth_first (exact brute force)"
+        ],
+        "params": "bandwidth=1.0, kernel='gaussian' (the cuML benchmark's KernelDensity), metric='euclidean' on every arm; ours and scikit-learn atol=0, rtol=0, algorithm='auto', leaf_size=40, breadth_first=True",
+        "rows": "kde block: 100,000 fit rows, 2,000 queries, standardized",
+        "timed": "score_samples; the fit is before the clock on every arm"
+      },
+      "log": "logs/classical.kde.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "bandwidth": 1.0,
+              "kernel": "gaussian",
+              "metric": "euclidean",
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "kde",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/kde-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T05:35:11Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 3.8
+    },
+    "classical/kmeans/istella/rows=full": {
+      "arms": [
+        "cuml-gpu",
+        "torch-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 1273.1867898255587
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "b6e13b97d032f910",
+          "hash_stable": true,
+          "lane": "kmeans",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 509.0036205947399,
+          "median_ms": 509.0036205947399,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 2154.0,
+            "peak_host_mb": 4957.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 2154.0,
+            "warmup_host_mb": 4957.4
+          },
+          "min_ms": 509.0036205947399,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "init": "k-means++",
+              "max_iter": 300,
+              "n_clusters": 8,
+              "n_init": 1,
+              "oversampling_factor": 0.0,
+              "seed": 7,
+              "tol": 1e-07
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 2154.0,
+          "peak_host_mb": 4957.5,
+          "quality": {
+            "inertia": 6.11068946364203e+17,
+            "n_iter": 21
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "KMeans",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "2043304x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            509.0036205947399
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 571.8666110187769
+        },
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 75.46690665185452
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "f14545477e4ac4af",
+          "hash_stable": true,
+          "lane": "kmeans",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 849.0203656256199,
+          "median_ms": 849.0203656256199,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3468.9,
+            "peak_host_mb": 3162.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3445.2,
+            "warmup_host_mb": 3162.5
+          },
+          "min_ms": 849.0203656256199,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "init": "k-means++",
+              "max_iter": 300,
+              "metric": "euclidean",
+              "n_clusters": 8,
+              "n_init": 1,
+              "seed": 7,
+              "tol": 1e-07
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3468.9,
+          "peak_host_mb": 3162.6,
+          "quality": {
+            "inertia": 5.991151883685576e+17,
+            "n_iter": 55
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "KMeans",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "2043304x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            849.0203656256199
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1239.7470697760582
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "kmeans",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "cuml-gpu,torch-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--infer"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T05:35:34Z",
+      "host": {
+        "hostname": "24a11adce16e",
+        "pod_id": null
+      },
+      "id": "classical/kmeans/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "cuml KMeans.predict(Xq on the device, output_type cupy); Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 1273.1867898255587
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 302.52950824797153
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "bf7160ca86f26e1a",
+          "hash_stable": true,
+          "lane": "kmeans",
+          "library": "cuml",
+          "max_ms": 5.444688722491264,
+          "median_ms": 5.444688722491264,
+          "memory": {},
+          "min_ms": 5.444688722491264,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "eval_inertia": 1.4424317130879248e+17,
+            "label_agreement_own_centers": 1.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "KMeans",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            5.444688722491264
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 13.13815638422966
+        },
+        {
+          "arm": "torch-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch chunked addmm(||c||^2, Xq, c.T, alpha -2).argmin over the fitted centers; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 75.46690665185452
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 19.623732194304466
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "a481fe3fa51daa50",
+          "hash_stable": true,
+          "lane": "kmeans",
+          "library": "torch",
+          "max_ms": 1.1746790260076523,
+          "median_ms": 1.1746790260076523,
+          "memory": {},
+          "min_ms": 1.1746790260076523,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "eval_inertia": 1.4022726161162272e+17,
+            "label_agreement_own_centers": 1.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "KMeans",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            1.1746790260076523
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1.1864099651575089
+        }
+      ],
+      "lane": "kmeans",
+      "lane_config": {
+        "mismatches": [
+          "k-means++: each library draws its own start from its own generator seeded 7, so the starts differ; scikit-learn greedy k-means++ (2 + log k candidates per center), ours and cuML the sequential k-means++ of cuML (oversampling_factor=0), torch-gpu scikit-learn's greedy rule written out",
+          "tol=1e-7 on ours, scikit-learn and cuML (ours and cuML refuse 0); each library applies it through its own convergence test; torch-gpu stops by scikit-learn's (center shift <= tol x mean feature variance). n_iter is in every quality cell",
+          "algorithm: scikit-learn algorithm='lloyd'; ours and cuML have no such parameter (Lloyd); torch-gpu is written as Lloyd"
+        ],
+        "params": "n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic sequential seeding), tol=1e-7, metric='euclidean', Lloyd; seed 7 (ours, scikit-learn and cuML random_state=7, torch a generator seeded 7)",
+        "rows": "big block: 4,000,000 taxi rows or the Istella-S train split, raw",
+        "timed": "fit (the k-means++ seeding included on every arm)"
+      },
+      "log": "logs/classical.kmeans.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "init": "k-means++",
+              "max_iter": 300,
+              "n_clusters": 8,
+              "n_init": 1,
+              "oversampling_factor": 0.0,
+              "seed": 7,
+              "tol": 1e-07
+            },
+            "source": "get_params"
+          },
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "init": "k-means++",
+              "max_iter": 300,
+              "metric": "euclidean",
+              "n_clusters": 8,
+              "n_init": 1,
+              "seed": 7,
+              "tol": 1e-07
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-gpu",
+            "ours": "k-means++",
+            "param": "init",
+            "same": true,
+            "theirs": "k-means++"
+          },
+          {
+            "arm": "torch-gpu",
+            "ours": 300,
+            "param": "max_iter",
+            "same": true,
+            "theirs": 300
+          },
+          {
+            "arm": "torch-gpu",
+            "ours": 8,
+            "param": "n_clusters",
+            "same": true,
+            "theirs": 8
+          },
+          {
+            "arm": "torch-gpu",
+            "ours": 1,
+            "param": "n_init",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-gpu",
+            "ours": 1e-07,
+            "param": "tol",
+            "same": true,
+            "theirs": 1e-07
+          }
+        ],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "kmeans",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/kmeans-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T05:35:15Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 18.9
     }
   },
   "schema": "mojolearn-bench-board/1",
@@ -39042,5 +40052,5 @@
       "wall_s": 5.7
     }
   ],
-  "updated": "2026-10-06T05:32:33Z"
+  "updated": "2026-10-06T05:35:34Z"
 }
