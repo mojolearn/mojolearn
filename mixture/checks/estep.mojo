@@ -1077,6 +1077,11 @@ def mahal_stacked_kernel(
 # 32769/9: candidate/incumbent time ratios AMD 1.138/1.082/1.048 and
 # NVIDIA L40S 1.054/2.058/1.127. This enables the byte-bounded E-step
 # projection schedule below; IDENTICAL cannot select FAST fused E-step.
+# Combined component+center-pair arm, same freeze/cases: AMD ratios
+# 1.204/1.190/1.196 (all LOSS), NVIDIA 1.648/1.632/0.930 (two losses,
+# one scoped WIN at 32769/9). Both schedules are enabled in this bundle;
+# it does not isolate either toggle. AMD regressions and mixed NVIDIA
+# outcomes reject the combined arm; both unpromoted switches stay OFF.
 # Each binary used one excluded same-context fit and one scored fit; all
 # recorded converged=True and rc=0. Runtime batch-width counters were not
 # emitted. Prior identity evidence reused; no new identity/quality validation.

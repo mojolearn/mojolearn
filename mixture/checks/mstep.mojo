@@ -592,10 +592,16 @@ def means_divide_kernel(
 # IDENTICAL has no FAST Gram path, so the source guard admits pair staging.
 # No runtime pair counter was emitted. One excluded same-context fit and one
 # scored fit per binary; all recorded converged=True and rc=0. Prior identity
-# evidence reused without revalidation. Remains OFF: no measured improvement,
-# and representative synthetic fits do not qualify full-board promotion.
+# evidence reused without revalidation. Center-pair alone remains OFF.
+# Combined component+center-pair, same freeze/cases: AMD candidate/incumbent
+# 1.204/1.190/1.196 (all LOSS), NVIDIA 1.648/1.632/0.930 (two losses,
+# one scoped WIN at 32769/9). This enables both admitted schedules; it is
+# bundle evidence, not an isolated-toggle comparison. Both switches remain
+# OFF because AMD regresses and NVIDIA is mixed; synthetic fits also lack
+# full-board qualification. All combined executions converged=True, rc=0,
+# with the same one excluded warmup/one score protocol.
 # Existing fused-Cholesky/one-drain defaults are unchanged; their rollback
-# arms and the combined component+center arm have no rows in this snapshot.
+# arms have no rows in this snapshot.
 # Evidence: experiments/performance_ideas/measurements/20261006/index.json.
 comptime GMM_CENTER_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GMM_CENTER_PAIR"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime GMM_CENTER_PAIR_MAX_CELLS = 1 << 20  # four Float32 planes <=16 MiB
