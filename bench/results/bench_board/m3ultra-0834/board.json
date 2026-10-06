@@ -349055,26 +349055,51 @@
     },
     {
      "arm": "torch-eager-fp32",
-     "comparability": {},
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
      "dataset": "gaussian",
      "device": "gpu",
+     "device_name": "Apple MPS",
      "family": "neural",
-     "hash": null,
+     "hash": "a6774ed78fb0522e",
      "hash_stable": null,
      "lane": "mamba1-forward",
      "library": "torch",
-     "max_ms": null,
-     "median_ms": null,
-     "memory": {},
-     "min_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 93.26816600514576,
+     "median_ms": 93.26816600514576,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 1232.5,
+      "peak_host_mb": 1742.2,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 1232.5,
+      "warmup_host_mb": 1738.6
+     },
+     "min_ms": 93.26816600514576,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
+     "params": {
+      "library": "torch",
+      "params": {
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 1232.5,
+     "peak_host_mb": 1742.2,
      "quality": {},
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 0.22685079913172781,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -349105,17 +349130,19 @@
       },
       "warmup_rounds": 1
      },
+     "shape": "B1 L2048 DM384",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:25Z",
+      "opponent_snapshot_sha256": "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+      "finished": "2026-10-06T05:12:59Z",
       "original_source": "measured this run"
      },
-     "status": "UNKNOWN(no race json, rc 1)",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
-     "verdict": "UNKNOWN",
-     "warmup_ms": null,
+     "status": "ok",
+     "times_ms": [
+      93.26816600514576
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 189.65762498555705,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -349132,26 +349159,51 @@
     },
     {
      "arm": "torch-eager-bf16",
-     "comparability": {},
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
      "dataset": "gaussian",
      "device": "gpu",
+     "device_name": "Apple MPS",
      "family": "neural",
-     "hash": null,
+     "hash": "52309d0f878615f9",
      "hash_stable": null,
      "lane": "mamba1-forward",
      "library": "torch",
-     "max_ms": null,
-     "median_ms": null,
-     "memory": {},
-     "min_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 98.1078750337474,
+     "median_ms": 98.1078750337474,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 1200.7,
+      "peak_host_mb": 1712.8,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 1200.7,
+      "warmup_host_mb": 1709.1
+     },
+     "min_ms": 98.1078750337474,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
+     "params": {
+      "library": "torch",
+      "params": {
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 1200.7,
+     "peak_host_mb": 1712.8,
      "quality": {},
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 0.21566013925528402,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -349182,17 +349234,19 @@
       },
       "warmup_rounds": 1
      },
+     "shape": "B1 L2048 DM384",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:25Z",
+      "opponent_snapshot_sha256": "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+      "finished": "2026-10-06T05:12:59Z",
       "original_source": "measured this run"
      },
-     "status": "UNKNOWN(no race json, rc 1)",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
-     "verdict": "UNKNOWN",
-     "warmup_ms": null,
+     "status": "ok",
+     "times_ms": [
+      98.1078750337474
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 120.3994580428116,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -349544,6 +349598,160 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 124.75629197433591
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "comparability": {},
+     "dataset": "gaussian",
+     "device": "gpu",
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "mamba1-forward",
+     "library": "torch",
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {},
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {},
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "ours_call": "mojolearn.Mamba1Block(weights).forward(x)",
+      "ours_device": "gpu",
+      "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B1 L2048 DM384",
+      "torch_call": "mamba/corpus/gen_corpus.py block_forward (pure-PyTorch reference scan)",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:25Z",
+      "original_source": "measured this run"
+     },
+     "status": "UNKNOWN(no race json, rc 1)",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "UNKNOWN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "comparability": {},
+     "dataset": "gaussian",
+     "device": "gpu",
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "mamba1-forward",
+     "library": "torch",
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {},
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {},
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "ours_call": "mojolearn.Mamba1Block(weights).forward(x)",
+      "ours_device": "gpu",
+      "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B1 L2048 DM384",
+      "torch_call": "mamba/corpus/gen_corpus.py block_forward (pure-PyTorch reference scan)",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:25Z",
+      "original_source": "measured this run"
+     },
+     "status": "UNKNOWN(no race json, rc 1)",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "UNKNOWN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
     }
    ]
   },
@@ -350078,26 +350286,51 @@
     },
     {
      "arm": "torch-eager-fp32",
-     "comparability": {},
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
      "dataset": "gaussian",
      "device": "gpu",
+     "device_name": "Apple MPS",
      "family": "neural",
-     "hash": null,
+     "hash": "9b09ccdc350153d1",
      "hash_stable": null,
      "lane": "mamba2-forward",
      "library": "torch",
-     "max_ms": null,
-     "median_ms": null,
-     "memory": {},
-     "min_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 244.19924995163456,
+     "median_ms": 244.19924995163456,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 7248.8,
+      "peak_host_mb": 7748.3,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 4176.8,
+      "warmup_host_mb": 4673.2
+     },
+     "min_ms": 244.19924995163456,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
+     "params": {
+      "library": "torch",
+      "params": {
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 7248.8,
+     "peak_host_mb": 7748.3,
      "quality": {},
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 0.13894408364920977,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -350128,17 +350361,19 @@
       },
       "warmup_rounds": 1
      },
+     "shape": "B1 L2048 DM384",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:25Z",
+      "opponent_snapshot_sha256": "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+      "finished": "2026-10-06T05:13:08Z",
       "original_source": "measured this run"
      },
-     "status": "UNKNOWN(no race json, rc 1)",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
-     "verdict": "UNKNOWN",
-     "warmup_ms": null,
+     "status": "ok",
+     "times_ms": [
+      244.19924995163456
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 319.7073749615811,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -350155,26 +350390,51 @@
     },
     {
      "arm": "torch-compile-fp32",
-     "comparability": {},
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
      "dataset": "gaussian",
      "device": "gpu",
+     "device_name": "Apple MPS",
      "family": "neural",
-     "hash": null,
+     "hash": "9b09ccdc350153d1",
      "hash_stable": null,
      "lane": "mamba2-forward",
      "library": "torch",
-     "max_ms": null,
-     "median_ms": null,
-     "memory": {},
-     "min_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 237.8398749860935,
+     "median_ms": 237.8398749860935,
+     "memory": {
+      "children_mb": 16.0,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 7248.8,
+      "peak_host_mb": 7851.3,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 4176.8,
+      "warmup_host_mb": 4776.3
+     },
+     "min_ms": 237.8398749860935,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
+     "params": {
+      "library": "torch",
+      "params": {
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 7248.8,
+     "peak_host_mb": 7851.3,
      "quality": {},
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 0.14265917779488443,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -350205,17 +350465,19 @@
       },
       "warmup_rounds": 1
      },
+     "shape": "B1 L2048 DM384",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:25Z",
+      "opponent_snapshot_sha256": "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+      "finished": "2026-10-06T05:13:08Z",
       "original_source": "measured this run"
      },
-     "status": "UNKNOWN(no race json, rc 1)",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
-     "verdict": "UNKNOWN",
-     "warmup_ms": null,
+     "status": "ok",
+     "times_ms": [
+      237.8398749860935
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 1564.2545419977978,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -350232,26 +350494,51 @@
     },
     {
      "arm": "torch-eager-bf16",
-     "comparability": {},
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
      "dataset": "gaussian",
      "device": "gpu",
+     "device_name": "Apple MPS",
      "family": "neural",
-     "hash": null,
+     "hash": "33e483cfbc4f4942",
      "hash_stable": null,
      "lane": "mamba2-forward",
      "library": "torch",
-     "max_ms": null,
-     "median_ms": null,
-     "memory": {},
-     "min_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 198.17845901707187,
+     "median_ms": 198.17845901707187,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 5744.8,
+      "peak_host_mb": 6247.2,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 5744.8,
+      "warmup_host_mb": 6244.1
+     },
+     "min_ms": 198.17845901707187,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
+     "params": {
+      "library": "torch",
+      "params": {
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 5744.8,
+     "peak_host_mb": 6247.2,
      "quality": {},
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 0.17120953094822142,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -350282,17 +350569,19 @@
       },
       "warmup_rounds": 1
      },
+     "shape": "B1 L2048 DM384",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:25Z",
+      "opponent_snapshot_sha256": "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+      "finished": "2026-10-06T05:13:08Z",
       "original_source": "measured this run"
      },
-     "status": "UNKNOWN(no race json, rc 1)",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
-     "verdict": "UNKNOWN",
-     "warmup_ms": null,
+     "status": "ok",
+     "times_ms": [
+      198.17845901707187
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 280.17433296190575,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -350309,26 +350598,51 @@
     },
     {
      "arm": "torch-compile-bf16",
-     "comparability": {},
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
      "dataset": "gaussian",
      "device": "gpu",
+     "device_name": "Apple MPS",
      "family": "neural",
-     "hash": null,
+     "hash": "33e483cfbc4f4942",
      "hash_stable": null,
      "lane": "mamba2-forward",
      "library": "torch",
-     "max_ms": null,
-     "median_ms": null,
-     "memory": {},
-     "min_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 154.39366700593382,
+     "median_ms": 154.39366700593382,
+     "memory": {
+      "children_mb": 16.0,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 5744.8,
+      "peak_host_mb": 6345.2,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 5744.8,
+      "warmup_host_mb": 6342.2
+     },
+     "min_ms": 154.39366700593382,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
+     "params": {
+      "library": "torch",
+      "params": {
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 5744.8,
+     "peak_host_mb": 6345.2,
      "quality": {},
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 0.21976316561643788,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -350359,17 +350673,19 @@
       },
       "warmup_rounds": 1
      },
+     "shape": "B1 L2048 DM384",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:25Z",
+      "opponent_snapshot_sha256": "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+      "finished": "2026-10-06T05:13:08Z",
       "original_source": "measured this run"
      },
-     "status": "UNKNOWN(no race json, rc 1)",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
-     "verdict": "UNKNOWN",
-     "warmup_ms": null,
+     "status": "ok",
+     "times_ms": [
+      154.39366700593382
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 1542.2556250123307,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -350910,6 +351226,314 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 1860.000749991741
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "comparability": {},
+     "dataset": "gaussian",
+     "device": "gpu",
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "mamba2-forward",
+     "library": "torch",
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {},
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {},
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "ours_call": "mojolearn.Mamba2Block(weights).forward(x)",
+      "ours_device": "gpu",
+      "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B1 L2048 DM384",
+      "torch_call": "mamba/corpus/gen_corpus.py m2_forward (pure-PyTorch chunked SSD reference)",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:25Z",
+      "original_source": "measured this run"
+     },
+     "status": "UNKNOWN(no race json, rc 1)",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "UNKNOWN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "comparability": {},
+     "dataset": "gaussian",
+     "device": "gpu",
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "mamba2-forward",
+     "library": "torch",
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {},
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {},
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "ours_call": "mojolearn.Mamba2Block(weights).forward(x)",
+      "ours_device": "gpu",
+      "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B1 L2048 DM384",
+      "torch_call": "mamba/corpus/gen_corpus.py m2_forward (pure-PyTorch chunked SSD reference)",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:25Z",
+      "original_source": "measured this run"
+     },
+     "status": "UNKNOWN(no race json, rc 1)",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "UNKNOWN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "comparability": {},
+     "dataset": "gaussian",
+     "device": "gpu",
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "mamba2-forward",
+     "library": "torch",
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {},
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {},
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "ours_call": "mojolearn.Mamba2Block(weights).forward(x)",
+      "ours_device": "gpu",
+      "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B1 L2048 DM384",
+      "torch_call": "mamba/corpus/gen_corpus.py m2_forward (pure-PyTorch chunked SSD reference)",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:25Z",
+      "original_source": "measured this run"
+     },
+     "status": "UNKNOWN(no race json, rc 1)",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "UNKNOWN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
+    },
+    {
+     "arm": "torch-compile-bf16",
+     "comparability": {},
+     "dataset": "gaussian",
+     "device": "gpu",
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "mamba2-forward",
+     "library": "torch",
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {},
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {},
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "ours_call": "mojolearn.Mamba2Block(weights).forward(x)",
+      "ours_device": "gpu",
+      "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B1 L2048 DM384",
+      "torch_call": "mamba/corpus/gen_corpus.py m2_forward (pure-PyTorch chunked SSD reference)",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:25Z",
+      "original_source": "measured this run"
+     },
+     "status": "UNKNOWN(no race json, rc 1)",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "UNKNOWN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
     }
    ]
   },
@@ -358304,28 +358928,42 @@
      },
      "dataset": "gaussian",
      "device": "gpu",
-     "device_name": null,
+     "device_name": "Apple MPS",
      "family": "neural",
-     "hash": null,
+     "hash": "45beebc3e1097fb4",
      "hash_stable": null,
      "lane": "transformer-forward",
      "library": "torch",
-     "library_version": null,
-     "max_ms": null,
-     "median_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 6.39754201984033,
+     "median_ms": 6.39754201984033,
      "memory": {
-      "gpu_method": "not sampled",
-      "host_method": "not sampled"
+      "children_mb": 1.7,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 112.7,
+      "peak_host_mb": 625.1,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 112.8,
+      "warmup_host_mb": 622.1
      },
-     "min_ms": null,
+     "min_ms": 6.39754201984033,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
+     "params": {
+      "library": "torch",
+      "params": {
+       "eps": 1e-06,
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 112.7,
+     "peak_host_mb": 625.1,
      "quality": {},
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 2.20600989355415,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -358361,16 +358999,17 @@
      },
      "shape": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:25Z",
+      "opponent_snapshot_sha256": "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+      "finished": "2026-10-06T05:12:56Z",
       "original_source": "measured this run"
      },
-     "status": "REFUSED(not_ready: {\"error\": \"SystemExit(\\\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100)",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
+     "status": "ok",
+     "times_ms": [
+      6.39754201984033
+     ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": null,
+     "warmup_ms": 60.50966598559171,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -358397,28 +359036,42 @@
      },
      "dataset": "gaussian",
      "device": "gpu",
-     "device_name": null,
+     "device_name": "Apple MPS",
      "family": "neural",
-     "hash": null,
+     "hash": "a01570fde5fdc891",
      "hash_stable": null,
      "lane": "transformer-forward",
      "library": "torch",
-     "library_version": null,
-     "max_ms": null,
-     "median_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 5.003625003155321,
+     "median_ms": 5.003625003155321,
      "memory": {
-      "gpu_method": "not sampled",
-      "host_method": "not sampled"
+      "children_mb": 16.0,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 1064.5,
+      "peak_host_mb": 1663.2,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 1064.5,
+      "warmup_host_mb": 1660.2
      },
-     "min_ms": null,
+     "min_ms": 5.003625003155321,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
+     "params": {
+      "library": "torch",
+      "params": {
+       "eps": 1e-06,
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 1064.5,
+     "peak_host_mb": 1663.2,
      "quality": {},
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 2.8205632878755673,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -358454,16 +359107,17 @@
      },
      "shape": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:25Z",
+      "opponent_snapshot_sha256": "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+      "finished": "2026-10-06T05:12:56Z",
       "original_source": "measured this run"
      },
-     "status": "REFUSED(not_ready: {\"error\": \"SystemExit(\\\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100)",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
+     "status": "ok",
+     "times_ms": [
+      5.003625003155321
+     ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": null,
+     "warmup_ms": 374.50204201741144,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -358490,28 +359144,42 @@
      },
      "dataset": "gaussian",
      "device": "gpu",
-     "device_name": null,
+     "device_name": "Apple MPS",
      "family": "neural",
-     "hash": null,
+     "hash": "08d2cff2a2e724b4",
      "hash_stable": null,
      "lane": "transformer-forward",
      "library": "torch",
-     "library_version": null,
-     "max_ms": null,
-     "median_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 6.616541999392211,
+     "median_ms": 6.616541999392211,
      "memory": {
-      "gpu_method": "not sampled",
-      "host_method": "not sampled"
+      "children_mb": 1.7,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 112.7,
+      "peak_host_mb": 616.8,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 112.7,
+      "warmup_host_mb": 613.8
      },
-     "min_ms": null,
+     "min_ms": 6.616541999392211,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
+     "params": {
+      "library": "torch",
+      "params": {
+       "eps": 1e-06,
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 112.7,
+     "peak_host_mb": 616.8,
      "quality": {},
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 2.132993486853492,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -358547,16 +359215,17 @@
      },
      "shape": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:25Z",
+      "opponent_snapshot_sha256": "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+      "finished": "2026-10-06T05:12:56Z",
       "original_source": "measured this run"
      },
-     "status": "REFUSED(not_ready: {\"error\": \"SystemExit(\\\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100)",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
+     "status": "ok",
+     "times_ms": [
+      6.616541999392211
+     ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": null,
+     "warmup_ms": 33.00562500953674,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -358583,28 +359252,42 @@
      },
      "dataset": "gaussian",
      "device": "gpu",
-     "device_name": null,
+     "device_name": "Apple MPS",
      "family": "neural",
-     "hash": null,
+     "hash": "9f5876b3c9ad04a9",
      "hash_stable": null,
      "lane": "transformer-forward",
      "library": "torch",
-     "library_version": null,
-     "max_ms": null,
-     "median_ms": null,
+     "library_version": "2.13.0",
+     "max_ms": 5.292540998198092,
+     "median_ms": 5.292540998198092,
      "memory": {
-      "gpu_method": "not sampled",
-      "host_method": "not sampled"
+      "children_mb": 16.0,
+      "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": 40.7,
+      "peak_host_mb": 634.7,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": 40.7,
+      "warmup_host_mb": 631.7
      },
-     "min_ms": null,
+     "min_ms": 5.292540998198092,
      "mode": "opponent",
      "neural_shape": "full",
-     "peak_gpu_mb": null,
-     "peak_host_mb": null,
+     "params": {
+      "library": "torch",
+      "params": {
+       "eps": 1e-06,
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": 40.7,
+     "peak_host_mb": 634.7,
      "quality": {},
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": null,
-     "rounds": 0,
+     "ratio_ours_identical_over": 2.6665907727500118,
+     "rounds": 1,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -358640,16 +359323,17 @@
      },
      "shape": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
      "source": {
-      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
-      "finished": "2026-10-06T05:09:25Z",
+      "opponent_snapshot_sha256": "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+      "finished": "2026-10-06T05:12:56Z",
       "original_source": "measured this run"
      },
-     "status": "REFUSED(not_ready: {\"error\": \"SystemExit(\\\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100)",
-     "store": "not stored (key fields missing: device, library_version, params_sha256)",
-     "times_ms": [],
+     "status": "ok",
+     "times_ms": [
+      5.292540998198092
+     ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": null,
+     "warmup_ms": 307.49154201475903,
      "resource_policy": {
       "cpu_allocation": "full-machine-uncapped",
       "available_logical_cpus": 28,
@@ -359206,6 +359890,378 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 320.07120799971744
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "gaussian",
+     "device": "gpu",
+     "device_name": null,
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "transformer-forward",
+     "library": "torch",
+     "library_version": null,
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {
+      "gpu_method": "not sampled",
+      "host_method": "not sampled"
+     },
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {
+       "eps": 1e-06,
+       "rope_theta": 10000.0
+      },
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "ours_call": "mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
+      "ours_device": "gpu",
+      "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+      "torch_call": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "shape": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:25Z",
+      "original_source": "measured this run"
+     },
+     "status": "REFUSED(not_ready: {\"error\": \"SystemExit(\\\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100)",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "gaussian",
+     "device": "gpu",
+     "device_name": null,
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "transformer-forward",
+     "library": "torch",
+     "library_version": null,
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {
+      "gpu_method": "not sampled",
+      "host_method": "not sampled"
+     },
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {
+       "eps": 1e-06,
+       "rope_theta": 10000.0
+      },
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "ours_call": "mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
+      "ours_device": "gpu",
+      "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+      "torch_call": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "shape": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:25Z",
+      "original_source": "measured this run"
+     },
+     "status": "REFUSED(not_ready: {\"error\": \"SystemExit(\\\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100)",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "gaussian",
+     "device": "gpu",
+     "device_name": null,
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "transformer-forward",
+     "library": "torch",
+     "library_version": null,
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {
+      "gpu_method": "not sampled",
+      "host_method": "not sampled"
+     },
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {
+       "eps": 1e-06,
+       "rope_theta": 10000.0
+      },
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "ours_call": "mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
+      "ours_device": "gpu",
+      "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+      "torch_call": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "shape": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:25Z",
+      "original_source": "measured this run"
+     },
+     "status": "REFUSED(not_ready: {\"error\": \"SystemExit(\\\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100)",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
+    },
+    {
+     "arm": "torch-compile-bf16",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+       "pre_clock_fit": false
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "gaussian",
+     "device": "gpu",
+     "device_name": null,
+     "family": "neural",
+     "hash": null,
+     "hash_stable": null,
+     "lane": "transformer-forward",
+     "library": "torch",
+     "library_version": null,
+     "max_ms": null,
+     "median_ms": null,
+     "memory": {
+      "gpu_method": "not sampled",
+      "host_method": "not sampled"
+     },
+     "min_ms": null,
+     "mode": "opponent",
+     "neural_shape": "full",
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_neural.py",
+      "explicit_params": {
+       "eps": 1e-06,
+       "rope_theta": 10000.0
+      },
+      "interleaved": true,
+      "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+      "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+      "ours_call": "mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
+      "ours_device": "gpu",
+      "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+      "shape": "full",
+      "shape_dims": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+      "torch_call": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+      "torch_settings": {
+       "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-compile-fp32": "float32, TF32 off",
+       "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+       "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+       "torch-eager-fp32": "float32, TF32 off",
+       "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+      },
+      "warmup_rounds": 1
+     },
+     "shape": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+     "source": {
+      "opponent_snapshot_sha256": "d0268658c8a0e8da7426e452ecd54894dfcf994cdd6e98d3e31a83dfa2986d52",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-final-delta-snapshot.json",
+      "finished": "2026-10-06T05:09:25Z",
+      "original_source": "measured this run"
+     },
+     "status": "REFUSED(not_ready: {\"error\": \"SystemExit(\\\"speed_torch_seq: cannot import mamba/corpus/gen_corpus.py (needed for the hash spec and the reference scan): [Errno 2] No such file or directory: '/Volumes/MojoPerfBuild2026100)",
+     "store": "not stored (key fields missing: device, library_version, params_sha256)",
+     "times_ms": [],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": null,
+     "resource_policy": {
+      "cpu_allocation": "full-machine-uncapped",
+      "available_logical_cpus": 28,
+      "thread_caps": {
+       "OMP_NUM_THREADS": null,
+       "OPENBLAS_NUM_THREADS": null,
+       "MKL_NUM_THREADS": null,
+       "NUMEXPR_NUM_THREADS": null,
+       "VECLIB_MAXIMUM_THREADS": null
+      },
+      "effective_utilization": "Library dependent; not a claim that all cores were busy",
+      "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71"
+     }
     }
    ]
   },
@@ -388205,9 +389261,63 @@
     "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71",
     "measurement_note": "Completed metric tensors moved CPU before float64 export; training semantics unchanged."
    }
+  },
+  "7dbebaed14d9eefd03358f9fd3e7804d7a5c30c2f1212b9c835aff38f4e6605b": {
+   "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/tail-resource-retry-10cells.json",
+   "counts": {
+    "imported": 10,
+    "successful": 10,
+    "failed": 0,
+    "stored_skipped": 0,
+    "already_current": 0
+   },
+   "resource_policy": {
+    "cpu_count": 28,
+    "hardware": "Mac15,14",
+    "thread_caps": {
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "MKL_NUM_THREADS": null,
+     "NUMEXPR_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null
+    },
+    "policy": "Serial races and arms; n_jobs=-1/default full resources; no imposed opponent CPU core cap",
+    "harness_sha": "920c767351127a3b869917a65b900ff00c23cb71",
+    "measurement_note": "Completed metric tensors moved CPU before float64 export; training semantics unchanged."
+   }
   }
  },
  "opponent_interruptions": [
+  {
+   "at": 1791260543.4751139,
+   "status": "INTERRUPTED_BY_USER",
+   "reason": "Prioritize candidate A/B measurements; missing GPU opponents follow candidate queue",
+   "active_race": "bench_board: [35/402] algos/gamma/istella/rows=full arms=sklearn-cpu",
+   "interrupted_processes": {
+    "23858": {
+     "ppid": 1,
+     "stat": "Ss",
+     "command": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/owner-missing-only.py"
+    },
+    "23863": {
+     "ppid": 23858,
+     "stat": "Ss",
+     "command": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python -u /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/source/tools/bench_board.py --vendor apple --modes identical --families trees,classical,classical2,algos,neural --rows full --neural-shape full --rounds 1 --python-env /Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python --skip-install --verify-data --no-smoke-gate --opponents-only --skip-failed --cache /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/cache --ctd-data /Users/ec2-user/mojolearn-full-f867b50e8/cache/ctd-data --more-data /Users/ec2-user/mojolearn-full-f867b50e8/cache/more-data --algos-data /Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data --data-root /Users/ec2-user/datasets/gbm-bench --opponent-store /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/opponent-store.jsonl --out /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/board"
+    },
+    "28888": {
+     "ppid": 23863,
+     "stat": "Ss",
+     "command": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python -u /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/source/tools/bench_board_algos.py race --lane gamma --dataset istella --data /Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full --arms sklearn-cpu --rounds 1 --out /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/board/raw/algos/rows-full --work /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/board/work --ours-python /Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python --theirs-python /Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600"
+    },
+    "28890": {
+     "ppid": 28888,
+     "stat": "Rs",
+     "command": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/source/tools/bench_board_algos.py worker --arm sklearn-cpu --lane gamma --dataset istella --data /Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full"
+    }
+   },
+   "timing_admitted": false,
+   "resume_command": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python /private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/owner-missing-only.py"
+  },
   {
    "at": 1791260543.4751139,
    "status": "INTERRUPTED_BY_USER",
