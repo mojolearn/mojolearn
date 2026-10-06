@@ -11,7 +11,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
 from sequence.moe_group import (
     MOE_GROUP_TPB, moe_group_count_all_kernel, moe_group_offsets_all_kernel, moe_group_scatter_all_kernel,
-    moe_group_zero_all_kernel,
+    moe_group_zero_all_kernel, MOE_STABLE_GROUP, moe_group_stable_kernel,
 )
 from sequence.moe_reg import (
     MOE_DEVGROUP,
@@ -40,6 +40,8 @@ from sequence.coop import COOP_W, apply_coop
 from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
 from sequence.ops import OP_THETA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW
+from sequence.layernorm import LN_ADJACENT_TREE
+from sequence.adafactor import AF_PROFILE_LEAF256
 from sequence.theta_spec import THETA_SPEC
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
@@ -73,10 +75,12 @@ comptime SEQ_COOP = has_apple_gpu_accelerator() or SEQ_COOP_NVAMD
 #: -D MOJOLEARN_IDN_SEQ_AF_COOP_OFF (or MOJOLEARN_IDN_ALL_OFF).
 comptime SEQ_AF_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not AF_PROFILE_LEAF256
     and not (is_defined["MOJOLEARN_IDN_SEQ_AF_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime SEQ_LN_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not LN_ADJACENT_TREE
     and not (is_defined["MOJOLEARN_IDN_SEQ_LN_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
@@ -677,10 +681,16 @@ struct DeviceExec(Exec):
                     a.p7, a.p5, a.p6, a.p8, Int32(a.i3), Int32(a.i5), Int32(a.i7),
                     grid_dim=((a.i3 + gt) // gt, 1, 1), block_dim=(gt, 1, 1),
                 )
-                self.ctx.enqueue_function[moe_group_scatter_all_kernel](
-                    a.p2, a.p7, a.p5, a.p4, Int32(gp), Int32(a.i3),
-                    grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
-                )
+                comptime if MOE_STABLE_GROUP:
+                    self.ctx.enqueue_function[moe_group_stable_kernel](
+                        a.p2, a.p5, a.p4, Int32(gp), Int32(a.i3),
+                        grid_dim=((a.i3 + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
+                    )
+                else:
+                    self.ctx.enqueue_function[moe_group_scatter_all_kernel](
+                        a.p2, a.p7, a.p5, a.p4, Int32(gp), Int32(a.i3),
+                        grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
+                    )
         comptime if MOE_REGTILE and OP == OP_MOE_ROUTE:
             if a.i1 <= MOE_RT:
                 var bt = MOE_RT // a.i1
@@ -711,10 +721,16 @@ struct DeviceExec(Exec):
                         self.ctx.enqueue_function[moe_group_offsets_kernel](
                             a.p7, a.p5, Int32(a.i3), grid_dim=(1, 1, 1), block_dim=(MOE_RT, 1, 1),
                         )
-                        self.ctx.enqueue_function[moe_group_scatter_kernel](
-                            a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
-                            grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
-                        )
+                        comptime if MOE_STABLE_GROUP:
+                            self.ctx.enqueue_function[moe_group_stable_kernel](
+                                a.p2, a.p5, a.p4, Int32(npairs), Int32(a.i3),
+                                grid_dim=((a.i3 + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                            )
+                        else:
+                            self.ctx.enqueue_function[moe_group_scatter_kernel](
+                                a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
+                                grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                            )
                 comptime if MOE_MMA:
                     # lane apple-fast-gap-misc: simdgroup matrix products
                     # (sequence/moe_mma.mojo), MOJOLEARN_MOE_FAST_MMA*
@@ -821,6 +837,11 @@ struct DeviceExec(Exec):
                     coop = coop or a.i11 == 1
             elif OP == OP_AF_ALPHA or OP == OP_AF_DENOM:
                 coop = a.i0 >= 4096
+            # S10's new folds must never be silently replaced by the old
+            # cooperative chains, including Apple. Leaf kernels themselves
+            # still use the unchanged short serial chain on every column.
+            comptime if AF_PROFILE_LEAF256 and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ or OP == OP_LAMB_RATIO):
+                coop = False
             if coop:
                 self.ctx.enqueue_function[coop_kernel[OP]](
                     a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,

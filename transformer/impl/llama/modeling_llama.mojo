@@ -268,11 +268,16 @@ transcendentals and division below are OURS.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcpy
+from max.gpu.sync import barrier
+from std.memory import bitcast, memcpy, stack_allocation
+from max.gpu.memory import AddressSpace
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+from training.neural_identical_experiments import (
+    NEURAL_SWIGLU_SAVE, NEURAL_PREFILL_NO_CARRY, NEURAL_RMS_APPLY_LANES,
+)
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -1561,6 +1566,8 @@ struct LlamaKVCache(Movable):
     var s: Int
     var window: Int
     var cap: Int
+    # A04 owner promise: only fresh non-decode prefill; never carry state.
+    var discard_after_prefill: Bool
     var k: DeviceBuffer[DType.float32]
     var v: DeviceBuffer[DType.float32]
 
@@ -1572,6 +1579,7 @@ struct LlamaKVCache(Movable):
         s_max: Int,
         window: Int = 0,
         max_positions: Int = MAX_ABS_POSITION,
+        discard_after_prefill: Bool = False,
     ) raises:
         """`window == 0`: the linear cache above, packed at stride `s`.
         `window > 0`: a RING of `window` slots per (batch, kv head), slot
@@ -1612,11 +1620,17 @@ struct LlamaKVCache(Movable):
         self.s_max = s_max
         self.s = 0
         self.window = window
+        self.discard_after_prefill = NEURAL_PREFILL_NO_CARRY and discard_after_prefill
+        if self.discard_after_prefill and window != 0:
+            raise Error("llama: discard_after_prefill requires a full-causal training prefill")
         self.cap = s_max
         if window > 0:
             self.cap = window
-        self.k = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
-        self.v = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
+        var carry_cells = b * dims.n_kv * self.cap * dims.head_dim
+        if self.discard_after_prefill:
+            carry_cells = 1  # never read: fresh K/V populate the retained stages
+        self.k = _zeros(ctx, carry_cells)
+        self.v = _zeros(ctx, carry_cells)
 
 
 struct LlamaDeviceStages(Movable):
@@ -2106,6 +2120,41 @@ def residual_next_norm_fusion_enabled(
     )
 
 
+def llama_rms_norm_apply_lanes_kernel(
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    out_buf: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    dm_in: Int32,
+    eps_in: Float32,
+):
+    """A05: serial S1/S2 in lane zero, unchanged S3/S4 in independent lanes.
+
+    Each block owns one whole row. Its one shared word carries the rounded
+    rstd; every lane reaches the barrier, including feature tails. No scratch
+    lifetime extends past the launch, no warp-width-dependent fold exists.
+    """
+    var row = Int(block_idx.x)
+    var lane = Int(thread_idx.x)
+    var dm = Int(dm_in)
+    var saved = stack_allocation[1, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    if lane == 0:
+        var acc = Float32(0.0)
+        for j in range(dm):
+            var xj = ftz(x.unsafe_load(row * dm + j))
+            acc = ftz(identical_mul_add(xj, xj, acc))
+        sumsq.unsafe_store(row, acc)
+        var mean = ftz(identical_div(acc, Float32(dm)))
+        saved.unsafe_store(0, ftz(identical_rsqrt(ftz(mean + eps_in))))
+    barrier()
+    var rstd = saved.unsafe_load(0)
+    var j = lane
+    while j < dm:
+        var inner = ftz(identical_mul(ftz(x.unsafe_load(row * dm + j)), rstd))
+        out_buf.unsafe_store(row * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner)))
+        j += Int(block_dim.x)
+
+
 def llama_rms_norm(
     ctx: DeviceContext,
     mut sumsq: DeviceBuffer[DType.float32],
@@ -2132,6 +2181,17 @@ def llama_rms_norm(
     # without the trial define and without a column default carrying a rows
     # token (DEVIATION 2649) the two values below are the shipped `_grid(m)`
     # and `LLAMA_TPB`.
+    # A05: NOT TESTED — NOT COMPILED — NOT MEASURED. Opt-in for every row
+    # width: one block amortizes serial statistics over parallel cell writes.
+    # Keep sabotage arithmetic on its original path; no dimension targeting.
+    comptime if NEURAL_RMS_APPLY_LANES and not BLOCK_ANY_SABOTAGE:
+        step_count_launch()
+        ctx.enqueue_function[llama_rms_norm_apply_lanes_kernel](
+            sumsq.unsafe_ptr(), out_buf.unsafe_ptr(), x.unsafe_ptr(),
+            weight.unsafe_ptr(), Int32(d_model), eps,
+            grid_dim=(m, 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+        )
+        return
     var norm_blocks = _grid(m)
     var norm_threads = LLAMA_TPB
     comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS:
@@ -3491,6 +3551,22 @@ def swiglu_fused_kernel(
     gated.unsafe_store(i, ftz(identical_mul(ftz(sil), ftz(up.unsafe_load(i)))))
 
 
+def swiglu_save_kernel(
+    silu_out: MutPointer[Float32, MutAnyOrigin],
+    gated: MutPointer[Float32, MutAnyOrigin],
+    gate: MutPointer[Float32, MutAnyOrigin],
+    up: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """A03: write both forward stages, retaining activation for dup backward."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var sil = ftz(identical_silu(ftz(gate.unsafe_load(i))))
+    silu_out.unsafe_store(i, sil)
+    gated.unsafe_store(i, ftz(identical_mul(ftz(sil), ftz(up.unsafe_load(i)))))
+
+
 def swiglu_fused_enabled() -> Bool:
     """`MOJOLEARN_SWIGLU_FUSED=1`; read per block call, default off."""
     return String(getenv("MOJOLEARN_SWIGLU_FUSED")) == "1"
@@ -4560,6 +4636,11 @@ def llama_attention_forward(
     var m = b * l
     var s_old = kv.s
     var window = kv.window
+    # A04: NOT TESTED — NOT COMPILED — NOT MEASURED. The owner explicitly
+    # requested fresh training prefill. A one-word carry is never dereferenced:
+    # kv_append2 reads only the new projections when s_old is zero.
+    if kv.discard_after_prefill and (s_old != 0 or pos0 != 0 or window != 0):
+        raise Error("llama: discard_after_prefill cannot carry history or decode")
     var key_lo = llama_key_lo(s_old, window)
     var s = llama_key_span(s_old, l, window)
     var ton = timing_on()
@@ -4790,7 +4871,9 @@ def llama_attention_forward(
     # computed. DEVIATION 1022 is why the two buffers are distinct; the rest
     # of THIS call reads `stages.k_cache` and `stages.v_cache`, which hold
     # the same bits.
-    if window == 0:
+    if kv.discard_after_prefill:
+        pass  # backward and tracing consume stages.k_cache/v_cache directly
+    elif window == 0:
         step_count_d2d()
         ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
         step_count_d2d()
@@ -4832,7 +4915,8 @@ def llama_attention_forward(
     comptime if not IDN_ATTN_CACHE_NOWAIT:
         step_count_sync()
         ctx.synchronize()
-    kv.s = s_old + l
+    if not kv.discard_after_prefill:
+        kv.s = s_old + l
     timing_tick(ctx, ton, tk, "attn.rope_and_cache")
 
     # ---- the attention interface (:264-277). Eager or fused, ONE set of
@@ -4998,12 +5082,26 @@ def llama_mlp_forward(
     # lane/neural-net-experiment: S20 + S21 in one launch when no backward
     # follows, the trace is off, the record is the default SiLU gated MLP
     # and the build is not the S20 sabotage spelling (`swiglu_fused_kernel`).
+    # A03: NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF. Both
+    # stage outputs survive, so this path also permits trace and backward.
+    var swiglu_save = False
+    comptime if NEURAL_SWIGLU_SAVE and not BLOCK_ANY_SABOTAGE:
+        swiglu_save = (gated and opts.act_is_silu()
+                        and not bias_silu_fused and not bias_gelu_fused)
     var swiglu_fused = False
     comptime if not SAB_S20_SILU_MUL_SIGMOID:
         swiglu_fused = (forward_only and gated and opts.act_is_silu()
                         and not bias_silu_fused and not bias_gelu_fused
                         and not trace.enabled and swiglu_fused_enabled())
-    if swiglu_fused:
+    if swiglu_save:
+        step_count_launch()
+        ctx.enqueue_function[swiglu_save_kernel](
+            stages.silu_out.unsafe_ptr(), stages.gated.unsafe_ptr(),
+            stages.gate_proj.unsafe_ptr(), stages.up_proj.unsafe_ptr(),
+            Int32(m * it), grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    elif swiglu_fused:
         step_count_launch()
         ctx.enqueue_function[swiglu_fused_kernel](
             stages.gated.unsafe_ptr(),
@@ -5055,7 +5153,11 @@ def llama_mlp_forward(
     pc.tick(ctx, "fwd.silu")
 
     # ---- the gate product (:175). S21. Absent under an ungated MLP.
-    if swiglu_fused:
+    if swiglu_save:
+        trace.record_device[DType.float32](
+            ctx, prefix + ".mlp.gated", stages.gated, m * it
+        )
+    elif swiglu_fused:
         pass  # written by swiglu_fused_kernel above
     elif gated:
         step_count_launch()

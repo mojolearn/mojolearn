@@ -39,6 +39,8 @@ comptime _ID_ONLY_UNSTABLE = is_defined["MOJOLEARN_EMB_SABOTAGE_SORT_KEY_ID_ONLY
 # the bitonic network (an unstable compare, a reversed position code), so
 # either one keeps it. IDENTICAL only; -D MOJOLEARN_IDN_EMB_RADIX_SORT_OFF
 # (or MOJOLEARN_IDN_ALL_OFF) restores the bitonic network.
+# E01 reuse in this campaign — NOT TESTED — NOT COMPILED — NOT MEASURED.
+# Historical evidence below is retained; full LM/SA caller coverage is pending.
 comptime EMB_RADIX_SORT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     # I11 sourcecbcc8dcd3303 (2026-10-06) scoped WINNER on both vendors:

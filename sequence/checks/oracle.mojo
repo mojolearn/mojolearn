@@ -187,6 +187,10 @@ def _o_wgrad_block(K: Int) -> Int:
     """Restated (sequence/recurrent.mojo `wgrad_block`): K itself when the
     blocked order is off, else the smallest power of two R >= 512 with
     R R >= K."""
+    # S03 independent numerical-profile restatement. NOT TESTED — NOT
+    # COMPILED — NOT MEASURED; no production default or acceptance claim.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NEURAL_S03_WGRAD_LEAF128"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        return 128
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
         return K
     var r = 512
@@ -691,6 +695,27 @@ def o_moe_route(x: List[Float32], Wg: List[Float32], T: Int, D: Int, E: Int, k: 
 
 
 # ---------------------------------------------------------------- 5515
+# V02 oracle control — NOT TESTED — NOT COMPILED — NOT MEASURED.
+# Independent adjacent-pair implementation, never imports sequence/layernorm.
+comptime _O_LN_TREE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NEURAL_V02_LN_ADJACENT_TREE"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+
+
+def _o_ln_tree(var values: List[Float32]) -> Float32:
+    """Pairs (0,1),(2,3),... per level; the unpaired last value carries."""
+    var live = len(values)
+    if live == 0:
+        return Float32(0.0)
+    while live > 1:
+        var out = 0
+        var i = 0
+        while i < live:
+            values[out] = _a(values[i], values[i + 1]) if i + 1 < live else values[i]
+            out += 1
+            i += 2
+        live = out
+    return values[0]
+
+
 def o_layer_norm(x: List[Float32], w: List[Float32], b: List[Float32], M: Int, D: Int, eps: Float32, alt: Bool) -> List[Float32]:
     """[y (M D), mean (M), rstd (M)] of torch.nn.functional.layer_norm."""
     var y = List[Float32]()
@@ -699,14 +724,28 @@ def o_layer_norm(x: List[Float32], w: List[Float32], b: List[Float32], M: Int, D
     for r in range(M):
         var base = r * D
         var s = Float32(0.0)
-        for cc in range(D):
-            var c = D - 1 - cc if alt else cc
-            s = _a(s, x[base + c])
+        comptime if _O_LN_TREE:
+            var terms = List[Float32]()
+            for cc in range(D):
+                var c = D - 1 - cc if alt else cc
+                terms.append(_a(Float32(0.0), x[base + c]))
+            s = _o_ln_tree(terms^)
+        else:
+            for cc in range(D):
+                var c = D - 1 - cc if alt else cc
+                s = _a(s, x[base + c])
         var mean = _d(s, Float32(D))
         var q = Float32(0.0)
-        for c in range(D):
-            var d = _s(x[base + c], mean)
-            q = _f(d, d, q)
+        comptime if _O_LN_TREE:
+            var terms = List[Float32]()
+            for c in range(D):
+                var d = _s(x[base + c], mean)
+                terms.append(_f(d, d, Float32(0.0)))
+            q = _o_ln_tree(terms^)
+        else:
+            for c in range(D):
+                var d = _s(x[base + c], mean)
+                q = _f(d, d, q)
         var rstd = _z(identical_rsqrt(_a(_d(q, Float32(D)), eps)))
         for c in range(D):
             y.append(_a(_m(_m(_s(x[base + c], mean), rstd), w[c]), b[c]))
@@ -717,6 +756,49 @@ def o_layer_norm(x: List[Float32], w: List[Float32], b: List[Float32], M: Int, D
     for i in range(M):
         y.append(rstds[i])
     return y^
+
+
+def o_layer_norm_tree_backward(
+    x: List[Float32], w: List[Float32], dy: List[Float32],
+    M: Int, D: Int, eps: Float32,
+) raises -> List[Float32]:
+    """V02 independent dx,dweight,dbias reference; source only, never run.
+    This explicitly requires the new profile, avoiding a mislabeled oracle
+    that silently returns candidate words for a baseline binary.
+    """
+    comptime if not _O_LN_TREE:
+        raise Error("LayerNorm tree backward oracle requires the V02 profile")
+    var bias = List[Float32](length=D, fill=Float32(0.0))
+    var fwd = o_layer_norm(x, w, bias, M, D, eps, False)
+    var result = List[Float32]()
+    for r in range(M):
+        var mean = fwd[M * D + r]
+        var rs = fwd[M * D + M + r]
+        var gs = List[Float32]()
+        var gxs = List[Float32]()
+        for c in range(D):
+            var g = _m(dy[r * D + c], w[c])
+            var xh = _m(_s(x[r * D + c], mean), rs)
+            gs.append(_a(Float32(0.0), g))
+            gxs.append(_f(g, xh, Float32(0.0)))
+        var mg = _d(_o_ln_tree(gs^), Float32(D))
+        var mgx = _d(_o_ln_tree(gxs^), Float32(D))
+        for c in range(D):
+            var g = _m(dy[r * D + c], w[c])
+            var xh = _m(_s(x[r * D + c], mean), rs)
+            result.append(_m(rs, _s(_s(g, mg), _m(xh, mgx))))
+    var db = List[Float32]()
+    for c in range(D):
+        var ws = List[Float32]()
+        var bs = List[Float32]()
+        for r in range(M):
+            var xh = _m(_s(x[r * D + c], fwd[M * D + r]), fwd[M * D + M + r])
+            ws.append(_f(dy[r * D + c], xh, Float32(0.0)))
+            bs.append(_a(Float32(0.0), dy[r * D + c]))
+        result.append(_o_ln_tree(ws^))
+        db.append(_o_ln_tree(bs^))
+    result.extend(db^)
+    return result^
 
 
 # ---------------------------------------------------------------- 5516
@@ -1147,6 +1229,18 @@ def o_lion(p: List[Float32], g: List[Float32], m0: List[Float32], lr: Float32, b
 
 # ---------------------------------------------------------------- 5539
 def _o_sumsq(x: List[Float32], s: Int, e: Int) -> Float32:
+    # S10 independent restatement — NOT TESTED — NOT COMPILED — NOT MEASURED.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NEURAL_S10_NORM_LEAF256"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        if e - s > 256:
+            var total = Float32(0.0)
+            var lo = s
+            while lo < e:
+                var part = Float32(0.0)
+                for k in range(lo, min(lo + 256, e)):
+                    part = _f(x[k], x[k], part)
+                total = _a(total, part)
+                lo += 256
+            return total
     var acc = Float32(0.0)
     for k in range(s, e):
         acc = _f(x[k], x[k], acc)

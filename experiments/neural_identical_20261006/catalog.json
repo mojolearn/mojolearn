@@ -1,0 +1,596 @@
+{
+  "schema": 1,
+  "baseline_source": "35b2d4976550a6a9a47c4563ca1c08b6de21670b",
+  "mode": "identical",
+  "scope": "NEURAL only",
+  "cross_version_bit_changes_allowed": true,
+  "required_identity_columns": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "performance_voters": [
+    "nvidia",
+    "amd"
+  ],
+  "execution_performed": false,
+  "cards": [
+    {
+      "id": "G01",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "GE,LM,TR,SA,M1–3",
+      "experiment": "Isolate existing AMD small-MFMA and NVIDIA stepped-kpack schedules versus their documented OFF arms. Reduce scalar fallback without changing logical leaves. Record actual route and full caller time; no repeating already decided identical cells.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "G02",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "GE,LM,TR,SA",
+      "experiment": "One versus two staging pages, and smaller register tiles versus current tiles. Reduce occupancy pressure; evaluate scratch/register traffic and tail lanes. Existing A02/N01 arms are reusable, not new implementations.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "G03",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "LM,TR,SA",
+      "experiment": "Group independent Q/K/V, gate/up or dA/dW products in one launch versus separate calls. Separate output ownership and original K per product; grouping cannot concatenate a reduction or alter rounding. Wire actual callers beyond the existing grouped-jobs fixture.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "G04",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "LM,SA,TR",
+      "experiment": "Retain bounded GEMM scratch per session versus per-product allocation. Cap by a documented byte budget; large/short alternating shapes, reset and concurrent owners must not alias or retain unbounded memory.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "G05",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "LM,TR,SA",
+      "experiment": "Fuse bias/residual/scaling into the final product write versus separate passes, explicitly materializing original rounding/FTZ seams. Measure increased register pressure and every backward stash consumer.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "G06",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "GE,LM,SA",
+      "experiment": "Cache deterministic execution plans by complete operation/layout/profile/device key versus repeat plan search. Invalidate on workspace policy/device changes; never cache an unproven numerical route.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "G07",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "GE,LM,TR",
+      "experiment": "Bounded leaf groups with in-kernel fold stacks versus global partial tensors. Keep logical leaf indices and adjacent-pair tree exact, including odd tails; count fold traffic and available parallelism together.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "G08",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "LM,SA,ML",
+      "experiment": "Persistent immutable weight packing versus per-call packing/gathering. Optimizer-owned generation stamps invalidate after updates and external mutations; no pointer-identity-only cache. Include cold packing and memory capacity.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "G09",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "GE,LM,TR",
+      "experiment": "Output-tile swizzle or grouped jobs sharing read-only operands versus linear tile order. Improve cache reuse with no changed arithmetic. Neighbor shapes and transposed operands guard against a board-only win.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "G10",
+      "arithmetic_class": "V",
+      "priority": "P3",
+      "workload_scope": "GE,all neural GEMM callers",
+      "experiment": "A named shorter-leaf FP32 profile (existing 64-element research arm first) versus current leaf profile. Update host/GPU contracts together; inspect conditioning and full training quality. Register both version digests rather than reject A because it differs from B.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "A01",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "TR,LM,SA",
+      "experiment": "Existing GQA K/V head-reuse schedule versus independent query-head loads. Cover true GQA, full multi-head, causal tails and windows; no altered head mapping or reduction order.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "A02",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "TR,LM,SA",
+      "experiment": "Retain exponent/probability state versus exact backward recomputation. Evaluate entire train step and peak memory, not backward alone; preserve masks, RNG, lifetime and recomputation refusal behavior.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "A03",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "TR,LM,SA",
+      "experiment": "Two-output fused SiLU-plus-gate versus separate passes, retaining the activation needed by backward. Keep nonlinear/divide and rounded product seams; existing forward-only fusion is a control, not evidence for training.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "A04",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "LM,SA",
+      "experiment": "Cache-free prefill for training versus allocate/append/copy a KV cache whose outputs are unused. Limit to explicit non-decode callers; preserve prefill traces and all retained backward inputs.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "A05",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "TR,LM,SA",
+      "experiment": "Compute canonical row stats once, then parallel scaling/residual application versus serial row walks. Preserve stat chain; include extra launch and scratch in timing. Distinct from the numerical tree revision V02.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "A06",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "TR,LM",
+      "experiment": "Hoist validated RoPE frequencies and retain position tables versus per-layer scan/rebuild. Key by full RoPE options, absolute range, dtype and device; extension/window/reset must invalidate correctly.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "A07",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "TR,LM,SA",
+      "experiment": "Reuse backward d_out as a read-only input view versus a full entry copy. Prove the destination's mutation lifetime in source, preserve ownership and alias rejection, include caller reuse.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "A08",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "TR,LM,SA",
+      "experiment": "Cooperative query/output lanes with shared score state versus each output lane recomputing normalizers. Preserve score, maximum, denominator and value order. Revisit rejected cooperative dK/dV only with a concrete changed resource mechanism.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "A09",
+      "arithmetic_class": "V",
+      "priority": "P3",
+      "workload_scope": "TR,LM,SA",
+      "experiment": "Fixed absolute key blocks with versioned softmax partials/merge versus sequential row normalization. Shared host/forward/backward/decode profile, canonical masks and empty rows; online recurrence is not inherently vendor-identical.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "A10",
+      "arithmetic_class": "C",
+      "priority": "P2",
+      "workload_scope": "TR,LM,SA",
+      "experiment": "Winning G03+A01+A02+A03+A04 combinations versus individual winners and frozen baseline. Measure memory/occupancy interactions and full configuration; independent wins never establish the combination.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "M01",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "M2",
+      "experiment": "Existing SSD tiles plus retained G⊙L versus tiles without retention and scalar control. Use a byte-cost budget, preserve triangular/backward trace semantics, include storage and tail chunks.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "M02",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "M1,M2",
+      "experiment": "Token-parallel depthwise convolution versus channel-owned sequence loops. Original tap order/zero padding and streaming state; existing route needs full caller A/B, not another duplicate kernel.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "M03",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "M3,SA",
+      "experiment": "Retain per-token/head exponential decay once versus recompute per feature. Cache only mathematically identical operands with the same primitive; backward/reset/sequence extension invalidate correctly.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "M04",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "M3,SA",
+      "experiment": "Extend existing intra-chunk shared tiles to resource-feasible AMD shapes versus scalar recomputation. Resource reasoning replaces vendor/dimension folklore; padded tails and finite checks stay live.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "M05",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "SA",
+      "experiment": "Retain attention/Mamba forward stages across backward versus replay forward in the step. Key by owned input/weight generation, include activation memory and checkpoint mode; never Python data processing.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "M06",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "M1–3,SA",
+      "experiment": "Retain scratch and weight descriptors with mutation stamps versus allocate/byte-compare/reupload each call. Warm and cold sessions, model interleaving, updates and checkpoint restoration must agree.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "M07",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "M1–3,SA",
+      "experiment": "Sweep fixed launch geometry and independent output tiling versus current geometry. Arithmetic ownership stays fixed; choose eventual rule from hardware resource/cost, not exact state or sequence sizes.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "M08",
+      "arithmetic_class": "V",
+      "priority": "P3",
+      "workload_scope": "M1",
+      "experiment": "Absolute-position fixed-chunk affine scan versus serial recurrence. Forward, reverse scan, host, streaming/decode and resume use one new profile; variable request segmentation cannot redefine chunk boundaries.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "M09",
+      "arithmetic_class": "V",
+      "priority": "P2",
+      "workload_scope": "M3,SA",
+      "experiment": "Shared suffix carry for angle-gradient sums versus per-token O(L²) suffix folds. Explicit new suffix order shared by host/backward; compare gradients and training convergence, especially cancellation/long sequences.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "M10",
+      "arithmetic_class": "V",
+      "priority": "P2",
+      "workload_scope": "M2",
+      "experiment": "Fixed leaves and balanced folds for backward parameter gradients versus serial token chains. Cover convolution, projection and dt gradients, tails and batch composition; no unordered atomics.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "T01",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "LM,SA,ML",
+      "experiment": "Emit post-update status while p/m/v are live versus rescan full arrays. Preserve ordered first-error field/index and transaction behavior; existing I10 is the starting point.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "T02",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "LM,SA",
+      "experiment": "Device status accumulation and one completion read versus intermediate waits. Only defer checks that cannot cause unsafe access; retain original error precedence and roll back failed updates before exposure.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "T03",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "LM,SA",
+      "experiment": "Device arena views for parameters/gradients versus full copies around layers. Rebind after swaps; checkpoint, tied weights, optimizers and all vendor ownership rules are included.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "T04",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "LM,SA",
+      "experiment": "Resident token/target batches and reusable pinned staging versus allocate/upload/read back repeatedly. Validate IDs before use; update batches explicitly, no stale-byte assumptions. Cold transfer remains timed.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "T05",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "LM,SA,ML",
+      "experiment": "Fuse CE weights and dlogits, reuse shift-exp values versus separate elementwise passes. Keep denominator and loss folds; ignore-index, class tails, extreme logits and gradient scale must match.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "T06",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "LM",
+      "experiment": "Bounded GEMM chunked LM head versus scalar streamed logits and dense head. Compare complete loss+dhidden+dweight and inference; no approximate/sampled softmax or missing dense gradient cost. Existing V2 is a distinct arithmetic control.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "T07",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "LM,SA,ML,SQ,CN",
+      "experiment": "One descriptor-driven SGD/momentum arena launch versus per-tensor launches. Keep weight decay, clipping, Nesterov operation order and tensor error order; mirror host semantics.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "T08",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "LM,SA,ML,SQ,CN",
+      "experiment": "Reuse deterministic norm/clip partials versus duplicate parameter scans. Respect global tensor order, overflow, empty tensors and disabled clipping; no change to the clipping decision.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "T09",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "LM,SA",
+      "experiment": "Microbatch gradient buffers and explicit immutable reduction schedule versus repeated allocation/clear. Existing accumulation semantics and RNG coordinates are invariant; no changed effective batch size or training steps.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "T10",
+      "arithmetic_class": "C",
+      "priority": "P2",
+      "workload_scope": "LM,SA,ML",
+      "experiment": "Combine admitted residency, status, loss and optimizer arms versus individual winners. Include cold start, full step, repeated epochs and checkpoint; expose interacting regressions before any default changes.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "E01",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "EB,LM,SA",
+      "experiment": "Existing stable radix (token, original position) grouping versus vocabulary scan/bitonic. Include sort workspace, zeros for untouched rows, duplicates/padding and highly skewed IDs.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "E02",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "EB,LM,SA",
+      "experiment": "Group only touched row descriptors and sparse temporary accumulation versus scanning every vocabulary row. Materialize required dense gradients in the timed boundary; optimizer weight decay still visits required state.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "E03",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "EB,LM,SA",
+      "experiment": "Reuse sorted IDs/segments between same-step consumers versus repeat grouping. Key by owned ID generation, sequence extent and vocab/padding settings; input changes invalidate.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "E04",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "EB,LM,SA",
+      "experiment": "Coalesced vector-width gather/scatter over independent feature cells versus scalar loads. Tail/alignment-safe, no float atomics, no changed duplicate accumulation order.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "E05",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "LM,SA",
+      "experiment": "Shared prerefused ID/target validation within a step versus repeated download-and-check. Public unvalidated inputs still pass complete range/refusal checks; cached validity belongs to a versioned buffer.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "E06",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "LM,ML,CN",
+      "experiment": "Device argmax/metric sufficient outputs for APIs requesting only those outputs versus materialize/download full logits. Preserve ties/NaNs and API contract; full-logit APIs still return all logits.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "S01",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "SQ",
+      "experiment": "Shared tiles for same-chain strided sequence GEMM versus per-cell global reads. Preserve K chain, transpose/stride and zero seed; actual recurrent and MLP fit callers required.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "S02",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "SQ",
+      "experiment": "Supported single-block recurrent scan versus per-timestep launches. Enforce hidden-state dependencies and supported barrier semantics across vendors; park if Mojo cannot guarantee required ordering.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "S03",
+      "arithmetic_class": "V",
+      "priority": "P2",
+      "workload_scope": "SQ",
+      "experiment": "Versioned fixed-leaf recurrent weight/bias gradients versus serial T×B folds. Host/device executor and oracle agree; forward quality alone does not qualify training.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "S04",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "SQ",
+      "experiment": "Split LayerNorm stats and cell application versus serial row walks. Reuse stats in backward when lifetime permits; epsilon, population variance and output rounding unchanged.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "S05",
+      "arithmetic_class": "V",
+      "priority": "P2",
+      "workload_scope": "SQ,ML",
+      "experiment": "Device epoch permutation with a declared new RNG mapping versus host Fisher–Yates. Same permutation on every column for seed/epoch/sample count; assess full training quality, no Python row processing.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "S06",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "CN",
+      "experiment": "General implicit/direct convolution replicating GEMM leaves versus im2col+GEMM. No model-size targeting; tensor indexing, dilation, groups, stride and tails have explicit coverage.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "S07",
+      "arithmetic_class": "S",
+      "priority": "P1",
+      "workload_scope": "CN",
+      "experiment": "Retain im2col across convolution backward versus recompute, with byte-budget policy. Include forward memory/copies and batch capacity; avoid stale input or changed padding semantics.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "S08",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "CN,SQ",
+      "experiment": "Compute row exponentials once and reuse for softmax versus two exponent calls. Preserve canonical max, denominator, NaNs and probability normalization; assess saved bytes versus extra scratch.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "S09",
+      "arithmetic_class": "S",
+      "priority": "P2",
+      "workload_scope": "SQ",
+      "experiment": "Stable MoE expert grouping and bounded batched products versus independent tiny expert jobs. Stable token/tie order, same top-k routes, capacity/overflow and gather/scatter order; no changed model semantics.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "S10",
+      "arithmetic_class": "V",
+      "priority": "P2",
+      "workload_scope": "SQ,OP",
+      "experiment": "Fixed-leaf Adafactor/LAMB norm and factor reductions versus serial chains. Shared host/device primitive and exact profile identity; preserve epsilon, clipping/trust ratios and update ordering, then assess convergence.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "V01",
+      "arithmetic_class": "V",
+      "priority": "P3",
+      "workload_scope": "GE,LM,TR,SA",
+      "experiment": "Multiple independent FP32 accumulators per logical leaf with a fixed merge versus serial FMA dependency. Specify chain assignment/merge/FTZ identically on host and all GPUs; whole-caller quality, error under cancellation and actual throughput mechanism required.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "V02",
+      "arithmetic_class": "V",
+      "priority": "P2",
+      "workload_scope": "TR,M1–3,SQ",
+      "experiment": "Balanced row-normalization sum/dot profile versus serial sums. Fixed logical leaves independent of physical warp width; include forward variance/RMS, backward dot, dweight/dbias and epsilon placement.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "V03",
+      "arithmetic_class": "V",
+      "priority": "P3",
+      "workload_scope": "TR,LM,SA",
+      "experiment": "One deterministic shared reciprocal per row plus multiply versus repeated division. Implement or reuse a supported correctly specified primitive, preserve exceptional rules, update all host/device paths; task quality and near-zero conditioning are critical.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "V04",
+      "arithmetic_class": "V",
+      "priority": "P3",
+      "workload_scope": "LM,SA,ML,CN",
+      "experiment": "Fixed-block CE max/sum/loss and gradient profile versus current folds. Keep full vocabulary/objective; finite, large-negative and ignored rows, gradient scale, all-class tails and training quality included.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "V05",
+      "arithmetic_class": "V",
+      "priority": "P3",
+      "workload_scope": "neural nonlinear callers",
+      "experiment": "A versioned shared polynomial/range-reduction primitive for exp/sigmoid/SiLU/tanh versus current primitive, only with an explicit error/domain bound and all-column implementation. Native vendor math is not a valid substitute. Assess accumulated training error, not isolated ulps only.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "V06",
+      "arithmetic_class": "V",
+      "priority": "P3",
+      "workload_scope": "LM,SA,ML,SQ,CN",
+      "experiment": "Fused multiply-add at selected optimizer/activation seams versus separately rounded multiply/add. One precisely named seam per A/B; shared oracle changes and model-state/convergence gates. No global fast-math.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "V07",
+      "arithmetic_class": "S",
+      "priority": "P3",
+      "workload_scope": "LM,SA,TR",
+      "experiment": "Supported graph replay or command batching for stable resident steps versus ordinary enqueue. Only implement when Mojo/Modular exposes required supported lifetime/error semantics; otherwise record the concrete upstream request. No toolchain patching or raw backend workaround.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    },
+    {
+      "id": "V08",
+      "arithmetic_class": "C",
+      "priority": "P2",
+      "workload_scope": "all affected neural callers",
+      "experiment": "Complete proposed numerical version (selected G10/M08–10/S03/S05/S10/V01–06 plus schedule winners) versus last version. New version identity is a separate matrix; ablate interactions and keep rejected/neutral arms off. Never promote from a component-only or one-vendor win.",
+      "source_status": "awaiting_lane_record",
+      "validation_status": "NOT TESTED — NOT COMPILED — NOT MEASURED"
+    }
+  ]
+}

@@ -60,6 +60,9 @@ comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
 #: (the chain order is the T-launch path's; `team_barrier` orders device
 #: memory on CUDA/HIP/Metal by the repo's lowering notes, unproven by a
 #: run). -D MOJOLEARN_IDN_SEQ_LSTM_SCAN turns it on.
+# S02 current campaign — NOT TESTED — NOT COMPILED — NOT MEASURED.
+# BLOCKED prerequisite: prior scan quality failures above remain unresolved;
+# this existing OFF arm is not an admitted candidate or supported-barrier proof.
 comptime SEQ_LSTM_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_SEQ_LSTM_SCAN"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime SEQ_LSTM_SCAN = (_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()) or SEQ_LSTM_SCAN_IDN
 comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()

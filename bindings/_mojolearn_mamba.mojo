@@ -2085,6 +2085,8 @@ struct Mamba3PrefillSession(Movable, Writable):
 
 
 def _m3_retain_stages() -> Bool:
+    # M05 campaign: NOT TESTED — NOT COMPILED — NOT MEASURED. Existing
+    # 1/0 A/B retains/replays Mamba3 stages; input/weight byte checks stay.
     """MOJOLEARN_MAMBA3_RETAIN_STAGES=0 drops the forward's stages at the
     end of the forward (the pre-session behaviour: every backward recomputes
     the forward). Default on: the stages stay on the device for the
@@ -2167,6 +2169,8 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
     var lens = _m3_weight_lens(dims)
     # MOJOLEARN_MAMBA3_RETAIN_WEIGHTS=0: the per-call upload (the A/B
     # against the byte compare).
+    # M06 campaign: NOT TESTED — NOT COMPILED — NOT MEASURED. This
+    # EXISTING arm still compares bytes; it is not a mutation-stamp cache.
     if String(getenv("MOJOLEARN_MAMBA3_RETAIN_WEIGHTS")) == "0":
         s.stages_valid = False
         s.w = None

@@ -14,7 +14,23 @@ norms are sqrt(sum of squares), squared back where the reference squares
 them, and its lerp is torch's two-branch formula."""
 from sequence.ops import FP, Args, add, fma3, ld, lerp, mul, st, sub, sumsq_fold
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul_add, identical_rsqrt, identical_sqrt
+
+# S10 A/B — NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF.
+# Numerical profile neural-norm-leaf256-v1: consecutive 256-element leaves,
+# +0-seeded FMA squares (or +0-seeded row-factor sums), then ascending
+# +0-seeded partial adds. The dependency bound is fixed independently of
+# shape/vendor. HostExec and DeviceExec share these bodies and block tables.
+# MLP's L2 leaf keeps AF_BASE_NORM_BLOCK; this profile is scoped to the
+# Adafactor/LAMB reduction callers and does not silently revise MLP loss.
+# Epsilon, sqrt-then-square, clipping, trust ratios and updates stay intact.
+# Whole-training quality and every-column identity remain unestablished.
+comptime AF_PROFILE_LEAF256 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NEURAL_S10_NORM_LEAF256"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 
 @always_inline
@@ -24,6 +40,15 @@ def div(a: Float32, b: Float32) -> Float32:
 
 @always_inline
 def _sumsq(p: FP, start: Int, n: Int, stride: Int) -> Float32:
+    comptime if AF_PROFILE_LEAF256:
+        if n > 256:
+            var result = Float32(0.0)
+            var lo = 0
+            while lo < n:
+                var part = sumsq_fold(p, start + lo * stride, min(256, n - lo), stride)
+                result = add(result, part)
+                lo += 256
+            return result
     return sumsq_fold(p, start, n, stride)
 
 
@@ -69,7 +94,8 @@ def _psum(p: FP, n: Int) -> Float32:
 #: chain it always was, unchanged bits. Larger tensors get new bits (the
 #: one ascending chain over the whole tensor was a serial walk the GPU ran
 #: at memory latency, or the host route folded it).
-comptime AF_NORM_BLOCK = 4096
+comptime AF_BASE_NORM_BLOCK = 4096
+comptime AF_NORM_BLOCK = 256 if AF_PROFILE_LEAF256 else AF_BASE_NORM_BLOCK
 #: partials loaded ahead of the ascending adds
 comptime AF_PART_STAGE = 16
 
@@ -161,8 +187,21 @@ def op_af_col(t: Int, a: Args):
 def op_af_rmean(t: Int, a: Args):
     """One thread: p1[2] = max(mean(p0[0:R]), eps1); i0 R, f0 eps1."""
     var s = Float32(0.0)
-    for k in range(a.i0):
-        s = add(s, ld(a.p0, k))
+    comptime if AF_PROFILE_LEAF256:
+        if a.i0 > 256:
+            var lo = 0
+            while lo < a.i0:
+                var partial = Float32(0.0)
+                for k in range(lo, min(lo + 256, a.i0)):
+                    partial = add(partial, ld(a.p0, k))
+                s = add(s, partial)
+                lo += 256
+        else:
+            for k in range(a.i0):
+                s = add(s, ld(a.p0, k))
+    else:
+        for k in range(a.i0):
+            s = add(s, ld(a.p0, k))
     af_rmean_tail(a, s)
 
 

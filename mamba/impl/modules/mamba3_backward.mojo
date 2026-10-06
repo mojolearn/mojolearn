@@ -11,11 +11,12 @@ from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from mamba.impl.ops.neural_experiment_profiles import NEURAL_MAMBA_TPB, IDN_M3_ANGLE_SUFFIX_SEEDS
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 
 from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf, identical_mul
 from mamba.checks.mamba3_fixture import M3_A_FLOOR, M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, M3_PI, M3_RMS_EPS, Mamba3Dims
-comptime M3_BWD_TPB = 128
+comptime M3_BWD_TPB = NEURAL_MAMBA_TPB  # M07: NOT TESTED — NOT COMPILED — NOT MEASURED; opt-in geometry only.
 comptime M3_S16_V_SHARED = not is_defined["MOJOLEARN_MAMBA3_S16_V_NAIVE"]()
 """lane/neural-apple2 (2026-09-28): the S16 d_v half runs one block per
 (row, head) with the q . k dot of each later row computed ONCE into shared
@@ -1301,6 +1302,7 @@ def mamba3_angle_reduce_kernel(
 # tail dump pass the chunk-sum scratch.
 # ---------------------------------------------------------------------------
 comptime IDN_M3_ANGLE_DT_SUFFIX = (
+    # M09 campaign: NOT TESTED — NOT COMPILED — NOT MEASURED; existing arithmetic profile retained.
     not is_defined["MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
@@ -1338,6 +1340,32 @@ def mamba3_angle_chunk_sum_kernel(
     sums.unsafe_store(cell,s)
 
 
+def mamba3_angle_chunk_seed_kernel(
+    sums: MutPointer[Float32, MutAnyOrigin], b_in: Int32, l_in: Int32, nh_in: Int32,
+):
+    """M09 schedule arm: replace each chunk total with its exact later seed.
+
+    One thread owns the whole chain. The existing suffix kernel starts from
+    +0 and visits later chunk totals in descending order; these seeds are
+    prefixes of that same descending walk, so sharing them changes no fold.
+    Scratch is private to this backward call and each chunk total is read
+    before replacement. This removes the repeated O(chunk_count squared)
+    seed construction while preserving the existing numerical version.
+    """
+    var nh = Int(nh_in)
+    var nk = (Int(l_in) + M3_ANGLE_SUFFIX_CHUNK - 1) // M3_ANGLE_SUFFIX_CHUNK
+    var chain = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if chain >= Int(b_in) * nh * M3_NUM_ROPE_ANGLES:
+        return
+    var carry = Float32(0.0)
+    var k = nk - 1
+    while k >= 0:
+        var total = ftz(sums.unsafe_load(chain * nk + k))
+        sums.unsafe_store(chain * nk + k, carry)
+        carry = ftz(carry + total)
+        k -= 1
+
+
 def mamba3_angle_suffix_kernel(
     carry_out: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
     sums: MutPointer[Float32, MutAnyOrigin], b_in:Int32,l_in:Int32,nh_in:Int32,
@@ -1353,10 +1381,13 @@ def mamba3_angle_suffix_kernel(
     var r=chain%M3_NUM_ROPE_ANGLES;var bh=chain//M3_NUM_ROPE_ANGLES
     var h=bh%nh;var bb=bh//nh
     var carry=Float32(0.0)
-    var kk=nk-1
-    while kk>k:
-        carry=ftz(carry+ftz(sums.unsafe_load(chain*nk+kk)))
-        kk-=1
+    comptime if IDN_M3_ANGLE_SUFFIX_SEEDS:
+        carry = sums.unsafe_load(chain * nk + k)
+    else:
+        var kk=nk-1
+        while kk>k:
+            carry=ftz(carry+ftz(sums.unsafe_load(chain*nk+kk)))
+            kk-=1
     var t0=k*M3_ANGLE_SUFFIX_CHUNK;var t1=t0+M3_ANGLE_SUFFIX_CHUNK
     if t1>l:t1=l
     var t=t1-1
@@ -1400,6 +1431,14 @@ def mamba3_backward_angle_into(
         var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
         var work=b*dims.nheads*M3_NUM_ROPE_ANGLES*nk
         ctx.enqueue_function[mamba3_angle_chunk_sum_kernel](sums.unsafe_ptr(),d_theta.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
+        comptime if IDN_M3_ANGLE_SUFFIX_SEEDS:
+            # NOT TESTED — NOT COMPILED — NOT MEASURED; one extra launch
+            # trades repeated chunk-total loads for a shared exact prefix.
+            var seed_chains = b * dims.nheads * M3_NUM_ROPE_ANGLES
+            ctx.enqueue_function[mamba3_angle_chunk_seed_kernel](
+                sums.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads),
+                grid_dim=(_grid(seed_chains), 1, 1), block_dim=(M3_BWD_TPB, 1, 1),
+            )
         ctx.enqueue_function[mamba3_angle_suffix_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),sums.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
         var m=b*l
         ctx.enqueue_function[mamba3_angle_suffix_dt_kernel](d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(_grid(m*dims.nheads),1,1),block_dim=(M3_BWD_TPB,1,1))

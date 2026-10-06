@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host-only shape and registry for the configured decoder language model."""
+from training.neural_identical_experiments import NEURAL_ADAMW_DECAY_FMA
 
 comptime BYTE_CONFIG_LIMIT = 2147483647
 comptime BYTE_DEFAULT_PROFILE = "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1"
@@ -41,6 +42,8 @@ struct ByteConfig(Copyable, Movable):
     var intermediate: Int
     var n_layers: Int
     var vocab_size: Int
+    # T06 reuse: NOT TESTED — NOT COMPILED — NOT MEASURED in this campaign.
+    # Existing opt-in numerical version; this config field is its real control.
     var chunked_lm_head_v2: Bool
 
     def __init__(out self, batch: Int = 2, length: Int = 32,
@@ -134,10 +137,13 @@ struct ByteConfig(Copyable, Movable):
 
     def profile(self) raises -> String:
         self.validate()
+        # V06: NOT TESTED — NOT COMPILED — NOT MEASURED. Distinguish the
+        # arithmetic version in host/device captures and checkpoint config.
+        var arithmetic = String("-adamw-decay-fma-v2") if NEURAL_ADAMW_DECAY_FMA else String("")
         if (not self.chunked_lm_head_v2 and self.batch == 2 and self.length == 32 and self.d_model == 32
             and self.n_heads == 4 and self.n_kv == 2 and self.head_dim == 8
             and self.intermediate == 64 and self.n_layers == 2 and self.vocab_size == 256):
-            return String(BYTE_DEFAULT_PROFILE)
+            return String(BYTE_DEFAULT_PROFILE) + arithmetic
         var suffix = String("-v256-blocks2.fp32.v2")
         if self.n_layers != 2 or self.vocab_size != 256:
             suffix = String("-v") + String(self.vocab_size) + "-blocks" + String(self.n_layers) + ".fp32.v3"
@@ -146,4 +152,4 @@ struct ByteConfig(Copyable, Movable):
             + "-l" + String(self.length) + "-d" + String(self.d_model)
             + "-h" + String(self.n_heads) + "-kv" + String(self.n_kv)
             + "-hd" + String(self.head_dim) + "-ff" + String(self.intermediate)
-            + suffix + head)
+            + suffix + head + arithmetic)

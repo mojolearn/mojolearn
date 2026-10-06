@@ -19,7 +19,7 @@ restated).
 from sequence.ops import FP, Args, add, fma3, ld, mul, op_bias, op_colsum, op_gemm, st, sub, sumsq_fold
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_tanh
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from sequence.adafactor import AF_NORM_BLOCK, af_fold_parts
+from sequence.adafactor import AF_BASE_NORM_BLOCK, af_fold_parts
 from std.sys.compile import is_defined
 
 #: nr-small (2026-10-04, review item 7: "MLP fit has one-thread folds per
@@ -45,8 +45,12 @@ from std.sys.compile import is_defined
 #: Both also turn off under MOJOLEARN_IDN_ALL_OFF.
 comptime _MLP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime MLP_BLOCKED_FOLDS = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF"]()
+# S05 reuse in this campaign — NOT TESTED — NOT COMPILED — NOT MEASURED.
+# Existing Feistel permutation plus epoch-loss fold, a numerical revision;
+# baseline OFF changes both. RNN's already-shipped permutation has no toggle.
 comptime MLP_EPOCH_DEV = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF"]()
-comptime MLP_L2_BLOCK = AF_NORM_BLOCK
+# S10 is an optimizer profile, not a revision of the MLP objective fold.
+comptime MLP_L2_BLOCK = AF_BASE_NORM_BLOCK
 comptime MLP_ROW_BLOCK = 256
 
 comptime ACT_IDENTITY = 0

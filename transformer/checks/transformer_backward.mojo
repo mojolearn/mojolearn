@@ -266,6 +266,8 @@ def _fill_ones[wait: Bool = True](
 
 #: The RMSNorm backward's `c` fold spelled product-then-add instead of one
 #: `fma` per term. INERT at `d_model == 1` and on exactly-representable rows.
+# A07 reuse: NOT TESTED — NOT COMPILED — NOT MEASURED in this campaign.
+# Existing enabled schedule is unchanged; its OFF arm restores the copy.
 comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )

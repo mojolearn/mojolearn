@@ -371,6 +371,8 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 # its numbers are a breakdown, never a request price.
 # ===========================================================================
 # NEVER RUN — PENDING MEASUREMENT
+# A02/A08 reuse: NOT TESTED — NOT COMPILED — NOT MEASURED in this campaign.
+# The existing trial selector exposes explicit arm words; no default changed.
 comptime ATTN_ARM_TRIAL = is_defined["MOJOLEARN_ATTN_ARM_TRIAL"]()
 comptime ATTN_PHASE_TIMERS = is_defined["MOJOLEARN_ATTN_PHASE_TIMERS"]()
 
@@ -1404,6 +1406,8 @@ of the trial tree (the sabotage copies stay trial-only, like
 # tradeoff qualification remain required. Preserve defaults and old exclusions.
 # Evidence: overnight-ab-20261006/amd/normalized-measurements.json and
 # overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json, I07.
+# A02 reuse: NOT TESTED — NOT COMPILED — NOT MEASURED in this campaign.
+# Existing retained/recompute arms need complete train-step and memory scope.
 comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
 comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
 comptime ATTN_V1_ALIAS_Y_ESTASH = (
@@ -9356,6 +9360,9 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
 # earlier cbcc bundled schedule measurements above remain separate history.
 # Representative forward/backward scope only; keep GQA reuse default OFF.
 # Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurements, I06.
+# A01 reuse: NOT TESTED — NOT COMPILED — NOT MEASURED in this campaign.
+# Keep the historical isolated loser off; only changed mechanisms/coverage
+# justify a future rerun. This is existing source, not a new GQA kernel.
 comptime ATTN_GQA_HEAD_REUSE = (
     GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL
     # The original bundled timing does not qualify this switch.

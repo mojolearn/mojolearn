@@ -133,6 +133,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_NN
+from training.neural_identical_experiments import NEURAL_CE_FUSED_GRAD
 from core.device_scan import (
     device_classify_nonfinite,
     device_first_nonfinite,
@@ -1031,6 +1032,42 @@ def ce_weights_kernel(
     )
 
 
+def ce_weights_dlogits_kernel(
+    weights: MutPointer[Float32, MutAnyOrigin],
+    dlogits: MutPointer[Float32, MutAnyOrigin],
+    expo: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    targets: MutPointer[Int32, MutAnyOrigin],
+    t_target: Float32,
+    t_other: Float32,
+    divisor: Float32,
+    n_rows_in: Int32,
+    vocab_in: Int32,
+    ignore_index_in: Int32,
+):
+    """T05: L14 and L16, preserving the intermediate rounded weight output.
+
+    Writes weights even for ignored rows, as the separate weight pass does.
+    The gradient for an ignored row is explicit +0. No normalization fold,
+    log/exp spelling, objective, smoothing or per-cell divisor is changed.
+    """
+    var vocab = Int(vocab_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= Int(n_rows_in) * vocab:
+        return
+    var row = cell // vocab
+    var v = cell - row * vocab
+    var w = ftz(identical_div(ftz(expo.unsafe_load(cell)), ftz(denom.unsafe_load(row))))
+    weights.unsafe_store(cell, w)
+    var y = Int(targets.unsafe_load(row))
+    if y == Int(ignore_index_in):
+        dlogits.unsafe_store(cell, Float32(0.0))
+        return
+    var target = t_target if v == y else t_other
+    var delta = ftz(ftz(w) - ftz(target))
+    dlogits.unsafe_store(cell, ftz(identical_div(delta, divisor)))
+
+
 def ce_dlogits_kernel(
     dlogits: MutPointer[Float32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -1651,6 +1688,19 @@ def identical_ce_backward_into(
     var divisor = ce_divisor(cfg.reduction, count, cfg.num_items)
     comptime if SAB_GRAD_DIVISOR_IS_N:
         divisor = Float32(n_rows)
+
+    # T05: NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF. Saves one
+    # launch and one probability reread per cell; original outputs survive.
+    # Sabotage profiles keep their separate implementation and diagnostics.
+    comptime if NEURAL_CE_FUSED_GRAD and not ANY_LOSS_SABOTAGE:
+        step_count_launch()
+        ctx.enqueue_function[ce_weights_dlogits_kernel](
+            weights.unsafe_ptr(), dlogits.unsafe_ptr(), expo.unsafe_ptr(),
+            denom.unsafe_ptr(), targets.unsafe_ptr(), tv[0], tv[1], divisor,
+            Int32(n_rows), Int32(vocab), Int32(cfg.ignore_index),
+            grid_dim=(_grid_for(cells), 1, 1), block_dim=(CE_TPB, 1, 1),
+        )
+        return
 
     step_count_launch()
     ctx.enqueue_function[ce_weights_kernel](

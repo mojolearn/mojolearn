@@ -126,6 +126,11 @@ from checks.numerics import (
 #: runs the elementwise stages as four fused launches (afn_mamba3_fused.mojo);
 #: every other build takes the kernels below unchanged.
 from mamba.impl.modules.afn_defines import AFN_MAMBA3_SISO_FUSED
+from mamba.impl.ops.neural_experiment_profiles import (
+    NEURAL_MAMBA_TPB,
+    IDN_M3_RETAIN_STATE_DECAY,
+    IDN_M3_RESOURCE_YINTRA,
+)
 from mamba.impl.ops.afn_mamba3_fused import (
     afn_m3_dacs_decay,
     afn_m3_rot_kscale,
@@ -260,7 +265,7 @@ def m3_n_chunks(t_work: Int) -> Int:
 # geometry in any expression that reaches a fold boundary or a seed.
 # ===========================================================================
 
-comptime MAMBA3_TPB = 128
+comptime MAMBA3_TPB = NEURAL_MAMBA_TPB  # M07: NOT TESTED — NOT COMPILED — NOT MEASURED; opt-in geometry only.
 
 
 def _grid(n: Int) -> Int:
@@ -1653,7 +1658,7 @@ def m3_yintra_kernel(
 # Eight independent token rows by 32 independent channels. Cooperative
 # operand loads preserve each output's ascending N fold, including FTZ.
 # The 33-column shared stride avoids bank conflicts in both directions.
-def m3_ystate_tiled_kernel(
+def m3_ystate_tiled_kernel[RETAIN_DECAY: Bool = False](
     ystate: MutPointer[Float32, MutAnyOrigin],
     rotq_work: MutPointer[Float32, MutAnyOrigin],
     pass_states: MutPointer[Float32, MutAnyOrigin],
@@ -1685,7 +1690,10 @@ def m3_ystate_tiled_kernel(
     var acc = Float32(0.0)
     var e_i = Float32(0.0)
     if t >= q0 and t < tw:
-        e_i = ftz(identical_exp(ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + t - c * qv))))
+        comptime if RETAIN_DECAY:
+            e_i = dacs.unsafe_load((bb * l + t - q0) * nh + hh)
+        else:
+            e_i = ftz(identical_exp(ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + t - c * qv))))
     for k0 in range(0, M3_D_STATE, 32):
         var qword = Float32(0.0)
         if t < tw:
@@ -1711,7 +1719,7 @@ def m3_ystate_tiled_kernel(
             ystate.unsafe_store(cell, ftz(identical_mul(ftz(acc), e_i)))
 
 
-def m3_ystate_kernel(
+def m3_ystate_kernel[RETAIN_DECAY: Bool = False](
     ystate: MutPointer[Float32, MutAnyOrigin],  # [M, H, P]
     rotq_work: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, N]
     pass_states: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, P, N]
@@ -1744,11 +1752,15 @@ def m3_ystate_kernel(
     var t = q0 + li
     var c = t // qv
     var ii = t - c * qv
-    var e_i = ftz(
-        identical_exp(
-            ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + ii))
+    var e_i: Float32
+    comptime if RETAIN_DECAY:
+        e_i = dacs.unsafe_load((bb * l + li) * nh + hh)
+    else:
+        e_i = ftz(
+            identical_exp(
+                ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + ii))
+            )
         )
-    )
     var pbase = ((((bb * nc + c) * nh + hh) * p_dim) + p) * n_state
     var acc = Float32(0.0)
     for n in range(n_state):
@@ -1767,6 +1779,36 @@ def m3_ystate_kernel(
         ystate.unsafe_store(cell, ftz(acc))
     else:
         ystate.unsafe_store(cell, ftz(identical_mul(ftz(acc), e_i)))
+
+
+def m3_ystate_decay_kernel(
+    decay: MutPointer[Float32, MutAnyOrigin],
+    dacs: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, q0_in: Int32, nh_in: Int32,
+    nc_in: Int32, q_in: Int32,
+):
+    """M03: one identical exp per NEW (token, head), shared by all P cells.
+
+    This pass owns fresh scratch for this invocation. It cannot outlive or
+    accidentally reuse a previous forward/reset/streaming extension. dacs
+    and every backward-visible stage remain intact; only S17 readers share
+    the precisely same ftz(exp(ftz(dacs))) result.
+    """
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= Int(b_in) * l * nh:
+        return
+    var hh = cell % nh
+    var li = (cell // nh) % l
+    var bb = cell // (l * nh)
+    var t = Int(q0_in) + li
+    var c = t // qv
+    var ii = t % qv
+    decay.unsafe_store(cell, ftz(identical_exp(
+        ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + ii)))))
 
 
 # ===========================================================================
@@ -2001,6 +2043,10 @@ def m3_siso_forward(
     var t_work = q0 + l
     var qv = m3_q_eff()
     var nc = m3_n_chunks(t_work)
+    # M03 retained storage stays alive through this function's final wait.
+    # One scalar per token/head is O(B*L*H), versus O(B*L*H*P) output;
+    # it introduces no shape threshold or cross-call cache key.
+    var retained_state_decay = List[DeviceBuffer[DType.float32]]()
     comptime n_state = M3_D_STATE
     comptime p_dim = M3_HEADDIM
     comptime r_ang = M3_NUM_ROPE_ANGLES
@@ -2321,7 +2367,13 @@ def m3_siso_forward(
     # threshold supplies ample tile work; it is not an intermediate-size tune.
     var use_yintra_tile = False
     comptime if column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
-        comptime if is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]():
+        comptime if IDN_M3_RESOURCE_YINTRA:
+            # M04: NOT TESTED — NOT COMPILED — NOT MEASURED. Use the
+            # existing 256-thread / 10,240-byte tile wherever those actual
+            # resources fit. Every shape takes this selected arm, including
+            # tiny grids and padded tails; cost-based admission comes later.
+            use_yintra_tile = True
+        elif is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]():
             use_yintra_tile = True
         elif TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_MAMBA3_LEGACY_YINTRA"]():
             use_yintra_tile = b * nc * nh >= 128
@@ -2348,12 +2400,21 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
     m3_phase_tick(ctx, phase_tick, String("m3_yintra_kernel"))
+    var state_decay_ptr = dacs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    comptime if IDN_M3_RETAIN_STATE_DECAY:
+        retained_state_decay.append(ctx.enqueue_create_buffer[DType.float32](b * l * nh))
+        ctx.enqueue_function[m3_ystate_decay_kernel](
+            retained_state_decay[0].unsafe_ptr(), dacs.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(q0), Int32(nh), Int32(nc), Int32(qv),
+            grid_dim=(_grid(b * l * nh), 1, 1), block_dim=(MAMBA3_TPB, 1, 1),
+        )
+        state_decay_ptr = retained_state_decay[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_YSTATE"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
-        ctx.enqueue_function[m3_ystate_tiled_kernel](
+        ctx.enqueue_function[m3_ystate_tiled_kernel[IDN_M3_RETAIN_STATE_DECAY]](
             ystate.unsafe_ptr(),
             rotq_work.unsafe_ptr(),
             pass_states.unsafe_ptr(),
-            dacs.unsafe_ptr(),
+            state_decay_ptr,
             Int32(b),
             Int32(l),
             Int32(q0),
@@ -2364,11 +2425,11 @@ def m3_siso_forward(
             block_dim=(256, 1, 1),
         )
     else:
-        ctx.enqueue_function[m3_ystate_kernel](
+        ctx.enqueue_function[m3_ystate_kernel[IDN_M3_RETAIN_STATE_DECAY]](
             ystate.unsafe_ptr(),
             rotq_work.unsafe_ptr(),
             pass_states.unsafe_ptr(),
-            dacs.unsafe_ptr(),
+            state_decay_ptr,
             Int32(b),
             Int32(l),
             Int32(q0),

@@ -1,0 +1,500 @@
+[
+  {
+    "id": "E01",
+    "title": "Reuse stable radix embedding grouping",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "embedding/checks/embedding_sort.mojo",
+      "embedding/checks/embedding_identical.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_IDN_EMB_RADIX_SORT_OFF=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {
+      "embedding_plan": "PLAN_SORT"
+    },
+    "baseline_settings": {
+      "embedding_plan": "PLAN_SORT"
+    },
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "EB",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Existing default and historical component evidence unchanged. Only PLAN_SORT callers reach radix; PLAN_SCAN is a distinct control. Repeating an unchanged decided component experiment is not requested. Full embedding caller sort workspace/seed/backward remains required."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in embedding/checks/embedding_sort.mojo"
+  },
+  {
+    "id": "E02",
+    "title": "Reuse touched-row embedding backward schedule",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "embedding/checks/embedding_identical.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "EB",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Existing arm reduces fold launch to sorted slots when positions < vocabulary; only run-start slots work. Dense dW seeding and padding stores remain. Compact touched-row descriptors and sparse temporary materialization are not new implementations here."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in embedding/checks/embedding_identical.mojo"
+  },
+  {
+    "id": "E03",
+    "title": "Generation-keyed embedding grouping workspace",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "embedding/checks/embedding_reuse.mojo",
+      "embedding/checks/embedding_identical.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NEURAL_E03_EMB_REUSE_GROUPS=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {
+      "native_entry": "EmbGroupingWorkspace.backward_into",
+      "same_step_consumers": 2
+    },
+    "baseline_settings": {
+      "native_entry": "EmbGroupingWorkspace.backward_into",
+      "same_step_consumers": 2
+    },
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "EB",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Owns bounded grouping buffers and requires nonzero owner/context-generation and ID-generation stamps; pointer identity is only an extra check. Public IDs still receive complete refusal. Every ID/context/scratch mutation requires invalidate or a new generation; callers must retain workspace through synchronization. Does not cache dy/dW."
+    ],
+    "blocker": "LM/SA step integration supplying authoritative owner/generation stamps is not wired. Standalone workspace is source only.",
+    "toggle_comments": "Inline campaign warning at the control in embedding/checks/embedding_reuse.mojo"
+  },
+  {
+    "id": "E04",
+    "title": "Four-feature embedding gather packets",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "embedding/checks/embedding_identical.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NEURAL_E04_EMB_FEATURE_PACKET=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "EB",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Wired into normal/prerefused/refusing forward launches. Four adjacent cells share one ID decode with scalar-safe tails and both existing FTZ seams. This is feature packet scheduling; no aligned SIMD instruction claim. Backward scatter packet extension is not implemented."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in embedding/checks/embedding_identical.mojo"
+  },
+  {
+    "id": "E05",
+    "title": "Shared prerefused ID checks with repeat-refusal control",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "embedding/checks/embedding_identical.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_NEURAL_E05_REPEAT_ID_REFUSAL=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "EB",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Existing prerefused forward/backward is A. The new opt-in B control repeats the original full ID download/refusal. Unvalidated public entry still refuses IDs. The control does not implement shared target validation or a new owned validity cache; those remain prerequisites for broader token/target reuse."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in embedding/checks/embedding_identical.mojo"
+  },
+  {
+    "id": "E06",
+    "title": "MLP chunk-local device class outputs",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "sequence/mlp_fit.mojo",
+      "sequence/ops.mojo",
+      "sequence/dispatch.mojo",
+      "sequence/pyapi.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NEURAL_E06_MLP_ARGMAX_CHUNKS=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {
+      "native_output_flag": 2
+    },
+    "baseline_settings": {
+      "native_output_flag": 2
+    },
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "ML",
+      "SQ"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Native trailing output flag 2 requests N float32 class codes for multiclass softmax with classes < 2^24 (exact code representation). A reduces completed probability chunks into N outputs; B materializes N*O probabilities before the same device/host argmax. First maximum/first NaN semantics; probability arithmetic is not bypassed. Existing full-output APIs unchanged. B does not deliberately add a needless full-logit download; compare real public baseline separately."
+    ],
+    "blocker": "Public estimator integration of native output flag 2 and LM/CNN sufficient-output extensions remain pending.",
+    "toggle_comments": "Inline campaign warning at the control in sequence/mlp_fit.mojo"
+  },
+  {
+    "id": "S01",
+    "title": "Reuse shared-tile sequence GEMM",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "sequence/gemm_tiled.mojo",
+      "sequence/exec_device.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "SQ"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Existing NV/AMD schedule; Apple keeps its current same-chain implementation. Cover actual RNN and MLP fit callers, strided/transposed products and neighboring tile occupancy. No new default or tile threshold."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in sequence/gemm_tiled.mojo"
+  },
+  {
+    "id": "S02",
+    "title": "Existing single-block recurrent scan prerequisite",
+    "status": "blocked_prerequisite",
+    "implementation_paths": [
+      "sequence/recurrent_scan.mojo",
+      "sequence/recurrent.mojo",
+      "sequence/exec_device.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_SEQ_LSTM_SCAN=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "SQ"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Existing opt-in implementation only. Historical source comments report constant-prediction/severe-quality failure even after an Args rewrite. Retained failure is not hidden or superseded by a fresh claimed implementation. No unsupported barrier workaround."
+    ],
+    "blocker": "Prior scan quality failure is unresolved; supported cross-vendor barrier/memory semantics and native recurrent correctness must be established in a later authorized task.",
+    "toggle_comments": "Inline campaign warning at the control in sequence/recurrent_scan.mojo"
+  },
+  {
+    "id": "S03",
+    "title": "Fixed128 recurrent gradient numerical profile",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "sequence/recurrent.mojo",
+      "sequence/checks/oracle.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF=1",
+      "MOJOLEARN_NEURAL_S03_WGRAD_LEAF128=1"
+    ],
+    "baseline_defines": [
+      "MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "SQ"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "A is recurrent-wgrad-leaf128-v1, fixed consecutive 128-row +0-seeded FMA chains with ascending +0-seeded partial sums. Explicit B is serial (existing blocked-fold OFF). Host and GPU share executor ops; independent BPTT oracle restates the fixed leaf. All weight/bias gradients, full training and cancellation/odd-tail behavior remain unqualified."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in sequence/recurrent.mojo"
+  },
+  {
+    "id": "S04",
+    "title": "Split LayerNorm stats and cell application",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "sequence/layernorm.mojo",
+      "sequence/ops.mojo",
+      "sequence/dispatch.mojo",
+      "sequence/pyapi.mojo",
+      "sequence/exec.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NEURAL_S04_LN_SPLIT_APPLY=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "SQ"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Forward writes original mean/rstd then parallel cells; backward writes original mean(g)/mean(g*xhat) then parallel dx. dweight/dbias are unchanged. Adds launches and two M-word arrays; host operation cost metadata updated. With V02 simultaneously enabled this is a combination profile, not the unchanged-arithmetic standalone experiment."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in sequence/layernorm.mojo"
+  },
+  {
+    "id": "S05",
+    "title": "Reuse device epoch permutation numerical profile",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "sequence/mlp.mojo",
+      "sequence/mlp_fit.mojo",
+      "sequence/recurrent.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "SQ",
+      "ML"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Existing MLP toggle bundles the Feistel shuffle and FP32 device epoch-loss fold; it is not a clean shuffle-only ablation. Seed/epoch/sample count map identically in shared Mojo executor ops. RNN already uses device permutation without a corresponding B switch. Full seed-set convergence and stopped-epoch behavior pending."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in sequence/mlp.mojo"
+  },
+  {
+    "id": "S06",
+    "title": "General implicit CNN convolution",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "x_cnn/device.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NEURAL_S06_CNN_IMPLICIT_CONV=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "CN"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Wired through ordinary and resident convolution/conv-block calls for every reduction extent. Computes original im2col address/zero padding/dilation/stride values inside output owners; uses existing GEMM contract partition, FMA, flush and balanced fold helpers. OC=0 alone writes saved cols for backward. Existing host im2col+GEMM/oracle remains independent same-arithmetic witness. Existing scratch allocations remain, so no eliminated-allocation claim; groups rely on existing group slices."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in x_cnn/device.mojo"
+  },
+  {
+    "id": "S07",
+    "title": "Saved CNN im2col versus recomputation control",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "x_cnn/ops.mojo",
+      "x_cnn/device.mojo",
+      "x_cnn/host/ops_host.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_NEURAL_S07_CNN_RECOMPUTE_SAVED=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "CN"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "A retains existing owner-provided saved im2col/conv state. New B switch recomputes backward state in host and device paths. B still owns forward saved allocation; report this in memory/capacity accounting. No new byte-budget allocation policy is implemented; caller lifecycle and cold cost are part of future full CNN qualification."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in x_cnn/ops.mojo"
+  },
+  {
+    "id": "S08",
+    "title": "Reuse single-exponential softmax paths",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "sequence/ops.mojo",
+      "x_cnn/ops.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF=1",
+      "MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "SQ",
+      "CN"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Existing source parks exponentials in gradient/probability output storage. Max, sum and normalization order unchanged. Both controls are existing defaults (other modes unchanged); experiment is IDENTICAL-only. Need separate SQ/CN workloads and full combination, not just exponent kernel timing."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in sequence/ops.mojo"
+  },
+  {
+    "id": "S09",
+    "title": "Stable expert-owned MoE grouping",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "sequence/moe_group.mojo",
+      "sequence/exec_device.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NEURAL_S09_MOE_STABLE_GROUP=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "SQ"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Wired into general tiled and register-tiled device grouping. One owner per expert scans original (token,pick) pairs, avoiding atomic cursor contention and yielding stable pair order. Existing expert products preserve pair outputs and pick-ordered combination. O(experts*pairs) integer reads can regress many-expert workloads; no tuned threshold. Routing, expert capacity and model semantics unchanged."
+    ],
+    "blocker": null,
+    "toggle_comments": "Inline campaign warning at the control in sequence/moe_group.mojo"
+  },
+  {
+    "id": "S10",
+    "title": "Fixed256 optimizer norm/factor numerical profile",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "sequence/adafactor.mojo",
+      "sequence/exec_device.mojo",
+      "sequence/mlp.mojo",
+      "sequence/checks/oracle.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NEURAL_S10_NORM_LEAF256=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "SQ",
+      "OP"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "256-term FMA leaves and ascending partial sums for Adafactor whole norms/row/column factors and LAMB norms; row-factor means have matching sum leaves. Shared host/device tables use the same leaf. Old cooperative folds are disabled when they would substitute a different profile. MLP L2 is isolated to AF_BASE_NORM_BLOCK=4096; no silent MLP-loss revision. LAMB independent sumsq oracle updated. Epsilon, sqrt-square, clipping/trust/update seams retained."
+    ],
+    "blocker": "Independent complete Adafactor step/state oracle for this arithmetic profile remains pending; full affected optimizer training recipes and convergence qualification are not established.",
+    "toggle_comments": "Inline campaign warning at the control in sequence/adafactor.mojo"
+  },
+  {
+    "id": "V02",
+    "title": "Sequence LayerNorm adjacent-pair numerical profile",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "sequence/layernorm.mojo",
+      "sequence/exec_device.mojo",
+      "sequence/checks/oracle.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NEURAL_V02_LN_ADJACENT_TREE=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "candidate_settings": {},
+    "baseline_settings": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "SQ"
+    ],
+    "limitations": [
+      "Source-development only: NOT TESTED — NOT COMPILED — NOT MEASURED. No all-vendor identity, task-quality, speed or full-workload acceptance is established.",
+      "Scoped ln-adjacent-tree-v1 covers mean, centered variance, dx row sum/dot, dweight and dbias. +0-seeded scalar/FMA leaves, adjacent balanced adds, odd carry, existing FTZ/nonlinear/division/epsilon seams; binary-carry implementation uses a fixed 64-slot bound, independent of GPU warp width. Host executor shares source, independent forward oracle and a new backward oracle restate pairwise levels. Old cooperative LN folds and old dweight row-block layout are disabled. No claimed parallel throughput from the source-only stack implementation."
+    ],
+    "blocker": "Broader transformer/Mamba RMSNorm V02 integration is not implemented. Independent backward oracle exists as source but is not connected to a new gate; no gate was run.",
+    "toggle_comments": "Inline campaign warning at the control in sequence/layernorm.mojo"
+  }
+]

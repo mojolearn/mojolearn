@@ -66,6 +66,7 @@ comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 #: once and park it in the output row (the same flushed word the second exp
 #: produced, so the same bits on every column and the host).
 #: -D MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+# S08 reuse in this campaign — NOT TESTED — NOT COMPILED — NOT MEASURED.
 comptime SEQ_SOFTMAX_ONE_EXP = not (
     is_defined["MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
@@ -207,6 +208,31 @@ comptime OP_SEQ_IOTA = 95
 #: lane cpu4-python: ProphetForecaster's scaled time and seasonal phases on the
 #: executor (soft binary64, `sequence/prophet.mojo` op_prophet_prep).
 comptime OP_PROPHET_PREP = 96
+# Neural S04: identical row statistics followed by independent cell stores.
+comptime OP_LN_STATS = 97
+comptime OP_LN_APPLY = 98
+comptime OP_LN_BWD_STATS = 99
+comptime OP_LN_BWD_APPLY = 100
+comptime OP_NEURAL_ARGMAX = 101
+
+
+def op_neural_argmax(t: Int, a: Args):
+    """E06 multiclass probability row to a float32 class code, i0 width.
+    First maximum wins ties; the first NaN wins, matching CNN/native argmax.
+    Calls require fewer than 2^24 classes so the integer code stays exact.
+    No nonlinear or probability roundings are bypassed.
+    """
+    var base = t * a.i0
+    var best = 0
+    var value = a.p0.unsafe_load(base)
+    for c in range(1, a.i0):
+        if value != value:
+            break
+        var v = a.p0.unsafe_load(base + c)
+        if v != v or v > value:
+            best = c
+            value = v
+    a.p1.unsafe_store(t, Float32(best))
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

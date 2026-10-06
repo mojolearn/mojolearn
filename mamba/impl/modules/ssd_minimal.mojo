@@ -180,7 +180,8 @@ def m2_n_chunks(t_work: Int) -> Int:
 # a fold boundary or a seed.
 # ===========================================================================
 
-comptime MAMBA2_TPB = 128
+from mamba.impl.ops.neural_experiment_profiles import NEURAL_MAMBA_TPB
+comptime MAMBA2_TPB = NEURAL_MAMBA_TPB  # M07: NOT TESTED — NOT COMPILED — NOT MEASURED; opt-in geometry only.
 
 
 def _grid(n: Int) -> Int:
@@ -687,11 +688,12 @@ comptime M2_CS_IC = 32
 comptime M2_RETAIN_GL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     # Scoped near-neutral measurements retain the default OFF.
+    # M01 campaign: NOT TESTED — NOT COMPILED — NOT MEASURED; reuse this existing arm, no new promotion.
     and is_defined["MOJOLEARN_IDN_M2_RETAIN_GL"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not SSD_ANY_SABOTAGE
 )
-comptime M2_RETAIN_GL_MAX_CELLS = 1<<22
+comptime M2_RETAIN_GL_MAX_CELLS = 1<<22  # 16 MiB of FP32 retained scratch, a byte budget independent of dataset shape.
 
 def m2_retained_gl_kernel(retained: MutPointer[Float32,MutAnyOrigin],
     cb_g: MutPointer[Float32,MutAnyOrigin],seg_l: MutPointer[Float32,MutAnyOrigin],

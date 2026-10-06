@@ -16,6 +16,7 @@ allocate their scratch uninitialized; the List entries below are their
 doors for the seam check."""
 from std.memory import alloc
 from std.sys.compile import is_defined
+from x_cnn.ops import CNN_RECOMPUTE_SAVED
 from core.host_parallel import host_parallelize
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
@@ -452,9 +453,10 @@ def conv_block_backward_into(
     var ckk = Int(cprm[CP_C]) * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = Int(cprm[CP_N]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
     var zp: List[Int32] = [0, 0, 0]
+    var reuse = keep and not CNN_RECOMPUTE_SAVED
     var cols = kcols
     var yconv = ky
-    if not keep:
+    if not reuse:
         cols = scratch(rows * ckk)
         yconv = scratch(ny)
         conv2d_forward_cols(x, w, bias, yconv, cprm, cols)
@@ -466,10 +468,10 @@ def conv_block_backward_into(
         _ = ps^
     else:
         run[relu_bwd_at](yconv, g, gy, gy, hi(zp), hi(zp), ny)
-    if not keep:
+    if not reuse:
         yconv.free()
     conv2d_backward_cols(cols, w, gy, gx, gw, gb, cprm, need_dx)
-    if not keep:
+    if not reuse:
         cols.free()
     gy.free()
     _ = zp^

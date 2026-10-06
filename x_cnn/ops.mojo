@@ -51,7 +51,19 @@ comptime IDN_ADAPT_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and no
 #: nr-small D9 (2026-10-04): `softmax_xent_row_at` computes each exp once
 #: and parks it in the proba row (same words, every column and the host).
 #: -D MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+# S08 reuse in this campaign — NOT TESTED — NOT COMPILED — NOT MEASURED.
 comptime XCNN_SOFTMAX_ONE_EXP = not (is_defined["MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+
+# S07 B/control — NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF.
+# A uses the existing caller-owned saved im2col/conv state. B recomputes
+# those arrays for backward on host and every GPU. The caller still owns
+# the saved allocation in B: include it in capacity accounting and do not
+# describe this as an implemented byte-budget allocation policy.
+comptime CNN_RECOMPUTE_SAVED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NEURAL_S07_CNN_RECOMPUTE_SAVED"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 
 # ---------------------------------------------------------------- conv params

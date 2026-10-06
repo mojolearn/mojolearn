@@ -128,6 +128,7 @@ comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
 # full-workload promotion. Evidence: overnight-ab-20261006/{amd,nvidia}
 # normalized measurement receipts, I09.
 comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
+    # M02 campaign: NOT TESTED — NOT COMPILED — NOT MEASURED; existing default/evidence retained.
     # Existing default is retained after scoped cross-vendor measurements.
     "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF"
 ]()

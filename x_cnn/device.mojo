@@ -55,6 +55,7 @@ from x_cnn.ops import (
 )
 # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
 from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
+from x_cnn.ops import CNN_RECOMPUTE_SAVED
 # lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
 from x_cnn.ops import (
     IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_rows_prm,
@@ -286,6 +287,75 @@ comptime DIRECT_CONV = (
 comptime DC_MAXK = 32
 comptime DC_MAXW = 2048  # 8 KB of threadgroup memory: four blocks fit a core
 comptime DC_TPB = 256
+
+# S06 A/B — NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF.
+# General implicit convolution materializes each im2col value in its owning
+# output cell and reuses the pinned GEMM leaf partition/fold helpers. No
+# exact dimensions or vendor routing; the candidate avoids im2col traffic
+# and intermediate y2, trading that for repeated integer address work.
+# The host/oracle retain their existing im2col+GEMM implementation as the
+# independent same-arithmetic witness. Full CNN fit/predict, grouped caller
+# slices, dilation/stride/padding/tails and training quality remain pending.
+comptime CNN_IMPLICIT_CONV = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NEURAL_S06_CNN_IMPLICIT_CONV"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def implicit_conv_kernel(
+    x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP,
+    rows_in: Int32, leaf_in: Int32, parts_in: Int32, save_cols: Int32,
+):
+    """S06: one output owner, original logical leaves and odd-tail carries.
+    OC==0 is the sole writer of each saved im2col cell; no float atomics.
+    The public grouped-convolution caller supplies its existing group slices.
+    """
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var OC = _gp(p, CP_OC)
+    if cell >= Int(rows_in) * OC:
+        return
+    var row = cell // OC
+    var oc = cell - row * OC
+    var C = _gp(p, CP_C)
+    var H = _gp(p, CP_H)
+    var W = _gp(p, CP_W)
+    var KH = _gp(p, CP_KH)
+    var KW = _gp(p, CP_KW)
+    var OH = _gp(p, CP_OH)
+    var OW = _gp(p, CP_OW)
+    var S = OH * OW
+    var batch = row // S
+    var spatial = row - batch * S
+    var oh = spatial // OW
+    var ow = spatial - oh * OW
+    var h0 = oh * _gp(p, CP_SH) - _gp(p, CP_PH)
+    var w0 = ow * _gp(p, CP_SW) - _gp(p, CP_PW)
+    var DH = _gp(p, CP_DH)
+    var DW = _gp(p, CP_DW)
+    var K = C * KH * KW
+    var leaf = Int(leaf_in)
+    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+    var occupied = 0
+    for part in range(Int(parts_in)):
+        var acc = Float32(0.0)
+        var lo = part * leaf
+        for k in range(lo, min(lo + leaf, K)):
+            var c = k // (KH * KW)
+            var tap = k - c * KH * KW
+            var kh = tap // KW
+            var kw = tap - kh * KW
+            var h = h0 + kh * DH
+            var ww = w0 + kw * DW
+            var value = Float32(0.0)
+            if h >= 0 and h < H and ww >= 0 and ww < W:
+                value = ftz(x.unsafe_load(((batch * C + c) * H + h) * W + ww))
+            if save_cols != 0 and oc == 0:
+                cols.unsafe_store(row * K + k, value)
+            acc = rtf_mul_add(value, ftz(w.unsafe_load(oc * K + k)), acc)
+        _ = _fold_push(stack, occupied, ftz(acc))
+    var value = ftz(_fold_drain(stack, occupied))
+    yconv.unsafe_store((batch * OC + oc) * S + spatial, conv_out_val(value, bias, oc, p))
 
 
 def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_in: Int32, save_cols: Int32):
@@ -2481,6 +2551,15 @@ def _conv_relu_on_device(
     = 27) runs `direct_conv_kernel` instead: the same cols words (written
     only when `need_cols`), each output cell the contract's one-leaf chain,
     no y2."""
+    comptime if CNN_IMPLICIT_CONV:
+        if rows > 0 and OC > 0:
+            var partition = contract_partition(ckk)
+            ctx.enqueue_function[implicit_conv_kernel](
+                fp(dx), fp(dw), fp(dbias), fp(cols), fp(yconv), ip(dp),
+                Int32(rows), Int32(partition[0]), Int32(partition[1]), Int32(1 if need_cols else 0),
+                grid_dim=((rows * OC + DC_TPB - 1) // DC_TPB, 1, 1), block_dim=(DC_TPB, 1, 1),
+            )
+            return
     comptime if DIRECT_CONV:
         if ckk <= DC_MAXK and OC * ckk <= DC_MAXW and rows > 0:
             ctx.enqueue_function[direct_conv_kernel](
@@ -2608,7 +2687,7 @@ def conv_block_backward_into[resident: Bool = False](
     var dbias = put[resident](ctx, 2, bias, OC)
     var dgo = put[resident](ctx, 3, g, no)
     var dp = put_prm(ctx, 5, cprm)
-    var saved = resident and save_cols != 0 and save_y != 0
+    var saved = resident and save_cols != 0 and save_y != 0 and not CNN_RECOMPUTE_SAVED
     var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 7, rows * ckk)
     var y2 = ws(ctx, 8, ny)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 9, ny)

@@ -52,6 +52,19 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_di
 
 from std.sys.compile import is_defined
 
+# S03 A/B — NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF.
+# Numerical version recurrent-wgrad-leaf128-v1: fixed consecutive 128-row
+# +0-seeded FMA leaves, ascending +0-seeded partial sum. 128 bounds serial
+# dependency length independent of T, B, hidden width or vendor. Host Exec
+# uses the same operations; checks/oracle.mojo restates the fixed leaf.
+# Bits may change versus B, but must match every column within A. Training
+# convergence, gradients and full datasets remain unqualified.
+comptime SEQ_WGRAD_LEAF128 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NEURAL_S03_WGRAD_LEAF128"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
 #: nr-small D3 (2026-10-04): under IDENTICAL the recurrent weight and bias
 #: gradients (C = A B over the K = T B time x batch rows, M N cells of one
 #: K-long chain each, and the bias column sums as ones^T dG, one fma by 1.0
@@ -63,9 +76,9 @@ from std.sys.compile import is_defined
 #: together; the oracle (`sequence/checks/oracle.mojo::o_bptt_dw`) states
 #: the same blocks. One block (K <= WGRAD_MIN_BLOCK) is the old chain.
 #: -D MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF (or MOJOLEARN_IDN_ALL_OFF).
-comptime SEQ_WGRAD_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+comptime SEQ_WGRAD_BLOCKED = SEQ_WGRAD_LEAF128 or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+))
 comptime WGRAD_MIN_BLOCK = 512
 #: partial floats one launch pair may hold (rows of cells are chunked to
 #: fit; chunking moves no bit, every cell's blocks are the same)
@@ -75,6 +88,8 @@ comptime WGRAD_IDN_SCRATCH = 1 << 22
 def wgrad_block(K: Int) -> Int:
     """Rows per block: the smallest power of two R >= WGRAD_MIN_BLOCK with
     R * R >= K (so at most R blocks)."""
+    comptime if SEQ_WGRAD_LEAF128:
+        return 128
     var r = WGRAD_MIN_BLOCK
     while r * r < K:
         r *= 2

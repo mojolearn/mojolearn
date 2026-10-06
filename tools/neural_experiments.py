@@ -20,9 +20,12 @@ baseline, and whether the output DIGEST equals the baseline's (`same` /
     python tools/neural_experiments.py --only speculative_attn,swiglu_fused
     python tools/neural_experiments.py --json results.json
 
-A configuration whose digest MOVED is not a speed result; it is a bug
-report against that toggle (or a stage the toggle legitimately drops from
-the card), and it must not be kept.
+A configuration whose digest MOVED needs an arithmetic-contract explanation.
+For a scheduling-only arm it violates the intended baseline equivalence.
+For an explicitly versioned arithmetic arm, --allow-version-bit-change permits
+that local A/B difference; same-version cross-vendor identity and task quality
+remain separate, unproven obligations. This component driver cannot qualify
+full-dataset performance or a production default.
 """
 import argparse
 import json
@@ -135,6 +138,9 @@ def main(argv=None):
     ap.add_argument("--only", help="comma-separated experiment names (baseline is always run)")
     ap.add_argument("--gemm-arms", help="comma-separated MOJOLEARN_GEMM_ARM names to add as experiments")
     ap.add_argument("--json")
+    # NOT TESTED — NOT COMPILED — NOT MEASURED; interpretation toggle only, OFF by default.
+    ap.add_argument("--allow-version-bit-change", action="store_true",
+                    help="label local A/B bit changes as a numerical revision; does not certify cross-vendor identity or quality")
     args = ap.parse_args(argv)
     lanes = args.lane or list(LANES)
     names = SETS[args.set]
@@ -164,14 +170,20 @@ def main(argv=None):
             if r is base:
                 bits = ""
             elif r["digest"].get(lane, "None") not in ("None", "?") and base["digest"].get(lane) not in (None, "None"):
-                bits = " same" if r["digest"][lane] == base["digest"][lane] else " **MOVED**"
+                bits = " same" if r["digest"][lane] == base["digest"][lane] else (
+                    " **VERSION_CHANGED**" if args.allow_version_bit_change else " **MOVED**")
             elif lane in r["losses"] and lane in base["losses"]:
-                bits = " same" if r["losses"][lane] == base["losses"][lane] else " **MOVED**"
+                bits = " same" if r["losses"][lane] == base["losses"][lane] else (
+                    " **VERSION_CHANGED**" if args.allow_version_bit_change else " **MOVED**")
             else:
                 bits = " n/a"
             cells.append("%.3f%s%s" % (m, ratio, bits))
         print("| %s | %s |" % (r["name"], " | ".join(cells)))
-    print("\nratio < 1 is faster than baseline; MOVED means the output bits differ from baseline: do not keep that toggle.")
+    print("\nratio < 1 is faster for this component boundary only; MOVED requires a declared numerical revision or a source repair.")
+    if args.allow_version_bit_change:
+        print("VERSION_CHANGED permits A/B version drift only. Compare each version separately across NVIDIA, AMD, Apple and host; task quality and full-workload speed remain pending.")
+    else:
+        print("Scheduling-only arms owe baseline arithmetic equivalence. Neither same nor MOVED establishes cross-vendor identity or task quality.")
     if args.json:
         with open(args.json, "w") as f:
             json.dump(results, f, indent=1, sort_keys=True)

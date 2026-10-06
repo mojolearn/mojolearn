@@ -42,6 +42,8 @@ comptime GT_PAGE_BYTES = (GT_M + GT_N) * GT_K * 4
 #: not keyed to any data shape)
 comptime GT_MIN_EDGE = 8
 
+# S01 reuse in this campaign — NOT TESTED — NOT COMPILED — NOT MEASURED.
+# Existing NV/AMD scheduling arm; Apple retains its current arithmetic witness.
 comptime SEQ_GEMM_TILED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not has_apple_gpu_accelerator()

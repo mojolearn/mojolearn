@@ -70,6 +70,9 @@ from core.step_phase import (
 from training.checks.optimizer_contract import opt_nonfinite_message
 
 
+# T02 reuse: NOT TESTED — NOT COMPILED — NOT MEASURED in this campaign.
+# Existing device-gated optimizer refusal batching only; not a complete
+# whole-step one-wait protocol or permission to defer unsafe access checks.
 comptime OPT_GATE_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
@@ -78,10 +81,14 @@ comptime OPT_GATE_SCAN = (
     )
     and not is_defined["MOJOLEARN_OPT_TRUST_INPUTS"]()
 )
+# T07 reuse: NOT TESTED — NOT COMPILED — NOT MEASURED in this campaign.
+# Existing descriptor-driven SGD arena update; enabled default unchanged.
 comptime OPT_SGD_ONE_LAUNCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF"]()
     or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+# T08 reuse: NOT TESTED — NOT COMPILED — NOT MEASURED in this campaign.
+# Existing batching of deterministic clip products, not an altered norm tree.
 comptime OPT_CLIP_BATCHED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF"]()
     or is_defined["MOJOLEARN_IDN_ALL_OFF"]()

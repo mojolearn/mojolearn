@@ -19,6 +19,8 @@ from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from std.memory import stack_allocation
 from mamba.host.gen.device_optimizations import IDN_M2_SSD_TILES
+# Source-only mirror of the M10 generated import; generator was NOT run.
+from mamba.impl.ops.neural_experiment_profiles import IDN_M2_BALANCED_GRADS, m2_balanced_gradient_fold
 
 from checks.numerics import (
     identical_mul,
@@ -1181,8 +1183,13 @@ def m2_fold_tiles_kernel(gid_: Int,
     if c >= cols:
         return
     var acc = part.unsafe_load(c)
-    for tile in range(1, tiles):
-        acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
+    comptime if IDN_M2_BALANCED_GRADS and IDN_M2_BWD_FOLD_TILED:
+        # M10: NOT TESTED — NOT COMPILED — NOT MEASURED. Host uses
+        # the same new-version tree; the existing launch restatement stays.
+        acc = m2_balanced_gradient_fold(part, tiles, cols, c)
+    else:
+        for tile in range(1, tiles):
+            acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
     if c < split:
         out_a.unsafe_store(c, acc)
         if has_scale != 0:

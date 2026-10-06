@@ -46,6 +46,21 @@ from sequence.ops import (
 )
 from sequence.recurrent import bias_rows, colsum, gather_rows, gemm
 from checks.numerics import ftz, identical_div, identical_mul, identical_pow64, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
+from sequence.ops import OP_NEURAL_ARGMAX
+
+# E06 A/B — NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF.
+# For the explicit native multiclass-index output mode only, A reduces each
+# completed probability chunk directly into N class codes; B materializes
+# the full N*O probability matrix before the same reduction. Neither changes
+# full-probability APIs. Native mode=2 caller integration remains pending;
+# the whole prediction boundary and tie/NaN/quality gates are unqualified.
+comptime MLP_ARGMAX_CHUNKS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NEURAL_E06_MLP_ARGMAX_CHUNKS"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 comptime SOLVER_ADAM = 0
 comptime SOLVER_SGD = 1
@@ -436,12 +451,14 @@ def mlp_fit[E: Exec](
 
 
 def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
-                         proba2: Bool = False) raises:
+                         proba2: Bool = False, class_indices_only: Bool = False) raises:
     """`proba2` (cpu2-l11-neural): a one-output logistic net writes the
     (N, 2) probability `[1 - p, p]` (`OP_PROBA2` on the executor)."""
     var L = net.n_layers()
     var D = net.sizes[0]
     var O = net.sizes[L]
+    if class_indices_only and (O < 2 or O >= (1 << 24) or net.out_act != ACT_SOFTMAX):
+        raise Error("mlp_predict indices: requires multiclass softmax and exact float32 class codes")
     var bs = chunk if chunk < N else N
     var dX = ex.alloc(N * D)
     ex.upload(dX, X, N * D)
@@ -450,7 +467,8 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
     var acts = List[FP]()
     for i in range(L + 1):
         acts.append(ex.alloc(bs * net.sizes[i]))
-    var dout = ex.alloc(N * O)
+    var chunk_indices = class_indices_only and MLP_ARGMAX_CHUNKS
+    var dout = ex.alloc(N if chunk_indices else N * O)
     var b0 = 0
     while b0 < N:
         var B = bs if b0 + bs <= N else N - b0
@@ -461,9 +479,28 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
         mlp_forward(ex, net, P, acts, B)
         var d = Args()
         d.p0 = acts[L]
-        d.p1 = dout + b0 * O
-        ex.launch[OP_COPY](d, B * O)
+        if chunk_indices:
+            d.p1 = dout + b0
+            d.i0 = O
+            ex.launch[OP_NEURAL_ARGMAX](d, B)
+        else:
+            d.p1 = dout + b0 * O
+            ex.launch[OP_COPY](d, B * O)
         b0 += B
+    if class_indices_only:
+        if chunk_indices:
+            ex.sync()
+            ex.download(dst, dout, N)
+        else:
+            var indices = ex.alloc(N)
+            var q = Args()
+            q.p0 = dout
+            q.p1 = indices
+            q.i0 = O
+            ex.launch[OP_NEURAL_ARGMAX](q, N)
+            ex.sync()
+            ex.download(dst, indices, N)
+        return
     if proba2 and O == 1:
         var two = ex.alloc(N * 2)
         var q = Args()

@@ -36,6 +36,26 @@ from gemm.checks.gemm_backward import (
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
 from training.estimator import identical_ce_loss_dev
+from gemm.experiments.neural_grouped_backward import neural_linear_backward_into
+
+comptime NI_G03_GROUP_LINEAR = (  # NOT TESTED — NOT COMPILED — NOT MEASURED; G03 A, default OFF.
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NI_G03_GROUP_LINEAR"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime NI_G03_SEPARATE_LINEAR = (  # NOT TESTED — NOT COMPILED — NOT MEASURED; G03 matched B, default OFF.
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NI_G03_SEPARATE_LINEAR"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime NI_G04_RETAIN_SCRATCH = (  # NOT TESTED — NOT COMPILED — NOT MEASURED; G04 A, default OFF.
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NI_G04_RETAIN_SCRATCH"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+# A bounded 64 MiB retention budget, independent of benchmark dimensions.
+# Oversized calls retain the existing temporary-allocation/completion path.
+comptime NI_G04_MAX_SCRATCH_FLOATS = (64 * 1024 * 1024) // 4
 
 comptime IDN_TRAIN_DEV_TENSORS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -51,10 +71,12 @@ struct _DevPool(Defaultable, Movable):
     var b: List[DeviceBuffer[DType.float32]]
     #: floats held by each slot; 0 marks a free slot
     var n: List[Int]
+    var gemm_scratch: List[DeviceBuffer[DType.float32]]
 
     def __init__(out self):
         self.b = List[DeviceBuffer[DType.float32]]()
         self.n = List[Int]()
+        self.gemm_scratch = List[DeviceBuffer[DType.float32]]()
 
 
 comptime _DEV_POOL_NAME = "MojoTrainingDevTensorsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoTrainingDevTensorsFast"
@@ -96,6 +118,33 @@ def train_dev_free(ctx: DeviceContext, h: Int) raises:
     var pool = _DEV_POOL.get_or_create_ptr()
     pool[].b[h] = ctx.enqueue_create_buffer[DType.float32](1)
     pool[].n[h] = 0
+    comptime if NI_G04_RETAIN_SCRATCH:
+        var any_live = False
+        for j in range(len(pool[].n)):  # handle metadata only
+            any_live = any_live or pool[].n[j] != 0
+        if not any_live:
+            # This entry already drained the queue before freeing handles.
+            pool[].gemm_scratch = List[DeviceBuffer[DType.float32]]()
+
+
+def _linear_scratch(ctx: DeviceContext, required: Int) raises -> DeviceBuffer[DType.float32]:
+    """Same binding/context owner as device handles; at most one retained slab.
+
+    Callers synchronize before releasing a temporary or reusing the pool.
+    This optimization removes allocations, not required completion/refusals.
+    """
+    var size = max(1, required)
+    comptime if NI_G04_RETAIN_SCRATCH:
+        if size <= NI_G04_MAX_SCRATCH_FLOATS:
+            var pool = _DEV_POOL.get_or_create_ptr()
+            if len(pool[].gemm_scratch) == 0:
+                pool[].gemm_scratch.append(ctx.enqueue_create_buffer[DType.float32](size))
+            elif len(pool[].gemm_scratch[0]) < size:
+                ctx.synchronize()
+                pool[].gemm_scratch[0] = ctx.enqueue_create_buffer[DType.float32](size)
+            var ptr = pool[].gemm_scratch[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            return DeviceBuffer[DType.float32](ctx, ptr, size, owning=False)
+    return ctx.enqueue_create_buffer[DType.float32](size)
 
 
 def train_dev_view(ctx: DeviceContext, h: Int, n: Int, name: String) raises -> DeviceBuffer[DType.float32]:
@@ -145,7 +194,7 @@ def train_linear_forward_dev(ctx: DeviceContext, c_h: Int, a_h: Int, w_h: Int, m
     var c = train_dev_view(ctx, c_h, m * n, "linear output")
     _refuse_dev(ctx, "linear input", a, m * k)
     _refuse_dev(ctx, "linear weight", w, n * k)
-    var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, n, k))
+    var ws = _linear_scratch(ctx, identical_gemm_workspace_max_floats(m, n, k))
     identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
     ctx.synchronize()
     _ = a^
@@ -171,6 +220,35 @@ def train_linear_backward_dev(
     _refuse_dev(ctx, "linear input", a, m * k)
     _refuse_dev(ctx, "linear weight", w, n * k)
     _refuse_dev(ctx, "linear upstream gradient", dc, m * n)
+    comptime if NI_G03_GROUP_LINEAR or NI_G03_SEPARATE_LINEAR:
+        # Independent output ownership is an API/lifetime condition, never
+        # a matrix-size dispatch rule. Keep the old route for aliased handles.
+        if (da_h != dw_h and da_h != dc_h and da_h != a_h and da_h != w_h
+                and dw_h != dc_h and dw_h != a_h and dw_h != w_h):
+            neural_linear_backward_into[NI_G03_GROUP_LINEAR](ctx, da, dw, dc, a, w, m, n, k)
+            ctx.synchronize()
+            _ = a^
+            _ = w^
+            _ = dc^
+            _ = da^
+            _ = dw^
+            return m * k
+    comptime if NI_G04_RETAIN_SCRATCH:
+        # Both products are enqueued serially on the same context, so one
+        # slab safely serves the two unchanged contraction/fold schedules.
+        var shared_ws = _linear_scratch(ctx, max(
+            identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k),
+            identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)))
+        identical_gemm_backward_a_into(ctx, da, dc, w, shared_ws, m, n, k, OP_NT)
+        identical_gemm_backward_b_into(ctx, dw, dc, a, shared_ws, m, n, k, OP_NT)
+        ctx.synchronize()
+        _ = a^
+        _ = w^
+        _ = dc^
+        _ = da^
+        _ = dw^
+        _ = shared_ws^
+        return m * k
     var ws_a = ctx.enqueue_create_buffer[DType.float32](
         identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
     )

@@ -17,6 +17,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from mamba.impl.modules.afn_defines import IDN_M2_SSD_TILES
+from mamba.impl.ops.neural_experiment_profiles import NEURAL_MAMBA_TPB, IDN_M2_BALANCED_GRADS, m2_balanced_gradient_fold
 
 from checks.numerics import (
     identical_mul,
@@ -36,7 +37,7 @@ from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
 from mamba.impl.modeling.modeling_mamba import mamba_scratch
 
 
-comptime M2_SSD_BWD_TPB = 128
+comptime M2_SSD_BWD_TPB = NEURAL_MAMBA_TPB  # M07: NOT TESTED — NOT COMPILED — NOT MEASURED; opt-in geometry only.
 
 # ---------------------------------------------------------------------------
 # lane nr-mamba (2026-10-04), roadmap B6. IDENTICAL only; every column
@@ -1184,8 +1185,13 @@ def m2_fold_tiles_kernel(
     if c >= cols:
         return
     var acc = part.unsafe_load(c)
-    for tile in range(1, tiles):
-        acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
+    comptime if IDN_M2_BALANCED_GRADS and IDN_M2_BWD_FOLD_TILED:
+        # M10: NOT TESTED — NOT COMPILED — NOT MEASURED. New-version
+        # bits: adjacent-pair tree over fixed leaves on every column.
+        acc = m2_balanced_gradient_fold(part, tiles, cols, c)
+    else:
+        for tile in range(1, tiles):
+            acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
     if c < split:
         out_a.unsafe_store(c, acc)
         if has_scale != 0:

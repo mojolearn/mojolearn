@@ -12,6 +12,7 @@ Caller supplies actual parameters, moments, flags, completed step and token IDs.
 No generated data, hidden initialization, tokenizer, performance or learning claim.
 """
 from std.memory import bitcast
+from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
@@ -42,6 +43,7 @@ from core.step_glue import (
 from core.device_scan import DeviceScanScratch, device_first_token_oob
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from training.neural_identical_experiments import NEURAL_PARAM_VIEWS, NEURAL_TOKEN_BATCH_UPLOAD
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_afn import (
     AFN_LM_HEAD_FUSE, AFN_LM_NOSYNC, AFN_LM_PARAM_VIEWS, BYTE_LM_FAST_APPLE,
@@ -478,6 +480,7 @@ struct ByteBuffers(Movable):
 
     var ids: DeviceBuffer[DType.int32]  # [M]
     var targets: DeviceBuffer[DType.int32]  # [M]
+    var token_batch: DeviceBuffer[DType.int32]  # T04 owned whole incoming batch
 
     var x: DeviceBuffer[DType.float32]  # [M, d_model]  block input
     var logits: DeviceBuffer[DType.float32]  # [M, V]
@@ -587,6 +590,7 @@ struct ByteBuffers(Movable):
 
         self.ids = _zeros_i32(ctx, M)
         self.targets = _zeros_i32(ctx, M)
+        self.token_batch = _zeros_i32(ctx, config.batch * (config.length + 1) if NEURAL_TOKEN_BATCH_UPLOAD else 1)
 
         self.x = _zeros(ctx, M * DM)
         self.logits = _zeros(ctx, M * min(V, LM_HEAD_V2_CHUNK) if config.chunked_lm_head_v2 else M * V)
@@ -767,7 +771,7 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
 #: but that column has not run this yet.
 #: `-D MOJOLEARN_BYTE_LM_COPY_EMB_HEAD` restores the copies.
 comptime BYTE_LM_EMB_HEAD_VIEWS = (
-    TARGET_COLUMN == COLUMN_APPLE
+    (TARGET_COLUMN == COLUMN_APPLE or NEURAL_PARAM_VIEWS)
     and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
 )
 
@@ -797,7 +801,9 @@ def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWei
     the host is a Metal round trip for nothing.
     """
     var base = 1 + 9 * block
-    comptime if AFN_LM_PARAM_VIEWS:
+    # T03: NOT TESTED — NOT COMPILED — NOT MEASURED. The opt-in IDENTICAL
+    # arm reuses explicit owned slices and refreshes after every param swap.
+    comptime if AFN_LM_PARAM_VIEWS or NEURAL_PARAM_VIEWS:
         # afn-lm PARAM_VIEWS (FAST + Apple only): the nine weights become
         # views of the CURRENT flat `param` (re-bound every call, as
         # `_bind_emb_head` does), so no launch and no separate allocation.
@@ -923,7 +929,11 @@ struct ByteTrainer(Movable):
         self.forward = List[LlamaDeviceStages]()
         self.backward = List[LlamaBackwardStages]()
         self.rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
-        self.prefill_cache = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
+        # A04: NOT TESTED — NOT COMPILED — NOT MEASURED. This trainer always
+        # starts each layer at absolute position zero and saves K/V in stages.
+        # The constructor applies the default-OFF IDENTICAL-only experiment.
+        self.prefill_cache = LlamaKVCache(ctx, config.batch, byte_dims(config),
+                                        config.length, discard_after_prefill=True)
         for layer in range(config.n_layers):
             self.weights.append(_block_weights(ctx, initial_params, layer, config))
             # The trace-disabled trainer uses the existing fused attention path.
@@ -1181,6 +1191,46 @@ struct ByteLeanResult(Movable):
     var flags: List[Bool]
 
 
+def _byte_token_split_kernel(
+    inputs: MutPointer[Int32, MutAnyOrigin],
+    targets: MutPointer[Int32, MutAnyOrigin],
+    batch: MutPointer[Int32, MutAnyOrigin],
+    cells_in: Int32,
+    length_in: Int32,
+):
+    """T04: integer copies only; one incoming token can feed adjacent outputs."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(cells_in):
+        return
+    var length = Int(length_in)
+    var row = i // length
+    var source = i + row
+    inputs.unsafe_store(i, batch.unsafe_load(source))
+    targets.unsafe_store(i, batch.unsafe_load(source + 1))
+
+
+def _byte_upload_token_batch(ctx: DeviceContext, mut tr: ByteTrainer, ids: List[Int32]) raises:
+    """Upload fresh bytes every call; never infer validity from an address."""
+    var config = tr.config.copy()
+    byte_validate_tokens(ids, config)
+    # T04: NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF. The
+    # following mandatory range scans also drain this borrowed List's upload.
+    # A retained device batch trades B*(L+1)*4 bytes for one DMA instead of
+    # 2*B submissions and ~2*B*L token transfers, for every neighboring shape.
+    comptime if NEURAL_TOKEN_BATCH_UPLOAD:
+        step_count_h2d()
+        ctx.enqueue_copy(dst_buf=tr.buffers.token_batch, src_ptr=ids.unsafe_ptr())
+        var cells = config.batch * config.length
+        step_count_launch()
+        ctx.enqueue_function[_byte_token_split_kernel](
+            tr.buffers.ids.unsafe_ptr(), tr.buffers.targets.unsafe_ptr(),
+            tr.buffers.token_batch.unsafe_ptr(), Int32(cells), Int32(config.length),
+            grid_dim=((cells + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+        )
+    else:
+        afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
+
+
 def _byte_admit_tokens(ctx: DeviceContext, mut tr: ByteTrainer, ids: List[Int32]) raises:
     """cpu3-seq: the token admission of the non-resident step and eval,
     BEFORE they mark the trainer unhealthy (as the host walk did): the ids
@@ -1188,7 +1238,7 @@ def _byte_admit_tokens(ctx: DeviceContext, mut tr: ByteTrainer, ids: List[Int32]
     the device. Writes only those scratch buffers, which the forward
     rewrites with the same bytes."""
     var config = tr.config.copy()
-    afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
+    _byte_upload_token_batch(ctx, tr, ids)
     byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
 
 
@@ -1306,10 +1356,10 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     # its wait also completes the uploads, so `ids` may be released after.
     # Under AFN NOSYNC this adds the scan's wait to the step (the host walk
     # it replaces was data-sized CPU work on the GPU route).
-    afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
+    _byte_upload_token_batch(ctx, tr, ids)
     byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
     timing_tick(ctx, ton, tk, "step.upload_inputs")
-    timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
+    timing_bytes(ton, "step.upload_inputs_bytes", (config.batch * (config.length + 1) if NEURAL_TOKEN_BATCH_UPLOAD else 2 * M) * 4)
     for layer in range(config.n_layers):
         _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
     _bind_emb_head(ctx, tr.buffers, config)
@@ -1318,7 +1368,10 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     # A host round trip costs about a dozen kernel launches on Metal.
     # Device-to-device: every parameter byte copied once (blocks, emb, head).
     timing_tick(ctx, ton, tk, "step.unpack_weights")
-    timing_bytes(ton, "step.unpack_weights_bytes", config.n_total() * 4)
+    var unpack_bytes = config.n_total() * 4
+    comptime if NEURAL_PARAM_VIEWS:
+        unpack_bytes = 0 if BYTE_LM_EMB_HEAD_VIEWS else 2 * config.vocab_size * config.d_model * 4
+    timing_bytes(ton, "step.unpack_weights_bytes", unpack_bytes)
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
     var ce = CeConfig.causal_lm(config.vocab_size)
     identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
@@ -1654,7 +1707,7 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     # A host round trip costs about a dozen kernel launches on Metal.
     pg.tick(ctx, "gemm.head_dB")
     timing_tick(ctx, ton, tk, "step.head_backward_db")
-    comptime if AFN_LM_PARAM_VIEWS:
+    comptime if AFN_LM_PARAM_VIEWS or NEURAL_PARAM_VIEWS:
         # afn-lm PARAM_VIEWS: the weight gradients land in the flat `grad`.
         for layer in range(config.n_layers):
             _afn_bind_grad_views(tr.buffers, tr.backward[layer], layer)
@@ -1716,7 +1769,7 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     # No wait: the pack loop below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.embedding_backward")
-    for layer in range(0 if AFN_LM_PARAM_VIEWS else config.n_layers):
+    for layer in range(0 if (AFN_LM_PARAM_VIEWS or NEURAL_PARAM_VIEWS) else config.n_layers):
         _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
@@ -1724,7 +1777,10 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     # A host round trip costs about a dozen kernel launches on Metal.
     # Device-to-device: every gradient byte copied once into `grad`.
     timing_tick(ctx, ton, tk, "step.pack_grads")
-    timing_bytes(ton, "step.pack_grads_bytes", config.n_total() * 4)
+    var pack_bytes = config.n_total() * 4
+    comptime if NEURAL_PARAM_VIEWS:
+        pack_bytes = 2 * config.vocab_size * config.d_model * 4  # embedding/head still copy
+    timing_bytes(ton, "step.pack_grads_bytes", pack_bytes)
     _ = trace
     return loss
 
@@ -2011,7 +2067,11 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
     # step does not justify promotion: live status stays default OFF.
     # Evidence: experiments/performance_ideas/measurements/20261006/index.json,
     # I10 AMD/NVIDIA; retained per-arm binary hashes and raw capture paths.
-    comptime if is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]():
+    # T01 reuse: NOT TESTED — NOT COMPILED — NOT MEASURED in this campaign.
+    # Existing arm remains default OFF; IDENTICAL and ALL_OFF delimit it.
+    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+                 and is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]()
+                 and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()):
         # This mechanism changes scheduling only on the existing admitted
         # OOP Adam path. Fault builds keep the required post-fault scan;
         # the path already refuses fault injection before it changes state.

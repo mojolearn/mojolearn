@@ -218,6 +218,30 @@ def _emb_max_tpb[column: Int]() -> Int:
 
 comptime EMB_TPB = _emb_max_tpb[TARGET_COLUMN]()
 
+# E04 A/B — NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF.
+# Four adjacent feature cells share one ID/index decode; the scalar tail
+# requires no pointer alignment. This is a scheduling width, independent of
+# vocabulary/sequence sizes. No reduction or FTZ seam changes. All-vendor
+# and host identity, quality and full LM/SA timings remain unestablished.
+comptime EMB_FEATURE_PACKET = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NEURAL_E04_EMB_FEATURE_PACKET"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not ANY_EMB_SABOTAGE
+)
+comptime EMB_PACKET_WIDTH = 4
+
+# E05 B/control — NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF.
+# Existing owning callers already use the prerefused A API. This explicit
+# B arm repeats the original complete ID readback/refusal on those callers,
+# without weakening the public unvalidated entry. Compare against A with
+# this define absent; this switch is not a new optimization default.
+comptime EMB_REPEAT_ID_REFUSAL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NEURAL_E05_REPEAT_ID_REFUSAL"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
 
 def _grid_for(count: Int, threads: Int = EMB_TPB) -> Int:
     """Blocks for a flat `count`-element launch."""
@@ -260,6 +284,31 @@ def emb_gather_kernel(
     out_y.unsafe_store(cell, ftz(ftz(src)))
 
 
+
+
+def emb_gather_packet_kernel(
+    out_y: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    ids: MutPointer[Int32, MutAnyOrigin],
+    n_positions_in: Int32,
+    width_in: Int32,
+):
+    """E04: adjacent feature packet, each cell retaining both flushes."""
+    var width = Int(width_in)
+    if width < 1:
+        return
+    var packets = (width + EMB_PACKET_WIDTH - 1) // EMB_PACKET_WIDTH
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var t = q // packets
+    if t >= Int(n_positions_in):
+        return
+    var first = (q - t * packets) * EMB_PACKET_WIDTH
+    var v = Int(ids.unsafe_load(t))
+    comptime for lane in range(EMB_PACKET_WIDTH):
+        var j = first + lane
+        if j < width:
+            var src = weight.unsafe_load(v * width + j)
+            out_y.unsafe_store(t * width + j, ftz(ftz(src)))
 
 
 def emb_counts_kernel(
@@ -539,6 +588,9 @@ def emb_backward_kernel(
 # so the row is `ids[perm[r]]`. Off under every embedding sabotage arm (they
 # patch `emb_backward_kernel`). -D MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF (or
 # MOJOLEARN_IDN_ALL_OFF) restores the V * d launch.
+# E02 reuse in this campaign — NOT TESTED — NOT COMPILED — NOT MEASURED.
+# Existing touched-slot schedule; sparse temporary/compact descriptor creation
+# is not implemented by this arm. Dense gradient seeding remains in boundary.
 comptime EMB_TOUCHED_ROWS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (is_defined["MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
@@ -822,6 +874,8 @@ def identical_embedding_forward_prerefused_into(
     into a new pinned buffer and walks them on the host a second time (two
     waits); a caller that uploaded a refused host list repeats nothing here
     (lane idn-embedding, 2026-10-04)."""
+    comptime if EMB_REPEAT_ID_REFUSAL:
+        emb_refuse_device_ids(ctx, ids, n_positions, cfg)
     _emb_forward_launch(ctx, out_y, weight, ids, n_positions, cfg)
 
 
@@ -843,6 +897,8 @@ def identical_embedding_backward_prerefused_into(
     device id read-back. `counts`, `run_begin` and `perm` need no initial
     value: both plans write every cell the fold reads."""
     _emb_backward_refuse_launch(ctx, plan, block_threads)
+    comptime if EMB_REPEAT_ID_REFUSAL:
+        emb_refuse_device_ids(ctx, ids, n_positions, cfg)
     _emb_backward_launch(ctx, dw, dy, ids, counts, run_begin, perm, n_positions, cfg, plan, block_threads)
 
 
@@ -874,6 +930,15 @@ def _emb_forward_launch(
         return
     var cells = n_positions * cfg.width
     step_count_launch()
+    comptime if EMB_FEATURE_PACKET:
+        var packets = (cfg.width + EMB_PACKET_WIDTH - 1) // EMB_PACKET_WIDTH
+        ctx.enqueue_function[emb_gather_packet_kernel](
+            out_y.unsafe_ptr(), weight.unsafe_ptr(), ids.unsafe_ptr(),
+            Int32(n_positions), Int32(cfg.width),
+            grid_dim=(_grid_for(n_positions * packets), 1, 1),
+            block_dim=(EMB_TPB, 1, 1),
+        )
+        return
     ctx.enqueue_function[emb_gather_kernel](
         out_y.unsafe_ptr(),
         weight.unsafe_ptr(),
@@ -947,8 +1012,12 @@ def _emb_backward_launch(
     cfg: EmbConfig,
     plan: Int,
     block_threads: Int,
+    runs_ready: Bool = False,
 ) raises:
-    """Seams E0 through E4, launched. Every refusal is the caller's."""
+    """Seams E0 through E4, launched. Every refusal is the caller's.
+    `runs_ready` is private to E03's generation-checked workspace entry;
+    ordinary callers always rebuild grouping. It never skips the dW seed.
+    """
 
     if cfg.vocab < 1 or cfg.width < 1:
         return
@@ -978,7 +1047,9 @@ def _emb_backward_launch(
             )
         return
 
-    if plan == PLAN_SORT:
+    if runs_ready:
+        pass
+    elif plan == PLAN_SORT:
         embedding_sort_runs(ctx, ids, counts, run_begin, perm, n_positions, cfg.vocab, cfg.padding_idx, block_threads)
     else:
         step_count_launch()

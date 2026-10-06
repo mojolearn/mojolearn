@@ -117,7 +117,7 @@ def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
 # versus leaf128 0.280/0.255 ms, M,N,K=1024,1024,2048 and1023,1025,2049.
 # One warmup/score; no full-workload promotion.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
-comptime CONTRACT_K_LEAF_MIN = (
+comptime CONTRACT_K_LEAF_MIN = (  # NEURAL G10 full-workload A/B: NOT TESTED — NOT COMPILED — NOT MEASURED in this campaign.
     64 if (is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
            and is_defined["MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"]()) else 128
 )

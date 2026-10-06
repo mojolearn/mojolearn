@@ -25,6 +25,7 @@ from std.memory import memcpy, memset_zero
 
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from sequence.ops import OP_LN_STATS, OP_LN_BWD_STATS
 from sequence.dispatch import apply
 from sequence.exec_trait import Exec
 from sequence.host_gemm import host_gemm_pack, host_gemm_rows
@@ -105,6 +106,8 @@ def _element_weight[OP: Int](a: Args) -> Int:
     elif OP == OP_COLSUM or OP == OP_COLSUM_DIV:
         return max(a.i0, 1)
     elif OP == OP_LN_BWD_W:
+        return max(a.i0, 1)
+    elif OP == OP_LN_STATS or OP == OP_LN_BWD_STATS:
         return max(a.i0, 1)
     elif OP == OP_AF_BLK_SUMSQ or OP == OP_MLP_L2PART or OP == OP_MLP_ROWPART:
         return max(a.i1, 1)

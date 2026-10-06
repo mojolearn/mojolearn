@@ -1,0 +1,382 @@
+[
+  {
+    "id": "G01",
+    "title": "Existing stepped matrix schedules",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "gemm/checks/gemm_identical.mojo",
+      "experiments/performance_ideas/A01/campaign.json",
+      "experiments/performance_ideas/N01/campaign.json"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "Existing current/OFF arms only; full neural workloads pending. Do not interpret independent device schedules as numerical versions.",
+    "blocker": null,
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status",
+    "variants": [
+      {
+        "name": "amd_mfma16",
+        "candidate_defines": [],
+        "baseline_defines": [
+          "MOJOLEARN_IDN_GEMM_MFMA16_OFF=1"
+        ],
+        "schedule_vendor": "amd"
+      },
+      {
+        "name": "nvidia_stepped_kpack",
+        "candidate_defines": [],
+        "baseline_defines": [
+          "MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF=1"
+        ],
+        "schedule_vendor": "nvidia"
+      }
+    ]
+  },
+  {
+    "id": "G02",
+    "title": "Staging page and register-tile sweeps",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "gemm/checks/gemm_identical.mojo",
+      "experiments/performance_ideas/A02/campaign.json",
+      "experiments/performance_ideas/N01/campaign.json"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_GEMM_ONE_PAGE=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "Sweep separately before combinations; existing component results do not qualify full neural calls.",
+    "blocker": null,
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status",
+    "variants": [
+      {
+        "name": "one_page",
+        "candidate_defines": [
+          "MOJOLEARN_GEMM_ONE_PAGE=1"
+        ],
+        "baseline_defines": []
+      },
+      {
+        "name": "narrow_rows",
+        "candidate_defines": [
+          "MOJOLEARN_GEMM_KPACK_RPT4=1"
+        ],
+        "baseline_defines": []
+      },
+      {
+        "name": "narrow_columns",
+        "candidate_defines": [
+          "MOJOLEARN_GEMM_KPACK_CPT4=1"
+        ],
+        "baseline_defines": []
+      }
+    ]
+  },
+  {
+    "id": "G03",
+    "title": "Grouped independent GEMM jobs",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "training/dev_tensors.mojo",
+      "gemm/experiments/neural_grouped_backward.mojo",
+      "gemm/experiments/grouped_jobs.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NI_G03_GROUP_LINEAR=1"
+    ],
+    "baseline_defines": [
+      "MOJOLEARN_NI_G03_SEPARATE_LINEAR=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "SA",
+      "OP"
+    ],
+    "limitations": "Resident training linear backward now wired for disjoint handles. Grouped dA/dW has separate-flat matched B; also owes production-dispatch comparison. QKV and gate/up projection grouping remain unimplemented; no claim of those callers. Full SA/other actual resident-caller dataset mappings pending.",
+    "blocker": null,
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status",
+    "candidate_entry": "train_linear_backward_dev -> grouped dA/dW",
+    "baseline_entry": "train_linear_backward_dev -> two matched FLAT jobs",
+    "variants": [
+      {
+        "name": "matched_flat",
+        "candidate_defines": [
+          "MOJOLEARN_NI_G03_GROUP_LINEAR=1"
+        ],
+        "baseline_defines": [
+          "MOJOLEARN_NI_G03_SEPARATE_LINEAR=1"
+        ]
+      },
+      {
+        "name": "versus_shipped",
+        "candidate_defines": [
+          "MOJOLEARN_NI_G03_GROUP_LINEAR=1"
+        ],
+        "baseline_defines": []
+      }
+    ]
+  },
+  {
+    "id": "G04",
+    "title": "Bounded retained GEMM workspace",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "training/dev_tensors.mojo",
+      "gemm/experiments/bounded_workspace.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NI_G04_RETAIN_SCRATCH=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "SA",
+      "OP"
+    ],
+    "limitations": "Resident linear callers wired. Pool retains at most 64 MiB scratch on its existing single binding context, releases when last handle closes, and synchronizes before growth. End-of-call waits/refusals unchanged. Does not wire every transformer projection; full workload mapping pending.",
+    "blocker": null,
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status",
+    "candidate_entry": "resident train_linear_forward_dev / train_linear_backward_dev with bounded retained scratch",
+    "baseline_entry": "same public entries with existing temporary workspaces"
+  },
+  {
+    "id": "G05",
+    "title": "Rounded GEMM bias epilogue",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "gemm/experiments/rounded_epilogue.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "Existing gemm_bias[FUSED] component only; historical L40S losses retained. Residual/scaling epilogues and neural caller wiring remain pending.",
+    "blocker": "Actual neural caller adapter required; no rerun of unchanged decided component.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status",
+    "candidate_entry": "gemm_bias[True]",
+    "baseline_entry": "gemm_bias[False]"
+  },
+  {
+    "id": "G06",
+    "title": "One-entry named-plan metadata cache",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "gemm/experiments/neural_profiles.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NI_G06_PLAN_CACHE=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "Explicit NeuralNamedPlanWorkspace adapter; same named-plan chooser both arms. Context/profile owner immutable, policy epoch invalidates. Not production dispatcher caching.",
+    "blocker": "Full neural caller adapter has not been wired.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status",
+    "candidate_entry": "NeuralNamedPlanWorkspace.run",
+    "baseline_entry": "NeuralNamedPlanWorkspace.run"
+  },
+  {
+    "id": "G07",
+    "title": "Bounded logical fold stacks",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "gemm/checks/gemm_identical.mojo",
+      "experiments/performance_ideas/N02/campaign.json"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_GEMM_FS2=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "Existing FS2 vs shipped stack arm; broader bounded leaf-group proposal remains separate. Full neural coverage owed.",
+    "blocker": null,
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status"
+  },
+  {
+    "id": "G08",
+    "title": "Immutable weight packing with generation invalidation",
+    "status": "blocked_prerequisite",
+    "implementation_paths": [
+      "bindings/_mojolearn_transformer.mojo",
+      "bindings/_mojolearn_mamba.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "Existing retained-weight byte comparisons do not implement owned generation-stamped packed layouts.",
+    "blocker": "Introduce shared mutation-generation ownership for optimizer, external mutation, tied weights and checkpoints before packing cache can be trusted.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status"
+  },
+  {
+    "id": "G09",
+    "title": "Column-first output tile traversal",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "gemm/experiments/neural_profiles.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NI_G09_COLUMN_BLOCKS=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "Explicit neural_gemm_into component, fixed 8x16 ownership and row/column tile sweep for arbitrary shapes. No production caller wiring or speed claim.",
+    "blocker": "Wire neural full-workload adapter before measurement.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status",
+    "candidate_entry": "neural_gemm_into",
+    "baseline_entry": "neural_gemm_into"
+  },
+  {
+    "id": "G10",
+    "title": "Existing 64-element numerical leaf profile",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "gemm/contract.mojo",
+      "gemm/experiments/profile_identity_check.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "Historical AMD and NVIDIA component losses explicitly retained in contract.mojo. No repeat unchanged decided component; full-caller/profile research only if new mechanism justified. Shared define affects non-neural consumers if used in global artifacts; use isolated neural artifacts.",
+    "blocker": null,
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status"
+  },
+  {
+    "id": "V01",
+    "title": "Two independent accumulators per numerical leaf",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "gemm/experiments/neural_profiles.mojo",
+      "gemm/experiments/neural_profiles_host.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_NI_V01_TWO_CHAIN=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "Isolated GPU adapter and independently spelled host oracle exist. Explicit new profile; leaf-relative even/odd chains, fixed merge and odd tail. Model/caller integration and nonfinite refusal wrapper still pending.",
+    "blocker": "Full neural caller integration, ordinary invalid-input refusal and complete quality coverage required.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status",
+    "candidate_entry": "neural_gemm_into / neural_gemm_host",
+    "baseline_entry": "neural_gemm_into / neural_gemm_host"
+  },
+  {
+    "id": "V05",
+    "title": "Versioned deterministic nonlinear primitive",
+    "status": "blocked_prerequisite",
+    "implementation_paths": [
+      "checks/numerics.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "No vendor native fast-math or unbounded approximation added.",
+    "blocker": "A declared supported-domain error bound and neural caller quality budget are required before selecting new range reduction or polynomial coefficients.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status"
+  },
+  {
+    "id": "V08",
+    "title": "Complete proposed numerical-version interaction matrix",
+    "status": "blocked_prerequisite",
+    "implementation_paths": [],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "combination",
+    "workload_codes": [
+      "GE",
+      "LM",
+      "TR",
+      "SA"
+    ],
+    "limitations": "Harness can materialize explicitly chosen component combinations; no all-on default or accepted winner list exists.",
+    "blocker": "Requires admitted individual full-workload NVIDIA/AMD results and four-column identity; those runs are prohibited in this programming-only task.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; new campaign is unqualified; historical results retain original status"
+  }
+]

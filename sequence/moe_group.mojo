@@ -18,11 +18,36 @@ pick order), so the words do not. The products' grids are the upper bound
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from sequence.ops import FP
 from sequence.moe_tiled import TILE_P
 
 comptime MOE_GROUP_TPB = 256
+
+# S09 A/B — NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF.
+# Stable grouping assigns one expert an ascending pair scan, avoiding the
+# contended atomic cursor for skewed routes. Cost is E*P ID reads; it may
+# lose for many experts and must be timed on complete MoE callers. No shape
+# threshold or changed top-k/capacity semantics. Products retain pair IDs.
+comptime MOE_STABLE_GROUP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NEURAL_S09_MOE_STABLE_GROUP"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def moe_group_stable_kernel(sel: FP, poff: FP, order: FP, n_pairs: Int32, n_experts: Int32):
+    """One owner per expert emits pairs in original (token, pick) order."""
+    var expert = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if expert >= Int(n_experts):
+        return
+    var slot = Int(poff.unsafe_load(expert))
+    for pair in range(Int(n_pairs)):
+        if Int(sel.unsafe_load(pair)) == expert:
+            order.unsafe_store(slot, Float32(pair))
+            slot += 1
 
 
 def moe_group_blocks(n_pairs: Int, n_experts: Int, n_tiles: Int) -> Int:

@@ -1,0 +1,688 @@
+[
+  {
+    "id": "A01",
+    "title": "Existing GQA head reuse schedule",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "transformer/impl/llama/fused_attention.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_ATTN_ARM_TRIAL=1",
+      "MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE=1"
+    ],
+    "baseline_defines": [
+      "MOJOLEARN_ATTN_ARM_TRIAL=1"
+    ],
+    "candidate_env": {
+      "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"
+    },
+    "baseline_env": {
+      "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"
+    },
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "TR",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Historical isolated component results were losses on both vendors. Do not repeat unchanged decided cells; only changed mechanism or new required full-workload coverage justifies a round.",
+      "Reuse eligibility still requires supported head tile/shared memory and an even grouped-head ratio. No current execution or reach evidence."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "A02",
+    "title": "Existing retained exponent state versus recomputation",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "transformer/impl/llama/fused_attention.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_ATTN_ARM_TRIAL=1"
+    ],
+    "baseline_defines": [
+      "MOJOLEARN_ATTN_ARM_TRIAL=1"
+    ],
+    "candidate_env": {
+      "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32"
+    },
+    "baseline_env": {
+      "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"
+    },
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "TR",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Retained exp cells, actual arm, memory grant and complete training-step reach must be captured later. Historical component wins are not full-caller qualification."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "A03",
+    "title": "Two-output SiLU plus gate fusion for backward",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "training/neural_identical_experiments.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_NEURAL_SWIGLU_SAVE=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "TR",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Stores both rounded activation and rounded gate product; trace and backward consumers retained.",
+      "Only gated SiLU without an already selected bias/activation fusion; sabotage builds keep original paths. Host arithmetic is unchanged; all-column identity unestablished."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "A04",
+    "title": "Explicit cache-free byte training prefill",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "training/neural_identical_experiments.mojo",
+      "transformer/impl/llama/modeling_llama.mojo",
+      "training/byte_lm.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_NEURAL_PREFILL_NO_CARRY=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "LM"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "ByteTrainer explicitly requests non-carrying full-causal prefill. LlamaKVCache retains only one-word placeholders; stage K/V and traces remain complete.",
+      "Nonzero position/history/window refused. Decode public callers retain their default storage semantics.",
+      "Samba caller wiring remains pending. Normal append-to-stage transpose stays; unused carry allocation/copies are removed."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "A05",
+    "title": "Canonical RMS statistics with cooperative output lanes",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "training/neural_identical_experiments.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_NEURAL_RMS_APPLY_LANES=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "TR",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Plain RMSNorm only: lane zero computes original serial FMA sum and rounded rstd, a shared word feeds independent application cells.",
+      "Already fused residual-to-normalization routes and other norm kinds remain unchanged; full-caller route coverage is pending.",
+      "One block per row may increase scheduling cost on narrow rows; no timing-based threshold introduced."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "A06",
+    "title": "Hoisted immutable RoPE validation/table ownership",
+    "status": "blocked_prerequisite",
+    "implementation_paths": [
+      "transformer/impl/llama/modeling_llama.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "TR",
+      "LM"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Existing trainer already retains LlamaRopeTable. Skipping per-call inv_freq refusal is not safe for publicly mutable table buffers without ownership/generation changes."
+    ],
+    "blocker": "Introduce an explicit immutable/versioned RoPE owner and update every table mutation/reset/extension path before caching validation; do not use pointer identity or suppress refusal checks.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "A07",
+    "title": "Existing read-only backward entry alias",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "transformer/checks/transformer_backward.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "TR",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Existing enabled default untouched. Trace/materialized calls preserve the explicit stage copy; alias path is intended only for unchanged read-only input lifetime."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "A08",
+    "title": "Existing cooperative forward attention schedule",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "transformer/impl/llama/fused_attention.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_ATTN_ARM_TRIAL=1"
+    ],
+    "baseline_defines": [
+      "MOJOLEARN_ATTN_ARM_TRIAL=1"
+    ],
+    "candidate_env": {
+      "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"
+    },
+    "baseline_env": {
+      "MOJOLEARN_ATTN_ARM": "stash_tiled_pf_kvgrid_r32"
+    },
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "TR",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Reuses existing cooperative query grid; fixes tiled/preflush/kvgrid backward schedule in both arms.",
+      "No resurrection of rejected cooperative dK/dV without a changed resource mechanism; source/runtime eligibility pending."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "A09",
+    "title": "Absolute-key-block versioned softmax merge",
+    "status": "blocked_prerequisite",
+    "implementation_paths": [
+      "transformer/impl/llama/modeling_llama.mojo",
+      "transformer/impl/llama/fused_attention.mojo",
+      "transformer/checks/transformer_backward_oracle.mojo",
+      "transformer/host/transformer_block_host.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "TR",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "No partial GPU-only arithmetic switch was added."
+    ],
+    "blocker": "Requires one fully specified max/exp/denominator/merge profile, all host/GPU forward and backward consumers, prefix/decode masks, empty rows and checkpoint version mapping together.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "A10",
+    "title": "Attention fusion/residency combination",
+    "status": "blocked_prerequisite",
+    "implementation_paths": [
+      "transformer/impl/llama/modeling_llama.mojo",
+      "transformer/impl/llama/fused_attention.mojo",
+      "training/byte_lm.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "combination",
+    "workload_codes": [
+      "TR",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "A03+A04 and existing A01/A02 are selectable separately. No winner has been established; G03 grouped projection caller wiring is not complete."
+    ],
+    "blocker": "Complete actual G03 callers, choose only admitted individual arms, and then specify full-workload combined arm. No performance default or combined-win claim.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "T01",
+    "title": "Existing live AdamW update status",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "training/byte_lm.mojo",
+      "training/checks/optimizer.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_TRAIN_LIVE_STATUS=1",
+      "MOJOLEARN_STEP_GLUE_TRIAL=1"
+    ],
+    "baseline_defines": [
+      "MOJOLEARN_STEP_GLUE_TRIAL=1"
+    ],
+    "candidate_env": {
+      "MOJOLEARN_STEP_GLUE_ARM": "noshadow"
+    },
+    "baseline_env": {
+      "MOJOLEARN_STEP_GLUE_ARM": "noshadow"
+    },
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "LM"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Reuses I10; added explicit IDENTICAL and ALL_OFF guard. Out-of-place Adam only, fault builds excluded.",
+      "Whole-workload acceptance remains pending; Samba/MLP live-status caller integration not added."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "T02",
+    "title": "Existing device-gated optimizer refusal batch",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "training/opt_gate.mojo",
+      "training/checks/optimizer.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_IDN_OPT_GATE_SCAN_OFF=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "LM",
+      "SA",
+      "ML"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Existing optimizer-scope gating is selectable; this is not a complete whole-step one-completion-read implementation.",
+      "Further wait deferral requires complete transactional error precedence and rollback ownership. No unsafe access check was removed."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "T03",
+    "title": "IDENTICAL parameter and gradient arena views",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "training/neural_identical_experiments.mojo",
+      "training/byte_lm.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_NEURAL_PARAM_VIEWS=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "LM"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Reuses existing explicit sub-buffer spelling on all IDENTICAL GPU columns, refreshing block parameter views after any owner swap and binding complete gradient writes before backward.",
+      "Saves pack/unpack transfers. Initial per-block constructor allocations are not eliminated; tied-weight models beyond ByteConfig semantics and Samba wiring remain pending.",
+      "Existing Apple embedding/head view default remains untouched; other columns join only under this opt-in arm."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "T04",
+    "title": "Retained whole-token upload and device split",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "training/neural_identical_experiments.mojo",
+      "training/byte_lm.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_NEURAL_TOKEN_BATCH_UPLOAD=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "LM"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Uploads fresh row-major batch bytes on every call into retained device scratch, splits input and shifted target with integer-only Mojo device work, and retains mandatory range scans.",
+      "No pointer-based input reuse. Allocation adds B*(L+1)*4 resident bytes; cold allocation/upload included in future timing.",
+      "Pinned staging and explicit reusable externally addressed batch generations are not implemented. Samba caller coverage pending."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "T05",
+    "title": "Fused CE probabilities and dlogits",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "training/neural_identical_experiments.mojo",
+      "training/checks/loss.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_NEURAL_CE_FUSED_GRAD=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "LM",
+      "SA",
+      "ML"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Single cell owner writes original rounded probability then original rounded gradient, including ignore-index +0; denominator/loss folds unchanged.",
+      "Both outputs remain materialized as in original APIs; caller aliasing policies unchanged. Existing CE exp stash is reused, not recomputed.",
+      "Only non-sabotage IDENTICAL path; task quality and exceptional-input coverage pending."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "T06",
+    "title": "Existing GEMM-backed chunked LM head v2",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "training/chunked_lm_head_v2.mojo",
+      "training/byte_lm_config.mojo",
+      "training/byte_lm.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "LM"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Existing code supplies chunked forward and complete dhidden/dweight. Its separate arithmetic version must be compared across columns independently of dense baseline bits.",
+      "No actual define/env control exists: future harness must pass the explicit ByteConfig field shown in candidate_settings; empty define lists alone do not select this arm."
+    ],
+    "blocker": "Future harness adapter must pass ByteConfig.chunked_lm_head_v2 explicitly; defines/env alone cannot distinguish these arms.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+    "candidate_settings": {
+      "ByteConfig.chunked_lm_head_v2": true
+    },
+    "baseline_settings": {
+      "ByteConfig.chunked_lm_head_v2": false
+    }
+  },
+  {
+    "id": "T07",
+    "title": "Existing descriptor-driven SGD arena launch",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "training/opt_gate.mojo",
+      "training/checks/optimizer.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "ML",
+      "SQ",
+      "CN"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Actual callers must use SGD/momentum. Byte LM requires AdamW and is therefore not a reached workload for this arm.",
+      "Existing tensor order, moment flags, clipping and Nesterov semantics retained; no new kernel added."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "T08",
+    "title": "Existing batched deterministic clip products",
+    "status": "existing_arm_unverified",
+    "implementation_paths": [
+      "training/opt_gate.mojo",
+      "training/checks/optimizer.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [
+      "MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF=1"
+    ],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "ML",
+      "SQ",
+      "CN"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Existing batching only; does not yet cache partial norms across distinct consumers.",
+      "Reach requires active global gradient clipping. Byte LM forbids max_norm > 0, so it is not reached there.",
+      "Complete cross-consumer norm reuse remains a separate ownership/lifetime prerequisite."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "T09",
+    "title": "Resident microbatch gradients and immutable reduction schedule",
+    "status": "blocked_prerequisite",
+    "implementation_paths": [
+      "training/checks/train_loop.mojo",
+      "training/checks/optimizer_contract.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Existing contract has microbatch alignment semantics, but ByteConfig full training API has no explicit reusable microbatch session owner."
+    ],
+    "blocker": "Add an explicit owned microbatch buffer lifecycle, complete full-dataset recipe, fixed existing reduction order and unchanged RNG/effective batch semantics before any allocation-reuse toggle.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "T10",
+    "title": "Training residency/loss/status combination",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "training/neural_identical_experiments.mojo",
+      "training/byte_lm.mojo",
+      "training/checks/loss.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_NEURAL_PARAM_VIEWS=1",
+      "MOJOLEARN_IDN_NEURAL_TOKEN_BATCH_UPLOAD=1",
+      "MOJOLEARN_IDN_NEURAL_CE_FUSED_GRAD=1",
+      "MOJOLEARN_TRAIN_LIVE_STATUS=1",
+      "MOJOLEARN_STEP_GLUE_TRIAL=1"
+    ],
+    "baseline_defines": [
+      "MOJOLEARN_STEP_GLUE_TRIAL=1"
+    ],
+    "candidate_env": {
+      "MOJOLEARN_STEP_GLUE_ARM": "noshadow"
+    },
+    "baseline_env": {
+      "MOJOLEARN_STEP_GLUE_ARM": "noshadow"
+    },
+    "profile_relation": "combination",
+    "workload_codes": [
+      "LM"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Combination definition wires already programmed arms; there are no admitted winners, performance claims or default changes.",
+      "Evaluate baseline, individuals, relevant pairs, full set, cold open, repeated complete steps, checkpoint and failure behavior. Memory savings/speedups are hypotheses."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "V03",
+    "title": "Shared deterministic reciprocal per normalization row",
+    "status": "blocked_prerequisite",
+    "implementation_paths": [
+      "transformer/impl/llama/modeling_llama.mojo",
+      "transformer/impl/llama/fused_attention.mojo",
+      "transformer/checks/transformer_backward_oracle.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "TR",
+      "LM",
+      "SA"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Portable division exists, but replacing e/d by e*(1/d) changes the numerical version and every dependent normalization/backward contract."
+    ],
+    "blocker": "Implement identical reciprocal exceptional/FTZ rules and complete host/eager/fused/backward/decode/attention-v2 profile plumbing together; no partial GPU-only toggle added.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "V04",
+    "title": "Fixed-block versioned CE folds",
+    "status": "blocked_prerequisite",
+    "implementation_paths": [
+      "training/checks/loss.mojo",
+      "training/checks/loss_oracle.mojo",
+      "training/loss_host_rows.mojo"
+    ],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "LM",
+      "SA",
+      "ML",
+      "CN"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Current routed GEMM leaves are a reusable baseline; fixed CE-local profile must cover denominator, smoothing, reduction and gradient scale without silently inheriting a vendor leaf choice."
+    ],
+    "blocker": "Specify and implement full CE-local max/sum/loss profile across scalar oracle, host lane implementation and GPU paths with full objective/ignore-index/tail semantics. No incomplete numerical switch introduced.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "V06",
+    "title": "AdamW decay scalar FMA numerical version",
+    "status": "source_implemented_unverified",
+    "implementation_paths": [
+      "training/neural_identical_experiments.mojo",
+      "training/checks/optimizer_contract.mojo",
+      "training/byte_lm_config.mojo"
+    ],
+    "candidate_defines": [
+      "MOJOLEARN_IDN_NEURAL_ADAMW_DECAY_FMA=1"
+    ],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "new_version",
+    "workload_codes": [
+      "LM",
+      "SA",
+      "ML",
+      "SQ",
+      "CN"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "Precisely named optimizer_decay_fma_v2 seam changes ftz(1-ftz(mul(lr,wd))) to ftz(fma(-lr,wd,+1)); all consumers share StepScalars, including independent scalar oracle and host lanes.",
+      "ByteConfig profile string gets an arithmetic suffix. Other external model/checkpoint adapters still need to record the define/profile explicitly; do not mix versioned resume states.",
+      "Only nonzero AdamW decay consumes the changed scalar; SGD/Adam are inert. Savings are a scalar-per-step hypothesis and may be neutral; full-state/convergence qualification remains pending."
+    ],
+    "blocker": "",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  },
+  {
+    "id": "V07",
+    "title": "Supported graph replay or command batching",
+    "status": "blocked_toolchain",
+    "implementation_paths": [],
+    "candidate_defines": [],
+    "baseline_defines": [],
+    "candidate_env": {},
+    "baseline_env": {},
+    "profile_relation": "same_arithmetic",
+    "workload_codes": [
+      "LM",
+      "SA",
+      "TR"
+    ],
+    "limitations": [
+      "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign.",
+      "No supported replay API/lifetime/error contract was established in the available repository source. No backend workaround, native capture, toolchain patch or fabricated switch added."
+    ],
+    "blocker": "Ask Modular for a supported DeviceContext graph/command-batch capture+replay API with retained buffer ownership, deterministic dependency order, host-visible failure propagation, mutable argument binding and AMD/NVIDIA/Apple support. Wait for supported semantics.",
+    "toggle_comments": "NOT TESTED — NOT COMPILED — NOT MEASURED; no validation or timing was run in this campaign."
+  }
+]

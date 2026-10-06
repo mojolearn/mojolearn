@@ -11,6 +11,7 @@ plain ascending scan; the host-lane fast path it had in the oracle is gone
 (a scan, same refusals, same messages)."""
 
 from gemm.contract import OP_NT, contract_leaf_size
+from training.neural_identical_experiments import NEURAL_ADAMW_DECAY_FMA
 from checks.numerics import (
     ftz,
     identical_div,
@@ -155,6 +156,12 @@ def step_scalars(cfg: OptimizerConfig, t: Int) -> StepScalars:
     var c1 = ftz(one - cfg.beta1)
     var c2 = ftz(one - cfg.beta2)
     var decay_mul = ftz(one - ftz(identical_mul(cfg.lr, cfg.weight_decay)))
+    # V06: NOT TESTED — NOT COMPILED — NOT MEASURED. Default OFF; named
+    # optimizer_decay_fma_v2 seam. This shared scalar feeds the GPU update,
+    # scalar independent oracle and host-lane update on every column.
+    # Only AdamW consumes it; no update, norm or clipping fold changes.
+    comptime if NEURAL_ADAMW_DECAY_FMA:
+        decay_mul = ftz(identical_mul_add(-cfg.lr, cfg.weight_decay, one))
     var neg_lr = -cfg.lr
     var c_damp = ftz(one - cfg.dampening)
 
@@ -198,7 +205,6 @@ def microbatch_split_is_identical(t_tokens: Int, a: Int) -> Bool:
             return False
         q = q // 2
     return True
-
 
 
 

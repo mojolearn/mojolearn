@@ -421,7 +421,8 @@ def mamba_block_sabotage_name() -> String:
 # a tap index or an accumulator seed.
 # ===========================================================================
 
-comptime MAMBA_TPB = 128
+from mamba.impl.ops.neural_experiment_profiles import NEURAL_MAMBA_TPB
+comptime MAMBA_TPB = NEURAL_MAMBA_TPB  # M07: NOT TESTED — NOT COMPILED — NOT MEASURED; opt-in geometry only.
 
 
 def _grid(n: Int) -> Int:
