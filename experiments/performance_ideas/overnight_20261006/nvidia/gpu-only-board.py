@@ -11,6 +11,11 @@ def plan(*args,**kwargs):
 def run_race(ctx,race):
  R=pathlib.Path('/root/overnight-nvidia');q=json.loads((R/'repair-queue.json').read_text());p=pathlib.Path('/root/campaign-results/repairs/results.json');done=json.loads(p.read_text()) if p.exists() else {}
  if any(x['key'] not in done for x in q) or not (R/'CANDIDATES_SEALED').exists():raise SystemExit(75)
+ marker=R/'lightgbm-cuda-ready.json'
+ if marker.exists():
+  import importlib.util
+  spec=importlib.util.spec_from_file_location('selective_repair',R/'selective-opponent-repair.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+  return module.repair_tree(ctx,race,run,json.loads(marker.read_text()))
  return run(ctx,race)
 def arm_envs(args,vendor,out,log):
  p=pathlib.Path('/root/overnight-nvidia/implicit-env-ready.json')
