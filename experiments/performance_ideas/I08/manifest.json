@@ -11,9 +11,12 @@
   ],
   "status": "source_ready",
   "implementation_paths": [
-    "experiments/performance_ideas/I08/check.mojo"
+    "experiments/performance_ideas/I08/check.mojo",
+    "mamba/impl/modules/ssd_minimal.mojo"
   ],
-  "candidate_defines": [],
+  "candidate_defines": [
+    "MOJOLEARN_IDN_M2_RETAIN_GL=1"
+  ],
   "baseline_defines": [
     "MOJOLEARN_IDN_M2_SSD_TILES_OFF=1",
     "MOJOLEARN_IDN_M2_CB_LOWER_OFF=1"
@@ -21,6 +24,8 @@
   "build_argv": [
     "mojo",
     "build",
+    "-D",
+    "MOJOLEARN_IDN_M2_RETAIN_GL=1",
     "-j1",
     "-I",
     "{repo}",
