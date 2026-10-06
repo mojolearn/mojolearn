@@ -14,6 +14,7 @@ of two. A non-positive pivot (a rank-deficient design) is reported through a
 status word, never as a NaN.
 """
 from std.memory import bitcast
+from checks.soft_f64 import sf64_from_f32, sf64_sub, sf64_to_f32
 
 from sequence.ops import FP, Args, add, fma3, gemm_dot, ld, mul, st, sub
 from checks.numerics import ftz, identical_div, identical_sqrt
@@ -149,6 +150,22 @@ def op_var_forecast(t: Int, a: Args):
 def op_sub(t: Int, a: Args):
     """p2[t] = p0[t] - p1[t]."""
     st(a.p2, t, sub(ld(a.p0, t), ld(a.p1, t)))
+
+
+def op_var_fitted(t: Int, a: Args):
+    """Public fittedvalues[t] = original_y[t] - returned_residual[t].
+
+    Keep the former NumPy binary32 subtraction graph, not the earlier GEMM
+    prediction (subtracting a rounded residual can yield another last bit).
+    Raw loads/stores preserve subnormal input/results. Existing integer
+    soft-f64 arithmetic plus RNE narrowing implements binary32 subtraction
+    on GPU and host without a target FTZ choice or a host fallback. NaNs
+    follow the existing canonical-NaN soft-f64 contract.
+    p0 original y after its lag rows, p1 residual, p2 output.
+    """
+    var y = sf64_from_f32(a.p0.unsafe_load(t))
+    var residual = sf64_from_f32(a.p1.unsafe_load(t))
+    a.p2.unsafe_store(t, sf64_to_f32(sf64_sub(y, residual)))
 
 
 def op_scale(t: Int, a: Args):

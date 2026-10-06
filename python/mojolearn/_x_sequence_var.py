@@ -17,7 +17,7 @@ from . import _backend
 
 
 class VARResults:
-    def __init__(self, endog, params, sigma_u, resid, k_ar, k_trend, numeric_mode):
+    def __init__(self, endog, params, sigma_u, resid, k_ar, k_trend, numeric_mode, fittedvalues):
         self.endog = endog
         self.params = params
         self.sigma_u = sigma_u
@@ -30,7 +30,7 @@ class VARResults:
         K = self.neqs
         self.intercept = params[0].copy() if k_trend else np.zeros(K, dtype=np.float32)
         self.coefs = np.ascontiguousarray(params[k_trend:].reshape(k_ar, K, K).transpose(0, 2, 1))
-        self.fittedvalues = (endog[k_ar:] - resid).astype(np.float32)
+        self.fittedvalues = fittedvalues
         self._numeric_mode = numeric_mode
 
     def forecast(self, y, steps):
@@ -76,9 +76,11 @@ class VAR:
         params = np.zeros((m, K), dtype=np.float32)
         sigma = np.zeros((K, K), dtype=np.float32)
         resid = np.zeros((max(n - p, 1), K), dtype=np.float32)
+        fittedvalues = np.empty_like(resid)
         code = _backend.binding("_mojolearn_x_sequence", self.numeric_mode).var_fit(
-            [self.endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data], [n, K, p, kt])
+            [self.endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data,
+             fittedvalues.ctypes.data], [n, K, p, kt])
         if int(code):
             raise np.linalg.LinAlgError(  # glue: raises the numpy error class
                 f"VAR.fit: the lagged design is rank deficient (Cholesky pivot of column {int(code) - 1})")
-        return VARResults(self.endog, params, sigma, resid, p, kt, self.numeric_mode)
+        return VARResults(self.endog, params, sigma, resid, p, kt, self.numeric_mode, fittedvalues)

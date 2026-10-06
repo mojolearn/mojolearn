@@ -217,6 +217,9 @@ comptime OP_SEQ_IOTA = 95
 #: executor (soft binary64, `sequence/prophet.mojo` op_prophet_prep).
 comptime OP_PROPHET_PREP = 96
 
+# Public VAR fittedvalues: raw binary32 y - residual, no Python/NumPy work.
+comptime OP_VAR_FITTED = 97
+
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
 comptime CELL_RNN_RELU = 1

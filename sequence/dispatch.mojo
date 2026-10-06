@@ -84,6 +84,7 @@ from sequence.ops import (
     OP_ETS_LIK,
     OP_ETS_INIT,
     OP_VAR_RESID,
+    OP_VAR_FITTED,
     OP_VAR_SIGMA,
     OP_STL_SEAS,
     OP_STL_MA,
@@ -127,7 +128,7 @@ from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
 from sequence.prophet import op_prophet_prep, op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, op_cell_bwd_scan, op_cell_fwd_scan
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
-from sequence.vecar import op_var_resid, op_var_sigma
+from sequence.vecar import op_var_resid, op_var_sigma, op_var_fitted
 from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas
 
 
@@ -296,6 +297,8 @@ def apply[OP: Int](t: Int, a: Args):
     elif OP == OP_MOE_OUT:
         op_moe_out(t, a)
     # lane/apple-fast-tsa2: reached only under TSA2_VAR / TSA2_STL
+    elif OP == OP_VAR_FITTED:
+        op_var_fitted(t, a)
     elif OP == OP_VAR_RESID:
         op_var_resid(t, a)
     elif OP == OP_VAR_SIGMA:

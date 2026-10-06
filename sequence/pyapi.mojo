@@ -11,7 +11,7 @@ from std.math import sqrt
 from std.memory import bitcast, memcpy
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec_trait import Exec
-from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_COOP, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
+from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_COOP, TSA2_STL, TSA2_VAR, OP_VAR_FITTED, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.layernorm import LN_FOLD_BLOCK, ln_fold_rows
@@ -425,11 +425,12 @@ def _stl_grid_py[E: Exec](
 
 def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     """VAR(p) by OLS (`sequence/vecar.mojo`). addrs = [y (n, K), params (m, K),
-    sigma_u (K, K), resid (n - p, K)], each output written; ip = [n, K, p,
+    sigma_u (K, K), resid (n - p, K), optional fittedvalues (n - p, K)],
+    each output written; ip = [n, K, p,
     k_trend]. Returns 0, or 1 + the design column whose Cholesky pivot was
     not positive (nothing is written then)."""
-    if len(addrs) != 4 or len(ip) != 4:
-        raise Error("var_fit: requires 4 addresses and 4 integer parameters")
+    if (len(addrs) != 4 and len(addrs) != 5) or len(ip) != 4:
+        raise Error("var_fit: requires 4 or 5 addresses and 4 integer parameters")
     var n = ival(ip, 0)
     var K = ival(ip, 1)
     var p = ival(ip, 2)
@@ -499,6 +500,13 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     f.p1 = sc
     f.i1 = K
     ex.launch[OP_ROWSCALE](f, m * K)
+    if len(addrs) == 5:
+        var fitted = Args()
+        fitted.p0 = y + p * K
+        fitted.p1 = Rs
+        fitted.p2 = F
+        ex.launch[OP_VAR_FITTED](fitted, R * K)
+        ex.download_async(fptr(addrs[4], "fittedvalues"), F, R * K)
     # three copies, one wait (lane gap-prep2: a download waits by itself, so
     # the three were three waits after the one above); the same words
     ex.download_async(fptr(addrs[1], "params"), Bm, m * K)
@@ -545,7 +553,8 @@ def _var_fit_queued[E: Exec](
     main's untouched zeros). The residual and sigma_u products fuse their
     epilogues (`op_var_resid`, `op_var_sigma`: the same chains)."""
     var y = ex.bind(fptr(addrs[0], "y"), n * K)
-    var ws = ex.alloc(R * m + R * K + m + m * m + m * K + R * K + K * K + 1)
+    var fitted_size = R * K if len(addrs) == 5 else 0
+    var ws = ex.alloc(R * m + R * K + m + m * m + m * K + R * K + K * K + 1 + fitted_size)
     var Z = ws
     var Ys = Z + R * m
     var sc = Ys + R * K
@@ -610,6 +619,13 @@ def _var_fit_queued[E: Exec](
     f.p1 = sc
     f.i1 = K
     ex.launch[OP_ROWSCALE](f, m * K)
+    if len(addrs) == 5:
+        var fitted = Args()
+        fitted.p0 = y + p * K
+        fitted.p1 = Rs
+        fitted.p2 = status + 1
+        ex.launch[OP_VAR_FITTED](fitted, R * K)
+        ex.download_async(fptr(addrs[4], "fittedvalues"), fitted.p2, R * K)
     comptime if SEQ_FAST_VAR_ONECOPY:
         # lane/apple-fast-gap-tsa: params | resid | sigma_u | status lie in one
         # span of the workspace: one device-to-host copy replaces four
