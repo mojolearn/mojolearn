@@ -16,10 +16,41 @@
     },
     "unsupported": 0
   },
-  "harness_repairs": [],
-  "harness_source_sha": "b0f5242d244ef75cd9ba7d78ca92e10008d75510",
+  "harness_repairs": [
+    {
+      "archive_sha256": "b8b768cf6ddab6552de0ddbd5d9a5bbbd6a514c9750a91a5b0a0b2cacadf5993",
+      "base_sha": "b0f5242d244ef75cd9ba7d78ca92e10008d75510",
+      "before": "2026-10-06T07:27:12Z",
+      "file_sha256": {
+        "mamba/corpus/gen_corpus.py": "453bcb7ee31d89d24606a57642c208ed5be3d3181d3c5d95a19a829af725a285",
+        "tools/bench_board.py": "0a741f9ea50b9986765a6928b32e24a65176c4e623f536521e0c589cd6a57d06",
+        "tools/bench_board_neural.py": "829341926e067de7ccfea227170ee113750a202ce37f259dd98e9280d5176382"
+      },
+      "history": "results/opponents/attempts/neural-pre-resource-repair",
+      "patch_commits": [
+        "e5c2fc3af92d4cf1b9461b03a48557dcd590d3e3",
+        "48880bba249ad7f975da1523b07d83ad4b50a462",
+        "8b0bdf4d4a7d145eec60e82f06b1f5a4ac05b948"
+      ],
+      "races": [
+        "neural/lm-forward/bytes/shape=full",
+        "neural/lm-train-step/bytes/shape=full",
+        "neural/mamba1-forward/gaussian/shape=full",
+        "neural/mamba2-forward/gaussian/shape=full",
+        "neural/mamba3-forward/gaussian/shape=full",
+        "neural/samba-forward/bytes/shape=full",
+        "neural/samba-train-step/bytes/shape=full",
+        "neural/transformer-forward/gaussian/shape=full"
+      ],
+      "reason": "Missing frozen corpus resources and opponent-only binding prerequisite",
+      "scope": "Only selected failed neural races after cutoff; earlier cells retain their original b0f harness and raw history",
+      "source_sha": "3e55ba47e581fa75dffba286327d023f96801831",
+      "status": "ACTIVE_RESOURCE_RETRY"
+    }
+  ],
+  "harness_source_sha": "3e55ba47e581fa75dffba286327d023f96801831",
   "policy": "Exact opponent-only source files, hardware and failures retained. No A/B component ratios are derived.",
-  "published_at": 1791271907.776115,
+  "published_at": 1791272027.915245,
   "schema": "mojolearn-opponent-publication/1",
   "source_directory": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/opponents/board",
   "source_sha256": {
