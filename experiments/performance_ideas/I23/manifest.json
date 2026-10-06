@@ -6,8 +6,7 @@
   "vendors": [
     "nvidia",
     "amd",
-    "apple",
-    "host"
+    "apple"
   ],
   "status": "source_ready",
   "implementation_paths": [
@@ -19,15 +18,18 @@
     "MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF=1"
   ],
   "build_argv": [
-    "mojo",
-    "build",
-    "-j1",
-    "-I",
-    "{repo}",
-    "-D",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "experiments/performance_ideas/I23/check.mojo",
-    "-o",
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/I23/check.mojo",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--source-sha",
+    "{source_sha}",
+    "--mojo",
+    "{mojo}",
+    "--output",
     "{output}"
   ],
   "run_argv": [
@@ -42,20 +44,23 @@
     "public semantics and canonical tie order retained",
     "NVIDIA+AMD combined faster and neither materially slower"
   ],
-  "timing_contract": "Frozen source; compile once on cheap boxes; device runs only; full public-operation timing includes all scratch/preparation/readback. Apple IDENTICAL bit check only.",
+  "timing_contract": "Frozen source; compile once on cheap boxes; device runs only; full public-operation timing includes all scratch/preparation/readback. Apple IDENTICAL bit check only. Native builds explicitly bind device column and accelerator; independent host replay remains a separate identity gate, not a DeviceContext execution vendor.",
   "blocker": null,
   "baseline_build_argv": [
-    "mojo",
-    "build",
-    "-j1",
-    "-I",
-    "{repo}",
-    "-D",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "-D",
-    "MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF=1",
-    "experiments/performance_ideas/I23/check.mojo",
-    "-o",
-    "{output}"
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/I23/check.mojo",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--source-sha",
+    "{source_sha}",
+    "--mojo",
+    "{mojo}",
+    "--output",
+    "{output}",
+    "--define",
+    "MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF=1"
   ]
 }
