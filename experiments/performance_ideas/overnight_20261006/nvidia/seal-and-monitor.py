@@ -78,7 +78,17 @@ def monitor_route(route,state,meta):
  if actual['ready'].get('failed',0):safe_alert('deps-'+route,'NVIDIA '+route+' opponent dependency setup failed; inspect captured opponent-setup logs. Tail is blocked, candidate measurements remain authorized.')
  return dict(status='MONITORED',builder_available=state is not None,seal_action=seal_action,worker_liveness=recovery,sealed=eligible,build_ready=build_ready,failed_builds=bad_builds,pending_claims=blockers,missing_measurements=missing,failed_measurements=failed,unsupported_baseline_shapes=unsupported_shapes,missing_ids=sorted(expected-seen) if state is not None else None,remote=actual)
 
+
+def builder_retirement():
+ # The owner has verified provider deletion. Do not probe or reconnect to its
+ # former address; cached receipts remain evidence, never a new work queue.
+ p=E.parent/'cpu-builder/status.json'
+ if not p.exists():return None
+ owner=json.loads(p.read_text())
+ return owner if owner.get('status') in ['TERMINATED','TERMINATED_VERIFIED'] else None
+
 def load_builder_state():
+ if builder_retirement() is not None:return None,[]
  code="import pathlib,json,time\nB=pathlib.Path('/root/measurement-builder');groups={}\nfor g in ['nvidia-family-repairs','nvidia-priority','nvidia-more','amd-remaining']:\n p=B/'artifacts'/g/'status.json';groups[g]=json.loads(p.read_text()) if p.exists() else {}\nclaims={p.name:time.time()-p.stat().st_mtime for p in (B/'claims').glob('*') if time.time()-p.stat().st_mtime<1800}\nprint(json.dumps(dict(groups=groups,claims=claims)))\n"
  state=json.loads(run([*CPU,'python3 -c '+shlex.quote(code)]).stdout)
  meta=json.loads((E/'repair-build-observations.json').read_text())['builds']
@@ -86,19 +96,22 @@ def load_builder_state():
  return state,meta
 
 def monitor_once():
- summary={};state=None;meta=[];builder_error=None
+ summary={};state=None;meta=[];builder_error=None;retired_builder=None
  try:
-  state,meta=load_builder_state()
+  retired_builder=builder_retirement()
+  if retired_builder is None:state,meta=load_builder_state()
  except Exception as exc:
   builder_error=type(exc).__name__+': '+str(exc)
   record_error('builder-unavailable; existing candidate seals unchanged')
  for route in ['specific','default']:
   try:
    summary[route]=monitor_route(route,state,meta)
+   if retired_builder is not None and summary[route].get('seal_action')=='UNCHANGED_BUILDER_UNAVAILABLE':
+    summary[route]['seal_action']='UNCHANGED_BUILDER_RETIRED'
   except Exception as exc:
    summary[route]=dict(status='MONITOR_ERROR',error=type(exc).__name__+': '+str(exc),seal_action='UNKNOWN_ROUTE_ERROR')
    record_error('route-'+route)
- atom(E/'tail-monitor-status.json',dict(pid=os.getpid(),time=time.time(),builder_available=state is not None,builder_error=builder_error,routes=summary))
+ atom(E/'tail-monitor-status.json',dict(pid=os.getpid(),time=time.time(),builder_available=state is not None,builder_error=builder_error,builder_status='RETIRED' if retired_builder else ('AVAILABLE' if state is not None else 'UNAVAILABLE'),builder_owner=retired_builder,routes=summary))
  return summary
 
 def main():
