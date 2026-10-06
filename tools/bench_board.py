@@ -3507,7 +3507,7 @@ def main(argv=None):
 
     python, wheel = setup_python(args, vendor, out, os.path.join(out, "logs", "setup.log"))
     arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
-    why = gpu_set_refusal(python, vendor)
+    why = None if getattr(args, "opponents_only", False) else gpu_set_refusal(python, vendor)
     if why:
         raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "
                          "so every race would refuse our arm:\n%s" % (vendor, why))

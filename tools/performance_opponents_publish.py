@@ -46,7 +46,13 @@ def inspect_pair(raw: bytes, markdown: bytes, vendor: str) -> tuple[dict, dict]:
     for cell in cells:
         arm = cell.get("arm", "")
         if arm.startswith("ours") or re.search(r"-cpu(?:-|$)", arm):
-            raise ValueError("source contains an own-algorithm or CPU cell: " + arm)
+            # Tree harnesses retain explicit GPU-PATH-ONLY refusal markers for
+            # unrequested arms. Preserve those receipts, never CPU timings.
+            refusal = str(cell.get("status", "")).startswith("REFUSED(GPU-PATH-ONLY:")
+            untimed = cell.get("rounds", 0) == 0 and not cell.get("times_ms") and all(
+                cell.get(key) is None for key in ("median_ms", "min_ms", "max_ms", "warmup_ms"))
+            if not (refusal and untimed):
+                raise ValueError("source contains an own-algorithm or CPU measurement: " + arm)
     states = Counter(race.get("status", "unknown") for race in races.values())
     cell_states = Counter(str(cell.get("status", "unknown")).split("(")[0] for cell in cells)
     planned = len(board.get("plan", []))
