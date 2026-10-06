@@ -35,6 +35,7 @@ def main() raises:
     if m < 1 or n < 1 or k < 1 or op < 0 or op > 2:
         raise Error("invalid shape or orientation")
     comptime mask = (
+        # A02 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         Int(is_defined["MOJOLEARN_GEMM_ONE_PAGE"]())
         # I01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         + 2 * Int(is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]())

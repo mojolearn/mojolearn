@@ -3168,6 +3168,7 @@ def _mfma_run(
     # 2026-10-05 one-page screen: NVIDIA B/A 1.013586 (slower), AMD
     # 0.991303 (single-sample near-neutral); not a combined timing win.
     # Exact cases retained in experiments/identical_speed/results/20261005/.
+    # A02 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     comptime PAGES = 1 if is_defined["MOJOLEARN_GEMM_ONE_PAGE"]() else lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
     var part = contract_partition(k)
     var leaf = part[0]
@@ -3292,6 +3293,7 @@ def _mfma_run_ws(
     comptime KS = 16
     comptime SSTRIDE = KS + TUNED_VECLEN
     comptime PAGE_BYTES = (128 + 128) * SSTRIDE * 4
+    # A02 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     comptime PAGES = 1 if is_defined["MOJOLEARN_GEMM_ONE_PAGE"]() else lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
     var part = contract_partition(k)
     if group_leaves > 0 and part[1] > 1:
@@ -5045,6 +5047,7 @@ def _launch_tuned[
     comptime PAGE_BYTES = (BM + BN) * SSTRIDE * 4
     # lane/amd-step-time trial arm: one page (half the LDS, so more blocks can
     # be resident per CU); scheduling only.
+    # A02 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     comptime PAGES = 1 if is_defined["MOJOLEARN_GEMM_ONE_PAGE"]() else lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
     comptime kern = identical_gemm_tuned_kernel[RPT, CPT, TC, KS, FS, PAGES]
     var g = _tile_grid(m, n, BM, BN, two_d)
@@ -8658,6 +8661,7 @@ def _kpack_launch[
     # DEVIATION 2700: the kernel's page is `TR` A line groups of `KS RPT + PAD`
     # words and `TC` B line groups of `KS CPT + PAD` (PAD 0 is 2599's page).
     comptime PAGE_BYTES = (BM * KS + TR * PAD + BN * KS + TC * PAD) * 4
+    # A02 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     comptime PAGES = 1 if is_defined["MOJOLEARN_GEMM_ONE_PAGE"]() else lib_smem_pages_for[
         TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES
     ]()
