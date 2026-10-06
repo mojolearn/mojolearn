@@ -1,0 +1,465 @@
+{
+  "arms": {
+    "xgboost-cpu": {
+      "command": [
+        "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+        "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/source-6897b8da0/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "xgboost-cpu",
+        "--lane",
+        "dart-reg",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "852b130dcfa49013",
+        "852b130dcfa49013"
+      ],
+      "infer_ms": [
+        1568.284249980934
+      ],
+      "infer_warmup_ms": 1567.440125043504,
+      "info": {
+        "config": "xgboost-cpu(booster='dart', colsample_bytree=1.0, device='cpu', learning_rate=0.1, max_bin=255, max_delta_step=0.0, max_depth=8, min_child_weight=1.0, n_estimators=200, n_jobs=-1, normalize_type='tree', one_drop=False, random_state=7, rate_drop=0.1, reg_alpha=0.0, reg_lambda=0.0, sample_type='uniform', skip_drop=0.5, subsample=1.0, tree_method='hist')",
+        "cpu_resources": {
+          "cpu_count": 28,
+          "thread_env": {
+            "MKL_NUM_THREADS": null,
+            "NUMEXPR_NUM_THREADS": null,
+            "OMP_NUM_THREADS": null,
+            "OPENBLAS_NUM_THREADS": null,
+            "VECLIB_MAXIMUM_THREADS": null
+          },
+          "threadpools": [
+            {
+              "filepath": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/sklearn/.dylibs/libomp.dylib",
+              "internal_api": "openmp",
+              "num_threads": 28,
+              "prefix": "libomp",
+              "user_api": "openmp",
+              "version": null
+            },
+            {
+              "filepath": "/Users/ec2-user/mojolearn/.pixi/envs/default/lib/libomp.dylib",
+              "internal_api": "openmp",
+              "num_threads": 28,
+              "prefix": "libomp",
+              "user_api": "openmp",
+              "version": null
+            }
+          ]
+        },
+        "device": "cpu",
+        "input_home": "host",
+        "library": "xgboost",
+        "pre_clock_fit": false,
+        "version": "3.2.0"
+      },
+      "median_ms": 702709.6052499255,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 3448.3,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 2647.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        702709.6052499255
+      ],
+      "operations": [
+        {
+          "dataset_load_included": false,
+          "fresh_process": false,
+          "ms": 689351.123917033,
+          "preparation_ms": 0.0009579816833138466,
+          "round": 0,
+          "scope": "call-consume",
+          "startup_probe_preparation_excluded": true,
+          "warmup": true
+        },
+        {
+          "dataset_load_included": false,
+          "fresh_process": false,
+          "ms": 704278.2952090492,
+          "preparation_ms": 0.001249951310455799,
+          "round": 1,
+          "scope": "call-consume",
+          "startup_probe_preparation_excluded": true,
+          "warmup": false
+        }
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "xgboost",
+        "params": {
+          "base_score": null,
+          "booster": "dart",
+          "colsample_bylevel": null,
+          "colsample_bynode": null,
+          "colsample_bytree": 1.0,
+          "early_stopping_rounds": null,
+          "enable_categorical": false,
+          "eval_metric": null,
+          "feature_types": null,
+          "feature_weights": null,
+          "gamma": null,
+          "grow_policy": null,
+          "interaction_constraints": null,
+          "learning_rate": 0.1,
+          "max_bin": 255,
+          "max_cat_threshold": null,
+          "max_cat_to_onehot": null,
+          "max_delta_step": 0.0,
+          "max_depth": 8,
+          "max_leaves": null,
+          "min_child_weight": 1.0,
+          "missing": NaN,
+          "monotone_constraints": null,
+          "multi_strategy": null,
+          "n_estimators": 200,
+          "normalize_type": "tree",
+          "num_parallel_tree": null,
+          "objective": "reg:squarederror",
+          "one_drop": false,
+          "random_state": 7,
+          "rate_drop": 0.1,
+          "reg_alpha": 0.0,
+          "reg_lambda": 0.0,
+          "sample_type": "uniform",
+          "sampling_method": null,
+          "scale_pos_weight": null,
+          "skip_drop": 0.5,
+          "subsample": 1.0
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X, y)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "state_receipts": [
+        {
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "output_sha256": "6f2540c2555144b5f7bcd1f24d977a9eba2b28adbb4f356c9484deba38c41684",
+          "output_status": "ok",
+          "schema": "mojolearn-scored-receipt/1"
+        }
+      ],
+      "status": "ok",
+      "warmup_ms": 687783.2862079376
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "76cc5a160ba41d2445ff360023046bc06d1a60ec260a06782b7d09b52f95efab",
+        "shape": [
+          2043304,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "5df1c07ce146440c0637c45063d99d2ebd303cd383a8b84329d5a1420f443545",
+        "shape": [
+          500000,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "25e6e0e797c2d45c74ad1e254e81f27fc953425c1fb6da38ea3329efa4254381",
+        "shape": [
+          2043304
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "a52392bd2069a76aafba8188e8aaf90666b446741363b333d0f2e4f01d46f596",
+        "shape": [
+          500000
+        ]
+      }
+    },
+    "block": "reg",
+    "data_root": "/Users/ec2-user/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": [
+      0,
+      500000
+    ],
+    "eval_rows_available": 500000,
+    "fit_rows": [
+      0,
+      2043304
+    ],
+    "fit_rows_available": 2043304,
+    "full_dataset_coverage": true,
+    "intrinsic_caps": [],
+    "rule": "bench_board_more.prep reg recipe with stride caps removed",
+    "scaling": "standardized by all fit rows (float64 mean and std)",
+    "seed": 7,
+    "smoke_max_rows": null,
+    "source_block": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/ctd-data/rows-full/big-istella.npz",
+    "source_recipe": {
+      "arrays": {
+        "X": {
+          "dtype": "float32",
+          "sha256": "4c25bd496cda0e88aefdd56e964a3cb050068bd5cbfe2ad26adb0d64c4484ea8",
+          "shape": [
+            2043304,
+            220
+          ]
+        },
+        "Xq": {
+          "dtype": "float32",
+          "sha256": "3e691df6be4f97e311a21b1a155a4aba0b3d0cc50948d452442904615832d2dc",
+          "shape": [
+            500000,
+            220
+          ]
+        },
+        "init": {
+          "dtype": "float32",
+          "sha256": "25f1f3356ecdd0f603573741ce2e6d11dcf02ee96ff168cce2d04b8be7b94d28",
+          "shape": [
+            8,
+            220
+          ]
+        },
+        "y": {
+          "dtype": "float32",
+          "sha256": "25e6e0e797c2d45c74ad1e254e81f27fc953425c1fb6da38ea3329efa4254381",
+          "shape": [
+            2043304
+          ]
+        },
+        "yq": {
+          "dtype": "float32",
+          "sha256": "a52392bd2069a76aafba8188e8aaf90666b446741363b333d0f2e4f01d46f596",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "block": "big",
+      "capped_below_4M": true,
+      "data_root": "/Users/ec2-user/datasets/gbm-bench",
+      "dataset": "istella",
+      "eval_rows": "the loader's test split, all 500000 rows",
+      "fit_rows": [
+        0,
+        2043304
+      ],
+      "fit_rows_available": 2043304,
+      "kmeans": {
+        "init_rows": [
+          0,
+          255413,
+          510826,
+          766239,
+          1021652,
+          1277065,
+          1532478,
+          1787891
+        ],
+        "k": 8,
+        "max_iter": 300
+      },
+      "lanes": [
+        "kmeans",
+        "pca",
+        "ols"
+      ],
+      "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+      "pca": {
+        "n_components": 10
+      },
+      "rule": "CONTRIBUTING.md (Performance claims); DEVIATION 2570",
+      "scaling": "none",
+      "sentinel_cells_replaced": {
+        "X": 1326565,
+        "Xq": 330995
+      },
+      "smoke_max_rows": null,
+      "target": "relevance grade 0..4",
+      "written": "2026-10-02T12:31:49Z"
+    },
+    "target": "real",
+    "target_mapping": "unchanged raw y; bench_board_algos.arrays applies gamma/tweedie target rules",
+    "written": "2026-10-06T11:55:29Z"
+  },
+  "commit": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+  "dataset": "istella",
+  "finished": "2026-10-06T14:34:19Z",
+  "host_quality_receipt": null,
+  "infer": {
+    "arms": {
+      "xgboost-cpu": {
+        "digest_stable": null,
+        "digests": [
+          "852b130dcfa49013",
+          "852b130dcfa49013"
+        ],
+        "error": null,
+        "info": {
+          "config": "xgboost-cpu(booster='dart', colsample_bytree=1.0, device='cpu', learning_rate=0.1, max_bin=255, max_delta_step=0.0, max_depth=8, min_child_weight=1.0, n_estimators=200, n_jobs=-1, normalize_type='tree', one_drop=False, random_state=7, rate_drop=0.1, reg_alpha=0.0, reg_lambda=0.0, sample_type='uniform', skip_drop=0.5, subsample=1.0, tree_method='hist')",
+          "cpu_resources": {
+            "cpu_count": 28,
+            "thread_env": {
+              "MKL_NUM_THREADS": null,
+              "NUMEXPR_NUM_THREADS": null,
+              "OMP_NUM_THREADS": null,
+              "OPENBLAS_NUM_THREADS": null,
+              "VECLIB_MAXIMUM_THREADS": null
+            },
+            "threadpools": [
+              {
+                "filepath": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/sklearn/.dylibs/libomp.dylib",
+                "internal_api": "openmp",
+                "num_threads": 28,
+                "prefix": "libomp",
+                "user_api": "openmp",
+                "version": null
+              },
+              {
+                "filepath": "/Users/ec2-user/mojolearn/.pixi/envs/default/lib/libomp.dylib",
+                "internal_api": "openmp",
+                "num_threads": 28,
+                "prefix": "libomp",
+                "user_api": "openmp",
+                "version": null
+              }
+            ]
+          },
+          "device": "cpu",
+          "input_home": "host",
+          "library": "xgboost",
+          "pre_clock_fit": false,
+          "version": "3.2.0"
+        },
+        "ms": [
+          1568.284249980934
+        ],
+        "status": "ok",
+        "warmup_ms": 1567.440125043504
+      }
+    },
+    "batch": "Xq",
+    "call": "predict(Xq)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "dart-reg",
+  "lane_config": {
+    "block": "reg",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "trees",
+    "kind": "dart",
+    "mismatches": [
+      "LightGBM boosting='dart' grows leaf-wise (num_leaves=255, max_depth=8) as ours; XGBoost booster='dart' tree_method='hist' grows depth-wise (max_depth=8, no leaf cap)",
+      "XGBoost has no max_drop (ours and LightGBM 50), no min_child_samples (ours and LightGBM 20 rows; XGBoost min_child_weight=1, a hessian sum), no uniform_drop / xgboost_dart_mode (XGBoost sample_type='uniform', normalize_type='tree') and no drop_seed: its drops come from random_state=7; each library's drop RNG is its own",
+      "max_bin 255 on every arm (XGBoost's default is 256, set to 255 here)"
+    ],
+    "notes": [],
+    "ours_class": "mojolearn.DARTRegressor",
+    "params": {
+      "bagging_seed": 7,
+      "colsample_bytree": 1.0,
+      "drop_rate": 0.1,
+      "drop_seed": 7,
+      "feature_fraction_seed": 7,
+      "learning_rate": 0.1,
+      "max_bin": 255,
+      "max_delta_step": 0.0,
+      "max_depth": 8,
+      "max_drop": 50,
+      "min_child_samples": 20,
+      "n_estimators": 200,
+      "num_leaves": 255,
+      "random_state": 7,
+      "reg_alpha": 0.0,
+      "reg_lambda": 0.0,
+      "skip_drop": 0.5,
+      "subsample": 1.0,
+      "subsample_freq": 0,
+      "uniform_drop": false,
+      "xgboost_dart_mode": false
+    },
+    "quality": "held-out R2 and RMSE",
+    "task": "reg",
+    "timed_fit": "fit(X, y)",
+    "timed_infer": "predict(Xq)"
+  },
+  "params_check": {
+    "arms": {
+      "xgboost-cpu": {
+        "library": "xgboost",
+        "params": {
+          "boosting_type": "dart",
+          "feature_fraction": 1.0,
+          "feature_fraction_bynode": null,
+          "grow_policy": null,
+          "learning_rate": 0.1,
+          "max_bin": 255,
+          "max_depth": 8,
+          "max_leaves": null,
+          "min_child_weight": 1.0,
+          "min_split_gain": null,
+          "n_estimators": 200,
+          "reg_alpha": 0.0,
+          "reg_lambda": 0.0,
+          "scale_pos_weight": 1.0,
+          "seed": 7,
+          "subsample": 1.0
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/dart-reg",
+    "problems": [],
+    "reference": "xgboost-cpu",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "xgboost-cpu": {
+      "finite": true,
+      "r2": 0.5834575114365859,
+      "rmse": 0.5385485687751013
+    }
+  },
+  "rounds_requested": 1,
+  "saved_outputs": {
+    "xgboost-cpu": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-06/board/work/dart-reg-istella-xgboost-cpu.npz"
+  },
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000",
+  "started": "2026-10-06T14:11:03Z"
+}

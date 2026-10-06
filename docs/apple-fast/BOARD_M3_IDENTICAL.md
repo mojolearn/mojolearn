@@ -9,7 +9,7 @@ Generated from board.json by tools/af_board_render.py; do not edit. Source: `ben
 
 Our IDENTICAL arm on the M3 Ultra Metal GPU at head cf94a6be6, 1 unscored warm-up + 1 scored round at board size (the 2026-10-04 ident-* sweep, 350 jobs, AFC_ARM=ours) (rows-full; trees MOJOLEARN_SPEED_SIZE=shipped). Opponents are not re-raced: classical times come from the M3 0.8.34 board (`~/mojolearn-evidence/board-0834-times.tsv`, quality from its board.json), trees from the 2026-09-29 M3 board (older tree params on some lanes); an opponent marked (fill) comes from the M3 opponent fill on the 0.8.34 kit. Ratio = our IDENTICAL ms / best opponent ms; below 1 is faster. Rows sort worst ratio after first. First written by `tools/af_board_merge.py`; now carried in board.json.
 
-Quality (2026-10-04, computed): of 467 lane/dataset rows, IDENTICAL quality is WORSE than an opponent on 69 (49 by more than 1%) and IDENTICAL after is WORSE than IDENTICAL before on 0 (0 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 119 have no parseable IDENTICAL quality. Tolerance rel 1e-3, abs 1e-6.
+Quality (2026-10-04, computed): of 469 lane/dataset rows, IDENTICAL quality is WORSE than an opponent on 69 (49 by more than 1%) and IDENTICAL after is WORSE than IDENTICAL before on 0 (0 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 121 have no parseable IDENTICAL quality. Tolerance rel 1e-3, abs 1e-6.
 
 Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 414 eligible opponent comparisons, 272 faster, geometric-mean ratio 0.482. Eligible = a ratio after and a status without HOLD or "excluded"; faster = ratio below 1. Ratio = IDENTICAL ms / best opponent ms.
 
@@ -434,6 +434,8 @@ Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 414 eligible oppo
 | adam | synthetic | algos | - | - | torch-eager-fp32 | 29.3 | - | - |  | - | - | - | MODE-MISMATCH(requested identical, read back unknown) |
 | adamw | synthetic | algos | - | - | torch-eager-fp32 | 31.1 | - | - |  | - | - | - | MODE-MISMATCH(requested identical, read back unknown) |
 | als | text | algos | - | - | implicit-cpu | 321340 | - | - |  | - | - | recall_at_10=0.5482 | Opponent full measurement; no matching own cell |
+| dart | istella | algos | - | - | xgboost-cpu | 706544 | - | - |  | - | - | accuracy=0.9549, logloss=0.1138 | Opponent full measurement; no matching own cell |
+| dart-reg | istella | algos | - | - | xgboost-cpu | 702710 | - | - |  | - | - | r2=0.5835, rmse=0.5385 | Opponent full measurement; no matching own cell |
 | dbscan | istella | classical | - | - | sklearn-cpu | 248709 | - | - |  | - | - | n_clusters=4.013e+04, noise_fraction=0.2194, rows=1e+06 | Opponent full measurement; no matching own cell |
 | dbscan | taxi | classical | - | - | - | - | - | - |  | - | - | - | Opponent full measurement; no matching own cell |
 | eigh | synthetic | algos | - | - | numpy-cpu | 4813 | - | - |  | - | - | max_eigenvalue_error=3.49e-08, relative_residual=2.824e-08 | REFUSED(timeout: null) |
@@ -465,7 +467,7 @@ Canonical full-board summary (2026-10-04): 421 IDENTICAL rows, 414 eligible oppo
 | iforest | taxi | trees | - | - | sklearn-iforest-cpu | 589 | - | - |  | - | - | auc=0.5528 | Opponent full measurement; no matching own cell |
 | lamb | synthetic | algos | - | - | - | - | - | - |  | - | - | - | REFUSED(error: {"error": "Exception('lamb_step: offsets must rise strictly from 0, below 2^24')", "event": "error", "sta |
 | lars | istella | algos | 442 | 380 | - | - | - | - |  | finite=1, r2=0.309043, rmse=0.694362 | - | - | ok |
-| lars | istella | algos | - | - | - | - | - | - |  | - | - | - | Opponent full measurement; no matching own cell |
+| lars | istella | algos | - | - | - | - | - | - |  | - | - | - | Opponent quality rejected: Full Istella LARS is numerically unstable: R2=-2.0354413136197406e27, RMSE=37646492112277.195; execution completed but quality is rejected. Frozen settings unchanged. |
 | lion | synthetic | algos | 135 | 135 | - | - | - | - |  | - | - | - | ok |
 | min-cov-det | istella | algos | - | - | sklearn-cpu | 43632 | - | - |  | - | - | n_features=220 | REFUSED(timeout: null) |
 | poisson | istella | algos | - | - | sklearn-cpu | 112432 | - | - |  | - | - | r2=0.2513, rmse=0.7228 | Opponent full measurement; no matching own cell |

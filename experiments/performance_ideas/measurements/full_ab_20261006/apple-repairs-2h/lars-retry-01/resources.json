@@ -1,0 +1,25 @@
+{
+  "cpu_count": 28,
+  "thread_caps": {
+    "OMP_NUM_THREADS": null,
+    "OPENBLAS_NUM_THREADS": null,
+    "MKL_NUM_THREADS": null,
+    "NUMEXPR_NUM_THREADS": null,
+    "VECLIB_MAXIMUM_THREADS": null,
+    "BLIS_NUM_THREADS": null
+  },
+  "source_sha": "e31c7b0e113b93b2d42f6410499894063102901f",
+  "harness_sha": "e31c7b0e113b93b2d42f6410499894063102901f",
+  "hardware": "Mac15,14",
+  "policy": "Shared machine lock; serial unrestricted CPU; worker pool readback retained",
+  "dataset_recipe": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data/rows-full/reg-istella.json",
+  "dataset_recipe_sha256": "090cbfba29a11e0fa362b66ebb421022caa47d87aa365b5a349f121dbbfa5060",
+  "train_shape": [
+    2043304,
+    220
+  ],
+  "eval_shape": [
+    500000,
+    220
+  ]
+}

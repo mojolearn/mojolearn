@@ -42,9 +42,9 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 1 planned, 429 done, 30 failed, 0 unsupported, 0 pending. Cells: 1548 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 29, ok 1513).
+Races: 1 planned, 431 done, 30 failed, 0 unsupported, 0 pending. Cells: 1550 (HOST-MEMORY 1, MODE-MISMATCH 5, QUALITY_FAILED 1, REFUSED 28, ok 1515).
 
-Inference cells: 924 (REFUSED 49, ok 875).
+Inference cells: 926 (QUALITY_FAILED 1, REFUSED 48, ok 877).
 
 ## Quality at a glance
 
@@ -170,10 +170,14 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | damped-ets | taxi-hourly | forecast_rmse (lower is better) | 96.684600 | 96.690449 | statsforecast-cpu 96.685568; statsmodels-cpu 196.928662 |
 | algos | dart-reg | istella | r2 (higher is better) | 0.551355 | 0.550916 | lightgbm-cpu 0.564663; xgboost-cpu - |
 | algos | dart-reg | istella | rmse (lower is better) | 0.559515 | 0.559789 | lightgbm-cpu 0.551154; xgboost-cpu - |
+| algos | dart-reg | istella | r2 (higher is better) | - | - | xgboost-cpu 0.583458 |
+| algos | dart-reg | istella | rmse (lower is better) | - | - | xgboost-cpu 0.538549 |
 | algos | dart-reg | taxi | r2 (higher is better) | 0.925497 | 0.925497 | lightgbm-cpu 0.926249; xgboost-cpu 0.926049 |
 | algos | dart-reg | taxi | rmse (lower is better) | 4.347340 | 4.347341 | lightgbm-cpu 4.325358; xgboost-cpu 4.331203 |
 | algos | dart | istella | accuracy (higher is better) | 0.948600 | 0.948830 | lightgbm-cpu 0.951860; xgboost-cpu - |
 | algos | dart | istella | logloss (lower is better) | 0.134461 | 0.134419 | lightgbm-cpu 0.123740; xgboost-cpu - |
+| algos | dart | istella | accuracy (higher is better) | - | - | xgboost-cpu 0.954868 |
+| algos | dart | istella | logloss (lower is better) | - | - | xgboost-cpu 0.113810 |
 | algos | dart | taxi | accuracy (higher is better) | 0.768150 | 0.768240 | lightgbm-cpu 0.768190; xgboost-cpu 0.768000 |
 | algos | dart | taxi | logloss (lower is better) | 0.529149 | 0.529097 | lightgbm-cpu 0.529108; xgboost-cpu 0.529540 |
 | algos | decision-tree-clf | istella | accuracy (higher is better) | 0.935000 | 0.935000 | sklearn-cpu 0.934410 |
@@ -291,6 +295,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | label-spreading | taxi | accuracy (higher is better) | 0.676400 | 0.676400 | sklearn-cpu 0.676400 |
 | algos | lars | istella | r2 (higher is better) | 0.328662 | 0.309043 | sklearn-cpu - |
 | algos | lars | istella | rmse (lower is better) | 0.684433 | 0.694362 | sklearn-cpu - |
+| algos | lars | istella | r2 (higher is better) | - | - | sklearn-cpu -2.035e+27 |
+| algos | lars | istella | rmse (lower is better) | - | - | sklearn-cpu 3.765e+13 |
 | algos | lars | taxi | r2 (higher is better) | 0.908983 | 0.908981 | sklearn-cpu 0.908988 |
 | algos | lars | taxi | rmse (lower is better) | 4.805050 | 4.805109 | sklearn-cpu 4.804917 |
 | algos | lasso-cv | istella | r2 (higher is better) | 0.325504 | 0.310329 | sklearn-cpu 0.310837 |
@@ -867,8 +873,10 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | conv1d | synthetic | Xq | - | 63.9 | 67.8 | - | torch-compile-bf16 3.2 ms (IDENTICAL/arm 20.916); torch-compile-fp32 3.0 ms (IDENTICAL/arm 21.930); torch-eager-bf16 2.2 ms (IDENTICAL/arm 30.417); torch-eager-fp32 2.5 ms (IDENTICAL/arm 26.632) |
 | algos | conv2d | synthetic | Xq | - | 26.2 | 26.9 | - | torch-compile-bf16 1.7 ms (IDENTICAL/arm 15.708); torch-compile-fp32 2.3 ms (IDENTICAL/arm 11.430); torch-eager-bf16 1.5 ms (IDENTICAL/arm 18.203); torch-eager-fp32 1.5 ms (IDENTICAL/arm 17.555) |
 | algos | dart-reg | istella | Xq | - | 108.6 | 105.4 | - | lightgbm-cpu 64.1 ms (IDENTICAL/arm 1.787); xgboost-cpu - ms (IDENTICAL/arm -) |
+| algos | dart-reg | istella | Xq | - | - | - | - | xgboost-cpu 1568.3 ms (IDENTICAL/arm -) |
 | algos | dart-reg | taxi | Xq | - | 165.5 | 182.9 | - | lightgbm-cpu 57.3 ms (IDENTICAL/arm 3.107); xgboost-cpu 114.4 ms (IDENTICAL/arm 1.557) |
 | algos | dart | istella | Xq | - | 228.1 | 220.3 | - | lightgbm-cpu 57.5 ms (IDENTICAL/arm 3.969); xgboost-cpu - ms (IDENTICAL/arm -) |
+| algos | dart | istella | Xq | - | - | - | - | xgboost-cpu 1568.0 ms (IDENTICAL/arm -) |
 | algos | dart | taxi | Xq | - | 301.1 | 235.8 | - | lightgbm-cpu 51.5 ms (IDENTICAL/arm 5.289); xgboost-cpu 113.4 ms (IDENTICAL/arm 2.403) |
 | algos | decision-tree-clf | istella | Xq | - | 12.2 | 11.9 | - | sklearn-cpu 18.0 ms (IDENTICAL/arm 0.646) |
 | algos | decision-tree-clf | taxi | Xq | - | 3.6 | 3.1 | - | sklearn-cpu 11.1 ms (IDENTICAL/arm 0.327) |
@@ -935,7 +943,7 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | label-spreading | istella | Xq | - | - | - | - | sklearn-cpu 1277.1 ms (IDENTICAL/arm -) |
 | algos | label-spreading | taxi | Xq | - | 548.4 | 596.3 | - | sklearn-cpu 959.8 ms (IDENTICAL/arm -) |
 | algos | lars | istella | Xq | - | 13.3 | 14.1 | - | sklearn-cpu - ms (IDENTICAL/arm -) |
-| algos | lars | istella | Xq | - | - | - | - | sklearn-cpu - ms (IDENTICAL/arm -) |
+| algos | lars | istella | Xq | - | - | - | - | sklearn-cpu 78.7 ms (IDENTICAL/arm -) |
 | algos | lars | taxi | Xq | - | 1.3 | 1.4 | - | sklearn-cpu 0.4 ms (IDENTICAL/arm 3.139) |
 | algos | lasso-cv | istella | Xq | - | 17.0 | 19.7 | - | sklearn-cpu 3.8 ms (IDENTICAL/arm 5.159) |
 | algos | lasso-cv | taxi | Xq | - | 2.2 | 2.1 | - | sklearn-cpu 0.4 ms (IDENTICAL/arm 5.318) |
@@ -8155,6 +8163,56 @@ inference call, lightgbm-cpu: predict(Xq)(Xq)
 
 inference call, xgboost-cpu: predict(Xq)(Xq)
 
+### dart-reg / istella (rows full, shape X 2043304x220; Xq 500000x220; y 2043304; yq 500000)
+
+race: done, driver rc 0, log `logs/algos.dart-reg.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-cpu | xgboost | cpu | opponent | 702709.6 | 702709.6..702709.6 | 1 | - | - | 2647.4 | - | finite=True, r2=0.583458, rmse=0.538549 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'a1911af2502ac6c3171ec86e28fa03f8459cba49ac6cb05e11781a290fe905a0', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/dart-board.json', 'finished': '2026-10-06T14:34:19Z', 'original_source': 'measured this run'}) |
+
+memory, xgboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'bagging_seed': 7, 'colsample_bytree': 1.0, 'drop_rate': 0.1, 'drop_seed': 7, 'feature_fraction_seed': 7, 'learning_rate': 0.1, 'max_bin': 255, 'max_delta_step': 0.0, 'max_depth': 8, 'max_drop': 50, 'min_child_samples': 20, 'n_estimators': 200, 'num_leaves': 255, 'random_state': 7, 'reg_alpha': 0.0, 'reg_lambda': 0.0, 'skip_drop': 0.5, 'subsample': 1.0, 'subsample_freq': 0, 'uniform_drop': False, 'xgboost_dart_mode': False}. Rows: None. Timed: None.
+
+mismatch: LightGBM boosting='dart' grows leaf-wise (num_leaves=255, max_depth=8) as ours; XGBoost booster='dart' tree_method='hist' grows depth-wise (max_depth=8, no leaf cap)
+
+mismatch: XGBoost has no max_drop (ours and LightGBM 50), no min_child_samples (ours and LightGBM 20 rows; XGBoost min_child_weight=1, a hessian sum), no uniform_drop / xgboost_dart_mode (XGBoost sample_type='uniform', normalize_type='tree') and no drop_seed: its drops come from random_state=7; each library's drop RNG is its own
+
+mismatch: max_bin 255 on every arm (XGBoost's default is 256, set to 255 here)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `xgboost-cpu`, seed 7): MATCHED
+
+| parameter | xgboost-cpu |
+|---|---|
+| library (source) | xgboost (get_params) |
+| boosting_type | "dart" |
+| feature_fraction | 1.0 |
+| feature_fraction_bynode | null |
+| grow_policy | null |
+| learning_rate | 0.1 |
+| max_bin | 255 |
+| max_depth | 8 |
+| max_leaves | null |
+| min_child_weight | 1.0 |
+| min_split_gain | null |
+| n_estimators | 200 |
+| reg_alpha | 0.0 |
+| reg_lambda | 0.0 |
+| scale_pos_weight | 1.0 |
+| seed | 7 |
+| subsample | 1.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-cpu | Xq | - | 1568.3 | 1568.3..1568.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, xgboost-cpu: predict(Xq)(Xq)
+
 ### dart-reg / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
 
 race: done, driver rc 0, log `logs/algos.dart-reg.taxi.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
@@ -8272,6 +8330,56 @@ inference call, ours: predict(Xq)(Xq)
 inference call, ours-fast: predict(Xq)(Xq)
 
 inference call, lightgbm-cpu: predict(Xq)(Xq)
+
+inference call, xgboost-cpu: predict(Xq)(Xq)
+
+### dart / istella (rows full, shape X 2043304x220; Xq 500000x220; y 2043304; yq 500000)
+
+race: done, driver rc 0, log `logs/algos.dart.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-cpu | xgboost | cpu | opponent | 706543.5 | 706543.5..706543.5 | 1 | - | - | 2583.2 | - | accuracy=0.954868, logloss=0.113810 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'a1911af2502ac6c3171ec86e28fa03f8459cba49ac6cb05e11781a290fe905a0', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/dart-board.json', 'finished': '2026-10-06T14:11:01Z', 'original_source': 'measured this run'}) |
+
+memory, xgboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'bagging_seed': 7, 'colsample_bytree': 1.0, 'drop_rate': 0.1, 'drop_seed': 7, 'feature_fraction_seed': 7, 'learning_rate': 0.1, 'max_bin': 255, 'max_delta_step': 0.0, 'max_depth': 8, 'max_drop': 50, 'min_child_samples': 20, 'n_estimators': 200, 'num_leaves': 255, 'random_state': 7, 'reg_alpha': 0.0, 'reg_lambda': 0.0, 'skip_drop': 0.5, 'subsample': 1.0, 'subsample_freq': 0, 'uniform_drop': False, 'xgboost_dart_mode': False}. Rows: None. Timed: None.
+
+mismatch: LightGBM boosting='dart' grows leaf-wise (num_leaves=255, max_depth=8) as ours; XGBoost booster='dart' tree_method='hist' grows depth-wise (max_depth=8, no leaf cap)
+
+mismatch: XGBoost has no max_drop (ours and LightGBM 50), no min_child_samples (ours and LightGBM 20 rows; XGBoost min_child_weight=1, a hessian sum), no uniform_drop / xgboost_dart_mode (XGBoost sample_type='uniform', normalize_type='tree') and no drop_seed: its drops come from random_state=7; each library's drop RNG is its own
+
+mismatch: max_bin 255 on every arm (XGBoost's default is 256, set to 255 here)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `xgboost-cpu`, seed 7): MATCHED
+
+| parameter | xgboost-cpu |
+|---|---|
+| library (source) | xgboost (get_params) |
+| boosting_type | "dart" |
+| feature_fraction | 1.0 |
+| feature_fraction_bynode | null |
+| grow_policy | null |
+| learning_rate | 0.1 |
+| max_bin | 255 |
+| max_depth | 8 |
+| max_leaves | null |
+| min_child_weight | 1.0 |
+| min_split_gain | null |
+| n_estimators | 200 |
+| reg_alpha | 0.0 |
+| reg_lambda | 0.0 |
+| scale_pos_weight | 1.0 |
+| seed | 7 |
+| subsample | 1.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-cpu | Xq | - | 1568.0 | 1568.0..1568.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, xgboost-cpu: predict(Xq)(Xq)
 
@@ -11666,7 +11774,9 @@ race: failed, driver rc 1, log `logs/algos.lars.istella.rows-full.log`, ran on i
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sklearn-cpu | scikit-learn | cpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "OverflowError('int too large to convert to float')", "event": "error", "stage": "round 0"}) ({'opponent_snapshot_sha256': 'b8691bf84eb79e764347f2703809b61f530cac9190c02f63abb48ca99e436bd5', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/gmm-lars-board.json', 'finished': '2026-10-06T13:47:19Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 1112.1 | 1112.1..1112.1 | 1 | - | - | 9208.7 | - | finite=True, r2=-2.035e+27, rmse=3.765e+13 | - | LIKE-FOR-LIKE-SPAN | - | QUALITY_FAILED ({'opponent_snapshot_sha256': '3a14a42432558ea1227750360f0ec538a9444be0a0ac09617c2c27feb176ad69', 'evidence': 'experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/lars-reviewed-board.json', 'finished': '2026-10-06T14:34:27Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
 settings: {'eps': 2.220446049250313e-16, 'fit_intercept': True, 'n_nonzero_coefs': 500, 'random_state': 7}. Rows: None. Timed: None.
 
@@ -11686,7 +11796,7 @@ Inference (each arm predicts with its own model from the fit rounds above):
 
 | arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| sklearn-cpu | Xq | - | - | - | 0 | - | - | - | - | LIKE-FOR-LIKE-SPAN | REFUSED(error: {"error": "OverflowError('int too large to convert to float')", "event": "error", "stage": "round 0"}) |
+| sklearn-cpu | Xq | - | 78.7 | 78.7..78.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | QUALITY_FAILED |
 
 inference call, sklearn-cpu: predict(Xq)(Xq)
 

@@ -9,7 +9,7 @@ Generated from board.json by tools/af_board_render.py; do not edit. Source: `ben
 
 Our FAST arm on the M3 Ultra Metal GPU at head 0150b04c1, 05cd07fbb, 05fffc97d, 0e743cac9, 22b3be501, 2432d5753, 24ed76679, 2dcdd949f, 37c65a3af, 3c6fb879b, 413da4d18, 417ba1ded, 4198d5a9c, 423305583, 42b6db46c, 443384b59, 4b1311c12, 550806bc0, 5990c5946, 661b818c2, 69f7a41fd, 6c0ba4379, 6c54b7e87, 6d4d55c99, 73f3a856d, 77da4a641, 7ba385b30, 829c3fb4a, 8432822f9, 8b9c91b9c, 8d43ec357, 94cb5ba59, 9525ed958, 9722e5a2b, a717feb53, a72b1deba, a7b8b9513, a8e9ee5a3, af01c6a54, b2dd5dfe5, c48ede3c1, c55b8c377, c5e1bbeb6, c65e09904, d05835681, d1fa9223b, dbe2ab85a, deee07721, e0c848afe, e2bfb8422, eb3fca1ac, ed49f2b11, f419ea9f1, f6a9e7c04, fc6c6837f, 1 warm-up + 3 timed rounds at board size (rows-full; trees MOJOLEARN_SPEED_SIZE=shipped). Opponents are not re-raced: classical times come from the M3 0.8.34 board (`~/mojolearn-evidence/board-0834-times.tsv`, quality from its board.json), trees from the 2026-09-29 M3 board (older tree params on some lanes); an opponent marked (fill) comes from the M3 opponent fill on the 0.8.34 kit. Ratio = our FAST ms / best opponent ms; below 1 is faster. Rows sort worst ratio after first. First written by `tools/af_board_merge.py`; now carried in board.json.
 
-Quality (2026-10-05, computed): of 482 lane/dataset rows, FAST quality is WORSE than an opponent on 56 (38 by more than 1%) and FAST after is WORSE than FAST before on 9 (6 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 106 have no parseable FAST quality. Tolerance rel 1e-3, abs 1e-6.
+Quality (2026-10-05, computed): of 484 lane/dataset rows, FAST quality is WORSE than an opponent on 56 (38 by more than 1%) and FAST after is WORSE than FAST before on 9 (6 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 108 have no parseable FAST quality. Tolerance rel 1e-3, abs 1e-6.
 
 Canonical full-board summary (2026-10-05): 442 FAST rows, 431 eligible opponent comparisons, 367 faster, geometric-mean ratio 0.308. Eligible = a ratio after and a status without HOLD or "excluded"; faster = ratio below 1. Ratio = FAST ms / best opponent ms.
 
@@ -463,6 +463,8 @@ Canonical full-board summary (2026-10-05): 442 FAST rows, 431 eligible opponent 
 | linearsvr | taxi | algos | 183 | 27.0 | sklearn-cpu | 83935 | 0.00 | 0.00 |  | r2=0.899813, rmse=5.04129 | r2=0.8998, rmse=5.041 | r2=0.8998, rmse=5.042 | ok |
 | linearsvr | istella | classical2 | 940 | 217 | sklearn-cpu | 710262 | 0.00 | 0.00 |  | r2=-0.106761, rmse=0.878794 | r2=-0.1067, rmse=0.8788 | r2=-0.02573, rmse=0.846 | ok; excluded: FAST quality under review (r2 -0.107 vs sklearn-cpu fill -0.026) |
 | als | text | algos | - | - | implicit-cpu | 321340 | - | - |  | - | - | recall_at_10=0.5482 | Opponent full measurement; no matching own cell |
+| dart | istella | algos | - | - | xgboost-cpu | 706544 | - | - |  | - | - | accuracy=0.9549, logloss=0.1138 | Opponent full measurement; no matching own cell |
+| dart-reg | istella | algos | - | - | xgboost-cpu | 702710 | - | - |  | - | - | r2=0.5835, rmse=0.5385 | Opponent full measurement; no matching own cell |
 | dbscan | istella | classical | - | - | sklearn-cpu | 248709 | - | - |  | - | - | n_clusters=4.013e+04, noise_fraction=0.2194, rows=1e+06 | Opponent full measurement; no matching own cell |
 | dbscan | taxi | classical | - | - | - | - | - | - |  | - | - | - | Opponent full measurement; no matching own cell |
 | embedding | synthetic | algos | - | - | torch-compile-fp32 | 11.1 | - | - |  | - | - | max_rel_diff_vs_torch_eager_fp32=0, rel_fro_vs_torch_eager_fp32=0 | MODE-MISMATCH(requested fast, read back unknown) |
@@ -492,7 +494,7 @@ Canonical full-board summary (2026-10-05): 442 FAST rows, 431 eligible opponent 
 | iforest | taxi | trees | - | - | sklearn-iforest-cpu | 589 | - | - |  | - | - | auc=0.5528 | Opponent full measurement; no matching own cell |
 | lamb | synthetic | algos | - | 213 | - | - | - | - |  | - | - | - | ok |
 | lars | istella | algos | 5583 | 845 | - | - | - | - |  | r2=0.328662, rmse=0.684433 | r2=0.2157, rmse=0.7398 | - | ok |
-| lars | istella | algos | - | - | - | - | - | - |  | - | - | - | Opponent full measurement; no matching own cell |
+| lars | istella | algos | - | - | - | - | - | - |  | - | - | - | Opponent quality rejected: Full Istella LARS is numerically unstable: R2=-2.0354413136197406e27, RMSE=37646492112277.195; execution completed but quality is rejected. Frozen settings unchanged. |
 | lion | synthetic | algos | 137 | 201 | - | - | - | - |  | - | - | - | ok |
 | poisson | istella | algos | - | - | sklearn-cpu | 112432 | - | - |  | - | - | r2=0.2513, rmse=0.7228 | Opponent full measurement; no matching own cell |
 | poisson | taxi | algos | - | - | sklearn-cpu | 430 | - | - |  | - | - | r2=0.03621, rmse=15.64 | Opponent full measurement; no matching own cell |

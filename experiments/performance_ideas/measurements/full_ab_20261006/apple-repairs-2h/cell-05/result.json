@@ -1,0 +1,209 @@
+{
+  "race": "algos/dart/istella/rows=full",
+  "arm": "xgboost-cpu",
+  "allocation_seconds": 1800,
+  "returncode": 0,
+  "elapsed_seconds": 1420.4575607776642,
+  "status": "MEASURED",
+  "killed_owned_pids": [],
+  "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/source-6897b8da0/experiments/performance_ideas/apple_repair_20261006/selected_board.py",
+    "--vendor",
+    "apple",
+    "--modes",
+    "identical",
+    "--families",
+    "algos,classical2",
+    "--rows",
+    "full",
+    "--rounds",
+    "1",
+    "--python-env",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--skip-install",
+    "--no-smoke-gate",
+    "--opponents-only",
+    "--skip-failed",
+    "--round-seconds",
+    "1800",
+    "--cache",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cache",
+    "--algos-data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data",
+    "--more-data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/data",
+    "--data-root",
+    "/Users/ec2-user/datasets/gbm-bench",
+    "--opponent-store",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-05/opponent-store.jsonl",
+    "--out",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-05/board"
+  ],
+  "race_status": "done",
+  "cells": [
+    {
+      "arm": "xgboost-cpu",
+      "comparability": {
+        "span": {
+          "input_home": "host",
+          "inside_clock": "fit(X, y)",
+          "pre_clock_fit": false,
+          "upload_ms_untimed": null
+        },
+        "span_asymmetry": []
+      },
+      "dataset": "istella",
+      "device": "cpu",
+      "device_name": null,
+      "family": "algos",
+      "hash": "5bcd1f5c5c7e5357",
+      "hash_stable": null,
+      "lane": "dart",
+      "library": "xgboost",
+      "library_version": "3.2.0",
+      "max_ms": 706543.5341671109,
+      "median_ms": 706543.5341671109,
+      "memory": {
+        "children_mb": 1.7,
+        "gpu_method": "cpu arm: no device memory",
+        "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+        "peak_gpu_mb": null,
+        "peak_host_mb": 2583.2,
+        "rounds_sampled": 1,
+        "warmup_gpu_mb": null,
+        "warmup_host_mb": 3447.4
+      },
+      "min_ms": 706543.5341671109,
+      "mode": "opponent",
+      "neural_shape": null,
+      "operations": [
+        {
+          "dataset_load_included": false,
+          "fresh_process": false,
+          "ms": 708646.615708014,
+          "preparation_ms": 0.0007910421118140221,
+          "round": 0,
+          "scope": "call-consume",
+          "startup_probe_preparation_excluded": true,
+          "warmup": true
+        },
+        {
+          "dataset_load_included": false,
+          "fresh_process": false,
+          "ms": 708113.0807918962,
+          "preparation_ms": 0.001249951310455799,
+          "round": 1,
+          "scope": "call-consume",
+          "startup_probe_preparation_excluded": true,
+          "warmup": false
+        }
+      ],
+      "params": {
+        "library": "xgboost",
+        "params": {
+          "boosting_type": "dart",
+          "feature_fraction": 1.0,
+          "feature_fraction_bynode": null,
+          "grow_policy": null,
+          "learning_rate": 0.1,
+          "max_bin": 255,
+          "max_depth": 8,
+          "max_leaves": null,
+          "min_child_weight": 1.0,
+          "min_split_gain": null,
+          "n_estimators": 200,
+          "reg_alpha": 0.0,
+          "reg_lambda": 0.0,
+          "scale_pos_weight": 1.0,
+          "seed": 7,
+          "subsample": 1.0
+        },
+        "source": "get_params"
+      },
+      "peak_gpu_mb": null,
+      "peak_host_mb": 2583.2,
+      "quality": {
+        "accuracy": 0.954868,
+        "logloss": 0.11380987526545985
+      },
+      "ratio_ours_fast_over": null,
+      "ratio_ours_identical_over": null,
+      "rounds": 1,
+      "rows": null,
+      "rows_tag": "full",
+      "settings": {
+        "config": "the board's own settings (no NVIDIA harness entry)",
+        "driver": "tools/bench_board_algos.py",
+        "interleaved": true,
+        "lane_config": {
+          "block": "cls",
+          "datasets": [
+            "taxi",
+            "istella"
+          ],
+          "expansion_lane": "trees",
+          "kind": "dart",
+          "mismatches": [
+            "LightGBM boosting='dart' grows leaf-wise (num_leaves=255, max_depth=8) as ours; XGBoost booster='dart' tree_method='hist' grows depth-wise (max_depth=8, no leaf cap)",
+            "XGBoost has no max_drop (ours and LightGBM 50), no min_child_samples (ours and LightGBM 20 rows; XGBoost min_child_weight=1, a hessian sum), no uniform_drop / xgboost_dart_mode (XGBoost sample_type='uniform', normalize_type='tree') and no drop_seed: its drops come from random_state=7; each library's drop RNG is its own",
+            "max_bin 255 on every arm (XGBoost's default is 256, set to 255 here)"
+          ],
+          "notes": [],
+          "ours_class": "mojolearn.DARTClassifier or mojolearn.DartClassifier",
+          "params": {
+            "bagging_seed": 7,
+            "colsample_bytree": 1.0,
+            "drop_rate": 0.1,
+            "drop_seed": 7,
+            "feature_fraction_seed": 7,
+            "learning_rate": 0.1,
+            "max_bin": 255,
+            "max_delta_step": 0.0,
+            "max_depth": 8,
+            "max_drop": 50,
+            "min_child_samples": 20,
+            "n_estimators": 200,
+            "num_leaves": 255,
+            "random_state": 7,
+            "reg_alpha": 0.0,
+            "reg_lambda": 0.0,
+            "skip_drop": 0.5,
+            "subsample": 1.0,
+            "subsample_freq": 0,
+            "uniform_drop": false,
+            "xgboost_dart_mode": false
+          },
+          "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+          "task": "clf",
+          "timed_fit": "fit(X, y)",
+          "timed_infer": "predict(Xq)"
+        },
+        "rounds": 1,
+        "rows_cap": null,
+        "seed": 7,
+        "warmup_rounds": 1
+      },
+      "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000",
+      "source": "measured this run",
+      "state_receipts": [
+        {
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "output_sha256": "da4455cad8a500c1ad78f96c88621c59f5cec4329d3f00a742cce55d24bd4deb",
+          "output_status": "ok",
+          "schema": "mojolearn-scored-receipt/1"
+        }
+      ],
+      "status": "ok",
+      "times_ms": [
+        706543.5341671109
+      ],
+      "verdict": "LIKE-FOR-LIKE-SPAN",
+      "warmup_ms": 707072.2448749002
+    }
+  ]
+}

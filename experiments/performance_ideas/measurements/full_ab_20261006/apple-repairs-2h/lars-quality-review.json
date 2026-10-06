@@ -1,0 +1,10 @@
+{
+  "status": "QUALITY_FAILED",
+  "accepted": false,
+  "reason": "Full Istella LARS is numerically unstable: R2=-2.0354413136197406e27, RMSE=37646492112277.195; execution completed but quality is rejected. Frozen settings unchanged.",
+  "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/apple-repairs-2h/lars-retry-01/board.json",
+  "original_board_sha256": "b2e40c131875474030a17dfa7707ad48ceca59fed59fc56252c33eb8eb56d24d",
+  "timing_use": "diagnostic only; excluded from opponent ratios and promotion",
+  "diagnosis": "Original float32 Cholesky recovery overflow; float64 completes with catastrophic finite predictions. No input mapping or metric bug identified. Changing epsilon would change the experiment; no further rerun.",
+  "model_hash": "Unavailable: opponent export is not normalized; scored output SHA256 retained."
+}

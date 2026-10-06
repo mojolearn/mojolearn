@@ -60,6 +60,15 @@ def merge(board, snapshot, resources, digest, evidence, separate_workloads=False
         incoming_infer=[copy.deepcopy(c) for c in incoming.get('infer_cells',[]) if c['arm'] in arms]
         if incoming_infer:
             target['infer_cells']=[c for c in target.get('infer_cells',[]) if c['arm'] not in arms]+incoming_infer
+        rejected=[c for c in target['cells'] if c.get('quality_review',{}).get('accepted') is False]
+        if rejected:
+            # Successful execution is not quality acceptance. Reviewed snapshots
+            # retain diagnostic timings but cannot enter opponent ratios.
+            assert all(c['status']!='ok' for c in rejected)
+            if not own:
+                note='Opponent quality rejected: '+'; '.join(c['quality_review']['reason'] for c in rejected)
+                for mode in ['fast','identical']:
+                    target.setdefault(mode+'_page',{})['status']=note
         bb.add_ratios(target['cells'])
     notes=['CPU opponents in the 2026-10-05 fresh sweep received the full 28-core M3 Ultra allocation with no imposed CPU thread cap. Library parallelism varies; all-core availability does not mean all cores were busy.', 'Stored historical opponent cells keep their original resource provenance. Fresh measurements use one excluded warmup and one scored sample; failures remain failures.', 'At the user-directed transition to missing-only opponents, the active LinearSVR/Istella attempt was interrupted without admitting a timing. Completed measurements were preserved; subsequent captures are recorded under opponent_imports.']
     result['opponent_resource_notes']=notes

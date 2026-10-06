@@ -1,0 +1,128 @@
+{
+  "status": "COMPLETE_WITH_QUALITY_FAILURE",
+  "scope": "Six selected full-data Apple CPU opponent repair cells; not a complete A/B candidate campaign",
+  "budget_seconds": 7200,
+  "started_at": 1791294168.504838,
+  "finished_at": 1791297269.2294688,
+  "deadline_at": 1791301368.504838,
+  "elapsed_seconds": 3100.724630832672,
+  "deadline_preserved": true,
+  "completed_measurements": 5,
+  "quality_failed": 1,
+  "original_execution_failures": 1,
+  "budget_limited": 0,
+  "source_freezes": [
+    "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+    "e31c7b0e113b93b2d42f6410499894063102901f"
+  ],
+  "sample_policy": {
+    "excluded_warmups": 1,
+    "scored_samples": 1
+  },
+  "cells": [
+    {
+      "race": "algos/qn-reg/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "execution_status": "MEASURED",
+      "returncode": 0,
+      "fit_ms": 321.93841598927975,
+      "quality": {
+        "finite": true,
+        "r2": 0.8230055550833815,
+        "rmse": 6.543974991608481
+      },
+      "evidence": "cell-01/result.json",
+      "source_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+      "status": "MEASURED"
+    },
+    {
+      "race": "algos/qn-reg/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "execution_status": "MEASURED",
+      "returncode": 0,
+      "fit_ms": 3221.7428750591353,
+      "quality": {
+        "finite": true,
+        "r2": 0.25532687328632353,
+        "rmse": 0.7200755473383585
+      },
+      "evidence": "cell-02/result.json",
+      "source_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+      "status": "MEASURED"
+    },
+    {
+      "race": "classical2/gmm/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "execution_status": "MEASURED",
+      "returncode": 0,
+      "fit_ms": 122133.5104170721,
+      "quality": {
+        "bic": -184832994.344408,
+        "mean_log_likelihood": 10.690672192719653,
+        "n_iter": 24
+      },
+      "evidence": "cell-03/result.json",
+      "source_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+      "status": "MEASURED"
+    },
+    {
+      "race": "algos/lars/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "execution_status": "FAILED_INCOMPLETE_COVERAGE",
+      "returncode": 0,
+      "fit_ms": null,
+      "quality": {},
+      "evidence": "cell-04/result.json",
+      "source_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+      "status": "QUALITY_FAILED",
+      "retry_execution_status": "MEASURED",
+      "retry_returncode": 0,
+      "retry_source_sha": "e31c7b0e113b93b2d42f6410499894063102901f",
+      "retry_evidence": "lars-retry-01/result.json",
+      "quality_review": "lars-quality-review.json"
+    },
+    {
+      "race": "algos/dart/istella/rows=full",
+      "arm": "xgboost-cpu",
+      "execution_status": "MEASURED",
+      "returncode": 0,
+      "fit_ms": 706543.5341671109,
+      "quality": {
+        "accuracy": 0.954868,
+        "logloss": 0.11380987526545985
+      },
+      "evidence": "cell-05/result.json",
+      "source_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+      "status": "MEASURED"
+    },
+    {
+      "race": "algos/dart-reg/istella/rows=full",
+      "arm": "xgboost-cpu",
+      "execution_status": "MEASURED",
+      "returncode": 0,
+      "fit_ms": 702709.6052499255,
+      "quality": {
+        "finite": true,
+        "r2": 0.5834575114365859,
+        "rmse": 0.5385485687751013
+      },
+      "evidence": "cell-06/result.json",
+      "source_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+      "status": "MEASURED"
+    }
+  ],
+  "remaining_limitations": {
+    "dbscan/taxi": "Actual253.9GB process-tree OOM on1mrows; full5.25m cannot be repaired by smallerdata or changingeps/algorithm.",
+    "mps_linear_algebra": "Unsupported backend operation; await upstream support.",
+    "mamba_samba_metal_compile": "Retained backend compiler refusals; no unsupported compiler workaround.",
+    "quantile/istella": "Previous explicit owner exclusion for excessive runtime."
+  },
+  "notes": [
+    "Original first-attempt LARS overflow and subsequent rc0 bad-quality execution are retained separately.",
+    "No further unchanged LARS retry: supported epsilon adjustment changes frozen settings.",
+    "Full workload opponent rows stay separate from historical reduced own timings; no incomparable ratios.",
+    "Scored output hashes are retained; exportable model hashes are unavailable for these opponent runners.",
+    "NVIDIA and AMD remain waiting for full-dataset artifacts; no fixture substitution.",
+    "No compilation, installation, smoke or numerical verification rerun."
+  ]
+}

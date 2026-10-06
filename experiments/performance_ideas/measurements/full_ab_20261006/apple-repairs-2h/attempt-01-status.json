@@ -1,0 +1,62 @@
+{
+  "status": "COMPLETE_WITH_UNRESOLVED_CELLS",
+  "source_sha": "6897b8da0ceeca3661d090add6d7017fdc4924e5",
+  "owner_pid": 61071,
+  "total": 6,
+  "completed": 5,
+  "failed": 1,
+  "budget_limited": 0,
+  "budget_seconds": 7200,
+  "cells": [
+    {
+      "race": "algos/qn-reg/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "status": "MEASURED",
+      "returncode": 0,
+      "elapsed_seconds": 4.0314130783081055
+    },
+    {
+      "race": "algos/qn-reg/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "status": "MEASURED",
+      "returncode": 0,
+      "elapsed_seconds": 10.058000087738037
+    },
+    {
+      "race": "classical2/gmm/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "status": "MEASURED",
+      "returncode": 0,
+      "elapsed_seconds": 251.28891706466675
+    },
+    {
+      "race": "algos/lars/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "status": "FAILED_INCOMPLETE_COVERAGE",
+      "returncode": 0,
+      "elapsed_seconds": 6.040715932846069
+    },
+    {
+      "race": "algos/dart/istella/rows=full",
+      "arm": "xgboost-cpu",
+      "status": "MEASURED",
+      "returncode": 0,
+      "elapsed_seconds": 1420.4575607776642
+    },
+    {
+      "race": "algos/dart-reg/istella/rows=full",
+      "arm": "xgboost-cpu",
+      "status": "MEASURED",
+      "returncode": 0,
+      "elapsed_seconds": 1398.5783638954163
+    }
+  ],
+  "evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01",
+  "heartbeat_at": 1791297261.000128,
+  "started_at": 1791294168.504838,
+  "deadline_at": 1791301368.504838,
+  "phase": "cell-06",
+  "worker_pid": null,
+  "active_race": null,
+  "finished_at": 1791297261.000121
+}
