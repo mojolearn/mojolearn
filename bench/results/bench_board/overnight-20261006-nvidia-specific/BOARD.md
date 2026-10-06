@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T05:35:34Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T05:37:36Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T05:35:34Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 114 planned, 74 done, 3 failed, 0 unsupported, 37 pending. Cells: 162 (REFUSED 2, ok 160).
+Races: 114 planned, 78 done, 3 failed, 0 unsupported, 33 pending. Cells: 170 (REFUSED 1, ok 169).
 
-Inference cells: 128 (REFUSED 1, ok 127).
+Inference cells: 134 (REFUSED 1, ok 133).
 
 ## Quality at a glance
 
@@ -49,6 +49,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | adafactor | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000 |
 | algos | adam | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 4.891e-08 |
 | algos | adamw | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 2.203e-07 |
+| algos | als | text | recall_at_10 (higher is better) | - | - | implicit-gpu 0.546926 |
 | algos | autoarima | taxi-hourly | forecast_rmse (lower is better) | - | - | cuml-gpu 106.817545 |
 | algos | avgpool2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000; torch-eager-tf32 0.000000; torch-compile-tf32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | avgpool2d | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000; torch-eager-tf32 0.000000; torch-compile-tf32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
@@ -140,6 +141,13 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical | kde | istella | rows_without_density | - | - | cuml-gpu 0 |
 | classical | kmeans | istella | inertia (lower is better) | - | - | cuml-gpu 6.111e+17; torch-gpu 5.991e+17 |
 | classical | kmeans | istella | n_iter | - | - | cuml-gpu 21; torch-gpu 55 |
+| classical | knn | istella | recall_at_k (higher is better) | - | - | cuml-gpu 0.976402; torch-gpu 0.981012 |
+| classical | knn | istella | rows_with_repeated_ids | - | - | cuml-gpu 0; torch-gpu 0 |
+| classical | ols | istella | r2 (higher is better) | - | - | cuml-gpu -11031.855105; torch-gpu nan; torch-gpu-eigh 0.151604 |
+| classical | ols | istella | rmse (lower is better) | - | - | cuml-gpu 87.647429; torch-gpu nan; torch-gpu-eigh 0.768590 |
+| classical | pca | istella | explained_variance_ratio_sum (higher is better) | - | - | cuml-gpu 1.000000; torch-gpu 1.000000 |
+| classical | svc | istella | accuracy (higher is better) | - | - | cuml-gpu 0.922200 |
+| classical | svc | istella | n_support | - | - | cuml-gpu 2401 |
 
 ## Inference at a glance
 
@@ -200,6 +208,9 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | svgp | istella | Xq | - | - | - | - | gpytorch-gpu 9.2 ms (IDENTICAL/arm -) |
 | algos | target-encoder | istella | Xq | - | - | - | - | cuml-gpu 53.4 ms (IDENTICAL/arm -) |
 | classical | kmeans | istella | Xq | - | - | - | - | cuml-gpu 5.4 ms (IDENTICAL/arm -); torch-gpu 1.2 ms (IDENTICAL/arm -) |
+| classical | ols | istella | Xq | - | - | - | - | cuml-gpu 2.3 ms (IDENTICAL/arm -); torch-gpu 0.9 ms (IDENTICAL/arm -); torch-gpu-eigh 0.9 ms (IDENTICAL/arm -) |
+| classical | pca | istella | Xq | - | - | - | - | cuml-gpu 10.2 ms (IDENTICAL/arm -); torch-gpu 2.2 ms (IDENTICAL/arm -) |
+| classical | svc | istella | Xq | - | - | - | - | cuml-gpu 4.6 ms (IDENTICAL/arm -) |
 
 ## Classical
 
@@ -348,6 +359,173 @@ inference call, cuml-gpu: cuml KMeans.predict(Xq on the device, output_type cupy
 
 inference call, torch-gpu: torch chunked addmm(//c//^2, Xq, c.T, alpha -2).argmin over the fitted centers; Xq uploaded before the clock, which ends at the device synchronize
 
+### knn / istella (rows full, shape 400000x220)
+
+race: done, driver rc 0, log `logs/classical.knn.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 78.4 | 78.4..78.4 | 1 | - | - | 1622.3 | 772.0 | recall_at_k=0.976402, rows_with_repeated_ids=0 | yes | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok (measured this run) |
+| torch-gpu | torch | gpu | opponent | 116.0 | 116.0..116.0 | 1 | - | - | 1223.8 | 3816.8 | recall_at_k=0.981012, rows_with_repeated_ids=0 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', algorithm='brute' (ours, scikit-learn, cuML); torch cdist p=2 plus topk. Rows: knn block: 400,000 index rows, 4,000 queries, raw. Timed: kneighbors; the fit (index) is before the clock on every arm.
+
+mismatch: seed: no arm has a seed argument (exact search); torch-gpu torch.manual_seed(7)
+
+mismatch: query_tile: ours only (tiling, results unchanged); n_jobs=-1: scikit-learn only
+
+config: cuML benchmark (RAPIDS), NearestNeighbors (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu | torch-gpu |
+|---|---||---|---|
+| library (source) | cuml (get_params) | torch (declared) |
+| algorithm | "brute" | "brute" |
+| metric | "euclidean" | "euclidean" |
+| n_neighbors | 64 | 64 |
+| p | 2 | 2 |
+| seed | "none (deterministic)" | 7 |
+
+### ols / istella (rows full, shape 2043304x220)
+
+race: failed, driver rc 0, log `logs/classical.ols.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 78.5 | 78.5..78.5 | 1 | - | - | 5075.9 | 2154.0 | finite=True, r2=-11031.855105, rmse=87.647429 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-gpu | torch | gpu | opponent | 580.8 | 580.8..580.8 | 1 | - | - | 3013.5 | 8894.4 | finite=False, r2=nan, rmse=nan | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-gpu-eigh | torch | gpu | opponent | 19.8 | 19.8..19.8 | 1 | - | - | 3044.8 | 3455.2 | finite=True, r2=0.151604, rmse=0.768590 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+memory, torch-gpu, torch-gpu-eigh: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: fit_intercept=True. Rows: big block, raw; R2 and RMSE on the 500,000 eval rows. Timed: fit.
+
+mismatch: seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)
+
+mismatch: solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff
+
+mismatch: scikit-learn positive=False and copy_X=True: parameters ours does not have
+
+config: cuML benchmark (RAPIDS), LinearRegression (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu | torch-gpu | torch-gpu-eigh |
+|---|---||---|---||---|---|
+| library (source) | cuml (get_params) | torch (declared) | torch (declared) |
+| algorithm | "eig" | - | - |
+| fit_intercept | true | true | true |
+| seed | "none (deterministic)" | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | 500000 | 2.3 | 2.3..2.3 | 1 | - | - | predict_max_rel_err_own_fp64=0.001281, r2_eval=-11032.159107, rmse_eval=87.648636 | yes | LIKE-FOR-LIKE-SPAN | ok |
+| torch-gpu | Xq | 500000 | 0.9 | 0.9..0.9 | 1 | - | - | predict_max_rel_err_own_fp64=nan, r2_eval=nan, rmse_eval=nan | yes | LIKE-FOR-LIKE-SPAN | ok |
+| torch-gpu-eigh | Xq | 500000 | 0.9 | 0.9..0.9 | 1 | - | - | predict_max_rel_err_own_fp64=7.288e-07, r2_eval=0.151604, rmse_eval=0.768590 | yes | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: cuml LinearRegression.predict(Xq on the device, output_type cupy); Xq uploaded before the clock, which ends at the device synchronize
+
+inference call, torch-gpu: torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize
+
+inference call, torch-gpu-eigh: torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize
+
+### pca / istella (rows full, shape 2043304x220)
+
+race: done, driver rc 0, log `logs/classical.pca.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 74.6 | 74.6..74.6 | 1 | - | - | 5058.4 | 2190.0 | explained_variance_ratio_sum=1.000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-gpu | torch | gpu | opponent | 17.0 | 17.0..17.0 | 1 | - | - | 2998.2 | 3439.6 | explained_variance_ratio_sum=1.000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'. Rows: big block, raw. Timed: fit.
+
+mismatch: svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'
+
+mismatch: torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)
+
+mismatch: random_state is read by none of the covariance solvers; set to 7 on every arm
+
+config: cuML benchmark (RAPIDS), PCA (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu | torch-gpu |
+|---|---||---|---|
+| library (source) | cuml (get_params) | torch (declared) |
+| n_components | 10 | 10 |
+| seed | "none (deterministic)" | 7 |
+| svd_solver | "covariance_eigh" | "covariance_eigh" |
+| tol | 1e-07 | - |
+| whiten | false | false |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | 500000 | 10.2 | 10.2..10.2 | 1 | - | - | transform_max_rel_err_own_fp64=3.694e-07 | yes | LIKE-FOR-LIKE-SPAN | ok |
+| torch-gpu | Xq | 500000 | 2.2 | 2.2..2.2 | 1 | - | - | transform_max_rel_err_own_fp64=4.129e-07 | yes | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: cuml PCA.transform(Xq on the device, output_type cupy); Xq uploaded before the clock, which ends at the device synchronize
+
+inference call, torch-gpu: torch (Xq - mean) @ components.T; Xq uploaded before the clock, which ends at the device synchronize
+
+### svc / istella (rows full, shape 10000x220)
+
+race: done, driver rc 0, log `logs/classical.svc.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 23.0 | 23.0..23.0 | 1 | - | - | 1008.8 | 464.0 | accuracy=0.922200, n_support=2401 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: C=1.0, kernel='rbf', gamma=1/d, tol=1e-3, degree=3, coef0=0.0, max_iter=-1, cache_size=2000 MB, class_weight=None. Rows: svc block: 10,000 fit rows, 10,000 eval rows, standardized. Timed: fit.
+
+mismatch: seed: scikit-learn and cuML random_state=7 (read only with probability=True); ours refuses random_state without probability=True, so ours stays None
+
+mismatch: cache_size=2000 on every arm; ours honors it only as the prediction buffer (DEVIATION 871), so its training is unaffected
+
+mismatch: shrinking=True: scikit-learn only; nochange_steps=1000: ours and cuML only
+
+config: cuML benchmark (RAPIDS), SVC-RBF (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| C | 1.0 |
+| class_weight | null |
+| coef0 | 0.0 |
+| degree | 3 |
+| gamma | 0.004545454545454545 |
+| kernel | "rbf" |
+| max_iter | -1 |
+| seed | 7 |
+| tol | 0.001 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | 10000 | 4.6 | 4.6..4.6 | 1 | - | - | accuracy_eval=0.922200 | yes | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: cuml SVC.predict(Xq on the device, output_type cupy); Xq uploaded before the clock, which ends at the device synchronize
+
 ## Algorithm expansion
 
 ### adafactor / synthetic (rows full, shape -)
@@ -431,11 +609,13 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 
 ### als / text (rows full, shape X 86626x4096; Xq 9626x4096; y 86626; yq 9626)
 
-race: failed, driver rc 1, log `logs/algos.als.text.rows-full.log`, ran on 24a11adce16e
+race: done, driver rc 0, log `logs/algos.als.text.rows-full.log`, ran on 24a11adce16e
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| implicit-gpu | implicit | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "KeyError('implicit-gpu')", "event": "error", "stage": "ready"}) (measured this run) |
+| implicit-gpu | implicit | gpu | opponent | 2560.8 | 2560.8..2560.8 | 1 | - | - | 2485.7 | 506.0 | recall_at_10=0.546926 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, implicit-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
 
 settings: {'alpha': 1.0, 'calculate_training_loss': False, 'cg_steps': 3, 'factors': 64, 'iterations': 15, 'random_state': 7, 'regularization': 0.01, 'use_cg': False}. Rows: None. Timed: None.
 
@@ -445,11 +625,14 @@ mismatch: each library draws its own initial factors from random_state=7
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters (tools/bench_board_params.py, read back from each constructed arm; reference `None`, seed 7): MATCHED
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `implicit-gpu`, seed 7): MATCHED
 
-| parameter |  |
-
-| library (source) |  |
+| parameter | implicit-gpu |
+|---|---|
+| library (source) | implicit (declared) |
+| alpha | 1.0 |
+| n_estimators | 15 |
+| seed | 7 |
 
 ### autoarima / taxi-hourly (rows full, shape Yfit 64x1392; Yhold 64x48)
 

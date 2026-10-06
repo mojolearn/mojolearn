@@ -1,16 +1,16 @@
 {
   "coverage": {
     "cell_statuses": {
-      "REFUSED": 2,
-      "ok": 160
+      "REFUSED": 1,
+      "ok": 169
     },
-    "cells": 162,
-    "done": 74,
+    "cells": 170,
+    "done": 78,
     "failed": 3,
-    "pending": 37,
+    "pending": 33,
     "planned": 114,
     "race_statuses": {
-      "done": 74,
+      "done": 78,
       "failed": 3
     },
     "unsupported": 0
@@ -19,16 +19,20 @@
     {
       "commit": "8b0bdf4d4a7d145eec60e82f06b1f5a4ac05b948",
       "purpose": "Explicit failed ALS repair overrides skip-failed; prior refusal retained"
+    },
+    {
+      "commit": "8efde3a29",
+      "purpose": "Uncapped implicit arm policy is recorded without KeyError"
     }
   ],
   "harness_source_sha": "b0f5242d244ef75cd9ba7d78ca92e10008d75510",
   "policy": "Exact opponent-only source files, hardware and failures retained. No A/B component ratios are derived.",
-  "published_at": 1791264962.1195688,
+  "published_at": 1791265082.349163,
   "schema": "mojolearn-opponent-publication/1",
   "source_directory": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-capture/artifacts/gpu-opponents/board",
   "source_sha256": {
-    "board_json": "393178b5d858aa105b5f489d8e7dd08c405f551b2032d686bd93ea2be0420a34",
-    "board_markdown": "f47b3e94e11d1de3de7610e1e6638d4079da76e917c670a0b8c534f94994e83d"
+    "board_json": "0aaae18102ce2a55735ef51099589a5a5a40029508c1dabd046190b373b19663",
+    "board_markdown": "9feeea6d6713bb5b59d6984b404e36d81313ee57705908e7e2c779a85ddc5539"
   },
-  "source_updated": "2026-10-06T05:35:34Z"
+  "source_updated": "2026-10-06T05:37:36Z"
 }
