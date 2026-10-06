@@ -148,6 +148,65 @@
         "{output}"
       ],
       "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "center_pair",
+      "source": "experiments/performance_ideas/I21/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GMM_CENTER_PAIR=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I21/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_GMM_CENTER_PAIR=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and device identity"
+    },
+    {
+      "name": "component_and_center_pair",
+      "source": "experiments/performance_ideas/I21/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GMM_COMPONENT_BATCH=1",
+        "MOJOLEARN_IDN_GMM_CENTER_PAIR=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I21/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_GMM_COMPONENT_BATCH=1",
+        "--define",
+        "MOJOLEARN_IDN_GMM_CENTER_PAIR=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and device identity"
     }
   ]
 }
