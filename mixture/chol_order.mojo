@@ -61,10 +61,20 @@ from checks.numerics import (
 comptime GMM_IDN_CHOL_TPB = 256
 comptime GMM_IDN_CHOL_MAX_D = GMM_IDN_CHOL_TPB
 
+# I21 2026-10-06 rollback LOSS: retain the existing ON default. Frozen
+# source 5b467815b51b; complete generated COV_FULL fits, k=9, rows/features
+# 10000/17,10001/18,32769/9. OFF/ON elapsed ratios AMD 2.011/1.925/1.338,
+# NVIDIA L40S 2.243/2.179/1.792. Every d is <=256 and sabotage is zero:
+# ON launches idn_precision_cholesky_kernel, OFF restores the component chain.
+# One excluded same-context fit and one score per binary; all converged=True,
+# rc=0. Prior identity evidence reused, with no new validation or claim that
+# different version/rollback arithmetic orders have identical output bits.
+# Representative synthetic caller results support retaining ON; full-board
+# qualification is separate. Evidence: experiments/performance_ideas/
+# measurements/20261006/index.json (fused_cholesky_off).
 comptime IDN_GMM_FUSED_CHOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
-        # I21 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
         is_defined["MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
