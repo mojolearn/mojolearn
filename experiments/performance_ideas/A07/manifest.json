@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "id": "A07",
+  "title": "Qualify bounded degree graph tasks against static row scheduling",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/A07/check.mojo",
+    "gemm/experiments/profile_campaign.py",
+    "neighbors/checks/ball_cover_canonical_order.mojo",
+    "experiments/performance_ideas/I13/check.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_RBC_CANON_MERGE=1",
+    "MOJOLEARN_RBC_CANON_DEGREE_BUCKETS=1"
+  ],
+  "baseline_defines": [],
+  "build_argv": [],
+  "run_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A07/campaign.json",
+    "--evidence",
+    "{output}"
+  ],
+  "validation_paths": [
+    "gemm/checks/gemm_step_arms_check.mojo",
+    "core/gemm_identity_check.mojo"
+  ],
+  "depends_on": [
+    "I13"
+  ],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host output bits",
+    "exact intermediate outputs and poison control",
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Histogram work scheduling must additionally qualify N07; graph qualification alone does not satisfy full forest fit"
+  ],
+  "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
+  "blocker": null
+}
