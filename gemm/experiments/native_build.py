@@ -39,7 +39,9 @@ def main():
         command += ['-D', 'MOJOLEARN_NUMERIC_IDENTICAL=1']
     column = 'CPU' if args.vendor == 'host' else args.vendor.upper()
     command += ['-D', 'MOJOLEARN_COLUMN_' + column + '=1']
-    accelerator = args.accelerator or {'nvidia': 'sm_89', 'amd': 'gfx942', 'apple': 'apple-m2'}.get(args.vendor)
+    accelerator = args.accelerator or {'nvidia': 'sm_89', 'amd': 'gfx942', 'apple': 'metal:1'}.get(args.vendor)
+    if args.vendor == 'apple':
+        command += ['--target-cpu', 'apple-m1']
     if accelerator:
         command += ['--target-accelerator', accelerator]
     for define in args.define:
