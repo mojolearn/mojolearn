@@ -2290,57 +2290,65 @@ def resample_indices_host(
     return out^
 
 
-# MIXED timing, 2026-10-04, compiled 7eacaa2b2; default OFF.
+# Apple FAST default ON by owner decision, 2026-10-06: enable gather with
+# F04 paired completion and F19 tiled gather (details and full evidence below).
+# Combined B/A: Istella 0.90023, taxi 0.93010; exact output/index hashes match.
+# One excluded warmup + one scored sample/arm is the accepted decision policy.
+# Limits: both full-data arms used gather; the old gather-OFF default was NOT
+# retimed. This is an explicit promotion of the measured combined configuration,
+# not a measured speedup versus that old default. IDENTICAL is unchanged;
+# NVIDIA/AMD do not execute these Apple FAST switches or vote on this decision.
+# Historical MIXED timing, 2026-10-04, compiled 7eacaa2b2 (then default OFF):
 # resample-gpu-recovered-q-r2-20261004: exact output/draw/refusal/lifetime
 # gates PASS with actual native reach. Timing harness 0c7066aae, r2 tags:
 # taxi A68.488292 -> B58.820584 ms; istella A390.820083 -> B805.391583 ms.
 # Both output checks PASS; matched board warmup + one scored call/arm.
-# Wide-row regression blocks broad activation; no dataset-specific switch.
+# Historical wide-row regression retained; no dataset-specific switch.
 # Initial metadata failures produced NO scores. Full receipt hashes are in
-# docs/apple-fast/ab/resample-gpu-recovery.md; no new board promotion.
+# docs/apple-fast/ab/resample-gpu-recovery.md.
 comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
-    # three shapes; quality equal, expected refusal recovered. Mixed, keep OFF.
+    # three shapes; quality equal, expected refusal recovered. Historical MIXED.
     # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
-    and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER"]())
+    and not is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER_OFF"]())
 
 
 # Pair independent array transfers on one stream. Source/output DeviceBuffers
 # remain owned until the single completion; direct host transport avoids a
-# second packed copy. This is default-off and applies to the supported
+# second packed copy. This is default-on and applies to the supported
 # float32 all-GPU gather entrance, never the hybrid narrow route.
 # Full M3 FAST F04 resample, freeze 265872c29 (2026-10-06), one excluded
 # warmup and one score per arm: all Istella 2,043,304 rows, A=1381.708 ms,
 # B=1271.052 ms (0.91991); all taxi 5,250,086 rows, A=209.237 ms,
 # B=199.579 ms (0.95384). Preparation, paired X/y draw and consumed outputs
-# included. Exact full output/indices/repeat checks passed. These scoped
-# gains retain the prior small-workload losses; default remains OFF pending
-# broad call-shape coverage and admission of the complete default route.
+# included. Exact full output/indices/repeat checks passed. Owner-approved ON
+# with tiled gather; prior small-workload losses and unmeasured call shapes
+# remain limitations. Explicit *_OFF flags take precedence over old opt-ins.
 # Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
 # resample-full-summary.json; model is stateless, output/index hashes saved.
 comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
-    # three shapes; quality equal, expected refusal recovered. Mixed, keep OFF.
+    # three shapes; quality equal, expected refusal recovered. Historical MIXED.
     # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
-    and is_defined["MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"]())
+    and not is_defined["MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF"]())
 
 # F19 M3 2026-10-06 public resample shapes(1,37)/(3,129)/(1,7,67):
-# B/A1.0402/0.9868/1.7701, quality equal, one warmup+score. Keep tiled gather OFF.
+# B/A1.0402/0.9868/1.7701, quality equal, one warmup+score. Historical losses.
 # Full M3 FAST F19, freeze 265872c29: all Istella rows A=1268.163 ms,
 # B=1233.142 ms (0.97238); all taxi rows A=195.661 ms, B=190.365 ms
 # (0.97293). One excluded warmup/one score; exact output/indices/repeat PASS.
 # Combined WAIT_PAIR+TILED versus GATHER-only was also measured on full data:
 # Istella 1379.800 -> 1242.142 ms (0.90023), taxi 212.941 -> 198.057 ms
-# (0.93010), exact checks PASS. These are scoped gather-enabled comparisons,
-# not admission of the complete main default route; retain OFF and preserve
-# the earlier small-workload losses. F19 permutation remains unqualified.
+# (0.93010), exact checks PASS. Owner-approved ON with WAIT_PAIR and GATHER;
+# these are scoped gather-enabled comparisons, with no fresh gather-OFF
+# control. Earlier small-workload losses remain. F19 permutation stays OFF.
 # Evidence beside the F04 summary: resample-combined-summary.json and boards.
+# Decision: resample-promotion.json in the same evidence directory.
 comptime RESAMPLE_FAST_TILED_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    # MEASURED M3; default OFF (mixed/regression).
-    and is_defined["MOJOLEARN_RESAMPLE_FAST_TILED_GATHER"]())
+    and not is_defined["MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF"]())
 
 
 def resample_gather_grouped(

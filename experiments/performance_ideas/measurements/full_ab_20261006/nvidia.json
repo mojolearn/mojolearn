@@ -890,8 +890,15 @@
     "Model/output SHA256 capture added to actual workload drivers; unavailable model exports remain explicit. No compilation or separate identity validation run.",
     "Final frozen main SHA is retained in /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/freeze.json after push.",
     "Apple FAST now proceeds independently. Current measured PCA subsets do not close downstream LLE, other adapters or interaction coverage.",
-    "Ten full Apple FAST A/B pairs captured: PCA and compensated PCA on uncapped Istella/taxi; paired gather, tiled gather and their combined configuration on both full datasets. Original failed PCA receipt remains separate. No default promotion or opponent comparison inferred.",
+    "Ten full Apple FAST A/B pairs captured: PCA and compensated PCA on uncapped Istella/taxi; paired gather, tiled gather and their combined configuration on both full datasets. Original failed PCA receipt remains separate. Owner explicitly promoted the Apple FAST F04/F19 combined configuration; see resample-promotion.json for scope and limitations. No opponent comparison inferred.",
     "F14 grouped-query pair has no distinct route under retained flags; ANN rejects the full query count. No F14 GPU test or reduced substitute was run."
   ],
-  "decisions": []
+  "decisions": [
+    {
+      "candidate": "F04 + F19 (Apple FAST gather / paired wait / tiled gather)",
+      "decision": "ON: owner-approved; six full-dataset pairs, one score/arm, exact checks passed. Combined B/A Istella 0.90023, taxi 0.93010 versus gather-enabled controls; previous gather-OFF default not retimed.",
+      "commit": "main promotion; measured source 265872c2922e466a41698cc8d4da054936991fb2",
+      "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/resample-promotion.json"
+    }
+  ]
 }

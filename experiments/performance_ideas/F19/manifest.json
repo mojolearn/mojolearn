@@ -22,7 +22,8 @@
   ],
   "baseline_defines": [
     "MOJOLEARN_RESAMPLE_FAST_GATHER",
-    "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+    "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+    "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF"
   ],
   "build_argv": [
     "{python}",
@@ -83,5 +84,11 @@
     "{output}/arms",
     "--output",
     "{output}/run"
-  ]
+  ],
+  "measurement_decision": {
+    "status": "default_on_apple_fast",
+    "date": "2026-10-06",
+    "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/resample-promotion.json",
+    "recipe_note": "Explicit OFF controls preserve the isolated A/B after promotion. Historical compile receipts retain their original source and defines."
+  }
 }

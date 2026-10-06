@@ -1,0 +1,197 @@
+{
+  "schema": "mojolearn.performance-default-decision/1",
+  "date": "2026-10-06",
+  "status": "PROMOTED",
+  "vendor": "apple",
+  "mode": "fast",
+  "candidates": [
+    "F04",
+    "F19"
+  ],
+  "measured_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+  "source_parent_sha": "14989ac43aef745fa989456899918b05c7165d15",
+  "authorization": "Owner explicitly requested paired resampling, tiled gather and their combined configuration enabled; one scored sample per arm is sufficient.",
+  "defaults": {
+    "RESAMPLE_GPU_GATHER": {
+      "enabled": true,
+      "rollback_define": "MOJOLEARN_RESAMPLE_FAST_GATHER_OFF"
+    },
+    "RESAMPLE_FAST_WAIT_PAIR": {
+      "enabled": true,
+      "rollback_define": "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF"
+    },
+    "RESAMPLE_FAST_TILED_GATHER": {
+      "enabled": true,
+      "rollback_define": "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF"
+    }
+  },
+  "warmups_per_arm": 1,
+  "scored_samples_per_arm": 1,
+  "full_workload_pairs": 6,
+  "quality": "All six pairs passed exact gather, repeated-output and baseline checks; output and index SHA256 match. Resampling is stateless, so there is no fitted-model hash.",
+  "timed_boundary": "Preparation, full paired X/y resampling, synchronization and consumed outputs; retained receipts report cold and repeated operation separately.",
+  "measurements": [
+    {
+      "cell": "F04-default-resample-istella-full",
+      "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+      "dimensions": {
+        "train": [
+          2043304,
+          220
+        ],
+        "labels": [
+          2043304
+        ]
+      },
+      "A_ms": 1381.7082919999998,
+      "B_ms": 1271.051791,
+      "B_over_A": 0.9199132684947368,
+      "quality": {
+        "exact_gather_matches_public_indices": true,
+        "repeated_output_exact": true,
+        "baseline_exact_match": true
+      },
+      "output_hash_A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+      "output_hash_B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+      "indices_hash_A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+      "indices_hash_B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3"
+    },
+    {
+      "cell": "F04-default-resample-taxi-full",
+      "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+      "dimensions": {
+        "train": [
+          5250086,
+          11
+        ],
+        "labels": [
+          5250086
+        ]
+      },
+      "A_ms": 209.236583,
+      "B_ms": 199.5785,
+      "B_over_A": 0.9538413270685079,
+      "quality": {
+        "exact_gather_matches_public_indices": true,
+        "repeated_output_exact": true,
+        "baseline_exact_match": true
+      },
+      "output_hash_A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+      "output_hash_B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+      "indices_hash_A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+      "indices_hash_B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb"
+    },
+    {
+      "cell": "F19-default-resample-istella-full",
+      "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+      "dimensions": {
+        "train": [
+          2043304,
+          220
+        ],
+        "labels": [
+          2043304
+        ]
+      },
+      "A_ms": 1268.163375,
+      "B_ms": 1233.141708,
+      "B_over_A": 0.9723839469815945,
+      "quality": {
+        "exact_gather_matches_public_indices": true,
+        "repeated_output_exact": true,
+        "baseline_exact_match": true
+      },
+      "output_hash_A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+      "output_hash_B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+      "indices_hash_A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+      "indices_hash_B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3"
+    },
+    {
+      "cell": "F19-default-resample-taxi-full",
+      "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+      "dimensions": {
+        "train": [
+          5250086,
+          11
+        ],
+        "labels": [
+          5250086
+        ]
+      },
+      "A_ms": 195.660834,
+      "B_ms": 190.365084,
+      "B_over_A": 0.9729340313452818,
+      "quality": {
+        "exact_gather_matches_public_indices": true,
+        "repeated_output_exact": true,
+        "baseline_exact_match": true
+      },
+      "output_hash_A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+      "output_hash_B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+      "indices_hash_A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+      "indices_hash_B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb"
+    },
+    {
+      "cell": "F19-combined-wait-tiled-istella-full",
+      "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+      "dimensions": {
+        "train": [
+          2043304,
+          220
+        ],
+        "labels": [
+          2043304
+        ]
+      },
+      "A_ms": 1379.7996249999999,
+      "B_ms": 1242.142042,
+      "B_over_A": 0.9002336422580199,
+      "quality": {
+        "exact_gather_matches_public_indices": true,
+        "repeated_output_exact": true,
+        "baseline_exact_match": true
+      },
+      "output_hash_A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+      "output_hash_B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+      "indices_hash_A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+      "indices_hash_B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3"
+    },
+    {
+      "cell": "F19-combined-wait-tiled-taxi-full",
+      "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+      "dimensions": {
+        "train": [
+          5250086,
+          11
+        ],
+        "labels": [
+          5250086
+        ]
+      },
+      "A_ms": 212.94062499999998,
+      "B_ms": 198.056667,
+      "B_over_A": 0.9301027786501519,
+      "quality": {
+        "exact_gather_matches_public_indices": true,
+        "repeated_output_exact": true,
+        "baseline_exact_match": true
+      },
+      "output_hash_A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+      "output_hash_B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+      "indices_hash_A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+      "indices_hash_B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb"
+    }
+  ],
+  "limitations": [
+    "Full-data controls already enabled gather; the earlier gather-OFF shipped default was not retimed. Promotion follows the explicit owner decision, not a measured comparison against that earlier default.",
+    "Historical small-workload and gather-route regressions remain retained beside source switches; other call shapes are unmeasured.",
+    "Permutation and narrow-gather candidates remain unpromoted; PCA unchanged.",
+    "Apple FAST decision only; NVIDIA/AMD IDENTICAL artifact blockers remain.",
+    "No rebuild or separate identity verification performed; existing frozen artifacts and receipts are unchanged. Source defaults apply to future builds."
+  ],
+  "evidence": [
+    "resample-full-summary.json",
+    "resample-combined-summary.json",
+    "index.json"
+  ]
+}
