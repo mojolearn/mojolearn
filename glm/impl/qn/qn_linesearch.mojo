@@ -162,6 +162,18 @@ def ls_backtrack(
     comptime if GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]():
         if param.linesearch==LBFGS_LS_BT_ARMIJO and param.max_linesearch>0 and n>0 and n<=(16*1024*1024-96)//32:
             return ls_backtrack_exact_trials(ctx,param,f,fx,x,grad,step,drt,xp,n,scalar,ls_iters,stage,fresh,gradp,dg_ready)
+    return ls_backtrack_sequential(ctx,param,f,fx,x,grad,step,drt,xp,n,scalar,ls_iters,stage,fresh,gradp,dg_ready)
+
+
+def ls_backtrack_sequential(ctx: DeviceContext,param: LBFGSParam,mut f: GLMWithData,
+    mut fx: Float32,mut x: DeviceBuffer[DType.float32],mut grad: DeviceBuffer[DType.float32],
+    mut step: Float32,mut drt: DeviceBuffer[DType.float32],mut xp: DeviceBuffer[DType.float32],
+    n: Int,mut scalar: DeviceBuffer[DType.float32],mut ls_iters: Int,
+    mut stage: HostBuffer[DType.float32],mut fresh: Bool,mut gradp: DeviceBuffer[DType.float32],
+    dg_ready: Bool) raises -> Int:
+    """The unchanged canonical control, callable by focused schedule fixtures."""
+    if step<=Float32(0):
+        return LS_INVALID_STEP
     var fx_init = fx
     # lane/linear-apple: dg_init's dot is enqueued and read home with the
     # first candidate's evaluate (one synchronize for both); see
