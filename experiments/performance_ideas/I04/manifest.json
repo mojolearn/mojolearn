@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "id": "I04",
+  "title": "Probe alternative leaves before a coherent fold version",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "blocked_prerequisite",
+  "implementation_paths": [
+    "gemm/experiments/fold_profile_probe.mojo"
+  ],
+  "candidate_defines": [],
+  "baseline_defines": [],
+  "build_argv": [
+    "pixi",
+    "run",
+    "mojo",
+    "build",
+    "-j1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-I",
+    "{repo}",
+    "{repo}/gemm/experiments/fold_profile_probe.mojo",
+    "-o",
+    "{output}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "gemm/checks/gemm_step_arms_check.mojo",
+    "core/gemm_identity_check.mojo"
+  ],
+  "depends_on": [
+    "I01",
+    "I02",
+    "I03"
+  ],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host output bits",
+    "exact intermediate outputs and poison control",
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower"
+  ],
+  "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
+  "blocker": "I01-I03 have no device attribution establishing leaf dependency or fold traffic as limiting; scalar adversarial probe exists but no new device profile is admitted."
+}
