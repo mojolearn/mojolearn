@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "id": "F14",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "neighbors/impl/detail/fast_topk_knn.mojo",
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": null,
+  "variants": [
+    {
+      "name": "ann",
+      "binding": "ivf",
+      "baseline_defines": [
+        "MOJOLEARN_IVF_FAST_BALANCED_AUDIT=1"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IVF_FAST_BALANCED_TASKS=1",
+        "MOJOLEARN_IVF_FAST_BALANCED_AUDIT=1"
+      ],
+      "caller": "ann_caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "default",
+      "binding": "core",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_KNN_FAST_QUERY_GROUP4"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}
