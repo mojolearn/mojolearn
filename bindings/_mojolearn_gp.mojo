@@ -146,6 +146,11 @@ from cholesky.estimator import (
 )
 
 
+from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
+
+def gp_shared_sub_count_py() raises -> PythonObject:
+    return PythonObject(shared_sub_count(True))
+
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
 
@@ -1717,6 +1722,7 @@ def gp_parallel_available() raises -> PythonObject:
 def PyInit__mojolearn_gp() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gp")
+        m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")
         m.def_function[gp_parallel_available]("gp_parallel_available")
         m.def_function[gp_vendor_binding]("gp_vendor")
         m.def_function[gp_py2mojo_binding]("gp_py2mojo")

@@ -1,0 +1,48 @@
+{
+  "id": "A05",
+  "source": "gemm/experiments/profile_check.mojo",
+  "arms": [
+    {
+      "name": "current",
+      "defines": []
+    },
+    {
+      "name": "compact_rows",
+      "defines": [
+        "MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE=1"
+      ]
+    }
+  ],
+  "fixtures": [
+    {
+      "MOJOLEARN_EXPERIMENT_M": 127,
+      "MOJOLEARN_EXPERIMENT_N": 130,
+      "MOJOLEARN_EXPERIMENT_K": 257
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 127,
+      "MOJOLEARN_EXPERIMENT_N": 130,
+      "MOJOLEARN_EXPERIMENT_K": 1025
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 127,
+      "MOJOLEARN_EXPERIMENT_N": 130,
+      "MOJOLEARN_EXPERIMENT_K": 4097
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 511,
+      "MOJOLEARN_EXPERIMENT_N": 514,
+      "MOJOLEARN_EXPERIMENT_K": 257
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 511,
+      "MOJOLEARN_EXPERIMENT_N": 514,
+      "MOJOLEARN_EXPERIMENT_K": 1025
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 511,
+      "MOJOLEARN_EXPERIMENT_N": 514,
+      "MOJOLEARN_EXPERIMENT_K": 4097
+    }
+  ]
+}

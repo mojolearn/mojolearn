@@ -21,10 +21,13 @@ from gemm.afn_apple_fast import AFN_GEMM_APPLE
 # G2 narrow1.203750->0.865625ms; different baseline from this AFN adapter.
 # Separate shared G1/G5 PCA transforms were faster, inverses slower; none
 # supplies PCA-fit or broad-regime admission. See GEMM_INLINE_OUTCOMES.md.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime TALL = is_defined["MOJOLEARN_SCOPED_GEMM_G1_TALL"]()
 comptime DENSE = is_defined["MOJOLEARN_SCOPED_GEMM_G1_DENSE"]()
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime GRAM = is_defined["MOJOLEARN_SCOPED_GEMM_G1_GRAM"]()
 comptime NARROW = is_defined["MOJOLEARN_SCOPED_GEMM_G2_NARROW"]()
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
 # HOLD-quality, scoped-pca-fit-istella-q-v1, compiled201fe736, zero allowance:
 # singular_relative1.964589033e-5->1.964642456e-5 and noise_relative
@@ -32,6 +35,7 @@ comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
 # Saved report serialization is INCOMPLETE; preserved fields show HOLD,
 # never PASS inferred from process rc. Rejudge saved captures (no GPU replay)
 # is owed; no fit timing/default admission. Mechanism PASS above is separate.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime PCA = is_defined["MOJOLEARN_SCOPED_GEMM_PCA"]()
 comptime AUDIT = is_defined["MOJOLEARN_SCOPED_GEMM_AUDIT"]()
 # LEGACY, default OFF: the old per-route windows (TALL M>=4096 N32..128
@@ -63,10 +67,29 @@ def scoped_last(index: Int) raises -> Int:
     return STATE.get_or_create_ptr()[].last[index]
 
 
-def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool](
+struct SharedSubAudit(Defaultable, Movable):
+    var lu: Int
+    var chol: Int
+    def __init__(out self):
+        self.lu = 0
+        self.chol = 0
+comptime SUB_STATE = _Global[StorageType=SharedSubAudit, name="SharedSubtractAuditV1", init_fn=SharedSubAudit.__init__]
+
+def shared_sub_record(cholesky: Bool) raises:
+    if cholesky:
+        SUB_STATE.get_or_create_ptr()[].chol += 1
+    else:
+        SUB_STATE.get_or_create_ptr()[].lu += 1
+
+def shared_sub_count(cholesky: Bool) raises -> Int:
+    return SUB_STATE.get_or_create_ptr()[].chol if cholesky else SUB_STATE.get_or_create_ptr()[].lu
+
+
+def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool, SUBTRACT: Bool = False, LOWER: Bool = False](
     dst: FPtr, a: FPtr, b: FPtr,
     m_in: Int32, n_in: Int32, k_in: Int32,
     a_si_in: Int32, a_sp_in: Int32, b_sp_in: Int32, b_sj_in: Int32, per_in: Int32,
+    dst_stride_in: Int32 = Int32(0),
 ):
     var m = Int(m_in)
     var n = Int(n_in)
@@ -76,6 +99,7 @@ def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool](
     var b_sp = Int(b_sp_in)
     var b_sj = Int(b_sj_in)
     var per = Int(per_in)
+    comptime assert not (SPLIT and SUBTRACT), "subtract requires an unsplit accumulation"
     comptime assert BM % 16 == 0 and BN % 16 == 0
     comptime RM = BM // 16
     comptime RN = BN // 16
@@ -86,6 +110,9 @@ def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool](
     var cols = (n + BN - 1) // BN
     var bm = (Int(block_idx.x) // cols) * BM
     var bn = (Int(block_idx.x) % cols) * BN
+    comptime if LOWER:
+        if bn >= bm + BM:
+            return  # uniform whole-tile rejection, no partial warp exit
     var sr = (sg // 2) * (BM // 2)
     var sc = (sg % 2) * (BN // 2)
     var first = 0
@@ -124,9 +151,12 @@ def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool](
             comptime for s in range(2):
                 var row = bm + sr + mi * 8 + fr
                 var col = bn + sc + ni * 8 + fc + s
-                if row < m and col < n:
+                if row < m and col < n and (not LOWER or col <= row):
                     comptime if SPLIT:
                         _ = Atomic.fetch_add(dst.unsafe_offset(row * n + col), fragment[s])
+                    elif SUBTRACT:
+                        var cell = row * Int(dst_stride_in) + col
+                        dst.unsafe_store(cell, dst.unsafe_load(cell) - fragment[s])
                     else:
                         dst.unsafe_store(row * n + col, fragment[s])
 
@@ -200,12 +230,12 @@ def try_scoped_gemm[SPLIT: Bool, ROUTE: Int](
             state[].last[14] = Int(nt)
         if arm == 1:
             ctx.enqueue_function[scoped_kernel[64, 64, SPLIT]](
-                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
+                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(n),
                 grid_dim=(((m + 63) // 64) * ((n + 63) // 64), splits, 1), block_dim=(128, 1, 1),
             )
         elif arm == 2:
             ctx.enqueue_function[scoped_kernel[32, 32, SPLIT]](
-                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
+                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(n),
                 grid_dim=(((m + 31) // 32) * ((n + 31) // 32), splits, 1), block_dim=(128, 1, 1),
             )
         return arm != 0

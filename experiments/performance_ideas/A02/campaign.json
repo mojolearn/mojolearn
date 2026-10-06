@@ -1,0 +1,48 @@
+{
+  "id": "A02",
+  "source": "experiments/performance_ideas/A02/check.mojo",
+  "arms": [
+    {
+      "name": "library_depth",
+      "defines": []
+    },
+    {
+      "name": "one_page",
+      "defines": [
+        "MOJOLEARN_GEMM_ONE_PAGE=1"
+      ]
+    }
+  ],
+  "fixtures": [
+    {
+      "MOJOLEARN_EXPERIMENT_M": 127,
+      "MOJOLEARN_EXPERIMENT_N": 130,
+      "MOJOLEARN_EXPERIMENT_K": 257
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 127,
+      "MOJOLEARN_EXPERIMENT_N": 130,
+      "MOJOLEARN_EXPERIMENT_K": 1025
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 127,
+      "MOJOLEARN_EXPERIMENT_N": 130,
+      "MOJOLEARN_EXPERIMENT_K": 4097
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 511,
+      "MOJOLEARN_EXPERIMENT_N": 514,
+      "MOJOLEARN_EXPERIMENT_K": 257
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 511,
+      "MOJOLEARN_EXPERIMENT_N": 514,
+      "MOJOLEARN_EXPERIMENT_K": 1025
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 511,
+      "MOJOLEARN_EXPERIMENT_N": 514,
+      "MOJOLEARN_EXPERIMENT_K": 4097
+    }
+  ]
+}

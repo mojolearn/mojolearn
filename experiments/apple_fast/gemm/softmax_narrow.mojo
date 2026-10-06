@@ -18,6 +18,7 @@ from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
 # scoped-r2-all-q-v1 PASS covers the shared kernel, not this optimizer caller.
 # Require M2 A/B compile, actual fit/predict reach and all zero-regression
 # gates in docs/apple-fast/ab/softmax-g2-narrow.md before timing/promotion.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime SOFTMAX_G2 = AFN_GEMM_APPLE and is_defined["MOJOLEARN_SOFTMAX_FAST_G2_NARROW"]()
 comptime SOFTMAX_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_SOFTMAX_G2_AUDIT"]()
 # LEGACY, default OFF: the old window admitted only M>=4096, C 2..16, D 128..512,
@@ -76,7 +77,7 @@ def softmax_gemm_nt(ctx: DeviceContext, mut dst: DeviceBuffer[DType.float32],
         if selected:
             ctx.enqueue_function[scoped_kernel[32, 32, False]](
                 dst.unsafe_ptr(), x.unsafe_ptr(), weights.unsafe_ptr(),
-                Int32(m), Int32(n), Int32(k), Int32(k), Int32(1), Int32(1), Int32(k), Int32(k),
+                Int32(m), Int32(n), Int32(k), Int32(k), Int32(1), Int32(1), Int32(k), Int32(k), Int32(n),
                 grid_dim=(((m + 31) // 32) * ((n + 31) // 32), 1, 1), block_dim=(128, 1, 1),
             )
             return

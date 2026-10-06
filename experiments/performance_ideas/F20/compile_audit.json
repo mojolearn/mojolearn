@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "id": "F20",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "training/afn_optim.mojo",
+    "sequence/layernorm.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": null,
+  "variants": [
+    {
+      "name": "default",
+      "binding": "training",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFN_OPT_MULTITENSOR"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "normalization",
+      "binding": "x_sequence",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_LN_FAST_BLOCK_FOLD"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "training"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "status",
+      "binding": "training",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFN_OPT_FUSE_SCAN"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}

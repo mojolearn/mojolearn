@@ -418,6 +418,7 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
     _quantize,
 )
 from std.atomic import Atomic, Ordering
+from std.ffi import _Global
 from std.gpu.primitives.warp import shuffle_idx as _hist_shuffle_idx
 from std.gpu.primitives.warp import sum as _hist_warp_sum
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
@@ -632,6 +633,26 @@ comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 # candidate round"). The candidate arm is P = 4.
 # =========================================================
 # `-D MOJOLEARN_2012_SMEM_COPIES4=1` selects P = 4; 1 is shipped.
+# N07 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
+# N07 PENDING: production feature chunks + replicas use the existing exact
+# fixed-point BinT addends and scales. Default off; resource/device gates owed.
+# NEVER RUN — PENDING MEASUREMENT: new opt-in streamed replica route.
+comptime IDN_RF_STREAM_REPLICAS = BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_STREAM_REPLICAS"]()
+
+struct _StreamReplicaAudit(Defaultable, Movable):
+    var launches: Int64
+    def __init__(out self):
+        self.launches = Int64(0)
+
+comptime _STREAM_REPLICA_AUDIT = _Global[StorageType=_StreamReplicaAudit, name="MojolearnForestStreamReplicasV1", init_fn=_StreamReplicaAudit.__init__]
+
+def forest_stream_replica_count() raises -> Int:
+    # Enqueue reach only; no wait, device readback, or quality inference.
+    comptime if IDN_RF_STREAM_REPLICAS:
+        ref audit = _STREAM_REPLICA_AUDIT.get_or_create_ptr()[]
+        return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.launches)))
+    return 0
+
 comptime HIST_SMEM_COPIES_DEFAULT = 4 if is_defined["MOJOLEARN_2012_SMEM_COPIES4"]() else 1
 
 
@@ -2658,6 +2679,7 @@ def build_histograms_binned_columns_kernel[
     SMEM_BIN_SLOTS: Int,
     sampled_labels: Bool = False,
     sabotage: Int = 0,
+    SMEM_COPIES: Int = 1,
 ](
     argsp: MutPointer[HistogramArgs[O], MutAnyOrigin],
     histograms: MutPointer[O.BinT, MutAnyOrigin],
@@ -2676,6 +2698,8 @@ def build_histograms_binned_columns_kernel[
     No quantile copy exists in this binned-only kernel; shared storage is
     exactly TILE * max_n_bins * NumClasses bins, rounded up by the launcher.
     """
+    comptime assert SMEM_COPIES == 1 or SMEM_COPIES == 4
+    comptime assert WARP_SIZE % SMEM_COPIES == 0
     comptime assert SMEM_BIN_SLOTS * size_of[O.BinT]() <= 16384
     ref args = argsp[unsafe_offset=0]
     var dataset = args.dataset.copy()
@@ -2690,8 +2714,11 @@ def build_histograms_binned_columns_kernel[
     var histogram = stack_allocation[
         SMEM_BIN_SLOTS, O.BinT, address_space=AddressSpace.SHARED
     ]()
+    var replica_stride = live * feature_stride
+    var replica = (Int(thread_idx.x) % WARP_SIZE) // (WARP_SIZE // SMEM_COPIES)
+    var replica_offset = replica * replica_stride
     var k = Int(thread_idx.x)
-    while k < live * feature_stride:
+    while k < replica_stride * SMEM_COPIES:
         histogram[unsafe_offset=k] = O.BinT()
         k += TPB
     barrier()
@@ -2699,7 +2726,7 @@ def build_histograms_binned_columns_kernel[
     var end = item.instances.begin + item.instances.count
     var stride = TPB * Int(workload.num_blocks)
     comptime AGG = (
-        HIST_SIMD_AGG_DEFAULT and sabotage == 0 and not O.BinT.weighted
+        HIST_SIMD_AGG_DEFAULT and sabotage == 0 and not O.BinT.weighted and SMEM_COPIES == 1
     )
     comptime if AGG:
         # every lane runs the same trips so the SIMD sums see a full group
@@ -2784,7 +2811,7 @@ def build_histograms_binned_columns_kernel[
                 comptime if sabotage == 3:
                     bin_index = Int32(0)
                 objective.IncrementHistogram(
-                    histogram.unsafe_offset(lane * feature_stride), n_bins,
+                    histogram.unsafe_offset(replica_offset + lane * feature_stride), n_bins,
                     bin_index, label, dataset, stat_idx,
                 )
         i += stride
@@ -2796,10 +2823,16 @@ def build_histograms_binned_columns_kernel[
             var destination = (nid * Int(columns_in_batch) + first + lane) * feature_stride
             k = Int(thread_idx.x)
             while k < live_bins:
-                O.BinT.AtomicAdd(
-                    histograms.unsafe_offset(destination + k),
-                    histogram[unsafe_offset=lane * feature_stride + k],
-                )
+                comptime if SMEM_COPIES == 1:
+                    O.BinT.AtomicAdd(
+                        histograms.unsafe_offset(destination + k),
+                        histogram[unsafe_offset=lane * feature_stride + k],
+                    )
+                else:
+                    var acc = O.BinT()
+                    comptime for copy in range(SMEM_COPIES):
+                        acc = acc + histogram[unsafe_offset=copy * replica_stride + lane * feature_stride + k]
+                    O.BinT.AtomicAdd(histograms.unsafe_offset(destination + k), acc)
                 k += TPB
 
 
@@ -2907,7 +2940,7 @@ def launch_build_histograms_kernel[
             comptime USE4 = (
                 DEFAULT4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]()
             )
-            comptime TILE = 10 if is_defined[
+            comptime TILE = 4 if IDN_RF_STREAM_REPLICAS else (10 if is_defined[
                 "MOJOLEARN_RF_HIST_COLUMNS10"
             ]() else (
                 8 if (
@@ -2922,16 +2955,22 @@ def launch_build_histograms_kernel[
                 ) else (
                     4 if USE4 else 2
                 )
-            )
+            ))
             comptime ENABLED = (
-                USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
+                IDN_RF_STREAM_REPLICAS or USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
             )
-            comptime if ENABLED and SMEM_COPIES == 1 and sabotage == 0:
-                var need = TILE * max_n_bins * num_outputs * size_of[O.BinT]()
+            comptime COPIES = 4 if IDN_RF_STREAM_REPLICAS else 1
+            comptime if ENABLED and (SMEM_COPIES == 1 or IDN_RF_STREAM_REPLICAS) and sabotage == 0:
+                # Actual bin bytes bound the four-column replicated footprint.
+                # Above16KiB the original single-column replica/fallback path runs.
+                var need = COPIES * TILE * max_n_bins * num_outputs * size_of[O.BinT]()
                 comptime for BYTES in [2048, 4096, 8192, 16384]:
                     comptime SLOTS = BYTES // size_of[O.BinT]()
                     if num_outputs > 0 and need > 0 and need <= SLOTS * size_of[O.BinT]():
-                        comptime tiled = build_histograms_binned_columns_kernel[O, TPB, TILE, SLOTS, sampled_labels]
+                        comptime tiled = build_histograms_binned_columns_kernel[O, TPB, TILE, SLOTS, sampled_labels, 0, COPIES]
+                        comptime if IDN_RF_STREAM_REPLICAS:
+                            ref audit = _STREAM_REPLICA_AUDIT.get_or_create_ptr()[]
+                            _ = Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.launches), Int64(1))
                         log_launch_ctx(ctx, "histogram_binned_columns" + String(TILE) + "_" + String(BYTES))
                         ctx.enqueue_function[tiled](
                             argsp.unsafe_origin_cast[MutAnyOrigin](),
@@ -2959,7 +2998,7 @@ def launch_build_histograms_kernel[
                 sabotage,
                 True,
                 sampled_labels,
-                SMEM_COPIES,
+                4 if IDN_RF_STREAM_REPLICAS else SMEM_COPIES,
             ]
             log_launch_ctx(ctx, "histogram_binned")
             ctx.enqueue_function[ksb](

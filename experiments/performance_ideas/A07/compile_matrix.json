@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "id": "A07",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "default_policy": "Production 256-row tasks require IDENTICAL + MOJOLEARN_IDN_RF_TASK_ROWS256. Incumbent512-row histogram map and TPB128 partition map remain defaults; graph buckets require separate define.",
+  "entrance": "experiments/performance_ideas/A07/histogram_tasks.mojo",
+  "source_scope": "Implemented real production histogram WorkloadInfo granularity256 through hostqueue and device-loop histogram maps, preserving partition table and existing exact integer/fixed-point weighted bins. Graph buckets and standalone node histograms remain separately instantiated. Full device/host identity/fit quality pending.",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "Unknown target.",
+  "targets": {
+    "nvidia": "sm_89",
+    "amd": "gfx942",
+    "apple": "apple-m1 + metal:1"
+  },
+  "compile_command": "python3 gemm/experiments/compile_matrix.py --ids A07 --vendors nvidia amd --evidence /absolute/external/evidence/A07",
+  "compile_prerequisites": [
+    "pixi install --locked -e default; activated Mojo1.0.0 ed45d567",
+    "clean frozen tracked source; compile_slot semaphore; MOJOLEARN_COMPILE_JOBS=1 and -j1",
+    "sm_89/gfx942 cross-builds embed device objects; rebuild native executable on remote Linux before execution",
+    "No GPU execution or timing occurs during matrix build"
+  ],
+  "arms": [
+    {
+      "name": "rank_static",
+      "source": "experiments/performance_ideas/A07/check.mojo",
+      "defines": [],
+      "runtime_environment": {}
+    },
+    {
+      "name": "bounded_merge",
+      "source": "experiments/performance_ideas/A07/check.mojo",
+      "defines": [
+        "MOJOLEARN_RBC_CANON_MERGE=1"
+      ],
+      "runtime_environment": {}
+    },
+    {
+      "name": "degree_tasks",
+      "source": "experiments/performance_ideas/A07/check.mojo",
+      "defines": [
+        "MOJOLEARN_RBC_CANON_DEGREE_BUCKETS=1"
+      ],
+      "runtime_environment": {}
+    },
+    {
+      "name": "production_default512",
+      "source": "experiments/performance_ideas/A07/production_check.mojo",
+      "defines": []
+    },
+    {
+      "name": "production_tasks256",
+      "source": "experiments/performance_ideas/A07/production_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
+      ]
+    },
+    {
+      "name": "histogram_tasks256",
+      "source": "experiments/performance_ideas/A07/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
+      ]
+    },
+    {
+      "name": "degree_histogram_tasks256",
+      "source": "experiments/performance_ideas/A07/check.mojo",
+      "defines": [
+        "MOJOLEARN_RBC_CANON_DEGREE_BUCKETS=1",
+        "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
+      ]
+    }
+  ],
+  "production_entrances": [
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:HIST_ITEMS_PER_THREAD",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:HIST_WORKLOAD_GRANULARITY"
+  ]
+}

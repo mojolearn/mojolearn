@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "id": "N07",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "default_policy": "Production streamed replicas require IDENTICAL + MOJOLEARN_IDN_RF_STREAM_REPLICAS; incumbent tiled/atomic paths retained. Standalone adapter only explicit.",
+  "entrance": "experiments/performance_ideas/N07/streamed_histogram.mojo",
+  "source_scope": "Implemented production four-column replicated histograms on existing integer/fixed-point bins, including weighted forest caller. Existing scales/quantization retained; above16KiB uses original bounded single-column fallback. Device/host identity and full fit quality remain pending.",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "Unknown target.",
+  "targets": {
+    "nvidia": "sm_89",
+    "amd": "gfx942",
+    "apple": "apple-m1 + metal:1"
+  },
+  "compile_command": "python3 gemm/experiments/compile_matrix.py --ids N07 --vendors nvidia amd --evidence /absolute/external/evidence/N07",
+  "compile_prerequisites": [
+    "pixi install --locked -e default; activated Mojo1.0.0 ed45d567",
+    "clean frozen tracked source; compile_slot semaphore; MOJOLEARN_COMPILE_JOBS=1 and -j1",
+    "sm_89/gfx942 cross-builds embed device objects; rebuild native executable on remote Linux before execution",
+    "No GPU execution or timing occurs during matrix build"
+  ],
+  "arms": [
+    {
+      "name": "baseline",
+      "source": "experiments/performance_ideas/N07/check.mojo",
+      "defines": []
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/N07/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RF_STREAM_REPLICAS=1"
+      ]
+    },
+    {
+      "name": "production_baseline",
+      "source": "experiments/performance_ideas/N07/production_check.mojo",
+      "defines": []
+    },
+    {
+      "name": "production_stream_replicas",
+      "source": "experiments/performance_ideas/N07/production_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RF_STREAM_REPLICAS=1"
+      ]
+    }
+  ],
+  "production_entrances": [
+    "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:IDN_RF_STREAM_REPLICAS",
+    "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:launch_build_histograms_kernel"
+  ]
+}

@@ -8,8 +8,9 @@ column's weight and bias gradients over rows. The backward is the
 reference's closed form dx = rstd (g - mean(g) - xhat mean(g xhat)) with
 g = dy w."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_rsqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST, ftz, identical_div, identical_rsqrt
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 #: lane idn-loss-norm-folds (2026-10-04): under IDENTICAL the dweight / dbias
 #: column folds are BLOCKED on every column (device and host run this same
@@ -19,7 +20,8 @@ from std.sys.compile import is_defined
 #: size is a function of M alone. One block (M <= 64) is the single chain.
 #: It replaced one M-term chain per column.
 #: `-D MOJOLEARN_LN_FOLD_BLOCK_OFF` restores the single chain.
-comptime LN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+comptime LN_FOLD_BLOCK = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_LN_FAST_BLOCK_FOLD"]())
 
 
 def ln_fold_rows(M: Int) -> Int:

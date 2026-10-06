@@ -42,12 +42,14 @@ comptime AFN_LM_NOSYNC = BYTE_LM_FAST_APPLE and (
 #: the three host waits the non-IDENTICAL tiers kept there ("old fences",
 #: transformer_backward.mojo `_bwd_rms_norm_kernels`): 6 per layer.
 comptime AFN_LM_BWD_NOSYNC = BYTE_LM_FAST_APPLE and (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_AFN_LM_BWD_NOSYNC"]() or _AFN_LM_ALL
 )
 #: -D MOJOLEARN_AFN_LM_BWD_FUSE: the block backward takes IDENTICAL's fused
 #: Apple routes on FAST (fused SiLU-gate VJP, norm2 + residual fused, the
 #: shipped norm kernel arm), which FAST had been routed around.
 comptime AFN_LM_BWD_FUSE = BYTE_LM_FAST_APPLE and (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_AFN_LM_BWD_FUSE"]() or _AFN_LM_ALL
 )
 #: -D MOJOLEARN_AFN_LM_PARAM_VIEWS: every block's nine weights are views of
@@ -55,6 +57,7 @@ comptime AFN_LM_BWD_FUSE = BYTE_LM_FAST_APPLE and (
 #: re-bound each step: no unpack and no pack launch (2 per layer), and the
 #: 18 per-layer separately allocated buffers are dropped.
 comptime AFN_LM_PARAM_VIEWS = BYTE_LM_FAST_APPLE and (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_AFN_LM_PARAM_VIEWS"]() or _AFN_LM_ALL
 )
 #: -D MOJOLEARN_AFN_LM_HEAD_FUSE: softmax, cross entropy, the mean loss and

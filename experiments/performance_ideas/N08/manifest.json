@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "id": "N08",
+  "title": "Fuse canonical radius distance decisions into device CSR scan/fill",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "status": "build_passed",
+  "implementation_paths": [
+    "experiments/performance_ideas/N08/fused_threshold.mojo",
+    "experiments/performance_ideas/N08/check.mojo",
+    "gemm/experiments/native_build.py"
+  ],
+  "candidate_defines": [],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/N08/check.mojo",
+    "--mojo",
+    "{mojo}",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "gemm/checks/gemm_step_arms_check.mojo",
+    "core/gemm_identity_check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host output bits",
+    "exact intermediate outputs and poison control",
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Full graph/DBSCAN fit timing and labels required; integer decisions+scan planes are counted",
+    "No distance recomputation in fill; threshold neighbors and signed-zero fixtures",
+    "Native harness instantiates explicit control and candidate; all compared cells and poison/failure gates required",
+    "Build target/column must match actual device; CPU identity uses independent host references and separately owed host caller qualification, not a GPU DeviceContext host run"
+  ],
+  "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
+  "blocker": null,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/N08/check.mojo",
+    "--mojo",
+    "{mojo}",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "validation_argv": [
+    "{output}"
+  ]
+}

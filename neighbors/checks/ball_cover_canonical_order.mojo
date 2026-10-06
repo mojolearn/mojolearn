@@ -52,37 +52,26 @@ ASCENDING COLUMN INDEX IS ALSO THE STANDARD CANONICAL CSR, not a compromise:
 makes `adj_ja` comparable across two vendors by a straight byte compare, which
 is what the AMD leg needs.
 
-WHY RANK-BY-COUNTING AND NOT A SEGMENTED RADIX
-----------------------------------------------
-`gbdt/gpu_util/kernel/segmented_sort.mojo::launch_segmented_radix_sort` is the
-only one of the tree's two segmented sorts that takes RAGGED segments
-(`core/segmented_sort.mojo` computes `base = seg * seg_size` and cannot express
-a CSR), and it is bit-exact on every vendor. It is still the wrong SHAPE here:
+BOUNDED WORK FOR DENSE ROWS
+---------------------------
+The original rank-by-counting pass performs sum(degree**2) comparisons.
+Splitting CSR batches limits total edges but cannot shorten a dense row.
+The opt-in MOJOLEARN_RBC_CANON_MERGE control uses stable bottom-up merges
+for rows longer than one block; MOJOLEARN_RBC_CANON_DEGREE_BUCKETS instead
+compacts rows by the exact merge-level count. Both are default off pending
+NVIDIA/AMD qualification. Each
+key binary-searches its rank in the opposite sorted run. The left run
+uses lower_bound and the right uses upper_bound, so equal keys retain
+multiplicity without output collisions. This is O(nnz * log(max_degree)^2)
+integer comparisons and one nnz-sized scratch, not a change to the graph.
 
-  1. it puts the segment on `grid.y`, and CUDA caps `maxGridSize[1]` at 65,535.
-     DBSCAN's default `batch_size` is `n_rows` (`dbscan/impl/
-     runner.mojo:302`), so `n_segments` is 200,000 on this lane's own scaling
-     fixture. `gbdt/` never hit this because its segments are leaves, bounded
-     by `2^depth`.
-  2. `blocks_wide` comes from the GLOBAL `max_segment_size`, so one long row
-     makes every one of `n_queries` segments launch that many blocks, most of
-     them returning on their first line.
-
-Rank-by-counting is ONE launch on `grid.x`, needs no scratch but the output,
-and is the construction THIS LANE ALREADY CHOSE for its index build
-(`ball_cover.mojo`'s DEVIATION 3: "Rank-by-counting needs no barrier, no
-shared memory and no atomics, and it is deterministic").
-
-COST, UNMEASURED
-----------------
-The shape is `sum over rows of |row|^2 / RBC_CANON_TPB` per-thread compares
-spread over `n_queries` blocks, so it scales with the SQUARE of the mean degree
-while the query kernel it follows scales with the first power. At a mean degree
-in the tens it should disappear; at a mean degree in the high hundreds it will
-not. THIS BANNER MUST BE REPLACED BY NUMBERS. If it binds, the fix is a second
-tier: route rows above a threshold through `launch_segmented_radix_sort`, where
-the long rows are FEW so `grid.y` and `blocks_wide` are both small. That tier
-is NOT built and must not be assumed.
+The default retains the original one-launch rank pass. The global-merge
+control retains that rank pass only when the entire batch
+fits one key per thread (maximum degree <= RBC_CANON_TPB). This boundary
+comes from the block's work assignment, not a benchmark shape. Its tie
+rule also orders by original position, although actual RBC rows are unique.
+All dispatch is vendor independent. A separate max-degree pass determines
+the number of merge levels; no data or degree estimate changes an edge.
 
 PORTABILITY
 -----------
@@ -98,6 +87,9 @@ what the AMD leg owes.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_idx, thread_idx
+from std.atomic import Atomic
+from std.sys.compile import is_defined
+from core.device_zero import enqueue_fill
 
 from checks.numerics import PIN_CROSS_VENDOR
 
@@ -117,11 +109,10 @@ def rbc_canonical_row_order_kernel(
     """One block per row. Each element's destination is the number of elements
     of the SAME row that are strictly smaller.
 
-    The keys are unique within a row, so the map is a bijection onto [0, n) and
-    every output slot is written exactly once. No initialisation, no atomics,
-    no barrier, and no tie rule to get wrong. A duplicate column would break
-    that invariant by writing one slot twice and leaving another unwritten,
-    which is why the gate asserts uniqueness BEFORE it asserts order.
+    The rank uses (key, original position), so duplicate keys retain their
+    multiplicity and every output slot is written exactly once. Actual RBC
+    neighborhoods have unique columns; the tie rule also makes the helper
+    safe for repeated keys. No initialisation, atomics or barrier are needed.
 
     OUT OF PLACE. `adj_ja_in` and `adj_ja_out` must be distinct: ranks are read
     from the input while the output is written, and there is no ordering
@@ -138,11 +129,148 @@ def rbc_canonical_row_order_kernel(
         var key = adj_ja_in.unsafe_load(start + p)
         var rank = 0
         for q in range(n):
-            if adj_ja_in.unsafe_load(start + q) < key:
+            var other = adj_ja_in.unsafe_load(start + q)
+            if other < key or (other == key and q < p):
                 rank += 1
         adj_ja_out.unsafe_store(start + rank, key)
         p += RBC_CANON_TPB
 
+
+def _rbc_max_degree_kernel(
+    adj_ia: MutPointer[Int32, MutAnyOrigin],
+    n_queries: Int32,
+    maximum: MutPointer[Int32, MutAnyOrigin],
+):
+    var row = Int(block_idx.x) * RBC_CANON_TPB + Int(thread_idx.x)
+    if row < Int(n_queries):
+        var degree = adj_ia[row + 1] - adj_ia[row]
+        _ = Atomic[DType.int32].max(maximum, degree)
+
+
+def _rbc_merge_row(
+    row: Int,
+    adj_ia: MutPointer[Int32, MutAnyOrigin],
+    src: MutPointer[Int32, MutAnyOrigin],
+    dst: MutPointer[Int32, MutAnyOrigin],
+    width_in: Int32,
+):
+    """Merge adjacent sorted runs; stable binary-search ranks are disjoint."""
+    var start = Int(adj_ia[row])
+    var n = Int(adj_ia[row + 1]) - start
+    var width = Int(width_in)
+    var p = Int(thread_idx.x)
+    while p < n:
+        var pair = (p // (2 * width)) * (2 * width)
+        var middle = min(pair + width, n)
+        var end = min(pair + 2 * width, n)
+        var left = p < middle
+        var low = middle if left else pair
+        var high = end if left else middle
+        var other_start = low
+        var own_start = pair if left else middle
+        var key = src[start + p]
+        while low < high:
+            var mid = low + (high - low) // 2
+            var other = src[start + mid]
+            if other < key or (not left and other == key):
+                low = mid + 1
+            else:
+                high = mid
+        var destination = pair + (p - own_start) + (low - other_start)
+        dst[start + destination] = key
+        p += RBC_CANON_TPB
+
+
+
+def _rbc_merge_rows_kernel(adj_ia: MutPointer[Int32, MutAnyOrigin], src: MutPointer[Int32, MutAnyOrigin], dst: MutPointer[Int32, MutAnyOrigin], width_in: Int32):
+    _rbc_merge_row(Int(block_idx.x), adj_ia, src, dst, width_in)
+
+
+def _degree_bucket(n: Int) -> Int:
+    # ceil(log2(degree)): each row executes exactly the merge levels it
+    # needs. Bucket boundaries follow work complexity, never board sizes.
+    var value = max(n - 1, 0)
+    var bucket = 0
+    while value > 0:
+        value >>= 1
+        bucket += 1
+    return bucket
+
+
+def _rbc_bucket_count(ia: MutPointer[Int32, MutAnyOrigin], n: Int32, counts: MutPointer[Int32, MutAnyOrigin]):
+    var row = Int(block_idx.x) * RBC_CANON_TPB + Int(thread_idx.x)
+    if row < Int(n):
+        var bucket = _degree_bucket(Int(ia[row + 1] - ia[row]))
+        _ = Atomic[DType.int32].fetch_add(counts + bucket, Int32(1))
+
+
+def _rbc_bucket_offsets(counts: MutPointer[Int32, MutAnyOrigin], offsets: MutPointer[Int32, MutAnyOrigin]):
+    # Exactly 32 integer bucket counts: bounded control-plane prefix.
+    var run = Int32(0)
+    for b in range(32):
+        offsets[b] = run
+        run += counts[b]
+        counts[b] = Int32(0)
+    offsets[32] = run
+
+
+def _rbc_bucket_scatter(ia: MutPointer[Int32, MutAnyOrigin], n: Int32, counts: MutPointer[Int32, MutAnyOrigin], offsets: MutPointer[Int32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin]):
+    var row = Int(block_idx.x) * RBC_CANON_TPB + Int(thread_idx.x)
+    if row < Int(n):
+        var bucket = _degree_bucket(Int(ia[row + 1] - ia[row]))
+        var slot = Atomic[DType.int32].fetch_add(counts + bucket, Int32(1))
+        rows[Int(offsets[bucket] + slot)] = Int32(row)
+
+
+def _rbc_bucket_merge(ia: MutPointer[Int32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin], offset: Int32, src: MutPointer[Int32, MutAnyOrigin], dst: MutPointer[Int32, MutAnyOrigin], width: Int32):
+    var row = Int(rows[Int(offset) + Int(block_idx.x)])
+    _rbc_merge_row(row, ia, src, dst, width)
+
+
+def _rbc_bucket_copy(ia: MutPointer[Int32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin], offset: Int32, src: MutPointer[Int32, MutAnyOrigin], dst: MutPointer[Int32, MutAnyOrigin]):
+    var row = Int(rows[Int(offset) + Int(block_idx.x)])
+    var p = Int(ia[row]) + Int(thread_idx.x)
+    while p < Int(ia[row + 1]):
+        dst[p] = src[p]
+        p += RBC_CANON_TPB
+
+
+def rbc_canonicalize_degree_buckets(ctx: DeviceContext, mut ia: DeviceBuffer[DType.int32], mut ja: DeviceBuffer[DType.int32], rows_count: Int, nnz: Int) raises:
+    """Compact degree tasks; nnz scratch + one row descriptor per row.
+    Atomic task order cannot affect output: tasks own disjoint CSR rows and
+    sorting comparisons/duplicate tie rules are the existing stable merge.
+    One 33-word readback replaces maximum-degree readback. No row data
+    arithmetic runs on the host; counts only determine kernel launch grids.
+    All asynchronous storage lives until the final completion."""
+    if rows_count <= 0 or nnz <= 0:
+        return
+    var counts = ctx.enqueue_create_buffer[DType.int32](32)
+    var offsets = ctx.enqueue_create_buffer[DType.int32](33)
+    var tasks = ctx.enqueue_create_buffer[DType.int32](rows_count)
+    var scratch = ctx.enqueue_create_buffer[DType.int32](nnz)
+    enqueue_fill(ctx, counts, Int32(0))
+    var blocks = (rows_count + RBC_CANON_TPB - 1) // RBC_CANON_TPB
+    ctx.enqueue_function[_rbc_bucket_count](ia.unsafe_ptr(), Int32(rows_count), counts.unsafe_ptr(), grid_dim=(blocks,1,1), block_dim=(RBC_CANON_TPB,1,1))
+    ctx.enqueue_function[_rbc_bucket_offsets](counts.unsafe_ptr(), offsets.unsafe_ptr(), grid_dim=(1,1,1), block_dim=(1,1,1))
+    ctx.enqueue_function[_rbc_bucket_scatter](ia.unsafe_ptr(), Int32(rows_count), counts.unsafe_ptr(), offsets.unsafe_ptr(), tasks.unsafe_ptr(), grid_dim=(blocks,1,1), block_dim=(RBC_CANON_TPB,1,1))
+    var ho = ctx.enqueue_create_host_buffer[DType.int32](33)
+    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=offsets)
+    ctx.synchronize()
+    for bucket in range(1,32):
+        var count = Int(ho[bucket+1] - ho[bucket])
+        if count <= 0:
+            continue
+        var width = 1
+        for level in range(bucket):
+            if level % 2 == 0:
+                ctx.enqueue_function[_rbc_bucket_merge](ia.unsafe_ptr(), tasks.unsafe_ptr(), ho[bucket], ja.unsafe_ptr(), scratch.unsafe_ptr(), Int32(width), grid_dim=(count,1,1), block_dim=(RBC_CANON_TPB,1,1))
+            else:
+                ctx.enqueue_function[_rbc_bucket_merge](ia.unsafe_ptr(), tasks.unsafe_ptr(), ho[bucket], scratch.unsafe_ptr(), ja.unsafe_ptr(), Int32(width), grid_dim=(count,1,1), block_dim=(RBC_CANON_TPB,1,1))
+            width *= 2
+        if bucket % 2 != 0:
+            ctx.enqueue_function[_rbc_bucket_copy](ia.unsafe_ptr(), tasks.unsafe_ptr(), ho[bucket], scratch.unsafe_ptr(), ja.unsafe_ptr(), grid_dim=(count,1,1), block_dim=(RBC_CANON_TPB,1,1))
+    ctx.synchronize()
+    _ = counts^; _ = offsets^; _ = tasks^; _ = scratch^
 
 def rbc_canonicalize_row_order(
     ctx: DeviceContext,
@@ -170,25 +298,73 @@ def rbc_canonicalize_row_order(
     if n_queries <= 0 or nnz <= 0:
         return
 
-    var scratch = ctx.enqueue_create_buffer[DType.int32](nnz)
-    ctx.synchronize()
-    ctx.enqueue_function[rbc_canonical_row_order_kernel](
-        adj_ia.unsafe_ptr(),
-        adj_ja.unsafe_ptr(),
-        scratch.unsafe_ptr(),
-        grid_dim=(n_queries, 1, 1),
+    # I13 new candidate remains default off. Qualification is pending: native
+    # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
+    # NEVER RUN — PENDING MEASUREMENT
+    comptime if is_defined["MOJOLEARN_RBC_CANON_DEGREE_BUCKETS"]():
+        rbc_canonicalize_degree_buckets(ctx, adj_ia, adj_ja, n_queries, nnz)
+        return
+
+    # NEVER RUN — PENDING MEASUREMENT
+    comptime if not is_defined["MOJOLEARN_RBC_CANON_MERGE"]():
+        var ranked = ctx.enqueue_create_buffer[DType.int32](nnz)
+        ctx.enqueue_function[rbc_canonical_row_order_kernel](
+            adj_ia.unsafe_ptr(), adj_ja.unsafe_ptr(), ranked.unsafe_ptr(),
+            grid_dim=(n_queries,1,1), block_dim=(RBC_CANON_TPB,1,1),
+        )
+        ctx.enqueue_copy(dst_buf=adj_ja.create_sub_buffer[DType.int32](0,nnz),src_buf=ranked)
+        ctx.synchronize()
+        _ = ranked^
+        return
+
+    var maximum = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill(ctx, maximum, Int32(0))
+    ctx.enqueue_function[_rbc_max_degree_kernel](
+        adj_ia.unsafe_ptr(), Int32(n_queries), maximum.unsafe_ptr(),
+        grid_dim=((n_queries + RBC_CANON_TPB - 1) // RBC_CANON_TPB, 1, 1),
         block_dim=(RBC_CANON_TPB, 1, 1),
     )
-    # `adj_ja` is allocated to a CAPACITY, which the caller may size above
-    # `nnz` (the max_k arm sizes it `n_queries * max_k`). Copying an
-    # nnz-sized scratch into the whole buffer fails with "not enough data
-    # in src", which is how this was found. Only the live prefix moves.
-    ctx.enqueue_copy(
-        dst_buf=adj_ja.create_sub_buffer[DType.int32](0, nnz),
-        src_buf=scratch,
-    )
+    var host_max = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=host_max.unsafe_ptr(), src_buf=maximum)
     ctx.synchronize()
-    # [[mojo-buffer-freed-at-last-use]]: `scratch` is the copy's SOURCE and its
-    # last textual use is the enqueue, which is asynchronous. Held past the
-    # synchronize or the copy reads freed memory.
+    _ = maximum^
+    var max_degree = Int(host_max.unsafe_ptr()[0])
+    if max_degree <= 1:
+        return
+    var scratch = ctx.enqueue_create_buffer[DType.int32](nnz)
+    if max_degree <= RBC_CANON_TPB:
+        ctx.enqueue_function[rbc_canonical_row_order_kernel](
+            adj_ia.unsafe_ptr(), adj_ja.unsafe_ptr(), scratch.unsafe_ptr(),
+            grid_dim=(n_queries, 1, 1), block_dim=(RBC_CANON_TPB, 1, 1),
+        )
+        ctx.enqueue_copy(
+            dst_buf=adj_ja.create_sub_buffer[DType.int32](0, nnz),
+            src_buf=scratch,
+        )
+    else:
+        var width = 1
+        var in_original = True
+        while width < max_degree:
+            if in_original:
+                ctx.enqueue_function[_rbc_merge_rows_kernel](
+                    adj_ia.unsafe_ptr(), adj_ja.unsafe_ptr(), scratch.unsafe_ptr(),
+                    Int32(width), grid_dim=(n_queries, 1, 1),
+                    block_dim=(RBC_CANON_TPB, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[_rbc_merge_rows_kernel](
+                    adj_ia.unsafe_ptr(), scratch.unsafe_ptr(), adj_ja.unsafe_ptr(),
+                    Int32(width), grid_dim=(n_queries, 1, 1),
+                    block_dim=(RBC_CANON_TPB, 1, 1),
+                )
+            in_original = not in_original
+            width *= 2
+        if not in_original:
+            ctx.enqueue_copy(
+                dst_buf=adj_ja.create_sub_buffer[DType.int32](0, nnz),
+                src_buf=scratch,
+            )
+    ctx.synchronize()
+    # Retain every async source until completion, including the max-degree
+    # scalar. No CSR capacity beyond its live prefix is read or overwritten.
     _ = scratch^

@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "id": "F14",
+  "title": "Compare exact grouped query rows and fixed-probe bounded IVF list tasks",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "neighbors/impl/detail/fast_topk_knn.mojo",
+    "experiments/performance_ideas/F14/caller.py",
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+    "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo",
+    "experiments/performance_ideas/F14/ann_caller.py"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_KNN_FAST_QUERY_GROUP4"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F14",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F14",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F14/caller.py",
+    "experiments/performance_ideas/F14/ann_caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "exhaustive exact neighbor candidate certification",
+    "same k/search contract",
+    "neighbor distance error tolerance, no digest gate",
+    "Approximate ANN variant is independently labeled: same probes/filters/candidatecounts, exactfullprobes control and no recall regression"
+  ],
+  "timing_contract": "Exact public kneighbors through distance/index output reads; fit/index construction remains explicit",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "core",
+  "prerequisite_bindings": [],
+  "build_uses_compile_slot": true,
+  "variants": {
+    "ann": [
+      "MOJOLEARN_IVF_FAST_BALANCED_TASKS=1",
+      "MOJOLEARN_IVF_FAST_BALANCED_AUDIT=1"
+    ]
+  },
+  "variant_baseline_defines": {
+    "ann": [
+      "MOJOLEARN_IVF_FAST_BALANCED_AUDIT=1"
+    ]
+  },
+  "variant_bindings": {
+    "ann": "ivf"
+  },
+  "variant_callers": {
+    "ann": "ann_caller.py"
+  },
+  "variant_prerequisite_bindings": {
+    "ann": [
+      "core"
+    ]
+  },
+  "paired_build": true,
+  "variant_semantic_equal_fields": {
+    "ann": [
+      "candidate_counts"
+    ]
+  },
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F14",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}

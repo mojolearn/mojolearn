@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "id": "I20",
+  "mode": "identical",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "DeviceContext oracle is GPU-only",
+  "status": "pending",
+  "default_enabled": false,
+  "arms": [
+    {
+      "name": "baseline",
+      "source": "experiments/performance_ideas/I20/check.mojo",
+      "defines": []
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I20/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_KDE_PARTIAL_POOL=1"
+      ]
+    },
+    {
+      "name": "workspace-lifecycle",
+      "source": "kde/checks/reused_workspace_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_KDE_PARTIAL_POOL=1"
+      ]
+    }
+  ]
+}

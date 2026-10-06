@@ -1069,6 +1069,58 @@ def mahal_stacked_kernel(
     )
 
 
+# Default-off schedule candidate: a byte-bounded component batch instead
+# of retaining all K projected sample matrices. Every GEMM cell keeps the
+# same contract_partition(d), and mahal_fold is unchanged.
+# I21 new candidate remains default off. Qualification is pending: native
+# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
+comptime GMM_COMPONENT_BATCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    # NEVER RUN — PENDING MEASUREMENT
+    and is_defined["MOJOLEARN_IDN_GMM_COMPONENT_BATCH"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime GMM_COMPONENT_BATCH_FLOATS = 1 << 22  # all extra scratch <=16 MiB
+
+def gmm_component_batch_workspace(n: Int,d: Int,width: Int) -> Int:
+    # The selected GEMM workspace need not be monotone in its shape. Bound
+    # every admitted tail width rather than extrapolating from the full batch.
+    var cells=0
+    for tail in range(1,9):
+        if tail<=width:
+            cells=max(cells,identical_gemm_workspace_max_floats(n,tail*d,d))
+            cells=max(cells,identical_gemm_workspace_max_floats(tail,tail*d,d))
+    return cells
+
+def gmm_component_batch_width(n: Int,d: Int,k: Int) -> Int:
+    # Buffer-index admission independent of device/dataset identity. Include
+    # precision pack, sample projection, mean projection and GEMM workspace.
+    if n<=0 or d<=0 or k<=0 or d>2147483647//d or n>2147483647//d:
+        return 0
+    for width in range(min(8,k),0,-1):
+        if d>2147483647//width or n>2147483647//(width*d):
+            continue
+        var kd = width*d
+        var cells = d*kd+n*kd+width*kd+gmm_component_batch_workspace(n,d,width)
+        if cells<=GMM_COMPONENT_BATCH_FLOATS:
+            return width
+    return 0
+
+def mahal_component_batch_kernel(yp: MutPointer[Float32,MutAnyOrigin],
+    mp: MutPointer[Float32,MutAnyOrigin],result_ptr: MutPointer[Float32,MutAnyOrigin],
+    n_in: Int32,d_in: Int32,total_in: Int32,first_in: Int32,width_in: Int32):
+    var task = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    var width = Int(width_in)
+    if task>=Int(n_in)*width:
+        return
+    var row = task//width
+    var local = task%width
+    var d = Int(d_in)
+    var kd = width*d
+    result_ptr[row*Int(total_in)+Int(first_in)+local] = mahal_fold(
+        yp.unsafe_offset(row*kd+local*d),mp.unsafe_offset(local*kd+local*d),d)
+
+
 def gmm_e_step(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -1208,10 +1260,36 @@ def gmm_e_step(
                 Int32(n), Int32(d), Int32(ncomp), fe_dl2pi,
                 grid_dim=(fe_grid, 1, 1), block_dim=(FE_TPB, 1, 1),
             )
+    var batched = False
+    comptime if GMM_COMPONENT_BATCH:
+        var width = gmm_component_batch_width(n,d,ncomp)
+        batched = not fused and sabotage==GMM_SAB_NONE and width>0
+        if batched:
+            # Allocate once for the largest batch; tail batches use exactly
+            # their own row stride. Both GEMMs and the consumer are stream
+            # ordered before the next batch reuses these buffers.
+            var kdmax = width*d
+            var pbatch = ctx.enqueue_create_buffer[DType.float32](d*kdmax)
+            var ybatch = ctx.enqueue_create_buffer[DType.float32](n*kdmax)
+            var mbatch = ctx.enqueue_create_buffer[DType.float32](width*kdmax)
+            var wsmax = gmm_component_batch_workspace(n,d,width)
+            var bws = ctx.enqueue_create_buffer[DType.float32](wsmax)
+            for first in range(0,ncomp,width):
+                var count = min(width,ncomp-first)
+                var kd = count*d
+                var ps = prec.create_sub_buffer[DType.float32](first*d*d,count*d*d)
+                var mus = means.create_sub_buffer[DType.float32](first*d,count*d)
+                ctx.enqueue_function[stack_prec_kernel](ps.unsafe_ptr(),pbatch.unsafe_ptr(),Int32(d),Int32(count),grid_dim=((d*kd+255)//256,1,1),block_dim=(256,1,1))
+                identical_gemm_into(ctx,ybatch,x,pbatch,bws,n,kd,d,OP_NN)
+                identical_gemm_into(ctx,mbatch,mus,pbatch,bws,count,kd,d,OP_NN)
+                ctx.enqueue_function[mahal_component_batch_kernel](ybatch.unsafe_ptr(),mbatch.unsafe_ptr(),mahal.unsafe_ptr(),Int32(n),Int32(d),Int32(ncomp),Int32(first),Int32(count),grid_dim=((n*count+row_tpb-1)//row_tpb,1,1),block_dim=(row_tpb,1,1))
+                _ = ps^; _ = mus^
+            ctx.synchronize()
+            _ = pbatch^; _ = ybatch^; _ = mbatch^; _ = bws^
     var stacked = False
     comptime if GMM_ESTEP_STACK:
         stacked = (
-            not fused
+            not fused and not batched
             and sabotage == GMM_SAB_NONE
             and n * ncomp * d <= GMM_ESTEP_STACK_MAX_FLOATS
         )
@@ -1240,7 +1318,7 @@ def gmm_e_step(
         _ = ystack^
         _ = mstack^
         _ = sws^
-    for kc in range(0 if (fused or stacked) else ncomp):
+    for kc in range(0 if (fused or stacked or batched) else ncomp):
         var pk = prec.create_sub_buffer[DType.float32](kc * d * d, d * d)
         var muk = means.create_sub_buffer[DType.float32](kc * d, d)
 

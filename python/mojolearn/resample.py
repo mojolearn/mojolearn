@@ -334,7 +334,7 @@ def _take(a, idx):
     return [a[int(i)] for i in idx]  # cpu-route: Python list input taken by index [py-data-loop]
 
 
-def _gpu_gather(arrays, n, count, seed, numeric_mode):
+def _gpu_gather(arrays, n, count, seed, numeric_mode, replace=True):
     """Return owned results or None for unchanged public fallback."""
     if (numeric_mode or _backend.default_mode()) != "fast" or count <= 0 or n <= 0:
         return None
@@ -359,7 +359,8 @@ def _gpu_gather(arrays, n, count, seed, numeric_mode):
     for x, output in zip(arrays, outputs):  # glue: one native span per argument
         addresses.extend((addr_ro(x, name="array"), addr(output, name="resampled")))
         widths.append(1 if x.ndim == 1 else x.shape[1])
-    if int(mod.resample_gather_gpu(addresses, [n, count, seed] + widths)):
+    route = mod.resample_gather_gpu if replace else getattr(mod, "resample_permutation_gather_gpu", None)
+    if route is not None and int(route(addresses, [n, count, seed] + widths)):
         return outputs
     return None
 
@@ -440,8 +441,15 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
         if len(a) != n:
             raise ValueError(f"mojolearn {where}: Found input variables with inconsistent numbers of samples: "
                              f"{[len(x) for x in arrays]}")
+    count = n if n_samples is None else _int(n_samples, "n_samples", where)
+    if not replace:
+        if count < 0 or count > n:
+            # Preserve existing refusal before requesting native buffers.
+            resample_indices(n, n_samples, replace, random_state, numeric_mode)
+        gathered = _gpu_gather(arrays, n, count, _int(random_state, "random_state", where), numeric_mode, replace=False)
+        if gathered is not None:
+            return gathered[0] if len(gathered) == 1 else gathered
     if replace:
-        count = n if n_samples is None else _int(n_samples, "n_samples", where)
         gathered = _gpu_gather(arrays, n, count, _int(random_state, "random_state", where), numeric_mode)
         if gathered is not None:
             return gathered[0] if len(gathered) == 1 else gathered

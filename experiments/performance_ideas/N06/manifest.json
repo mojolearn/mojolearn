@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "id": "N06",
+  "title": "Keep compact feature gradients in registers without query barriers",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "status": "build_passed",
+  "implementation_paths": [
+    "experiments/performance_ideas/N06/compact_grad.mojo",
+    "experiments/performance_ideas/N06/check.mojo",
+    "transformer/impl/llama/attention_v2.mojo",
+    "gemm/experiments/native_build.py"
+  ],
+  "candidate_defines": [],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/N06/check.mojo",
+    "--mojo",
+    "{mojo}",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "gemm/checks/gemm_step_arms_check.mojo",
+    "core/gemm_identity_check.mojo",
+    "bench/evidence/2026-09-20_attention_v2_cooperative_dkdv_rejected.md"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host output bits",
+    "exact intermediate outputs and poison control",
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Must beat complete v1 training route as well as stock v2; no Apple-rejection performance extrapolation",
+    "Build target/column must match actual device; CPU identity uses independent host references and separately owed host caller qualification, not a GPU DeviceContext host run"
+  ],
+  "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
+  "blocker": null,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/transformer/checks/attention_v2_backward_check.mojo",
+    "--mojo",
+    "{mojo}",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "validation_argv": [
+    "{output}"
+  ]
+}

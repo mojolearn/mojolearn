@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "id": "F15",
+  "title": "Independent mini-batch labeling and bounded stopping work",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "x_cluster/minibatch_fast.mojo",
+    "experiments/performance_ideas/F15/caller.py",
+    "dbscan/estimator.mojo",
+    "hdbscan/impl/detail/fast_apple.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F15",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F15",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F15/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "full clustering fit inertia no material loss",
+    "same starts/seeds/batch and stopping policy",
+    "iterations and cold/repeated scratch use reported",
+    "DBSCAN/HDBSCAN separate full-fit quality and diagnostic graph/stage timing; no phase-instrumented time counted as scored fit",
+    "Independent promoted center-compaction and cross-fit input-pool controls; verify compiled policy, complete fit task quality and preserved previous outputs"
+  ],
+  "timing_contract": "Full fit through centers/labels read; cold and repeat distinct",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "x_cluster",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true,
+  "variants": {
+    "default": [
+      "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"
+    ],
+    "stopping": [
+      "MOJOLEARN_CLUSTER_FAST_STOP_GROUP8"
+    ],
+    "dbscan-outputs": [
+      "MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"
+    ],
+    "hdbscan-downloads": [
+      "MOJOLEARN_HDB_ONE_SYNC"
+    ],
+    "hdbscan-linkage": [
+      "MOJOLEARN_HDB_LINKAGE_DEVICE"
+    ],
+    "hdbscan-selection": [
+      "MOJOLEARN_HDB_SELECT_DEVICE"
+    ],
+    "hdbscan-core": [
+      "MOJOLEARN_HDB_CORE_TILE"
+    ],
+    "center-accumulation": [],
+    "scratch-reuse": []
+  },
+  "variant_bindings": {
+    "dbscan-outputs": "estimators",
+    "hdbscan-downloads": "hdbscan",
+    "hdbscan-linkage": "hdbscan",
+    "hdbscan-selection": "hdbscan",
+    "hdbscan-core": "hdbscan"
+  },
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F15",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "variant_baseline_defines": {
+    "center-accumulation": [
+      "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"
+    ],
+    "scratch-reuse": [
+      "MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"
+    ]
+  }
+}

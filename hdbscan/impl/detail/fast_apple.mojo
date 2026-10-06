@@ -38,6 +38,7 @@ main batchv-hdb-smr-istella: hdbscan istella 44,879 -> 3,800 ms, n_clusters
 # Old-base -11% did not carry; dropped for no demonstrated main gain.
 # See docs/apple-fast/EXPERIMENTS.md (HDB_CORE_TILE).
 comptime HDB_CORE_TILE = HDB_FAST_APPLE and (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_HDB_CORE_TILE"]() or HDB_ALL
 )
 """Core distances from one tiled kernel with a register top-k (core_tile.mojo)."""
@@ -52,11 +53,13 @@ comptime HDB_DEV_BORUVKA = HDB_FAST_APPLE and (
 # Old-base -5% did not carry; dropped for no demonstrated main gain.
 # See docs/apple-fast/EXPERIMENTS.md (HDB_ONE_SYNC).
 comptime HDB_ONE_SYNC = HDB_FAST_APPLE and (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_HDB_ONE_SYNC"]() or HDB_ALL
 )
 """The extract's and the runner's output downloads under one wait each."""
 
 comptime HDB_LINKAGE_DEVICE = HDB_FAST_APPLE and (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_HDB_LINKAGE_DEVICE"]() or HDB_ALL
 )
 """The dendrogram's per-level hook loop as one lock-free union launch (no
@@ -64,6 +67,7 @@ flag readback, dendrogram_union.mojo) and the condense with two status
 readbacks instead of eight waits (tree_device.mojo `_condensed_two_reads`)."""
 
 comptime HDB_SELECT_DEVICE = HDB_FAST_APPLE and (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_HDB_SELECT_DEVICE"]() or HDB_ALL
 )
 """Stabilities, selection, labels, scores and probabilities with no wait in

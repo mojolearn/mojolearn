@@ -126,7 +126,7 @@ from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
 #: (`gbdt/methods/sym_iter_fast.mojo`); every use below sits under one
 from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA, SYM_REUSE_PARTITION
 from gbdt.methods.dynamic_boosting_folds import TFold
-from gbdt.methods.ordered_fast_switches import ORD_ALL
+from gbdt.methods.ordered_fast_switches import ORD_ALL, ORD_DOC_ID_STORAGE
 from gbdt.methods.kernel.pointwise_scores import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_NEWTON_COSINE,
@@ -768,6 +768,9 @@ def fit_oblivious_tree_structure_traced(
                 GATHER_NO_MASK,
             )
             docs = d_observations.copy()
+        var dither_ids = Optional[MutPointer[UInt32, MutAnyOrigin]]()
+        comptime if ORD_DOC_ID_STORAGE:
+            if fold_order:dither_ids = d_doc_ids.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if len(std_scale_word) > 0:
             var scale_word = rebind[MutPointer[Float32, MutAnyOrigin]](
                 std_scale_word[0].unsafe_ptr().unsafe_offset(1)
@@ -776,20 +779,24 @@ def fit_oblivious_tree_structure_traced(
                 calcer.submit_compute_dev(
                     ctx, subsets, d_fold_cindex, docs, doc_count, sm_count,
                     scale_word,
+                    dither_ids=dither_ids,
                 )
             else:
                 calcer.submit_compute_dev(
                     ctx, subsets, cindex, docs, doc_count, sm_count,
                     scale_word,
+                    dither_ids=dither_ids,
                 )
         elif fold_order:
             calcer.submit_compute(
                 ctx, subsets, d_fold_cindex, docs, doc_count, sm_count,
                 fixed_scale,
+                dither_ids=dither_ids,
             )
         else:
             calcer.submit_compute(
-                ctx, subsets, cindex, docs, doc_count, sm_count, fixed_scale
+                ctx, subsets, cindex, docs, doc_count, sm_count, fixed_scale,
+                dither_ids=dither_ids,
             )
         times.end(ctx, "pw.hist")
 

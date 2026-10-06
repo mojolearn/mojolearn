@@ -73,6 +73,7 @@ def check_readback(ctx: DeviceContext) raises:
 
 def main() raises:
     comptime assert is_defined["MOJOLEARN_NUMERIC_IDENTICAL"](), "IDENTICAL required"
+    # I02 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     comptime assert is_defined["MOJOLEARN_STEP_PHASE_TIMERS"](), "counters required"
     if String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != "":
         raise Error("disable phase timing: it adds waits")

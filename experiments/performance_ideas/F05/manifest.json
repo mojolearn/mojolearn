@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "id": "F05",
+  "title": "Narrow softmax at full optimizer and line-search caller",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/F05/caller.py",
+    "experiments/apple_fast/gemm/softmax_narrow.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_SOFTMAX_FAST_G2_NARROW",
+    "MOJOLEARN_SOFTMAX_G2_AUDIT"
+  ],
+  "baseline_defines": [
+    "MOJOLEARN_SOFTMAX_G2_AUDIT"
+  ],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F05",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F05",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F05/caller.py",
+    "tools/softmax_g2_quality.py"
+  ],
+  "depends_on": [
+    "F01"
+  ],
+  "quality_gates": [
+    "actual forward/line-search route counts",
+    "heldout logloss and accuracy",
+    "fixed optimizer settings/iterations reported",
+    "finite fitted margins/state"
+  ],
+  "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "estimators",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true,
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F05",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}

@@ -82,6 +82,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from arima.impl.fast_scalar_df import ARIMA_K3_DF_ON
+from arima.impl.fast_eval_df import product_df_count
 from bindings.arima_k3_df_probe import arima_k3_df_probe_binding
 from std.python.bindings import PythonModuleBuilder
 
@@ -697,6 +698,10 @@ def arima_forecast_binding(
     return PythonObject(written)
 
 
+def arima_product_df_count_binding(stage: PythonObject) raises -> PythonObject:
+    return PythonObject(product_df_count(Int(py=stage)))
+
+
 @export
 def PyInit__mojolearn_arima() abi("C") -> PythonObject:
     try:
@@ -705,6 +710,7 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
             m.def_function[arima_k3_df_probe_binding]("_arima_k3_df_probe")
         m.def_function[arima_vendor_binding]("arima_vendor")
         m.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
+        m.def_function[arima_product_df_count_binding]("arima_product_df_count")
         m.def_function[arima_fit_binding]("arima_fit")
         m.def_function[arima_ic_from_loglike_binding]("arima_ic_from_loglike")
         m.def_function[arima_order_batch_enabled_binding]("arima_order_batch_enabled")

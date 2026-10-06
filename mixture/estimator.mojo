@@ -814,6 +814,7 @@ def gmm_initial_resp_host(
 comptime IDN_GMM_ONE_DRAIN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
+        # I21 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
         is_defined["MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )

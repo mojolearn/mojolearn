@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "id": "F02",
+  "title": "Share GEMM infrastructure through independent fused and unfused caller adapters",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/apple_fast/gemm/scoped_dispatch.mojo",
+    "x_decomp/lu_fast_mma.mojo",
+    "experiments/performance_ideas/F02/caller.py",
+    "cholesky/checks/fast_trsm.mojo",
+    "bindings/_mojolearn_gp.mojo",
+    "bindings/_mojolearn_x_decomp.mojo",
+    "core/gemm.mojo",
+    "gemm/checks/gemm_identical.mojo",
+    "bindings/_mojolearn_scoped_gemm_probe.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_LU_FAST_SHARED_SUB"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F02",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F02",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F02/caller.py"
+  ],
+  "depends_on": [
+    "F01"
+  ],
+  "quality_gates": [
+    "factor/solve residual against FAST incumbent",
+    "retain strided subtract epilogue without extra pass",
+    "Independent SDK, LU, Cholesky lower triangle, PCA and active-batched MCD variants require positive actual reach"
+  ],
+  "timing_contract": "Complete caller through first read; each adapter independently built/qualified; no full-fit admission from matrix-only SDK checks",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "x_decomp",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true,
+  "variants": {
+    "cholesky": [
+      "MOJOLEARN_CHOL_FAST_SHARED_SUB"
+    ],
+    "sdk": [
+      "MOJOLEARN_SCOPED_GEMM_AUDIT",
+      "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+      "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+      "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+      "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+      "MOJOLEARN_SCOPED_GEMM_SPLIT",
+      "MOJOLEARN_SCOPED_GEMM_PCA"
+    ],
+    "pca": [
+      "MOJOLEARN_SCOPED_GEMM_AUDIT",
+      "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+      "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+      "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+      "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+      "MOJOLEARN_SCOPED_GEMM_SPLIT",
+      "MOJOLEARN_SCOPED_GEMM_PCA"
+    ],
+    "mcd": [
+      "MOJOLEARN_MCD_FAST_G1_GRAM",
+      "MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"
+    ]
+  },
+  "variant_bindings": {
+    "cholesky": "gp",
+    "sdk": "scoped_gemm_probe",
+    "pca": "estimators",
+    "mcd": "x_decomp"
+  },
+  "variant_baseline_defines": {
+    "sdk": [
+      "MOJOLEARN_SCOPED_GEMM_AUDIT"
+    ],
+    "pca": [
+      "MOJOLEARN_SCOPED_GEMM_AUDIT"
+    ],
+    "mcd": [
+      "MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"
+    ]
+  },
+  "variant_prerequisite_bindings": {
+    "sdk": [],
+    "pca": [
+      "core",
+      "x_decomp"
+    ]
+  },
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F02",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}

@@ -8,6 +8,7 @@ from transformer.impl.llama.fused_attention import attention_v1_backward_memory_
 
 def main() raises:
     var got = attention_v1_backward_memory_profile()
+    # NEVER RUN — PENDING MEASUREMENT
     comptime if is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]():
         if got != "v1-recompute":
             raise Error("recompute profile lost precedence: " + got)

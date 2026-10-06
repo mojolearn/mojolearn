@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "id": "I01",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "default_policy": "Explicit campaign harness only; shipped group and tile defaults retained.",
+  "entrance": "gemm/experiments/profile_check.mojo",
+  "source_scope": "All admitted source arms listed below are implemented; device qualification is pending.",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "Unknown target.",
+  "targets": {
+    "nvidia": "sm_89",
+    "amd": "gfx942",
+    "apple": "apple-m1 + metal:1"
+  },
+  "compile_command": "python3 gemm/experiments/compile_matrix.py --ids I01 --vendors nvidia amd --evidence /absolute/external/evidence/I01",
+  "compile_prerequisites": [
+    "pixi install --locked -e default; activated Mojo1.0.0 ed45d567",
+    "clean frozen tracked source; compile_slot semaphore; MOJOLEARN_COMPILE_JOBS=1 and -j1",
+    "sm_89/gfx942 cross-builds embed device objects; rebuild native executable on remote Linux before execution",
+    "No GPU execution or timing occurs during matrix build"
+  ],
+  "arms": [
+    {
+      "name": "current",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [],
+      "runtime_environment": {}
+    },
+    {
+      "name": "one_page",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [
+        "MOJOLEARN_GEMM_ONE_PAGE=1"
+      ],
+      "runtime_environment": {}
+    },
+    {
+      "name": "slack2",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1"
+      ],
+      "runtime_environment": {}
+    },
+    {
+      "name": "slack8",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8=1"
+      ],
+      "runtime_environment": {}
+    },
+    {
+      "name": "body_tiles",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY=1"
+      ],
+      "runtime_environment": {}
+    },
+    {
+      "name": "packed64",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [
+        "MOJOLEARN_GEMM_KPACK_RPT4=1"
+      ],
+      "runtime_environment": {}
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "id": "I12",
+  "title": "gate solver pass fusion on accepted iterates and refusal semantics",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/I12/check.mojo",
+    "glm/impl/qn/glm_base.mojo",
+    "glm/impl/qn/qn_linesearch.mojo",
+    "experiments/performance_ideas/I12/trials_check.mojo",
+    "experiments/performance_ideas/I12/sgd_check.mojo",
+    "x_linear/device.mojo",
+    "x_linear/sgd.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_IDN_QN_EXACT_TRIALS=1"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/I12/check.mojo",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--source-sha",
+    "{source_sha}",
+    "--mojo",
+    "{mojo}",
+    "--output",
+    "{output}",
+    "--define",
+    "MOJOLEARN_IDN_QN_EXACT_TRIALS=1"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/I12/check.mojo",
+    "experiments/performance_ideas/I12/sgd_check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "public semantics and canonical tie order retained",
+    "NVIDIA+AMD combined faster and neither materially slower"
+  ],
+  "timing_contract": "Frozen source; compile once on cheap boxes; device runs only; full public-operation timing includes all scratch/preparation/readback. Apple IDENTICAL bit check only. Native builds explicitly bind device column and accelerator; independent host replay remains a separate identity gate, not a DeviceContext execution vendor.",
+  "blocker": null,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/I12/check.mojo",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--source-sha",
+    "{source_sha}",
+    "--mojo",
+    "{mojo}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{output}"
+  ],
+  "compile_matrix_path": "experiments/performance_ideas/I12/compile_matrix.json",
+  "arm_policy": "Compile every independent arm in compile_matrix.json once; no device qualification inferred from compiler exit status."
+}

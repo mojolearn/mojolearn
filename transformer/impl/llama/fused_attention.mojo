@@ -370,6 +370,7 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 # and `bwd.attention`). A timer build synchronizes around every launch:
 # its numbers are a breakdown, never a request price.
 # ===========================================================================
+# NEVER RUN — PENDING MEASUREMENT
 comptime ATTN_ARM_TRIAL = is_defined["MOJOLEARN_ATTN_ARM_TRIAL"]()
 comptime ATTN_PHASE_TIMERS = is_defined["MOJOLEARN_ATTN_PHASE_TIMERS"]()
 
@@ -1386,6 +1387,7 @@ default resolves to: `_launch_fwd_r2_keep[64, 32, True, True, False]` and
 of the trial tree (the sabotage copies stay trial-only, like
 `ATTN_SHIPPED_BWD_KV`'s)."""
 
+# NEVER RUN — PENDING MEASUREMENT
 comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
 comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
 comptime ATTN_V1_ALIAS_Y_ESTASH = (
@@ -7011,7 +7013,7 @@ def fused_bwd_zdot_sched_pf_kernel[HD: Int, TQ: Int, LAG: Bool, SABN: Bool](
 
 
 @__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_FWD_LAUNCH_BOUND)))
-def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
+def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False, HEAD_SHARE: Int = 1](
     ctxv: MutPointer[Float32, MutAnyOrigin],
     amax: MutPointer[Float32, MutAnyOrigin],
     denom: MutPointer[Float32, MutAnyOrigin],
@@ -7028,6 +7030,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     comment above. Instantiated at HD 64 with TQ 64 or 32 only, QRES only
     at TQ 32 (`fused_attention_fwd_rows`); 256 threads per block, grid
     `B * nh * ceil(L / TQ)`; one shared page of `_fwd_r2_page_bytes`."""
+    comptime assert HEAD_SHARE==1 or (HEAD_SHARE==2 and TQ==64 and QRES and PF and not SABN and not SWZ), "attention head reuse: unsupported shared layout"
     _attn_mode_enter()
     comptime RPT = TQ // 16
     comptime CPT = HD // 16
@@ -7057,17 +7060,17 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     var pos0 = Int(pos0_in)
     var key_lo = Int(key_lo_in)
     var window = Int(window_in)
-    var ntb = (l + TQ - 1) // TQ
+    var ntb = (l + TQ//HEAD_SHARE - 1) // (TQ//HEAD_SHARE)
     var raw = Int(block_idx.x)
     # DEVIATION 2900 under SWZ: the same set of (tile, head, batch)
     # triples, handed out heaviest first.
-    var bm = _blk_map[SWZ, True](raw, ntb, nh, Int(b_in))
-    var t0 = bm[0] * TQ
-    var h = bm[1]
+    var bm = _blk_map[SWZ, True](raw, ntb, nh//HEAD_SHARE, Int(b_in))
+    var t0 = bm[0] * (TQ//HEAD_SHARE)
+    var h = bm[1]*HEAD_SHARE
     var bb = bm[2]
     var kvbase = (bb * nkv + h // (nh // nkv)) * s * HD
     var stbase = (bb * nh + h) * l * s
-    var t1 = min(t0 + TQ - 1, l - 1)
+    var t1 = min(t0 + TQ//HEAD_SHARE - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
     var kb_lo = r0[0] // BK
@@ -7081,10 +7084,10 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
         comptime for si in range(TQ * HD // 256):
             var i = tid + si * 256
             var r = i // HD
-            var t = t0 + r
+            var t = t0 + r//HEAD_SHARE
             var x = Float32(0.0)
             if t < l:
-                x = ftz(q_rope.unsafe_load((bb * l + t) * nh * HD + h * HD + i % HD))
+                x = ftz(q_rope.unsafe_load((bb * l + t) * nh * HD + (h+r%HEAD_SHARE) * HD + i % HD))
             comptime if SABN:
                 stg.unsafe_store(i, _flip_ulp(x))
             else:
@@ -7113,9 +7116,9 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                             var p = i % KS
                             var x = Float32(0.0)
                             if r < TQ:
-                                var t = t0 + r
+                                var t = t0 + r//HEAD_SHARE
                                 if t < l:
-                                    x = ftz(q_rope.unsafe_load((bb * l + t) * nh * HD + h * HD + pw * KS + p))
+                                    x = ftz(q_rope.unsafe_load((bb * l + t) * nh * HD + (h+r%HEAD_SHARE) * HD + pw * KS + p))
                             else:
                                 var j = kb * BK + r - TQ
                                 if j < s:
@@ -7151,7 +7154,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                     barrier()
                 comptime for u in range(RPT):
                     var r = tr + u * 16
-                    var t = t0 + r
+                    var t = t0 + r//HEAD_SHARE
                     var rr = _row_range(t, pos0, key_lo, window, s)
                     comptime for v in range(2):
                         var jj = tc + v * 16
@@ -7159,18 +7162,18 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                         if t < l and j >= rr[0] and j <= rr[1]:
                             var masked = ftz(_pmulx(dots[u * 2 + v], scale_in) + Float32(0.0))
                             mpart[u] = identical_fmax(mpart[u], masked)
-                            var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
+                            var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h+r%HEAD_SHARE, t, j, l, nh, s, pos0, key_lo, window)
                             sstash.unsafe_store(cell, masked)
             else:
                 comptime for u in range(RPT):
                     var r = tr + u * 16
-                    var t = t0 + r
+                    var t = t0 + r//HEAD_SHARE
                     var rr = _row_range(t, pos0, key_lo, window, s)
                     comptime for v in range(2):
                         var jj = tc + v * 16
                         var j = kb * BK + jj
                         if t < l and j >= rr[0] and j <= rr[1]:
-                            var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
+                            var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h+r%HEAD_SHARE, t, j, l, nh, s, pos0, key_lo, window)
                             comptime if phase == 1:
                                 var masked = sstash.unsafe_load(cell)
                                 var e = ftz(identical_exp(ftz(ftz(masked) - ftz(stats.unsafe_load(r)))))
@@ -7184,8 +7187,8 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                                 tile.unsafe_store(r * 33 + jj, w)
             barrier()
             comptime if phase == 1:
-                if tid < TQ and t0 + tid < l:
-                    var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+                if tid < TQ and t0 + tid//HEAD_SHARE < l:
+                    var rr = _row_range(t0 + tid//HEAD_SHARE, pos0, key_lo, window, s)
                     comptime for jj in range(BK):
                         var j = kb * BK + jj
                         if j >= rr[0] and j <= rr[1]:
@@ -7205,8 +7208,8 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                 var vhi = SIMD[DType.int32, RPT](-1)
                 comptime for u in range(RPT):
                     var r = tr + u * 16
-                    if t0 + r < l:
-                        var rr = _row_range(t0 + r, pos0, key_lo, window, s)
+                    if t0 + r//HEAD_SHARE < l:
+                        var rr = _row_range(t0 + r//HEAD_SHARE, pos0, key_lo, window, s)
                         vlo[u] = Int32(rr[0])
                         vhi[u] = Int32(rr[1])
                 comptime for j4 in range(BK // 4):
@@ -7233,19 +7236,20 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
             comptime for u in range(RPT):
                 tile.unsafe_store((tr + u * 16) * 16 + tc, mpart[u])
             barrier()
-            if tid < TQ and t0 + tid < l:
+            if tid < TQ and t0 + tid//HEAD_SHARE < l:
                 var m = negmax
                 comptime for c in range(16):
                     m = identical_fmax(m, tile.unsafe_load(tid * 16 + c))
                 stats.unsafe_store(tid, m)
-                amax.unsafe_store((bb * nh + h) * l + t0 + tid, m)
+                amax.unsafe_store((bb * nh + h+tid%HEAD_SHARE) * l + t0 + tid//HEAD_SHARE, m)
         elif phase == 1:
-            if tid < TQ and t0 + tid < l:
+            if tid < TQ and t0 + tid//HEAD_SHARE < l:
                 stats.unsafe_store(TQ + tid, ftz(dacc))
-                denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))
+                denom.unsafe_store((bb * nh + h+tid%HEAD_SHARE) * l + t0 + tid//HEAD_SHARE, ftz(dacc))
         barrier()
     comptime for u in range(RPT):
-        var t = t0 + tr + u * 16
+        var r = tr+u*16
+        var t = t0+r//HEAD_SHARE
         var rr = _row_range(t, pos0, key_lo, window, s)
         if t < l:
             comptime for v in range(CPT):
@@ -7254,7 +7258,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                     corner.unsafe_store(0, Float32(1.0))
                 comptime if SABN and PF and not QRES and v == 0:
                     x = _flip_ulp(x)
-                ctxv.unsafe_store((bb * l + t) * nh * HD + h * HD + tc + v * 16, x)
+                ctxv.unsafe_store((bb * l + t) * nh * HD + (h+r%HEAD_SHARE) * HD + tc + v * 16, x)
 
 
 # ===========================================================================
@@ -9313,6 +9317,35 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
     return g[].bufs[at].create_sub_buffer[DType.float32](0, cells)
 
 
+# I06 new candidate remains default off. Qualification is pending: native
+# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
+comptime ATTN_GQA_HEAD_REUSE = (
+    GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL
+    # NEVER RUN — PENDING MEASUREMENT
+    and is_defined["MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and lib_smem_page_fits_for[TARGET_COLUMN,_fwd_r2_page_bytes(64,True)]()
+)
+
+@always_inline
+def _try_launch_shared_heads[HD: Int,TQ: Int,QRES: Bool,PF: Bool,SABN: Bool,SWZ: Bool](
+    ctx: DeviceContext,mut ctxv: DeviceBuffer[DType.float32],mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],mut corner: DeviceBuffer[DType.float32],
+    mut sstash: DeviceBuffer[DType.float32],mut q_rope: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],mut v_cache: DeviceBuffer[DType.float32],
+    b: Int,l: Int,nh: Int,nkv: Int,s: Int,pos0: Int,key_lo: Int,window: Int,scale: Float32) raises -> Bool:
+    comptime if ATTN_GQA_HEAD_REUSE and HD==64 and TQ==32 and QRES and PF and not SABN and not SWZ:
+        # Two adjacent query heads share one KV head. Logical rows interleave
+        # heads while each keeps the original32query tile and all row folds.
+        if nkv>0 and nh%nkv==0 and (nh//nkv)%2==0:
+            step_count_launch()
+            ctx.enqueue_function[fused_attn_forward_r2_kernel[64,64,True,True,False,False,2]](
+                ctxv.unsafe_ptr(),amax.unsafe_ptr(),denom.unsafe_ptr(),corner.unsafe_ptr(),sstash.unsafe_ptr(),q_rope.unsafe_ptr(),k_cache.unsafe_ptr(),v_cache.unsafe_ptr(),Int32(b),Int32(l),Int32(nh),Int32(nkv),Int32(s),Int32(pos0),Int32(key_lo),Int32(window),scale,
+                grid_dim=(b*(nh//2)*((l+31)//32),1,1),block_dim=(FUSED_THREADS,1,1))
+            return True
+    return False
+
+
 def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
     ctx: DeviceContext,
     on: Bool,
@@ -9336,29 +9369,30 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool
     # No wait after the allocation (lane/neural-apple, 2026-09-28): the
     # kernel below is enqueued on the same in-order `ctx`.
     _attn_tick(ctx, on, tk, "fwd_scratch_alloc")
-    step_count_launch()
-    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and (TQ == 32 or TQ == 16) and PF and not SABN:
-        comptime ka = fused_attn_forward_r2_amma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
-        ctx.enqueue_function[ka](
-            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
-            corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
-            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
-            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-            Int32(window), scale,
-            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
-            block_dim=(FUSED_THREADS, 1, 1),
-        )
-    else:
-        comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN, SWZ]
-        ctx.enqueue_function[kr](
-            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
-            corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
-            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
-            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-            Int32(window), scale,
-            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
-            block_dim=(FUSED_THREADS, 1, 1),
-        )
+    if not _try_launch_shared_heads[HD,TQ,QRES,PF,SABN,SWZ](ctx,ctxv,amax,denom,corner,sstash,q_rope,k_cache,v_cache,b,l,nh,nkv,s,pos0,key_lo,window,scale):
+        step_count_launch()
+        comptime if ATTN_FWD_APPLE_MMA and HD == 64 and (TQ == 32 or TQ == 16) and PF and not SABN:
+            comptime ka = fused_attn_forward_r2_amma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
+            ctx.enqueue_function[ka](
+                ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+                corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+                k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+                Int32(window), scale,
+                grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+                block_dim=(FUSED_THREADS, 1, 1),
+            )
+        else:
+            comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN, SWZ]
+            ctx.enqueue_function[kr](
+                ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+                corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+                k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+                Int32(window), scale,
+                grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+                block_dim=(FUSED_THREADS, 1, 1),
+            )
     # The scratch must outlive the enqueued kernel: synchronize, then the
     # explicit last use (a buffer is freed at its last use).
     step_count_sync()
@@ -9390,42 +9424,43 @@ def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ:
     only the clean copy its column default resolves to, and only when that
     default carries the estash bits (DEVIATION 2657,
     `ATTN_SHIPPED_BWD_ESTASH`)."""
-    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and (TQ == 32 or TQ == 16) and PF and not SABN:
-        comptime ka = fused_attn_forward_r2_amma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
-        step_count_launch()
-        ctx.enqueue_function[ka](
-            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
-            corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
-            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
-            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-            Int32(window), scale,
-            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
-            block_dim=(FUSED_THREADS, 1, 1),
-        )
-    elif ATTN_FWD_MFMA and HD == 64 and PF and not SABN:
-        comptime km = fused_attn_forward_r2_mfma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
-        step_count_launch()
-        ctx.enqueue_function[km](
-            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
-            corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
-            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
-            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-            Int32(window), scale, Float32(1.0),
-            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
-            block_dim=(FUSED_THREADS, 1, 1),
-        )
-    else:
-        comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN, SWZ]
-        step_count_launch()
-        ctx.enqueue_function[kr](
-            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
-            corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
-            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
-            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-            Int32(window), scale,
-            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
-            block_dim=(FUSED_THREADS, 1, 1),
-        )
+    if not _try_launch_shared_heads[HD,TQ,QRES,PF,SABN,SWZ](ctx,ctxv,amax,denom,corner,sstash,q_rope,k_cache,v_cache,b,l,nh,nkv,s,pos0,key_lo,window,scale):
+        comptime if ATTN_FWD_APPLE_MMA and HD == 64 and (TQ == 32 or TQ == 16) and PF and not SABN:
+            comptime ka = fused_attn_forward_r2_amma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
+            step_count_launch()
+            ctx.enqueue_function[ka](
+                ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+                corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+                k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+                Int32(window), scale,
+                grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+                block_dim=(FUSED_THREADS, 1, 1),
+            )
+        elif ATTN_FWD_MFMA and HD == 64 and PF and not SABN:
+            comptime km = fused_attn_forward_r2_mfma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
+            step_count_launch()
+            ctx.enqueue_function[km](
+                ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+                corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+                k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+                Int32(window), scale, Float32(1.0),
+                grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+                block_dim=(FUSED_THREADS, 1, 1),
+            )
+        else:
+            comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN, SWZ]
+            step_count_launch()
+            ctx.enqueue_function[kr](
+                ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+                corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+                k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+                Int32(window), scale,
+                grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+                block_dim=(FUSED_THREADS, 1, 1),
+            )
     # IDN_ATTN_ONE_FLAG_WAIT: `sstash` is the caller's kept buffer; the
     # caller's flag read waits behind this kernel.
     comptime if not IDN_ATTN_ONE_FLAG_WAIT:

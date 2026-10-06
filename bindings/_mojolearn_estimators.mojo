@@ -74,6 +74,7 @@ from core.labeled_reference_predict import labeled_reference_predict
 from dbscan.estimator import dbscan_fit
 from kde.estimator import kde_score_samples_host_ptr
 from kde.resident_fit import (
+    KDE_FAST_IMMUTABLE_FIT,
     kde_fit_prepare,
     kde_fit_release,
     kde_score_samples_resident,
@@ -115,6 +116,11 @@ from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from decomposition.impl.pca_rank import pca_rank_finish
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 
+
+from decomposition.impl.linalg.detail.pca import pca_compensated_cov_count
+
+def pca_compensated_cov_count_py() raises -> PythonObject:
+    return PythonObject(pca_compensated_cov_count())
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
@@ -1291,6 +1297,10 @@ def kde_score_samples_binding(
     return PythonObject(n_query)
 
 
+def kde_fast_immutable_fit_binding() raises -> PythonObject:
+    return PythonObject(Int(KDE_FAST_IMMUTABLE_FIT))
+
+
 def kde_fit_prepare_binding(
     train_addr: PythonObject,
     weights_addr: PythonObject,
@@ -1432,6 +1442,7 @@ def scoped_gemm_metadata_binding(index: PythonObject) raises -> PythonObject:
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
+        m.def_function[pca_compensated_cov_count_py]("pca_compensated_cov_count")
         m.def_function[dbscan_parallel_available_binding]("dbscan_parallel_available")
         m.def_function[gram_parallel_available_binding]("gram_parallel_available")
         m.def_function[gram_parallel_available_binding]("gram_outputs_parallel_available")
@@ -1448,6 +1459,7 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[kde_fit_prepare_binding]("kde_fit_prepare")
+        m.def_function[kde_fast_immutable_fit_binding]("kde_fast_immutable_fit")
         m.def_function[kde_fit_release_binding]("kde_fit_release")
         m.def_function[kde_score_samples_resident_binding]("kde_score_samples_resident")
         comptime if SCOPED_AUDIT:

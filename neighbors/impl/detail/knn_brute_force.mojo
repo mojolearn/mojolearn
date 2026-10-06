@@ -68,6 +68,7 @@ merge (`knn_merge_parts`). See `neighbors/NOT_IMPLEMENTED.tsv`.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
+from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.os import getenv
 
@@ -231,8 +232,38 @@ comptime KNN_APPLE_MMA_DIST = (
 comptime KNN_CERTIFIED_MMA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_COLUMN == COLUMN_APPLE
+    # I15 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     and not is_defined["MOJOLEARN_KNN_CERTIFIED_MMA_OFF"]()
 )
+# Experimental metadata only: no new query route or device work. This
+# serial campaign counter uses the exact fallback total already read by
+# the existing driver and is absent from ordinary builds.
+struct _CertifiedReach(Defaultable,Movable):
+    var calls: Int
+    var queries: Int
+    var fallback: Int
+    def __init__(out self):
+        self.calls=0; self.queries=0; self.fallback=0
+comptime _CERTIFIED_REACH = _Global[StorageType=_CertifiedReach,
+    name="MojolearnCertifiedKnnReachV1",init_fn=_CertifiedReach.__init__]
+
+# I15 experiment qualification pending: compile/fixtures do not establish
+# four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
+# defaults stay unchanged; this campaign attributes explicit experiment arms.
+def certified_knn_reach_clear() raises:
+    # NEVER RUN — PENDING MEASUREMENT
+    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
+        var p=_CERTIFIED_REACH.get_or_create_ptr()
+        p[].calls=0; p[].queries=0; p[].fallback=0
+
+def certified_knn_reach_read() raises -> InlineArray[Int,3]:
+    var values=InlineArray[Int,3](fill=0)
+    # NEVER RUN — PENDING MEASUREMENT
+    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
+        var p=_CERTIFIED_REACH.get_or_create_ptr()
+        values[0]=p[].calls; values[1]=p[].queries; values[2]=p[].fallback
+    return values^
+
 comptime CERT_MAX_K = 24
 comptime CERT_MAX_D = 32
 
@@ -317,6 +348,7 @@ comptime KNN_FUSED_SELECT = (
     and not KNN_PREFLIGHT_METADATA
     and not KNN_PREFLIGHT_METADATA_DEFAULT
     and not KNN_EXACT_CHAIN
+    # NEVER RUN — PENDING MEASUREMENT
     and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 )
 # DEVIATION 2631 (kernel-matrix row `knn_radix_scratch_shrink_for`).
@@ -344,6 +376,7 @@ comptime KNN_BLOCK_TOPK = (
     knn_block_topk_select_for[TARGET_COLUMN, IDENTICAL_BUILD]()
     and KNN_SMEM_TILE
     and EXPERIMENTAL_SMALLK_IDENTICAL
+    # NEVER RUN — PENDING MEASUREMENT
     and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 )
 
@@ -414,6 +447,7 @@ def _cache_sabotage_kernel(transposed: MutPointer[Float32, MutAnyOrigin]):
 comptime KNN_SELECTOR_BOUND = (
     knn_selector_bound_compact_for[TARGET_COLUMN, IDENTICAL_BUILD]()
     and EXPERIMENTAL_SMALLK_IDENTICAL
+    # NEVER RUN — PENDING MEASUREMENT
     and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 )
 
@@ -2210,6 +2244,10 @@ def certified_mma_knn(
     # device (ascending, by an exclusive scan), not downloaded and walked
     var rows = ctx.enqueue_create_buffer[DType.int32](n_queries)
     var nf = device_compact_equal_i32(ctx, flags, n_queries, Int32(0), rows)
+    # NEVER RUN — PENDING MEASUREMENT
+    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
+        var reached=_CERTIFIED_REACH.get_or_create_ptr()
+        reached[].calls+=1; reached[].queries+=n_queries; reached[].fallback+=nf
     if getenv("MOJOLEARN_STAGE_TIMES") == "1":
         print("CERT_KNN queries=" + String(n_queries) + " kc=" + String(kc)
               + " tiled_fallback=" + String(nf))

@@ -47,7 +47,7 @@ Candidates (docs/apple-fast/notes/neural-attn.md has the launch profile):
 - ALL: every candidate at once.
 """
 
-from std.ffi import external_call
+from std.ffi import external_call, _Global
 from std.gpu import block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from std.math import exp, sqrt
@@ -78,10 +78,12 @@ comptime AFN_ATTN_ROPE_CACHE = AFN_ATTN_ON and (
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_ROPE_CACHE"]()
 )
 comptime AFN_ATTN_GQA_TILE = AFN_ATTN_ON and (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_GQA_TILE"]()
 )
 #: FLASH is also what GQA_TILE runs (at GROUP 1 when n_kv == n_heads).
 comptime AFN_ATTN_FLASH = AFN_ATTN_ON and (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_ATTN_ALL or AFN_ATTN_GQA_TILE or is_defined["MOJOLEARN_AFN_ATTN_FLASH"]()
 )
 comptime AFN_ATTN_FUSE_PRE = AFN_ATTN_ON and (
@@ -791,6 +793,22 @@ def _afn_flash_launch[HDP: Int](
         )
 
 
+struct FlashCallerAudit(Defaultable, Movable):
+    var calls: Int
+    var grouped_calls: Int
+    def __init__(out self):
+        self.calls = 0
+        self.grouped_calls = 0
+
+comptime FLASH_AUDIT = _Global[StorageType=FlashCallerAudit, name="AppleFlashCallerAudit", init_fn=FlashCallerAudit.__init__]
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+comptime AFN_FLASH_AUDIT_ON = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN_ATTN_AUDIT"]()
+
+def afn_flash_call_count(grouped: Bool) raises -> Int:
+    var audit = FLASH_AUDIT.get_or_create_ptr()
+    return audit[].grouped_calls if grouped else audit[].calls
+
+
 def afn_flash_forward(
     ctx: DeviceContext,
     ctxv: MutPointer[Float32, MutAnyOrigin],
@@ -814,6 +832,10 @@ def afn_flash_forward(
     nonzero). No wait: the kernel is enqueued on the in-order context like
     every other stage."""
     comptime if AFN_ATTN_FLASH:
+        comptime if AFN_FLASH_AUDIT_ON:
+            var audit = FLASH_AUDIT.get_or_create_ptr()
+            audit[].calls += 1
+            audit[].grouped_calls += Int(afn_flash_group(nh // nkv) > 1)
         var c = afn_flash_head_class(hd)
         if c == 16:
             _afn_flash_launch[16](ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window, scale, hd)

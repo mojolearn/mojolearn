@@ -143,7 +143,8 @@ REFERENCE: `TComputeHist2Kernel : TStatelessKernel` holds thirteen members,
            to N devices by `LaunchKernels<TKernel>(targets.NonEmptyDevices(),
            ...)`.
 
-HERE:      `compute_hist2(...)`, a function taking the same thirteen values as
+dither_ids=dither_ids,
+)
            arguments, on one device.
 
 REASON: three of theirs do not exist here and one is deliberate.
@@ -835,6 +836,7 @@ def run_compute_hist2_non_binary_kernel[
     ny: Int,
     nz: Int,
     int_slot: Bool = False,
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """`RunComputeHist2NonBinaryKernel` (`:190-216`), copied.
 
@@ -868,6 +870,7 @@ def run_compute_hist2_non_binary_kernel[
             Int32(bin_feature_count),
             fixed_scale,
             Int32(1 if int_slot else 0),
+            dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(nb_block, 1, 1),
         )
@@ -890,6 +893,7 @@ def run_compute_hist2_non_binary_kernel[
             Int32(bin_feature_count),
             fixed_scale,
             Int32(1 if int_slot else 0),
+            dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(nb_block, 1, 1),
         )
@@ -926,6 +930,7 @@ def compute_hist2_non_binary_dev[
     feature_count_for_bits: Int,
     sm_count: Int,
     fixed_scale: MutPointer[Float32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """`ComputeHist2NonBinary<Bits>` (`:221-270`), copied line for line.
 
@@ -1005,6 +1010,7 @@ def compute_hist2_non_binary_dev[
             nb_count, cindex, target, weight, indices, partition,
             slots_i.unsafe_ptr(), hist_line_size, full_pass, fixed_scale,
             multiplier, nx, ny, nz, True,
+            dither_ids=dither_ids,
         )
         launch_pw_fold_int_slots(
             ctx, slots_i, bin_sums, full_pass, stride_i, multiplier, fixed_scale
@@ -1025,6 +1031,7 @@ def compute_hist2_non_binary_dev[
                 nb_count, cindex, target, weight, indices, partition,
                 slots.unsafe_ptr(), hist_line_size, full_pass, fixed_scale,
                 multiplier, nx, ny, nz,
+                dither_ids=dither_ids,
             )
             launch_pw_fold_doc_slots(
                 ctx, slots, bin_sums, full_pass, stride, multiplier
@@ -1035,6 +1042,7 @@ def compute_hist2_non_binary_dev[
         ctx, feature_offset, feature_first_fold_index, feature_folds,
         nb_count, cindex, target, weight, indices, partition, bin_sums,
         hist_line_size, full_pass, fixed_scale, multiplier, nx, ny, nz,
+        dither_ids=dither_ids,
     )
 
 
@@ -1069,6 +1077,7 @@ def compute_hist2_non_binary[
     feature_count_for_bits: Int,
     sm_count: Int,
     fixed_scale: Float32,
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """The host-scalar form of `compute_hist2_non_binary_dev` (the checks
     call one width directly): the scale staged on a held one-float device
@@ -1082,6 +1091,7 @@ def compute_hist2_non_binary[
         feature_count_for_bits, sm_count, rebind[MutPointer[Float32, MutAnyOrigin]](
             scale_word.unsafe_ptr()
         ),
+        dither_ids=dither_ids,
     )
     _ = scale_word^
 
@@ -1233,6 +1243,7 @@ def non_binary_multiplier_ladder[
     ny: Int,
     nz: Int,
     int_slot: Bool = False,
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """The `COMPUTE(1|2|4|8|16|32|64) else exit(1)` ladder of
     `ComputeHist2NonBinary`, lifted out of the launcher unchanged so
@@ -1242,42 +1253,49 @@ def non_binary_multiplier_ladder[
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
+            dither_ids=dither_ids,
         )
     elif multiplier == 2:
         run_compute_hist2_non_binary_kernel[bits, 2](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
+            dither_ids=dither_ids,
         )
     elif multiplier == 4:
         run_compute_hist2_non_binary_kernel[bits, 4](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
+            dither_ids=dither_ids,
         )
     elif multiplier == 8:
         run_compute_hist2_non_binary_kernel[bits, 8](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
+            dither_ids=dither_ids,
         )
     elif multiplier == 16:
         run_compute_hist2_non_binary_kernel[bits, 16](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
+            dither_ids=dither_ids,
         )
     elif multiplier == 32:
         run_compute_hist2_non_binary_kernel[bits, 32](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
+            dither_ids=dither_ids,
         )
     elif multiplier == 64:
         run_compute_hist2_non_binary_kernel[bits, 64](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition, bin_sums,
             hist_line_size, full_pass, fixed_scale, nx, ny, nz, int_slot,
+            dither_ids=dither_ids,
         )
     else:
         # DEVIATION 101: theirs is `exit(1)` (`:266`)
@@ -1320,6 +1338,7 @@ def run_compute_hist2_binary_kernel[
     ny: Int,
     nz: Int,
     fixed_scale: MutPointer[Float32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """`RunComputeHist2BinaryKernel` (`:98-124`), copied."""
     if full_pass:
@@ -1338,6 +1357,7 @@ def run_compute_hist2_binary_kernel[
             Int32(total_feature_count),
             fixed_scale,
             Int32(0),
+            dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
         )
@@ -1357,6 +1377,7 @@ def run_compute_hist2_binary_kernel[
             Int32(total_feature_count),
             fixed_scale,
             Int32(0),
+            dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
         )
@@ -1389,6 +1410,7 @@ def compute_hist2_binary[
     bin_sums: MutPointer[Float32, o9],
     sm_count: Int,
     fixed_scale: MutPointer[Float32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """`ComputeHist2Binary` (`:128-179`), copied line for line.
 
@@ -1452,7 +1474,8 @@ def compute_hist2_binary[
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
         target, weight, indices, partition, slots_i.unsafe_ptr(), total_feature_count,
         full_pass, multiplier, nx, ny, nz, fixed_scale,
-        )
+        dither_ids=dither_ids,
+    )
         launch_pw_fold_int_slots(ctx, slots_i, bin_sums, full_pass, stride_i, multiplier, fixed_scale)
         _ = slots_i^
         return
@@ -1469,6 +1492,7 @@ def compute_hist2_binary[
                 cindex, target, weight, indices, partition,
                 slots.unsafe_ptr(), total_feature_count, full_pass,
                 multiplier, nx, ny, nz, fixed_scale,
+                dither_ids=dither_ids,
             )
             launch_pw_fold_doc_slots(
                 ctx, slots, bin_sums, full_pass, stride, multiplier
@@ -1479,6 +1503,7 @@ def compute_hist2_binary[
         ctx, feature_offset, feature_first_fold_index, b_count, cindex,
         target, weight, indices, partition, bin_sums, total_feature_count,
         full_pass, multiplier, nx, ny, nz, fixed_scale,
+        dither_ids=dither_ids,
     )
 
 
@@ -1509,6 +1534,7 @@ def binary_multiplier_ladder[
     ny: Int,
     nz: Int,
     fixed_scale: MutPointer[Float32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """`ComputeHist2Binary`'s multiplier ladder, lifted out unchanged for
     DEVIATION 2670."""
@@ -1517,42 +1543,49 @@ def binary_multiplier_ladder[
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
             total_feature_count, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 2:
         run_compute_hist2_binary_kernel[2](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
             total_feature_count, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 4:
         run_compute_hist2_binary_kernel[4](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
             total_feature_count, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 8:
         run_compute_hist2_binary_kernel[8](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
             total_feature_count, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 16:
         run_compute_hist2_binary_kernel[16](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
             total_feature_count, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 32:
         run_compute_hist2_binary_kernel[32](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
             total_feature_count, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 64:
         run_compute_hist2_binary_kernel[64](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
             total_feature_count, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     else:
         # DEVIATION 101: theirs is `exit(1)` (`:174`)
@@ -1597,6 +1630,7 @@ def run_compute_hist2_half_byte_kernel[
     ny: Int,
     nz: Int,
     fixed_scale: MutPointer[Float32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """`RunComputeHist2HalfByteKernel` (`:99-127`), copied."""
     if full_pass:
@@ -1618,6 +1652,7 @@ def run_compute_hist2_half_byte_kernel[
             Int32(bin_feature_count),
             fixed_scale,
             Int32(0),
+            dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
         )
@@ -1640,6 +1675,7 @@ def run_compute_hist2_half_byte_kernel[
             Int32(bin_feature_count),
             fixed_scale,
             Int32(0),
+            dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
         )
@@ -1674,6 +1710,7 @@ def compute_hist2_half_byte[
     bin_sums: MutPointer[Float32, o9],
     sm_count: Int,
     fixed_scale: MutPointer[Float32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """`ComputeHist2HalfByte` (`:130-180`), copied line for line.
 
@@ -1723,7 +1760,8 @@ def compute_hist2_half_byte[
         half_byte_features_count, cindex, target, weight, indices,
         partition, slots_i.unsafe_ptr(), hist_line_size, full_pass, multiplier,
         nx, ny, nz, fixed_scale,
-        )
+        dither_ids=dither_ids,
+    )
         launch_pw_fold_int_slots(ctx, slots_i, bin_sums, full_pass, stride_i, multiplier, fixed_scale)
         _ = slots_i^
         return
@@ -1740,6 +1778,7 @@ def compute_hist2_half_byte[
                 half_byte_features_count, cindex, target, weight, indices,
                 partition, slots.unsafe_ptr(), hist_line_size, full_pass,
                 multiplier, nx, ny, nz, fixed_scale,
+                dither_ids=dither_ids,
             )
             launch_pw_fold_doc_slots(
                 ctx, slots, bin_sums, full_pass, stride, multiplier
@@ -1751,6 +1790,7 @@ def compute_hist2_half_byte[
         half_byte_features_count, cindex, target, weight, indices,
         partition, bin_sums, hist_line_size, full_pass, multiplier,
         nx, ny, nz, fixed_scale,
+        dither_ids=dither_ids,
     )
 
 
@@ -1783,6 +1823,7 @@ def half_byte_multiplier_ladder[
     ny: Int,
     nz: Int,
     fixed_scale: MutPointer[Float32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """`ComputeHist2HalfByte`'s multiplier ladder, lifted out unchanged for
     DEVIATION 2670."""
@@ -1791,42 +1832,49 @@ def half_byte_multiplier_ladder[
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
             partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 2:
         run_compute_hist2_half_byte_kernel[2](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
             partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 4:
         run_compute_hist2_half_byte_kernel[4](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
             partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 8:
         run_compute_hist2_half_byte_kernel[8](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
             partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 16:
         run_compute_hist2_half_byte_kernel[16](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
             partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 32:
         run_compute_hist2_half_byte_kernel[32](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
             partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     elif multiplier == 64:
         run_compute_hist2_half_byte_kernel[64](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
             partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
+            dither_ids=dither_ids,
         )
     else:
         # DEVIATION 101: theirs is `exit(1)` (`:175`)
@@ -1877,6 +1925,7 @@ def compute_hist2_dev[
     folds_hist: FoldsHistogram,
     sm_count: Int,
     fixed_scale: MutPointer[Float32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """`TComputeHist2Kernel::Run` (`pointwise_kernels.cpp:17-93`), copied.
 
@@ -1926,6 +1975,7 @@ def compute_hist2_dev[
             bin_sums,
             sm_count,
             fixed_scale,
+            dither_ids=dither_ids,
         )
     elif policy == POLICY_HALF_BYTE:
         compute_hist2_half_byte(
@@ -1947,6 +1997,7 @@ def compute_hist2_dev[
             bin_sums,
             sm_count,
             fixed_scale,
+            dither_ids=dither_ids,
         )
     elif policy == POLICY_ONE_BYTE:
         # `DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 4, 5)` and the three
@@ -1969,6 +2020,7 @@ def compute_hist2_dev[
                 bin_sums,
                 folds_hist.feature_count_for_bits(4, 8), sm_count,
                 fixed_scale,
+                dither_ids=dither_ids,
             )
         else:
             compute_hist2_non_binary_dev[5](
@@ -1980,6 +2032,7 @@ def compute_hist2_dev[
                 bin_sums,
                 folds_hist.feature_count_for_bits(4, 5), sm_count,
                 fixed_scale,
+                dither_ids=dither_ids,
             )
             compute_hist2_non_binary_dev[6](
                 ctx, feature_offset, feature_first_fold_index,
@@ -1990,6 +2043,7 @@ def compute_hist2_dev[
                 bin_sums,
                 folds_hist.feature_count_for_bits(6, 6), sm_count,
                 fixed_scale,
+                dither_ids=dither_ids,
             )
             compute_hist2_non_binary_dev[7](
                 ctx, feature_offset, feature_first_fold_index,
@@ -2000,6 +2054,7 @@ def compute_hist2_dev[
                 bin_sums,
                 folds_hist.feature_count_for_bits(7, 7), sm_count,
                 fixed_scale,
+                dither_ids=dither_ids,
             )
             compute_hist2_non_binary_dev[8](
                 ctx, feature_offset, feature_first_fold_index,
@@ -2010,6 +2065,7 @@ def compute_hist2_dev[
                 bin_sums,
                 folds_hist.feature_count_for_bits(8, 8), sm_count,
                 fixed_scale,
+                dither_ids=dither_ids,
             )
     else:
         # `CB_ENSURE(false, "Unexpected feature grouping policy")` (`:64`)
@@ -2111,6 +2167,7 @@ def compute_hist2[
     folds_hist: FoldsHistogram,
     sm_count: Int,
     fixed_scale: Float32,
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ) raises:
     """The host-scalar form of `compute_hist2_dev`, for callers that hold
     the scale on the host (the checks, the multi-GPU shards). T5 drain
@@ -2128,5 +2185,6 @@ def compute_hist2[
         full_pass, folds_hist, sm_count, rebind[MutPointer[Float32, MutAnyOrigin]](
             scale_word.unsafe_ptr()
         ),
+        dither_ids=dither_ids,
     )
     _ = scale_word^

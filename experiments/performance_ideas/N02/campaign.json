@@ -1,0 +1,74 @@
+{
+  "id": "N02",
+  "source": "gemm/experiments/profile_check.mojo",
+  "arms": [
+    {
+      "name": "full_stack",
+      "defines": [
+        "MOJOLEARN_GEMM_NV_FS4_OFF=1"
+      ]
+    },
+    {
+      "name": "current_fs4",
+      "defines": []
+    },
+    {
+      "name": "bounded_fs2",
+      "defines": [
+        "MOJOLEARN_IDN_GEMM_FS2=1"
+      ]
+    }
+  ],
+  "fixtures": [
+    {
+      "MOJOLEARN_EXPERIMENT_M": 255,
+      "MOJOLEARN_EXPERIMENT_N": 258,
+      "MOJOLEARN_EXPERIMENT_K": 127
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 255,
+      "MOJOLEARN_EXPERIMENT_N": 258,
+      "MOJOLEARN_EXPERIMENT_K": 129
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 255,
+      "MOJOLEARN_EXPERIMENT_N": 258,
+      "MOJOLEARN_EXPERIMENT_K": 255
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 255,
+      "MOJOLEARN_EXPERIMENT_N": 258,
+      "MOJOLEARN_EXPERIMENT_K": 257
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 255,
+      "MOJOLEARN_EXPERIMENT_N": 258,
+      "MOJOLEARN_EXPERIMENT_K": 1025
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 1023,
+      "MOJOLEARN_EXPERIMENT_N": 1026,
+      "MOJOLEARN_EXPERIMENT_K": 127
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 1023,
+      "MOJOLEARN_EXPERIMENT_N": 1026,
+      "MOJOLEARN_EXPERIMENT_K": 129
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 1023,
+      "MOJOLEARN_EXPERIMENT_N": 1026,
+      "MOJOLEARN_EXPERIMENT_K": 255
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 1023,
+      "MOJOLEARN_EXPERIMENT_N": 1026,
+      "MOJOLEARN_EXPERIMENT_K": 257
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 1023,
+      "MOJOLEARN_EXPERIMENT_N": 1026,
+      "MOJOLEARN_EXPERIMENT_K": 1025
+    }
+  ]
+}

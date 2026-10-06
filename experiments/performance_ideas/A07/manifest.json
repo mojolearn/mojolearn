@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "id": "A07",
+  "title": "Qualify bounded degree graph and exact integer node histogram tasks",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/A07/check.mojo",
+    "experiments/performance_ideas/A07/histogram_check.mojo",
+    "experiments/performance_ideas/A07/histogram_tasks.mojo",
+    "experiments/performance_ideas/N07/streamed_histogram.mojo",
+    "gemm/experiments/profile_campaign.py",
+    "neighbors/checks/ball_cover_canonical_order.mojo",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+    "experiments/performance_ideas/A07/production_check.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_RBC_CANON_MERGE=1",
+    "MOJOLEARN_RBC_CANON_DEGREE_BUCKETS=1"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A07/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A07/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
+  ],
+  "validation_paths": [
+    "neighbors/checks/rbc_canonical_merge_check.mojo",
+    "experiments/performance_ideas/A07/histogram_check.mojo",
+    "experiments/performance_ideas/N07/check.mojo",
+    "experiments/performance_ideas/A07/production_check.mojo"
+  ],
+  "depends_on": [
+    "I13",
+    "N07"
+  ],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host output bits",
+    "exact intermediate outputs and poison control",
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Every node/bin signed integer histogram equals independent oracle for both static and bounded task scheduling; malformed row spans refuse before scan; full production forest fit remains owed",
+    "Campaign receipt contains explicit baseline and independently compiled candidate arms; do not rebuild for run-only",
+    "Production default512 versus tasks256 native arms: every row once, actual <=256-row descriptor bound, complete weighted fit/failure contracts and independent device/host bits"
+  ],
+  "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
+  "blocker": null,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A07/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ],
+  "build_uses_compile_slot": true,
+  "validation_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A07/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
+  ]
+}

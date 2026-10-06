@@ -62,7 +62,11 @@ def _worse(da: Float32, ia: UInt32, db: Float32, ib: UInt32) -> Bool:
     return da > db or (da == db and ia > ib)
 
 
-comptime FKT_QPT = 2
+# Four query accumulators reuse one staged index row more widely, trading
+# register pressure for input bandwidth. All neighboring eligible shapes use
+# the same rule; no task or benchmark dimensions participate.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+comptime FKT_QPT = 4 if (FAST_TOPK_KNN_ENABLED and is_defined["MOJOLEARN_KNN_FAST_QUERY_GROUP4"]()) else 2
 """Queries per thread: each loaded index row is reused across them."""
 
 

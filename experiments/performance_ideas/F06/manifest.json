@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "id": "F06",
+  "title": "Independent MCD batch bounds, active-candidate compaction and exact-support covariance reuse",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "x_decomp/mcd_bmma.mojo",
+    "bindings/_mojolearn_x_decomp.mojo",
+    "experiments/performance_ideas/F06/caller.py",
+    "x_decomp/mcd_fast.mojo",
+    "x_decomp/mcd_experiments.mojo",
+    "experiments/performance_ideas/F06/native_check.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_MCD_FAST_BOUND_BATCH"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F06",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F06",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F06/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "candidate counter positive at fitted MCD/EE callers",
+    "unchanged support/candidate/search settings",
+    "contaminated near-singular covariance and location quality",
+    "split products retain incumbent split path",
+    "Native stable original-ID compaction, all/none/skew membership including multichunk tails and poison slots",
+    "Native cache exact support invalidation, step0/inactive refusals; actual raw search support/distance gates",
+    "Actual MinCovDet.mahalanobis/score and EllipticEnvelope.predict/decision_function/score_samples/score, with heldout contamination labels",
+    "Candidate positive route count; covariance variants positive actual reused-candidate count over fixtures",
+    "Source/rows/shape are immutable inside each MfPhase, cache never crosses phase or fit",
+    "New product/covariance mechanisms retain incumbent arithmetic, stopping/rank/precision and reweighting; FAST fullfit quality must not regress"
+  ],
+  "timing_contract": "Whole fit + each actually consumed prediction/distance/score, upload/compaction scans and mandatory count-read completion included. One run per arm. Process RSS reported separately; device peak scratch/resource measurement pending.",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "x_decomp",
+  "prerequisite_bindings": [
+    "core",
+    "x_metrics"
+  ],
+  "build_uses_compile_slot": true,
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F06",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "variants": {
+    "active_compact": [
+      "MOJOLEARN_MCD_FAST_ACTIVE_COMPACT"
+    ],
+    "cov_reuse": [
+      "MOJOLEARN_MCD_FAST_COV_REUSE"
+    ],
+    "active_cov": [
+      "MOJOLEARN_MCD_FAST_ACTIVE_COMPACT",
+      "MOJOLEARN_MCD_FAST_COV_REUSE"
+    ]
+  },
+  "native_checks": [
+    {
+      "name": "mcd_candidate_mechanisms",
+      "source": "experiments/performance_ideas/F06/native_check.mojo"
+    }
+  ]
+}

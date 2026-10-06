@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "id": "I18",
+  "title": "Retain bounded exact forest histograms and subtract compatible siblings",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/I18/check.mojo",
+    "ensemble/decisiontree/batched_levelalgo/exact_histogram_subtract.mojo",
+    "ensemble/decisiontree/batched_levelalgo/retained_count_histograms.mojo",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+    "experiments/performance_ideas/I18/forest_check.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_TREE_EXACT_SIBLING_HIST=1",
+    "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT=1"
+  ],
+  "baseline_defines": [
+    "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT=1"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/I18/forest_check.mojo",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--source-sha",
+    "{source_sha}",
+    "--mojo",
+    "{mojo}",
+    "--output",
+    "{output}",
+    "--define",
+    "MOJOLEARN_TREE_EXACT_SIBLING_HIST=1",
+    "--define",
+    "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT=1"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/I18/check.mojo",
+    "experiments/performance_ideas/I18/forest_check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "public semantics and canonical tie order retained",
+    "NVIDIA+AMD combined faster and neither materially slower",
+    "retained parent and independently tallied child cells match exactly",
+    "different per-node feature permutations preserve count cells and produce actual reuse",
+    "cache byte bound and tree reset do not leak stale histograms",
+    "complete classifier forest digests agree with OFF arm; feature-sampled and regression fallbacks unchanged",
+    "Device CUR guards padded/inactive idx0 tasks without corrupting retained root metadata",
+    "Normal untraced device-loop classifier fits produce positive completed sibling reuse; OFF partial-feature and regression arms produce none"
+  ],
+  "timing_contract": "Frozen source; one scored complete fit per arm on NVIDIA and AMD, counting bounded cache allocation, device routing, preparation and readback. Separate correctness/launch-log attribution runs; never time the fingerprint or mechanism fixture. Apple IDENTICAL is an identity witness only. Full feature unweighted count rounds and live-prefix device-queue and exact host-queue batches admitted; partial-feature, weighted and uncached node routes retain exact fallback. Native builds explicitly bind device column and accelerator; independent host replay remains a separate identity gate, not a DeviceContext execution vendor. This executable is correctness/attribution only, with an optional device reuse counter and post-completion audit read. Score fits separately with the AUDIT definition absent.",
+  "blocker": null,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/I18/forest_check.mojo",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--source-sha",
+    "{source_sha}",
+    "--mojo",
+    "{mojo}",
+    "--output",
+    "{output}",
+    "--define",
+    "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT=1"
+  ],
+  "validation_argv": [
+    "{output}"
+  ]
+}

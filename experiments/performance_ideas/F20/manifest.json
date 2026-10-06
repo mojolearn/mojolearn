@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "id": "F20",
+  "title": "Task-level optimizer fusion and FAST blocked LayerNorm qualification",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "sequence/layernorm.mojo",
+    "training/afn_optim.mojo",
+    "experiments/performance_ideas/F20/caller.py"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_AFN_OPT_MULTITENSOR"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F20",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F20",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F20/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "fixed task/data order/hyperparameters",
+    "multi-parameter optimizer actual training loss",
+    "failed update leaves parameters unchanged",
+    "independent normalization cancellation/large magnitude/tail oracle"
+  ],
+  "timing_contract": "Whole two-head train step through losses+updated parameters, separate full normalization forward/backward",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "training",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true,
+  "variants": {
+    "default": [
+      "MOJOLEARN_AFN_OPT_MULTITENSOR"
+    ],
+    "status": [
+      "MOJOLEARN_AFN_OPT_FUSE_SCAN"
+    ],
+    "normalization": [
+      "MOJOLEARN_LN_FAST_BLOCK_FOLD"
+    ]
+  },
+  "variant_bindings": {
+    "normalization": "x_sequence"
+  },
+  "paired_build": true,
+  "variant_prerequisite_bindings": {
+    "normalization": [
+      "core",
+      "training"
+    ]
+  },
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F20",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}

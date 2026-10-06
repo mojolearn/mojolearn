@@ -9,6 +9,7 @@ from core.step_phase import step_counts_now
 
 
 def main() raises:
+    # I02 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     comptime assert is_defined["MOJOLEARN_STEP_PHASE_TIMERS"](), "counters required"
     var ctx = DeviceContext()
     var cap = SCAN_BLOCKS * SCAN_TPB

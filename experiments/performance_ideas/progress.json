@@ -1,0 +1,546 @@
+{
+  "schema": 1,
+  "user_plan": "all 60 supported candidates implemented; compilation only where no matching proof exists; verified binaries already prove compilation and are never rebuilt unchanged; use local M4 and rented NVIDIA correctness; optional shared AMD targets pending; every selectable experiment/control arm labeled NEVER RUN \u2014 PENDING MEASUREMENT, new defaults off; merge main now per owner; continue missing configuration compilation with no duplicate verified builds",
+  "compile_repetition_policy": "reuse matching successful verification/build artifacts; one compiler invocation per missing configuration; retry only actual failures or relevant source fixes",
+  "performance_timing_required_before_merge": false,
+  "new_experiment_defaults": "off; existing main behavior preserved",
+  "qualification": "pending measurement; selected correctness checks completed; new switches off; no qualification gate before requested main merge",
+  "main_merge": "authorized_now; incomplete compile targets and measurements explicitly pending",
+  "unsupported_policy": "record missing Modular support or numerical contract explicitly; do not manufacture unsupported toolchain workarounds",
+  "hardware": {
+    "nvidia": "guarded rented NVIDIA RTX 4090 builder",
+    "apple": "M3 Ultra compilation; local Apple M4 correctness verification",
+    "m2_instance": "terminated; internal SSD backup verified locally; retained EBS backup in progress",
+    "m2_dedicated_host": "released"
+  },
+  "cards": [
+    {
+      "id": "I01",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I02",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I03",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I04",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I05",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I06",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I07",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I08",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I09",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I10",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I11",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I12",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I13",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I14",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I15",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I16",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I17",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I18",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I19",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I20",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I21",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I22",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I23",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "I24",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "A01",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "A02",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "A03",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "A04",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "A05",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "A06",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "A07",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "A08",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "N01",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "N02",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "N03",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "N04",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "N05",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "N06",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "N07",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "N08",
+      "mode": "identical",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F01",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F02",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F03",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F04",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F05",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F06",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F07",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F08",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F09",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F10",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F11",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F12",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F13",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F14",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F15",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F16",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F17",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F18",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F19",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    },
+    {
+      "id": "F20",
+      "mode": "fast",
+      "configuration_compile": "pending_single_frozen_campaign",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending",
+      "source": "implemented_supported_scope"
+    }
+  ],
+  "source_freeze": "all_sixty_supported_sources_merged; ready_for_single_frozen_compile_campaign",
+  "preliminary_campaigns": "stopped at owner request; retained evidence is not final all-60 compile proof",
+  "source_toggle_comment": "NEVER RUN \u2014 PENDING MEASUREMENT",
+  "compile_campaign": {
+    "original_source": "c58945cd08380400c7b0276945c480efa0fc5398",
+    "failed_only_source": "b3d5730e4",
+    "original_unique_jobs": {
+      "nvidia_amd": 253,
+      "apple_fast": 87
+    },
+    "actual_compiler_fixes": [
+      "F05 explicit scoped output stride",
+      "F06 mutable device workspace views"
+    ],
+    "known_retry_jobs": [
+      "job017",
+      "job018",
+      "job019",
+      "job021",
+      "job022",
+      "job023",
+      "job024",
+      "job026",
+      "job028"
+    ],
+    "successful_build_policy": "reuse; comments do not trigger rebuilding",
+    "infrastructure_recovery": "Apple job001 through job004: existing successful artifacts recovered with supplemental receipts, no rebuild",
+    "unsupported_targets": [
+      "N03/amd"
+    ],
+    "primary_targets": {
+      "shared_and_nvidia_cards": "nvidia",
+      "amd_specific_cards": "amd cross-compile on NVIDIA builder",
+      "apple_fast_cards": "apple"
+    },
+    "verification_source_fixes": [
+      "I07 forced-recompute harness reach expectation",
+      "I14 all-noise harness refusal/empty-cluster expectations",
+      "F02 audit export and admitted caller fixture",
+      "F16 Jones-floor and genuine prepared-variance refusal fixture"
+    ]
+  },
+  "verification_devices": [
+    "local Apple M4",
+    "rented NVIDIA RTX 4090"
+  ],
+  "optional_amd_policy": "preserve completed cross-compiles; finish AMD-specific A01-A08 arms; remaining shared AMD targets uncompiled pending per faster-local owner steering",
+  "measurement_required_before_merge": false
+}

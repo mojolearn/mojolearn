@@ -78,6 +78,7 @@ from x_decomp.kit import Mat
 from x_decomp.cells import FOLD_BLOCK
 from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
 from x_decomp.mcd_bmma import launch_gemm_mma_batched, MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered, note_cov_route
+from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, MCD_FAST_COV_REUSE, MCD_EXPERIMENT_CANDIDATES, McdCompactWorkspace, McdCovReuseWorkspace, reuse_covariance_kernel, mcd_experiment_hit
 from x_decomp.jacobi2 import dev_barrier
 
 # FAILED gap26-mcdcompat-taxi at 948c4e7b1: B rejected by the batched
@@ -869,6 +870,8 @@ def _u(buf: DeviceBuffer[DType.uint64]) -> U64Ptr:
 struct MfPhase(Movable):
     """One phase: nc candidates in groups of `per`, each over r rows (row
     group g of `rows`, or the identity), support size h, n_iter steps."""
+    var compact: Optional[McdCompactWorkspace]
+    var reuse: Optional[McdCovReuseWorkspace]
     var nc: Int
     var per: Int
     var r: Int
@@ -902,6 +905,12 @@ struct MfPhase(Movable):
 
     def __init__(out self, ctx: DeviceContext, nc: Int, per: Int, r: Int, ident: Int, h: Int, n_iter: Int, d: Int,
                  npair: Int) raises:
+        self.compact = None
+        self.reuse = None
+        comptime if MCD_FAST_ACTIVE_COMPACT and MCD_BMMA:
+            if nc <= MCD_EXPERIMENT_CANDIDATES: self.compact = McdCompactWorkspace(ctx, nc)
+        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
+            if nc <= MCD_EXPERIMENT_CANDIDATES: self.reuse = McdCovReuseWorkspace(ctx, nc)
         self.nc = nc
         self.per = per
         self.r = r
@@ -971,7 +980,7 @@ def _mma_precision(ctx: DeviceContext, ph: MfPhase, d: Int) raises:
     comptime if MCD_BMMA:
         # gate = mm_ran (pinvh ran for the candidate), the publication's mask
         launch_gemm_mma_batched(ctx, _f(ph.mm_vw), _f(ph.mm_v), _f(ph.mm_out), d, d, d, False, True,
-                                ph.nc, d*d, d*d, d*d, _i(ph.mm_ran), False)
+                                ph.nc, d*d, d*d, d*d, _i(ph.mm_ran), False, ph.compact)
     else:
         for c in range(ph.nc):
             var off = c*d*d
@@ -985,9 +994,12 @@ def _mma_precision(ctx: DeviceContext, ph: MfPhase, d: Int) raises:
 
 def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float32],
                     rows: DeviceBuffer[DType.int32], d: Int, par: Int, hinv: Float32) raises:
+    var gate = _i(ph.active)
+    comptime if MCD_FAST_COV_REUSE:
+        if Bool(ph.reuse): gate = _i(ph.reuse[].gate)
     ctx.enqueue_function[mc_center_kernel[MCD_BMMA]](
         _f(dx), _i(rows), _i(ph.selected), _f(ph.loc0), _f(ph.loc1),
-        _f(ph.mm_x), _i(ph.active), _i(ph.fin), Int32(ph.nc), Int32(ph.r), Int32(d),
+        _f(ph.mm_x), gate, _i(ph.fin), Int32(ph.nc), Int32(ph.r), Int32(d),
         Int32(ph.per), Int32(ph.ident), Int32(ph.h), Int32(1), Int32(par), Int32(0),
         grid_dim=_blocks(ph.nc*ph.h*d), block_dim=MF_TPB,
     )
@@ -995,16 +1007,16 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
         comptime if MCD_ORDERED_COV:
             note_cov_route(True, ph.h, d)
             launch_mcd_cov_ordered(ctx, _f(ph.mm_x), _f(ph.mm_out), _f(ph.part),
-                ph.h, d, ph.nc, ph.r*d, d*d, _i(ph.active), False)
+                ph.h, d, ph.nc, ph.r*d, d*d, gate, False)
         else:
             launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), _f(ph.mm_out), d, ph.h, d, True, False,
-                                    ph.nc, ph.r*d, ph.r*d, d*d, _i(ph.active), False)
+                                    ph.nc, ph.r*d, ph.r*d, d*d, gate, False, ph.compact)
     else:
         for c in range(ph.nc):
             var x = _f(ph.mm_x)+c*ph.r*d
             _launch_gemm_mma(ctx, x, x, _f(ph.mm_out)+c*d*d, d, ph.h, d, True, False)
     ctx.enqueue_function[mc_publish_matrix_kernel](
-        _f(ph.mm_out), _f(ph.cov1) if par == 1 else _f(ph.cov0), _i(ph.active),
+        _f(ph.mm_out), _f(ph.cov1) if par == 1 else _f(ph.cov0), gate,
         Int32(ph.nc), Int32(d), hinv, grid_dim=_blocks(ph.nc*d*d), block_dim=MF_TPB,
     )
 
@@ -1021,7 +1033,7 @@ def _mma_distance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float3
     comptime if MCD_BMMA:
         # gate = active, every candidate for the final distances (use_fin)
         launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm), _f(ph.mm_y), ph.r, d, d, False, False,
-                                ph.nc, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin)
+                                ph.nc, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin, ph.compact)
     else:
         for c in range(ph.nc):
             var off = c*ph.r*d
@@ -1105,6 +1117,9 @@ def _run_phase(
     var tp = Float64(0)
     var t0 = Float64(0)
     var steps = 0
+    var hreused = List[Int32]()
+    comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
+        hreused = List[Int32](length=1, fill=Int32(0))
     comptime if MCD_PROFILE:
         t0 = _pms(ctx)
         tp = t0
@@ -1137,26 +1152,38 @@ def _run_phase(
     for s in range(ph.n_iter + 1):
         var par = s % 2
         steps += 1
+        var moment_gate = _i(ph.active)
+        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
+            if Bool(ph.reuse):
+                ph.reuse[].reused.enqueue_fill(Int32(0))
+                ctx.enqueue_function[reuse_covariance_kernel](
+                    _i(ph.mask1) if par == 1 else _i(ph.mask0), _i(ph.mask0) if par == 1 else _i(ph.mask1),
+                    _i(ph.active), _i(ph.reuse[].gate),
+                    _f(ph.loc1) if par == 1 else _f(ph.loc0), _f(ph.loc0) if par == 1 else _f(ph.loc1),
+                    _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.cov0) if par == 1 else _f(ph.cov1),
+                    _i(ph.reuse[].reused), Int32(r), Int32(d), Int32(s), grid_dim=nc, block_dim=256)
+                moment_gate = _i(ph.reuse[].gate)
+                mcd_experiment_hit(1)
         comptime if MCD_BATCH_COMPAT:
             ctx.enqueue_function[mc_compact_kernel](
-                _i(ph.mask1) if par == 1 else _i(ph.mask0), _i(ph.selected), Int32(r), _i(ph.active),
+                _i(ph.mask1) if par == 1 else _i(ph.mask0), _i(ph.selected), Int32(r), moment_gate,
                 grid_dim=nc, block_dim=MF_TPB,
             )
             ctx.enqueue_function[mc_moment_kernel](
                 _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.selected),
                 _f(ph.loc1) if par == 1 else _f(ph.loc0), _i(pj), _i(pk), _f(ph.part),
-                Int32(nc), Int32(r), Int32(ph.h), Int32(ph.tiles), Int32(d), Int32(npair), Int32(0), _i(ph.active),
+                Int32(nc), Int32(r), Int32(ph.h), Int32(ph.tiles), Int32(d), Int32(npair), Int32(0), moment_gate,
                 grid_dim=_blocks(nc * ph.tiles * d), block_dim=MF_TPB,
             )
         else:
             ctx.enqueue_function[mf_colsum_kernel](
                 _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.mask1) if par == 1 else _i(ph.mask0), _f(ph.part),
-                Int32(nc), Int32(r), Int32(ph.tiles), Int32(d), _i(ph.active),
+                Int32(nc), Int32(r), Int32(ph.tiles), Int32(d), moment_gate,
                 grid_dim=_blocks(nc * ph.tiles * d), block_dim=MF_TPB,
             )
         ctx.enqueue_function[mf_mean_kernel](
             _f(ph.part), _f(ph.loc1) if par == 1 else _f(ph.loc0), Int32(nc), Int32(ph.tiles), Int32(d), hinv,
-            _i(ph.active), grid_dim=_blocks(nc * d), block_dim=MF_TPB,
+            moment_gate, grid_dim=_blocks(nc * d), block_dim=MF_TPB,
         )
         comptime if MCD_BATCH_MMA:
             _mma_covariance(ctx, ph, dx, rows, d, par, hinv)
@@ -1165,25 +1192,29 @@ def _run_phase(
                 ctx.enqueue_function[mc_moment_kernel](
                     _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.selected),
                     _f(ph.loc1) if par == 1 else _f(ph.loc0), _i(pj), _i(pk), _f(ph.part),
-                    Int32(nc), Int32(r), Int32(ph.h), Int32(ph.tiles), Int32(d), Int32(npair), Int32(1), _i(ph.active),
+                    Int32(nc), Int32(r), Int32(ph.h), Int32(ph.tiles), Int32(d), Int32(npair), Int32(1), moment_gate,
                     grid_dim=_blocks(nc * ph.tiles * npair), block_dim=MF_TPB,
                 )
             else:
                 ctx.enqueue_function[mf_cov_part_kernel](
                     _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.mask1) if par == 1 else _i(ph.mask0),
                     _f(ph.loc1) if par == 1 else _f(ph.loc0), _i(pj), _i(pk), _f(ph.part), Int32(nc), Int32(r), Int32(ph.tiles),
-                    Int32(d), Int32(npair), _i(ph.active), grid_dim=_blocks(nc * ph.tiles * npair), block_dim=MF_TPB,
+                    Int32(d), Int32(npair), moment_gate, grid_dim=_blocks(nc * ph.tiles * npair), block_dim=MF_TPB,
                 )
             ctx.enqueue_function[mf_cov_kernel](
                 _f(ph.part), _f(ph.cov1) if par == 1 else _f(ph.cov0), _i(pj), _i(pk), Int32(nc), Int32(ph.tiles), Int32(d),
-                Int32(npair), hinv, _i(ph.active), grid_dim=_blocks(nc * npair), block_dim=MF_TPB,
+                Int32(npair), hinv, moment_gate, grid_dim=_blocks(nc * npair), block_dim=MF_TPB,
             )
         _lap(ctx, prof, 1, tp)
         _det(ctx, ph, d, s, err)
         ctx.enqueue_function[mf_fill_i_kernel](_i(anyb), Int32(1), Int32(0), grid_dim=1, block_dim=MF_TPB)
         ctx.enqueue_function[mf_any_kernel](_i(ph.active), Int32(nc), _i(anyb), grid_dim=_blocks(nc), block_dim=MF_TPB)
+        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
+            if Bool(ph.reuse): ctx.enqueue_copy(dst_ptr=hreused.unsafe_ptr(), src_buf=ph.reuse[].reused)
         ctx.enqueue_copy(dst_ptr=hany.unsafe_ptr(), src_buf=anyb)
         ctx.synchronize()
+        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
+            if Bool(ph.reuse): mcd_experiment_hit(2, Int(hreused[0]))
         _lap(ctx, prof, 2, tp)
         comptime if MCD_SKIP_PINVH:
             # nobody reads this phase's final distances: the pinvh that only

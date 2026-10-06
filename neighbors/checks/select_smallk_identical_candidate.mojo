@@ -429,6 +429,7 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 # WARPBOUND_GUARD (DEVIATION 2523) is WARPBOUND composed with the VOTEGUARD
 # chain form and excludes every other candidate default.
 # ---------------------------------------------------------------------------
+# NEVER RUN — PENDING MEASUREMENT
 comptime SMALLK_SELECT_TRIAL = is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 comptime SMALLK_UNIFORM_TRIP_DEFAULT = True  # DEVIATION 2497: flipped 2026-09-11 on the H100 and M4 gates
 comptime SMALLK_HEAD_BOUND_DEFAULT = False  # DEVIATION 2498: NEGATIVE on the H100 2026-09-11, stays off

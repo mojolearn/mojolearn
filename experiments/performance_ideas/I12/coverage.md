@@ -1,0 +1,14 @@
+# I12 implementation coverage
+
+Mode: IDENTICAL. New source mechanisms are default off.
+
+Implemented: Actual CD independent coordinate arms with accepted iterate/oracle/refusal/support/prediction gates, plus complete logistic/OWL-QN/multinomial minimizer and replay fixtures.
+
+Remaining original-card scope: New default-off IDENTICAL bounded4trial Armijo schedule prices actual independently materialized trial vectors through the original full evaluator, batches scalar consumption, and preserves first acceptance, bounds, logical evaluation counts, selected gradients and norms. Physical speculative evaluation counts are separate diagnostics. Eight actual-objective cases compare public dispatch to the unchanged sequential control, including first rejection then acceptance, invalid direction/step, lower/upper step bounds, and two/seven trial exhaustion. Status, first-acceptance count, logical work, selected parameter/gradient/objective words and cached norm are checked; a physical counter witnesses candidate reach. Actual direct SGD host replay now attributes independent OVR with chunk64 and binary/regression batch-step fusion with chunk1, including weighted/shuffled/tail/repeated fits and complete coefficient/intercept/epoch/status words. Gram/shared-fold variants remain numerical-profile prerequisites. Existing FAST linearized-score batching remains separate.
+
+Qualification: compile checks only on the development machine. Same-version host/NVIDIA/AMD/Apple output identity and NVIDIA+AMD full-operation performance acceptance have not been demonstrated. Apple IDENTICAL is an identity witness only. No speed claim or production promotion is made.
+
+Merge admission: new source candidates remain explicit default-off opt-ins.
+Qualification remains pending. `native_arms.json` lists independently compiled
+incumbent/candidate and available rollback arms; compilation never promotes a
+switch or supplies performance evidence. Existing promoted defaults remain unchanged.

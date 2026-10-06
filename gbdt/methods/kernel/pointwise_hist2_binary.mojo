@@ -80,6 +80,7 @@ def compute_split_properties_b_kernel[
     total_feature_count_in: Int32,
     fixed_scale_p: MutPointer[Float32, MutAnyOrigin],
     int_slot: Int32,
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ):
     """`ComputeSplitPropertiesBImpl` (`:23-94`), copied; under the ordered
     tiers the fixed-point accumulator (lane/neural-pass124).
@@ -133,11 +134,13 @@ def compute_split_properties_b_kernel[
             compute_histogram_2[PW_HB_BLOCK, 1, 1, m](
                 hi, indices, UInt32(part_offset), UInt32(part_size),
                 target, weight, ci,
+                dither_ids=dither_ids,
             )
         else:
             compute_histogram[PW_HB_BLOCK, 1, 1, 1, m](
                 hi, indices, UInt32(part_offset), UInt32(part_size),
                 target, weight, ci,
+                dither_ids=dither_ids,
             )
         barrier()
         var w_i = tid & 1
@@ -165,11 +168,13 @@ def compute_split_properties_b_kernel[
         compute_histogram_2[PW_HB_BLOCK, 1, 1, m](
             hist, indices, UInt32(part_offset), UInt32(part_size),
             target, weight, ci,
+            dither_ids=dither_ids,
         )
     else:
         compute_histogram[PW_HB_BLOCK, 1, 1, 1, m](
             hist, indices, UInt32(part_offset), UInt32(part_size),
             target, weight, ci,
+            dither_ids=dither_ids,
         )
 
     # their writeback (`:69-91`). `Reduce` ends in a barrier, so theirs has

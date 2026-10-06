@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "id": "F18",
+  "title": "Resident KDE immutable input ownership and direct preparation",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "kde/resident_fit.mojo",
+    "python/mojolearn/density.py",
+    "bindings/_mojolearn_estimators.mojo",
+    "experiments/performance_ideas/F18/caller.py"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_KDE_FAST_DIRECT_PREP"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F18",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F18",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F18/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "actual public repeated score quality vs independent oracle",
+    "bandwidth invalidation, two models, refit, refusal recovery",
+    "immutable snapshot variant external source mutation",
+    "returned output ownership preserved"
+  ],
+  "timing_contract": "Actual public score through first read; cold preparation and repeated calls separate, mandatory output copies counted",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "estimators",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true,
+  "variants": {
+    "default": [
+      "MOJOLEARN_KDE_FAST_DIRECT_PREP"
+    ],
+    "immutable": [
+      "MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"
+    ]
+  },
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F18",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}

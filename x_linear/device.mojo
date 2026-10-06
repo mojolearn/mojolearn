@@ -847,6 +847,7 @@ comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
 # helpers on the same operands in the same order: no bit moves.
 # `-D MOJOLEARN_SGD_IDN_MB_FUSE_OFF` restores three launches a batch.
 comptime SGD_IDN_MB_FUSE = (
+    # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
@@ -1156,6 +1157,7 @@ def sgd_mb_chunk_kernel(
 # the sequential problems.
 comptime SGD_IDN_OVR_PAR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     and not (is_defined["MOJOLEARN_SGD_IDN_OVR_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 #: `cf` words a problem (`_sgd_mb_chunk_kernel_body`'s nine)

@@ -65,7 +65,11 @@ comptime MBF_MAX_KD = 4096
 comptime MBF_MAX_K = 256
 comptime MBF_MAX_BATCH = 4096
 """The reassignment's pool lives in threadgroup memory (16 KB)."""
-comptime MBF_GROUP = 32
+# Bound speculative stopping work more tightly while retaining the same
+# batch schedule and convergence tests; group size is independent of data
+# dimensions. Qualification must compare reported completed iterations.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+comptime MBF_GROUP = 8 if (MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_CLUSTER_FAST_STOP_GROUP8"]()) else 32
 """Steps enqueued between two reads of the batch inertias."""
 
 # lane/apple-fast-gap-cls2 (2026-10-03): MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL
@@ -117,6 +121,7 @@ comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUS
 # coalesced reads, one pass over X. k <= MBF_RG_MAXK, else the old pass.
 # FAST: the distance's summation order changes (labels may flip only at
 # near-ties; quality checked against main).
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime MBK_W2_LABRG = MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"]()
 
 

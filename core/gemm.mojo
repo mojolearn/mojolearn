@@ -5,6 +5,7 @@
 from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
+from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -467,6 +468,12 @@ def gemm_nt(
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
         return
+    if try_scoped_gemm[False, 0](
+        ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        m, n, k, k, 1, 1, k, 1, k,
+    ):
+        return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(x, row_major(m, k))
     var ty = TileTensor(y, row_major(n, k))
@@ -504,6 +511,14 @@ def gemm_nt_gram(
             grid_dim=((m * n + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
+        return
+    # True alias Gram retains its original lifetime and plain NT epilogue.
+    var scoped_xt = xt  # mutable view; shared buffer remains caller-owned
+    var xp = scoped_xt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    if try_scoped_gemm[False, 0](
+        ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xp, xp,
+        m, n, k, k, 1, 1, k, 1, k,
+    ):
         return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(xt, row_major(m, k))

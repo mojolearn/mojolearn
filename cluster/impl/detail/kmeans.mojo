@@ -200,6 +200,7 @@ comptime IDN_KMEANS_DEVICE_CONV = (
 #: `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1=1` (gating alone, one read per
 #: iteration), `_2`, `_4`, `_16`, `_32`. No bit depends on the chunk.
 comptime KMEANS_CONV_CHUNK = (
+    # A08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     1 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1"]()
     else (
         2 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2"]()

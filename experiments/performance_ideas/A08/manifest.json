@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "id": "A08",
+  "title": "Requalify promoted 256-row accumulation with fit interactions",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "status": "build_passed",
+  "implementation_paths": [
+    "experiments/performance_ideas/A08/check.mojo",
+    "gemm/experiments/profile_campaign.py",
+    "cluster/checks/reduce_by_key.mojo",
+    "cluster/impl/detail/kmeans.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1",
+    "MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096=1",
+    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1=1",
+    "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1",
+    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1=1"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A08/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A08/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
+  ],
+  "validation_paths": [
+    "gemm/checks/gemm_step_arms_check.mojo",
+    "core/gemm_identity_check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host output bits",
+    "exact intermediate outputs and poison control",
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Campaign receipt contains explicit baseline and independently compiled candidate arms; do not rebuild for run-only"
+  ],
+  "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
+  "blocker": null,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A08/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ],
+  "build_uses_compile_slot": true,
+  "validation_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A08/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
+  ]
+}

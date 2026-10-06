@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "id": "I09",
+  "title": "gate token-parallel recurrence on prefix and decode boundaries",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/I09/check.mojo"
+  ],
+  "candidate_defines": [],
+  "baseline_defines": [
+    "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF=1"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/I09/check.mojo",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--source-sha",
+    "{source_sha}",
+    "--mojo",
+    "{mojo}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/I09/check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "public semantics and canonical tie order retained",
+    "NVIDIA+AMD combined faster and neither materially slower"
+  ],
+  "timing_contract": "Frozen source; compile once on cheap boxes; device runs only; full public-operation timing includes all scratch/preparation/readback. Apple IDENTICAL bit check only. Native builds explicitly bind device column and accelerator; independent host replay remains a separate identity gate, not a DeviceContext execution vendor.",
+  "blocker": null,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
+    "{repo}/experiments/performance_ideas/I09/check.mojo",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--source-sha",
+    "{source_sha}",
+    "--mojo",
+    "{mojo}",
+    "--output",
+    "{output}",
+    "--define",
+    "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF=1"
+  ],
+  "validation_argv": [
+    "{output}"
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "id": "F16",
+  "title": "Integrate compensated production Kalman tail with independent gradient prerequisite",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "arima/impl/fast_eval_ws.mojo",
+    "arima/impl/fast_eval_df.mojo",
+    "arima/checks/product_df_quality_check.mojo",
+    "experiments/performance_ideas/F16/caller.py",
+    "experiments/performance_ideas/apple_fast/arima_task.py"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL=1"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F16",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F16",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "arima/checks/product_df_quality_check.mojo",
+    "experiments/performance_ideas/F16/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "independent covariance/gradient oracle before estimator timing",
+    "production Jones/initializer/optimizer failure semantics",
+    "selected order and heldout forecast quality"
+  ],
+  "timing_contract": "No timing authorization until production compensated likelihood+gradient integration and full quality pass",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "arima",
+  "prerequisite_bindings": [
+    "core",
+    "tsa"
+  ],
+  "build_uses_compile_slot": true,
+  "native_checks": [
+    {
+      "name": "F16-independent-gradient",
+      "source": "arima/checks/product_df_quality_check.mojo",
+      "compile_arms": [
+        "B"
+      ],
+      "role": "candidate-only independent gradient oracle; public incumbent binding remains the A control"
+    }
+  ],
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F16",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}

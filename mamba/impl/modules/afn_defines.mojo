@@ -120,6 +120,7 @@ comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
 #: bias-seeded four-tap fma chain over the same inputs (no recurrence), so no
 #: bit moves; the host column keeps the walking kernel (same cells, same bits).
 comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
+    # I09 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF"
 ]()
 #: lane nr-mamba (2026-10-04, roadmap B1) IDN_M2_SSD_TILES (default ON where
@@ -135,23 +136,29 @@ comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
 #: cell kernels (it has no shared memory).
 comptime IDN_M2_SSD_TILES = (
     _IDN_MAMBA_DEVICE
+    # I08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     and not is_defined["MOJOLEARN_IDN_M2_SSD_TILES_OFF"]()
     and lib_smem_page_fits_for[TARGET_COLUMN, 20480]()
 )
 
 comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"]()
 )
 comptime AFN_MAMBA1_FUSE_IN = AFN_MAMBA_ALL or (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_FUSE_IN"]()
 )
 comptime AFN_MAMBA2_SSD_MMA = AFN_MAMBA_ALL or (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA2_SSD_MMA"]()
 )
 comptime AFN_MAMBA3_SISO_FUSED = AFN_MAMBA_ALL or (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA3_SISO_FUSED"]()
 )
 comptime AFN_MAMBA_ARENA = AFN_MAMBA_ALL or (
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_ARENA"]()
 ) or IDN_MAMBA_ARENA
 #: cpu3-seq (2026-10-04): the device refusal is THE refusal on every device

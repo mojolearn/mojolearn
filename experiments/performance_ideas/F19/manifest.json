@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "id": "F19",
+  "title": "Coalesced tiled gather with GPU-generated indices and direct owned outputs",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "resample/gather_fast.mojo",
+    "resample/estimator.mojo",
+    "experiments/performance_ideas/F19/caller.py",
+    "experiments/performance_ideas/F04/caller.py",
+    "bindings/_mojolearn_resample.mojo",
+    "python/mojolearn/resample.py"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_RESAMPLE_FAST_GATHER",
+    "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+    "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER"
+  ],
+  "baseline_defines": [
+    "MOJOLEARN_RESAMPLE_FAST_GATHER",
+    "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+  ],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F19",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F19",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F19/caller.py"
+  ],
+  "depends_on": [
+    "F04"
+  ],
+  "quality_gates": [
+    "actual GPU draw/gather, no NumPy hybrid fallback",
+    "exact replacement sampling semantics",
+    "narrow/wide/tail rows and multiple arrays",
+    "weighted API refused; nonreplacement gather prerequisite explicitly outstanding",
+    "weighted API remains explicitly refused; no synthetic weighted support claim"
+  ],
+  "timing_contract": "Whole resample through output consumption, all upload/download bytes included; no width/dataset-specific route",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "resample",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true,
+  "variants": {
+    "permutation": [
+      "MOJOLEARN_RESAMPLE_FAST_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+      "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"
+    ]
+  },
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F19",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}
