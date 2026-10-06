@@ -3752,6 +3752,7 @@ def _mfma16_try(
 #: NVIDIA column (kernel body row 1). `-D MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF`
 #: keeps the scalar stepped-down plans; also off under `MOJOLEARN_IDN_ALL_OFF`.
 comptime IDN_GEMM_NV_STEP_KPACK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    # N01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     is_defined["MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
@@ -7830,6 +7831,7 @@ comptime GEMM_KPACK_PAGE_GUARD_BYTES = 1024
 # 2026-10-05 packed64 screen: NVIDIA B/A 1.015291 (~1.53% slower),
 # all bits matched. No timing win; retain explicit arm, do not enable default.
 # Raw per-case evidence: experiments/identical_speed/results/20261005/nvidia-screen.json.
+# N01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
 comptime GEMM_KPACK_RPT = TUNED_RPT if is_defined["MOJOLEARN_GEMM_KPACK_RPT4"]() else TUNED_RPT * 2
 comptime GEMM_KPACK_CPT = TUNED_CPT if (
     is_defined["MOJOLEARN_GEMM_KPACK_CPT4"]() or lib_gemm_kpack_narrow_for[TARGET_COLUMN]()

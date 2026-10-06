@@ -43,6 +43,7 @@ def main() raises:
         + 4 * Int(is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"]())
         # I01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         + 8 * Int(is_defined["MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY"]())
+        # N01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         + 16 * Int(is_defined["MOJOLEARN_GEMM_KPACK_RPT4"]())
     )
     if mask != gemm_step_env_int("SCHEDULE_EXPECT_MASK", 0):
