@@ -5,8 +5,7 @@ is compared by the existing contract oracle on neighboring prefix tails.
 New chunk/affine profiles remain conditional on complete replay contracts."""
 from max.gpu.host import DeviceContext
 from mamba.checks.mamba_check import planted_weights, clause_d
-from mamba.checks.mamba_fixture import corpus_case_seed, corpus_x
-from mamba.impl.modules.mamba import MambaDims
+from mamba.checks.mamba_fixture import corpus_case_seed, corpus_x, MambaDims
 
 def main() raises:
     var ctx = DeviceContext()
