@@ -16,6 +16,7 @@ import math
 from pathlib import Path
 import re
 import sys
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -144,7 +145,37 @@ def capture_signature(capture, paths, label):
                 manifest=sorted(normalized, key=lambda row: row['path']))
 
 
-def check_scored(run, receipt, case, expected, column, transport):
+def observed_outputs(run, receipt, case, expected, column, transport):
+    """Report literal scored output hashes; never substitute for full identity."""
+    data = run.get('result', {})
+    try:
+        require(receipt.get('status') == 'MEASURED_FULL' and not receipt.get('error'), 'attempt incomplete')
+        require(type(run.get('returncode')) is int and run['returncode'] == 0
+                and not run.get('error') and run.get('excluded') is False, 'scored process failed/excluded')
+        require(data.get('schema') == 'mojolearn.full-ab-result/1' and data.get('status') == 'PASS'
+                and not data.get('error') and not data.get('errors'), 'scored result failed')
+        require(data.get('phase') == 'scored' and data.get('arm') == run['arm']
+                and data.get('vendor') == COLUMNS[column], 'arm/phase/vendor differs')
+        require(data.get('sample_counts') == {'excluded_warmups': 0, 'scored': 1}
+                and data.get('full_dataset_coverage') is True, 'sample/full scope differs')
+        require(receipt.get('source_sha') == data.get('source_sha') and sha(data.get('source_sha'), 40),
+                'original source attribution differs')
+        require(receipt.get('workload', {}).get('master_selection', {}).get('id') == case['configuration_id']
+                and data.get('implementation_ids') == case['implementation_ids'], 'configuration attribution differs')
+        for key in SCOPE:
+            if key not in ('source_sha', 'harness_sha256'):
+                require(key in data and canonical(data[key]) == canonical(expected[key]), 'scope differs: ' + key)
+        require(configuration(data.get('configuration'), transport) == expected['configurations'][run['arm']],
+                'logical configuration differs')
+        outputs = capture_signature(data.get('outputs'), expected['capture_paths']['outputs'], 'outputs')
+        require(data.get('output_sha256') == outputs['sha256'], 'output aliases differ')
+        return dict(status='OBSERVED_ONLY', outputs=outputs, source_sha=data['source_sha'],
+                    harness_sha256=data.get('harness_sha256'), qualified_identity=False)
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        return dict(status='INCOMPLETE', issues=[str(exc)], qualified_identity=False)
+
+
+def check_scored(run, receipt, case, expected, column, transport, equivalent_source=None):
     issues = []
     data = run.get('result')
     if not isinstance(data, dict):
@@ -163,14 +194,15 @@ def check_scored(run, receipt, case, expected, column, transport):
         require(data.get('sample_counts') == {'excluded_warmups': 0, 'scored': 1}, 'scored sample counts differ')
         require(data.get('full_dataset_coverage') is True, 'full dataset coverage missing')
         require(data.get('hashing_outside_timing') is True, 'hash/report timing exclusion missing')
-        require(receipt.get('source_sha') == expected['source_sha'], 'attempt source differs')
+        source = equivalent_source or expected['source_sha']
+        require(receipt.get('source_sha') == source, 'attempt source differs')
         require(receipt.get('mode') == expected['mode'], 'attempt mode differs')
         job = receipt.get('workload', {})
         require(isinstance(job, dict), 'missing frozen job')
         require(job.get('master_selection', {}).get('id') == case['configuration_id'],
                 'frozen configuration ID differs')
         for key in SCOPE:
-            require(key in data and canonical(data[key]) == canonical(expected[key]), 'scope differs: ' + key)
+            require(key in data and canonical(data[key]) == canonical(source if key == 'source_sha' else expected[key]), 'scope differs: ' + key)
         require(data.get('implementation_ids') == case['implementation_ids'], 'implementation attribution differs')
         require(configuration(data.get('configuration'), transport) == expected['configurations'][run['arm']],
                 'logical arm configuration differs')
@@ -207,7 +239,8 @@ def check_scored(run, receipt, case, expected, column, transport):
         issues.append(str(exc))
     return dict(status='READY' if not issues else 'INCOMPLETE', issues=issues,
                 result=data, log=run.get('log'), output=run.get('output'),
-                result_sha256=run.get('result_sha256'), returncode=run.get('returncode'))
+                result_sha256=run.get('result_sha256'), returncode=run.get('returncode'),
+                observed_outputs=observed_outputs(run, receipt, case, expected, column, transport))
 
 
 def receipt_summary(value):
@@ -236,13 +269,26 @@ def read_column(spec, base, case, expected, column):
                           for r in receipt.get('runs', []) if isinstance(r, dict)]
         transport = spec.get('transport_environment', {})
         require(isinstance(transport, dict) and set(transport) <= {'A', 'B'}, 'invalid transport mapping')
+        equivalent_source = None
+        if case.get('freeze_equivalence') and column in ('nvidia-native', 'amd'):
+            try:
+                from six_lane_freeze_equivalence import validate
+                report['freeze_equivalence'] = validate(case['freeze_equivalence'], base, case, expected,
+                                                       column, report['sha256'])
+                equivalent_source = report['freeze_equivalence']['original_source_sha']
+            except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError) as exc:
+                report['freeze_equivalence_error'] = str(exc)
         for arm in ('A', 'B'):
             runs = [r for r in receipt.get('runs', []) if isinstance(r, dict)
                     and r.get('phase') == 'scored' and r.get('arm') == arm]
             if len(runs) != 1:
                 report['arms'][arm] = dict(status='INCOMPLETE', issues=['expected exactly one scored ' + arm])
             else:
-                report['arms'][arm] = check_scored(runs[0], receipt, case, expected, column, transport.get(arm))
+                report['arms'][arm] = check_scored(runs[0], receipt, case, expected, column, transport.get(arm), equivalent_source)
+        if report.get('freeze_equivalence_error'):
+            for arm in report['arms'].values():
+                arm['status'] = 'INCOMPLETE'
+                arm.setdefault('issues', []).append(report['freeze_equivalence_error'])
         report['status'] = 'READY' if all(r['status'] == 'READY' for r in report['arms'].values()) else 'INCOMPLETE'
         require(isinstance(spec.get('history', []), list), 'invalid history list')
         for old in spec.get('history', []):
@@ -314,6 +360,7 @@ def compare_cases(manifest, base):
                         for arm in value.get('arms', {}).values():
                             arm['status'] = 'INCOMPLETE'
                             arm.setdefault('issues', []).append('same receipt reused for distinct columns')
+                            arm['observed_outputs'] = dict(status='INCOMPLETE', qualified_identity=False)
             required = COLUMNS if case['mode'] == 'identical' else ('apple',)
             if all(report['columns'].get(name, {}).get('status') == 'READY' for name in required):
                 report['receipt_status'] = 'COMPLETE'
@@ -321,6 +368,18 @@ def compare_cases(manifest, base):
                 report['status'] = 'NOT_REQUIRED'
                 report['policy'] = 'Apple FAST uses retained task-quality gates; no cross-vendor equality requirement.'
             else:
+                report['observed_output_bits'] = {}
+                for arm in ('A', 'B'):
+                    observations = []
+                    for left, right in itertools.combinations(COLUMNS, 2):
+                        a = report['columns'].get(left, {}).get('arms', {}).get(arm, {}).get('observed_outputs', {})
+                        b = report['columns'].get(right, {}).get('arms', {}).get(arm, {}).get('observed_outputs', {})
+                        status = 'INCOMPLETE'
+                        if a.get('status') == b.get('status') == 'OBSERVED_ONLY':
+                            status = 'AGREE' if a['outputs'] == b['outputs'] else 'DIFFER'
+                        observations.append(dict(left=left, right=right, status=status, qualified_identity=False,
+                                                 observations={left: a, right: b}))
+                    report['observed_output_bits'][arm] = observations
                 report['arms'] = {arm: compare_arm(report['columns'], arm, expected) for arm in ('A', 'B')}
                 states = {r['status'] for r in report['arms'].values()}
                 report['status'] = 'MISMATCH' if 'MISMATCH' in states else ('MATCH' if states == {'MATCH'} else 'INCOMPLETE')
@@ -357,7 +416,11 @@ def board_inputs(report, catalog, previous_inventory=None, previous_index=None):
                 arms = value.get('arms', {})
                 ready = set(arms) == {'A', 'B'} and all(a['status'] == 'READY' for a in arms.values())
                 cell = dict(id=ident, vendor=vendor, route=column, case=case['id'], scope='full_workload',
-                            configuration_id=case['configuration_id'], source_sha=case['source_sha'],
+                            configuration_id=case['configuration_id'],
+                            source_sha=value.get('attempt', {}).get('source_sha', case['source_sha']),
+                            comparison_anchor_source_sha=case['source_sha'],
+                            freeze_equivalence=value.get('freeze_equivalence'),
+                            observed_output_bits=case.get('observed_output_bits'),
                             status='PENDING_ADMISSION' if ready else 'FAILED_OR_INCOMPLETE',
                             evidence=value.get('path'), receipt_sha256=value.get('sha256'),
                             identity=case['status'], accepted=False, promoted=False,
