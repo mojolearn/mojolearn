@@ -169,7 +169,10 @@ def host_pinned_distance(
     """`pinned_distance_tile_kernel` at `is_sqrt = 0`, one cell (module
     docstring). `descending` is the sabotage arm's walk and nothing else."""
     comptime if C30_DIRECT_DISTANCE:
-        return direct_squared_distance((q.unsafe_ptr()+qi*d).unsafe_origin_cast[MutAnyOrigin](),(y.unsafe_ptr()+yi*d).unsafe_origin_cast[MutAnyOrigin](),d)
+        # Read-only views for the shared raw-pointer ABI; q/y retain storage.
+        var qp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(q.unsafe_ptr()))
+        var yp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(y.unsafe_ptr()))
+        return direct_squared_distance(qp + qi*d, yp + yi*d, d)
     var acc = Float32(0.0)
     if descending:
         var f = d - 1

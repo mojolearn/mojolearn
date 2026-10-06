@@ -582,8 +582,8 @@ struct HostFeistel(Movable):
         var total_bits = UInt64(max(8, width))
         self.left_bits = total_bits // UInt64(2)
         self.right_bits = total_bits - self.left_bits
-        self.left_mask = (UInt64(1) << UInt64(self).left_bits) - UInt64(1)
-        self.right_mask = (UInt64(1) << UInt64(self).right_bits) - UInt64(1)
+        self.left_mask = (UInt64(1) << UInt64(self.left_bits)) - UInt64(1)
+        self.right_mask = (UInt64(1) << UInt64(self.right_bits)) - UInt64(1)
         # `lcg_seed` (`:137-149`): `s % M`, a zero state rescued to 1.
         var x = UInt64(Int(seed)) % UInt64(2147483647)
         if x == UInt64(0):

@@ -134,7 +134,7 @@ def fa_em[E: Exec](A: Mat, mut psi: Mat, mut W: Mat, mut ll_out: List[Float64], 
         var sk = cols_of(s2, 0, nc)
         var unexp = dsum(s2, nc, d) if nc < d else 0.0
         comptime if C27_FA_COMPONENTS:
-            W = k.ew3(OP_CLASSICAL_FA_LOAD, Vt, mat_vec_t(sk), sqrt_psi, 0.0)
+            W = k.ew3(OP_CLASSICAL_FA_LOAD, Vt, mat_vec_t(sk.copy()), sqrt_psi, 0.0)
         else:
             W = k.ew2(OP_MUL, Vt, mat_vec_t(k.ew1(OP_SQRT, k.ew1(OP_MAXS, k.ew1(OP_ADDS, sk, -1.0), 0.0), 0.0)))
             W = k.ew2(OP_MUL, W, sqrt_psi)
