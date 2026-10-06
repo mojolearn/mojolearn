@@ -5274,8 +5274,40 @@
         "amd",
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "I02",
+          "vendor": "amd",
+          "route": "gfx942",
+          "scope": "component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "measurement_stage": "streamed_driver",
+          "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+          "case": "{}/{\"k\": 2048, \"m\": 1024, \"n\": 1024}/1",
+          "status": "MEASURED",
+          "returncode": 0,
+          "artifact_hashes": {
+            "baseline": "a14b08f11e403a7f895ee185f75b7b459c3f513e49ce70a1831529d3d4f8cd33",
+            "candidate": "a14b08f11e403a7f895ee185f75b7b459c3f513e49ce70a1831529d3d4f8cd33"
+          },
+          "baseline_ms": 0.504342,
+          "candidate_ms": 0.180641,
+          "baseline_arm": "0",
+          "candidate_arm": "1",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 0.35817163749995046
+        }
+      ],
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "I03",
@@ -5386,8 +5418,40 @@
         "amd",
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "I04",
+          "vendor": "amd",
+          "route": "gfx942",
+          "scope": "component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "measurement_stage": "streamed_driver",
+          "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+          "case": "{}/{\"k\": 2048, \"m\": 1024, \"n\": 1024}/candidate",
+          "status": "MEASURED",
+          "returncode": 0,
+          "artifact_hashes": {
+            "baseline": "2640a2dba1636c40b454988b0a246b36f3d8711aa54745a5d7564713ffa0c119",
+            "candidate": "ebb5c8bffd2afdadd758cb5c1c1f68f21a1eea8b600e60b3cca0b1ddc2f2b66e"
+          },
+          "baseline_ms": 0.182357,
+          "candidate_ms": 0.231253,
+          "baseline_arm": "baseline",
+          "candidate_arm": "candidate",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 1.2681333867084894
+        }
+      ],
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "I05",
