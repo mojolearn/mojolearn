@@ -660,11 +660,26 @@ def _ridge_fast_gram() -> Bool:
 # The epoch order (`sgd_perm_kernel`), the targets and the epoch end
 # (x_linear/sgd_end.mojo) are the device's; the host enqueues an epoch's
 # batches without a sync and reads two stop words.
+# AFCL-L14: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# Four SIMD groups per independent row-prediction block expose twice as
+# many schedulable blocks as the 256-thread baseline. Training examples,
+# minibatches, seeded order, gradient folds and update/stopping policy do
+# not change. Witness capacities/offsets use the same row-grid helper.
+comptime AFCL_L14 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L14"]())
+comptime SGD_ROW_TPB = 128 if AFCL_L14 else XG_TPB
+
+
+@always_inline
+def _sgd_row_blocks(rows: Int) -> Int:
+    return max((rows + SGD_ROW_TPB - 1) // SGD_ROW_TPB, 1)
+
+
 @always_inline
 def _sgd_mb_rows_kernel_body(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
                        dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32, ocm: Int32):
-    var r = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if r < Int(bs):
         var i = Int(idx.unsafe_load(Int(start) + r))
         if ocm != 0:
@@ -1554,7 +1569,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var ws0 = 0
     while ws0 < n:
         var wbs = min(batch, n - ws0)
-        wcap += _xg_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2) + (1 if ocm == 2 else 0)
+        wcap += _sgd_row_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2) + (1 if ocm == 2 else 0)
         ws0 += wbs
     wcap += _xg_blocks(n)
     var wit = Witness(ctx, max(wcap, 1))
@@ -1711,7 +1726,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                                 dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
                                 dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
                                 wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
-                                Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                                Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
                             )
                         else:
                             var w_src = FP(unsafe_from_address=wa if cur == 0 else wb)
@@ -1723,10 +1738,10 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                                 dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
                                 ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp, ddlt.unsafe_ptr(),
                                 Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(dev_eta),
-                                wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                                wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
                             )
                             cur = 1 - cur
-                        wo += _xg_blocks(bs)
+                        wo += _sgd_row_blocks(bs)
                         if ocm == 2:
                             # the implicit step of this batch (its rows' margins
                             # above), dlt[0] for the step the next launch takes
@@ -1774,9 +1789,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                             dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
                             dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
                             wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
-                            Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                            Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
                         )
-                        wo += _xg_blocks(bs)
+                        wo += _sgd_row_blocks(bs)
                         if ocm == 2:
                             ctx.enqueue_function[sgd_mb_oc_kernel](
                                 ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(bs), et, alpha, Int32(1 if bsum else 0),

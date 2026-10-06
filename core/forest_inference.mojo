@@ -34,6 +34,24 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
 from core.forest_experiments import (T31_PACKED_A, T31_PACKED_B, T32_SHARED_ROWS, T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
 
+# AFCL-T08: two Apple SIMD groups per RF traversal workgroup instead of
+# four. Logical 32-tree groves, tree order and all outputs stay unchanged.
+# Lower per-group register/shared-memory use applies across neighboring
+# row counts; no dataset, feature count or forest shape selects this arm.
+# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
+comptime AFCL_T08 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_T08"]()
+)
+
+
+@always_inline
+def _afcl_rf_block[RF_INPUT: Bool]() -> Int:
+    comptime if AFCL_T08 and RF_INPUT:
+        return 64
+    return 128
+
 
 @always_inline
 def forest_add(a: Float32, b: Float32) -> Float32:
@@ -203,6 +221,8 @@ def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
     output: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, features_in: Int32, outputs_in: Int32, trees_in: Int32,
 ):
+    comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
+    comptime traversal_rows = traversal_tpb // 32
     var rows = Int(rows_in)
     var features = Int(features_in)
     var outputs = Int(outputs_in)
@@ -210,22 +230,22 @@ def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     # Four scalar row/output tasks per128-thread block; all threads hit barriers.
     var tid = Int(thread_idx.x)
     var lane = tid%32
-    var item = Int(block_idx.x)*4+tid//32
+    var item = Int(block_idx.x)*traversal_rows+tid//32
     var total = Float32(0)
     var tiled = False
     comptime if FOREST_SHARED_ROWS:
         # DEVIATION 2963: with one output an item is a row, so the block's
         # four rows tile into shared memory; every thread hits the barrier.
-        var xs = stack_allocation[4*FOREST_SHARED_ROW_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
+        var xs = stack_allocation[traversal_rows*FOREST_SHARED_ROW_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
         if outputs == 1 and features <= FOREST_SHARED_ROW_CAPACITY:
             tiled = True
-            var row0 = Int(block_idx.x)*4
-            var count = 4*features
+            var row0 = Int(block_idx.x)*traversal_rows
+            var count = traversal_rows*features
             var i = tid
             while i < count:
                 var r = row0+i//features
                 xs[unsafe_offset=i] = x.unsafe_load(r*features+i%features) if r < rows else Float32(0)
-                i += 128
+                i += traversal_tpb
             barrier()
             if item < rows:
                 var tree = lane
@@ -239,7 +259,7 @@ def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
             var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item//outputs,features)
             total = forest_add(total,leaves.unsafe_load(node*outputs+item%outputs))
             tree += 32
-    var sums = stack_allocation[128,Float32,address_space=AddressSpace.SHARED]()
+    var sums = stack_allocation[traversal_tpb,Float32,address_space=AddressSpace.SHARED]()
     sums[unsafe_offset=tid] = total
     barrier()
     var step = 16
@@ -280,13 +300,15 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
     bounds register use and shared scratch (at most4KiB). More outputs keep
     the existing scalar-output kernel. No row*tree global scratch is added.
     """
+    comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
+    comptime traversal_rows = traversal_tpb // 32
     var rows = Int(rows_in)
     var features = Int(features_in)
     var outputs = Int(outputs_in)
     var trees = Int(trees_in)
     var tid = Int(thread_idx.x)
     var lane = tid%32
-    var row = Int(block_idx.x)*4+tid//32
+    var row = Int(block_idx.x)*traversal_rows+tid//32
     var totals = stack_allocation[OUTPUT_CAPACITY,Float32]()
     @parameter
     for c in range(OUTPUT_CAPACITY):
@@ -294,16 +316,16 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
     var tiled = False
     comptime if FOREST_SHARED_ROWS:
         # DEVIATION 2963: the block's four rows tiled into shared memory.
-        var xs = stack_allocation[4*FOREST_SHARED_ROW_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
+        var xs = stack_allocation[traversal_rows*FOREST_SHARED_ROW_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
         if features <= FOREST_SHARED_ROW_CAPACITY:
             tiled = True
-            var row0 = Int(block_idx.x)*4
-            var count = 4*features
+            var row0 = Int(block_idx.x)*traversal_rows
+            var count = traversal_rows*features
             var i = tid
             while i < count:
                 var r = row0+i//features
                 xs[unsafe_offset=i] = x.unsafe_load(r*features+i%features) if r < rows else Float32(0)
-                i += 128
+                i += traversal_tpb
             barrier()
             if row < rows:
                 var tree = lane
@@ -323,24 +345,24 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
                 if c < outputs:
                     totals[unsafe_offset=c] = forest_add(totals[unsafe_offset=c],leaves.unsafe_load(node*outputs+c))
             tree += 32
-    var sums = stack_allocation[128*OUTPUT_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
+    var sums = stack_allocation[traversal_tpb*OUTPUT_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
     @parameter
     for c in range(OUTPUT_CAPACITY):
-        sums[unsafe_offset=c*128+tid] = totals[unsafe_offset=c]
+        sums[unsafe_offset=c*traversal_tpb+tid] = totals[unsafe_offset=c]
     barrier()
     var step = 16
     while step > 0:
         if lane < step:
             @parameter
             for c in range(OUTPUT_CAPACITY):
-                sums[unsafe_offset=c*128+tid] = forest_add(sums[unsafe_offset=c*128+tid],sums[unsafe_offset=c*128+tid+step])
+                sums[unsafe_offset=c*traversal_tpb+tid] = forest_add(sums[unsafe_offset=c*traversal_tpb+tid],sums[unsafe_offset=c*traversal_tpb+tid+step])
         barrier()
         step //= 2
     if lane == 0 and row < rows:
         @parameter
         for c in range(OUTPUT_CAPACITY):
             if c < outputs:
-                output.unsafe_store(row*outputs+c,ftz(identical_div(ftz(sums[unsafe_offset=c*128+tid]),Float32(trees))))
+                output.unsafe_store(row*outputs+c,ftz(identical_div(ftz(sums[unsafe_offset=c*traversal_tpb+tid]),Float32(trees))))
 
 
 def forest_grove32_row_kernel[RF_INPUT: Bool, PACKED: Bool = False](
@@ -454,6 +476,7 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
     through completion and performs required readback/synchronization. No
     allocations or device drains occur here. Empty row batches enqueue nothing.
     """
+    comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
     if n_rows == 0:
         return
     comptime if T35_LEAF_REUSE or T36_FINITE_STAGE:
@@ -484,7 +507,7 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
         ctx.enqueue_function[forest_ordered_kernel[RF_INPUT,PACKED]](
             doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
             dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-            grid_dim=(n_rows*n_outputs+127)//128,block_dim=128,
+            grid_dim=(n_rows*n_outputs+traversal_tpb-1)//traversal_tpb,block_dim=traversal_tpb,
         )
 
 
@@ -497,30 +520,32 @@ def _launch_grove_lanes[RF_INPUT: Bool, PACKED: Bool](
     n_outputs: Int, trees: Int,
 ) raises:
     """The 32-thread kernels: a row's lanes across a thread group, the fold in shared memory."""
+    comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
+    comptime traversal_rows = traversal_tpb // 32
     if vector_groves_for(n_outputs):
         if n_outputs <= 2:
             ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,2,PACKED]](
                 doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                 dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                grid_dim=(n_rows+3)//4,block_dim=128,
+                grid_dim=(n_rows+traversal_rows-1)//traversal_rows,block_dim=traversal_tpb,
             )
         elif n_outputs <= 4:
             ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,4,PACKED]](
                 doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                 dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                grid_dim=(n_rows+3)//4,block_dim=128,
+                grid_dim=(n_rows+traversal_rows-1)//traversal_rows,block_dim=traversal_tpb,
             )
         else:
             ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,8,PACKED]](
                 doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                 dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                grid_dim=(n_rows+3)//4,block_dim=128,
+                grid_dim=(n_rows+traversal_rows-1)//traversal_rows,block_dim=traversal_tpb,
             )
     else:
         ctx.enqueue_function[forest_grove32_kernel[RF_INPUT,PACKED]](
             doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
             dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-            grid_dim=(n_rows*n_outputs+3)//4,block_dim=128,
+            grid_dim=(n_rows*n_outputs+traversal_rows-1)//traversal_rows,block_dim=traversal_tpb,
         )
 
 
@@ -533,30 +558,32 @@ def _launch_grove_rows[RF_INPUT: Bool, PACKED: Bool](
     n_outputs: Int, trees: Int,
 ) raises:
     """DEVIATION 2964: one thread per row (vector leaves) or per item."""
+    comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
+    comptime traversal_rows = traversal_tpb // 32
     if vector_groves_for(n_outputs):
         if n_outputs <= 2:
             ctx.enqueue_function[forest_vector_grove32_row_kernel[RF_INPUT,2,PACKED]](
                 doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                 dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                grid_dim=(n_rows+127)//128,block_dim=128,
+                grid_dim=(n_rows+traversal_tpb-1)//traversal_tpb,block_dim=traversal_tpb,
             )
         elif n_outputs <= 4:
             ctx.enqueue_function[forest_vector_grove32_row_kernel[RF_INPUT,4,PACKED]](
                 doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                 dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                grid_dim=(n_rows+127)//128,block_dim=128,
+                grid_dim=(n_rows+traversal_tpb-1)//traversal_tpb,block_dim=traversal_tpb,
             )
         else:
             ctx.enqueue_function[forest_vector_grove32_row_kernel[RF_INPUT,8,PACKED]](
                 doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                 dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                grid_dim=(n_rows+127)//128,block_dim=128,
+                grid_dim=(n_rows+traversal_tpb-1)//traversal_tpb,block_dim=traversal_tpb,
             )
     else:
         ctx.enqueue_function[forest_grove32_row_kernel[RF_INPUT,PACKED]](
             doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
             dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-            grid_dim=(n_rows*n_outputs+127)//128,block_dim=128,
+            grid_dim=(n_rows*n_outputs+traversal_tpb-1)//traversal_tpb,block_dim=traversal_tpb,
         )
 
 

@@ -131,9 +131,18 @@ comptime GMM_PROFILE = "mojolearn.identical.gmm.full.fp32.v1"
 #: modes.
 comptime GMM_ELEM_TPB = 256
 
+# AFCL-G08: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Halve rows per block in both the fused and ordinary E-step schedules.
+# Each row retains its complete component/feature fold and stable logsumexp;
+# more independent blocks trade staged-parameter reuse for occupancy.
+comptime AFCL_G08 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G08"]()
+)
+
 #: SCHEDULING. Threads per block for the one-thread-per-sample-row kernels
 #: (the Mahalanobis fold and the logsumexp). Free.
-comptime GMM_ROW_TPB = 128
+comptime GMM_ROW_TPB = 64 if AFCL_G08 else 128
 
 #: SCHEDULING. Threads per block for the one-thread-per-component kernels.
 #: Free.
@@ -511,7 +520,7 @@ thread-per-row launch (`fast_estep_kernel`): every component's precision
 factor and `mu_k . P_k` staged in threadgroup memory, the row in registers
 padded to a comptime width. `-D MOJOLEARN_GMM_FAST_FUSED_ESTEP_OFF` keeps
 the pinned path."""
-comptime FE_TPB = 256
+comptime FE_TPB = 128 if AFCL_G08 else 256
 comptime FE_SMEM = 7936
 
 

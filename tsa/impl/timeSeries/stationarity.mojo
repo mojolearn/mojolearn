@@ -95,12 +95,19 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceil, isfinite
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from core.column_stats import STATS_TPB
 from core.device_scan import device_first_nonfinite
 from core.pinned_reduce import pinned_block_sum
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from tsa.impl.timeSeries.arima_helpers import prepare_data
+
+# AFCL-P11: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Two independent per-lane chains reduce recurrence dependency in the series
+# sums without changing the shared STATS_TPB launch or any KPSS lag/decision.
+# The existing block reduction combines the two chain totals; bits may change.
+comptime AFCL_P11 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P11"]()
 
 
 #: Table 1, Kwiatkowski 1992 (`stationarity.cuh:131-132`), as `float`.
@@ -161,14 +168,29 @@ def series_sum_kernel[
     var tid = Int(thread_idx.x)
     var base = b * n
     var acc = Float32(0.0)
+    var acc_odd = Float32(0.0)
     var t = tid
     while t < n:
         var x = ftz(data.unsafe_load(base + t))
-        comptime if square:
-            acc = ftz(identical_mul_add(x, x, acc))
+        comptime if AFCL_P11:
+            if (t // STATS_TPB) % 2 == 0:
+                comptime if square:
+                    acc = ftz(identical_mul_add(x, x, acc))
+                else:
+                    acc = ftz(acc + x)
+            else:
+                comptime if square:
+                    acc_odd = ftz(identical_mul_add(x, x, acc_odd))
+                else:
+                    acc_odd = ftz(acc_odd + x)
         else:
-            acc = ftz(acc + x)
+            comptime if square:
+                acc = ftz(identical_mul_add(x, x, acc))
+            else:
+                acc = ftz(acc + x)
         t += STATS_TPB
+    comptime if AFCL_P11:
+        acc = ftz(acc + acc_odd)
     var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
     if tid == 0:
         out_v.unsafe_store(b, ftz(s0 * scale))

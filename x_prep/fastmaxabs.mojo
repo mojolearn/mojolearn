@@ -27,12 +27,20 @@ from x_prep.prims import zero_to_one
 from x_prep.device import x_prep_ctx
 from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from core.device_pool import pool_give, pool_take
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+
+# AFCL-P02: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Halve work per column lane to expose more independent blocks for every
+# width. This doubles partial storage; the existing width policy is unchanged.
+comptime AFCL_P02 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P02"]()
 
 #: threads per block: one column each, consecutive columns of one row
 comptime MA_TPB = 256
 #: rows per chunk (wide X) and for a narrow X (more chunks, more threads)
-comptime MA_ROWS = 1024
-comptime MA_ROWS_NARROW = 128
+comptime MA_ROWS = 512 if AFCL_P02 else 1024
+comptime MA_ROWS_NARROW = 64 if AFCL_P02 else 128
 comptime MA_NARROW = 64
 
 

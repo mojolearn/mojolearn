@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "campaign": "apple-fast-classical-20261006",
+  "machines": [],
+  "cells": [],
+  "decisions": [],
+  "notes": [
+    "All 54 source candidates are uncompiled, unverified and unmeasured.",
+    "This empty input index is registration for the existing board tool, not a rendered board or measured evidence.",
+    "No defaults are promoted; old opponent measurements remain untouched."
+  ]
+}

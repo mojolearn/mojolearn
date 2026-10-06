@@ -26,6 +26,14 @@ from x_metrics.contingency import (
     OP_MI_CELL, OP_EMI_CELL, CT_CH, CT_IREC, FF_REC, FF_ENT, FF_MI, FF_SUM,
 )
 
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+
+# AFCL-P09: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# The planner and its emitted chunk parameters use the same selected width.
+comptime AFCL_P09 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P09"]()
+
 comptime OP_GROUP_SORT = 0
 comptime OP_GROUP_SUM = 1
 comptime OP_COL_SORT = 4
@@ -99,7 +107,10 @@ comptime CF_CHUNK = 1024
 #: rows per chunk of the K-fold row partition
 comptime FR_CHUNK = 1024
 #: rows per chunk of the unweighted curve counts
-comptime CURVE_CHUNK = 1024
+# AFCL-P09: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Halving the prefix chunk doubles independent chunks while retaining every
+# score threshold and tie group. Weighted scans change association, not rows.
+comptime CURVE_CHUNK = 512 if AFCL_P09 else 1024
 #: the unweighted CDF is Float32(i + 1) only while it stays exact
 comptime IOTA_EXACT = 1 << 24
 #: ops 55 (cls_epi) .. 62 (cl_epi): the metric tails and scans (x_metrics/cls_epi.mojo,

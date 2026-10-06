@@ -57,7 +57,17 @@ comptime FAST_MMA_BORUVKA_ENABLED = (
 
 comptime MB_SG = 8
 comptime MB_TPB = MB_SG * 32
-comptime MB_T = 128
+# AFCL-G14: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Halve staged reference rows, retaining complete 32-row MMA admission
+# groups. This halves shared operand/metadata pages and prefetch registers
+# but doubles tile barriers. All points remain candidates, and the scalar
+# recomputation, lower-bound filter and value/index tie ordering are fixed.
+# Applies to agglomerative and HDBSCAN callers of this same MST search.
+comptime AFCL_G14 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G14"]()
+)
+comptime MB_T = 64 if AFCL_G14 else 128
 comptime MB_MAX_D = 32
 comptime MB_A = 2
 """Listed-point 8-blocks per simdgroup (4: 2.08 s against 1.72-1.80 s at

@@ -7,6 +7,18 @@ and neural-board configurations; the [neural README](../neural_identical_ab/READ
 describes that interface. These new drafts have no compilation, identity,
 quality or timing evidence and do not inherit acceptance from the experiments here.
 
+The [consolidated A/B experiment index](../AB_EXPERIMENT_INDEX.md) lists all
+114 registered cards with their files, plus existing IDENTICAL recipes,
+historical Apple FAST records and other A/B drivers.
+
+The shared catalog also registers the 54 source-only
+[Apple FAST classical candidates](../apple_fast_classical_20261006/README.md)
+as `AFCL-L01..L14`, `AFCL-G01..G14`, `AFCL-T01..T12` and `AFCL-P01..P14`.
+They are uncompiled, unverified and unmeasured, with every new switch OFF.
+Their source-ready status means implementation source exists, not acceptance.
+See the [integration workflow](../apple_fast_classical_20261006/INTEGRATION.md)
+for common catalog selection, paired packages and full-workload recipe inputs.
+
 This directory implements the cards in
 [`PERFORMANCE_EXPERIMENT_IDEAS_2026-10-05.md`](../../docs/plans/PERFORMANCE_EXPERIMENT_IDEAS_2026-10-05.md).
 Each card has its own source changes and manifest. Candidates remain opt-in;
@@ -32,6 +44,8 @@ controls, `neural build-plan` targets the frozen native binding builder, and
 These commands describe work; they do not compile, execute or establish quality.
 The original `check --require-all` continues to cover the original 60 manifests.
 NI cards use their own source ledger, including partial and rejected ideas.
+
+| AFCL-L/G/T/P (54 cards) | FAST | Apple classical full-workload A/B and task quality; all evidence pending |
 
 IDENTICAL compares all columns within a compiled arithmetic version. A candidate
 may change that version's arithmetic contract only when all columns change
@@ -115,7 +129,7 @@ python3 tools/performance_ideas.py plan I01 --stage build --vendor amd --output 
 ```
 
 `check` verifies manifests, source references and dependency cycles. It does not
-compile, run, or qualify candidates. `--require-all` requires all 60 cards;
+compile, run, or qualify candidates. `--require-all` requires all 114 cards (60 original plus 54 AFCL);
 `--require-ready` also rejects recorded toolchain or prerequisite blockers.
 
 Implementation status is deliberately distinct from qualification:
@@ -188,3 +202,23 @@ The runner does not promote defaults or update performance boards. Each recipe
 still requires matched fixtures, warmup, a frozen source pair, one scored run
 per arm, full caller completion timing, and the quality and identity evidence
 specified by its card.
+
+## Apple FAST classical integration
+
+The AFCL registration manifests resolve `baseline_defines`, `candidate_defines`,
+arm environments and implementation paths from their authoritative lane JSON at
+read time. They do not copy a second set of controls. `recipe_digest` covers the
+resolved registration and its linked source recipes. Existing F/I/A/N cards keep
+their existing manifest-only digest contract.
+
+AFCL build recipes create paired packages via `apple_fast_classical_20261006/build_pair.py`.
+Device-stage recipes take `--artifacts` (the retained paired build directory) and
+`--workloads` (an explicitly audited full-workload configuration). These inputs
+become `{artifacts}` and `{workloads}` in the registered command. `paired_run`
+means one invocation processes A and B; asking separately for the baseline arm
+is refused. Per-arm runtime environment belongs to the paired runner.
+
+Task-quality admission is tied to the exact workload-configuration hash and
+paired-build-manifest hash as well as source, recipe and vendor. A successful
+worker exit cannot establish any quality gate. Compilation and validation are
+future explicitly selected stages: none was executed during source integration.

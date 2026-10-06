@@ -3592,7 +3592,16 @@ comptime ET_RANGE_TILED = (
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_range_tiled_kernel`)."""
 
-comptime ET_FEATURE_TILE = 16
+# AFCL-T09: eight sampled features per task halves the private range/score
+# tile footprint and admits more independent tasks on Apple. Every selected
+# feature keeps its RNG identity and full row set; this changes no threshold.
+# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
+comptime AFCL_T09 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_T09"]()
+)
+comptime ET_FEATURE_TILE = 8 if AFCL_T09 else 16
 
 comptime ET_SPLIT_REDUCE_ONE_BLOCK = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 # T07: 128 lanes, all candidate columns in strided lanes; existing exact

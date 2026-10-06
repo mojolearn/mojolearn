@@ -2790,7 +2790,14 @@ comptime KDE2_TQ = 16
 comptime KDE2_TT = 8
 #: Cells per thread: KDE2_QM queries (stride KDE2_TQ) x KDE2_TM train rows
 #: (stride KDE2_TT), so a simdgroup's loads of one feature are consecutive.
-comptime KDE2_QM = 4
+# AFCL-G13: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Halve query ownership per thread to halve the distance accumulator bank
+# and shrink shared query/reduction pages. More query blocks trade training
+# operand reuse against occupancy, with no feature/query-size dispatch.
+# Every training contribution and the online max-rescaled logsumexp remain;
+# query-grid-derived chunking may change FAST reduction association.
+comptime AFCL_G13 = _KDE2_FAST_APPLE and is_defined["MOJOLEARN_AFCL_G13"]()
+comptime KDE2_QM = 2 if AFCL_G13 else 4
 comptime KDE2_TM = 8
 comptime KDE2_QT = KDE2_TQ * KDE2_QM
 comptime KDE2_TT_ROWS = KDE2_TT * KDE2_TM

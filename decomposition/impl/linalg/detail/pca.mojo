@@ -102,6 +102,59 @@ from decomposition.checks.jacobi_eigh_device import (
 # pca-full-summary.json (full receipts linked by the measurement board).
 comptime PCA_COMPENSATED_COV = AFN_GEMM_APPLE and is_defined["MOJOLEARN_PCA_FAST_COMPENSATED_COV"]()
 
+# AFCL-L07: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# Requires the compensated covariance route in BOTH arms. Each partial
+# centers before multiplying and uses compensation; the finish compensates
+# the partial fold too. 2048-row nominal chunks expose row parallelism.
+# Partial scratch is bounded by 16 MiB or one covariance matrix, whichever
+# is larger; fewer chunks handle wider matrices without a shape-specific gate.
+comptime AFCL_L07 = AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFCL_L07"]()
+comptime AFCL_PCA_PART_WORDS = 4 * 1024 * 1024
+
+
+def pca_compensated_cov_part_kernel(
+    x: F32Ptr, mu: F32Ptr, part: F32Ptr, rows_in: Int32,
+    cols_in: Int32, chunk_rows_in: Int32,
+):
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= cols * cols:
+        return
+    var ch = Int(block_idx.y)
+    var lo = ch * Int(chunk_rows_in)
+    var hi = min(rows, lo + Int(chunk_rows_in))
+    var i = cell // cols
+    var j = cell % cols
+    var mi = mu[i]
+    var mj = mu[j]
+    var total = Float32(0)
+    var correction = Float32(0)
+    for r in range(lo, hi):
+        var product = (x[r * cols + i] - mi) * (x[r * cols + j] - mj)
+        var adjusted = product - correction
+        var updated = total + adjusted
+        correction = (updated - total) - adjusted
+        total = updated
+    part[ch * cols * cols + cell] = total
+
+
+def pca_compensated_cov_finish_kernel(
+    part: F32Ptr, cov: F32Ptr, rows_in: Int32, cells_in: Int32, chunks_in: Int32,
+):
+    var cells = Int(cells_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= cells:
+        return
+    var total = Float32(0)
+    var correction = Float32(0)
+    for ch in range(Int(chunks_in)):
+        var adjusted = part[ch * cells + cell] - correction
+        var updated = total + adjusted
+        correction = (updated - total) - adjusted
+        total = updated
+    cov[cell] = total / Float32(Int(rows_in) - 1)
+
 struct PcaCovAudit(Defaultable, Movable):
     var calls: Int
     def __init__(out self):
@@ -173,6 +226,28 @@ def compute_covariance(
         return
     comptime if PCA_COMPENSATED_COV:
         PCA_COV_STATE.get_or_create_ptr()[].calls += 1
+        comptime if AFCL_L07:
+            var cov_cells = n_cols * n_cols
+            var max_chunks = max(1, AFCL_PCA_PART_WORDS // max(cov_cells, 1))
+            var chunks = min(max(1, (n_rows + 2047) // 2048), max_chunks)
+            var chunk_rows = (n_rows + chunks - 1) // chunks
+            var part = ctx.enqueue_create_buffer[DType.float32](chunks * cov_cells)
+            ctx.enqueue_function[pca_compensated_cov_part_kernel](
+                x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                Int32(n_rows), Int32(n_cols), Int32(chunk_rows),
+                grid_dim=((cov_cells + 255) // 256, chunks, 1), block_dim=(256, 1, 1),
+            )
+            ctx.enqueue_function[pca_compensated_cov_finish_kernel](
+                part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                Int32(n_rows), Int32(cov_cells), Int32(chunks),
+                grid_dim=((cov_cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+            )
+            ctx.synchronize()
+            _ = part^
+            return
         ctx.enqueue_function[pca_compensated_cov_kernel](
             x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),

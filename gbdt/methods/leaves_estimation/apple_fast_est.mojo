@@ -57,6 +57,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul_add
+from gbdt.apple_fast_classical import AFCL_T06
 from core.identity_trace import IdentityTrace
 from gbdt.gpu_util.kernel.partition_stats_gather import (
     compute_partition_stats_gather,
@@ -169,6 +170,15 @@ comptime EST_WALK_TRY_CAP = 100
 comptime EST_EPS = Float32(1e-20)
 #: `MinLeafWeight`, `leaves_estimation_config.h:60`
 comptime EST_MIN_LEAF_WEIGHT = Float32(1e-20)
+
+
+@always_inline
+def _afcl_leaf_stats_sm(sm: Int) -> Int:
+    # Scheduling proxy only: halve the partial-grid budget, not the device's
+    # reported hardware. Allocation and both statistic launchers use this.
+    comptime if AFCL_T06:
+        return max(1, (sm + 1) // 2)
+    return sm
 
 
 def apple_est_handles(
@@ -293,8 +303,8 @@ struct AppleEstScratch(Movable):
         )
         # the two-stat fold and the one-stat weight fold size their partials
         # from `partition_stats_chunks`, which is per stat count
-        var two = 2 * partition_stats_chunks(sm, 2)
-        var one = partition_stats_chunks(sm, 1)
+        var two = 2 * partition_stats_chunks(_afcl_leaf_stats_sm(sm), 2)
+        var one = partition_stats_chunks(_afcl_leaf_stats_sm(sm), 1)
         var per_leaf = two if two > one else one
         self.d_partials = ctx.enqueue_create_buffer[DType.float32](
             leaves_cap * per_leaf
@@ -928,14 +938,14 @@ def apple_fast_estimate_and_apply(
                 ctx, n_leaves, 0, 1, n_rows,
                 s.d_leaves, d_p_off, d_p_sz, weights, row_index,
                 s.d_partials, s.d_wsum_stats,
-                sm_count=sm,
+                sm_count=_afcl_leaf_stats_sm(sm),
             )
         else:
             compute_partition_stats(
                 ctx, n_leaves, 0, 1, n_rows,
                 s.d_leaves, d_p_off, d_p_sz, g_weights,
                 s.d_partials, s.d_wsum_stats,
-                sm_count=sm, row_bound=max_leaf,
+                sm_count=_afcl_leaf_stats_sm(sm), row_bound=max_leaf,
             )
     stage_times.end(ctx, "est.stage_in")
 
@@ -946,14 +956,14 @@ def apple_fast_estimate_and_apply(
                 ctx, n_leaves, 0, 2, n_rows,
                 s.d_leaves, d_p_off, d_p_sz, s.d_eval_stats, row_index,
                 s.d_partials, s.d_part_stats,
-                sm_count=sm,
+                sm_count=_afcl_leaf_stats_sm(sm),
             )
         else:
             compute_partition_stats(
                 ctx, n_leaves, 0, 2, n_rows,
                 s.d_leaves, d_p_off, d_p_sz, s.d_eval_stats,
                 s.d_partials, s.d_part_stats,
-                sm_count=sm, row_bound=max_leaf,
+                sm_count=_afcl_leaf_stats_sm(sm), row_bound=max_leaf,
             )
 
     @parameter

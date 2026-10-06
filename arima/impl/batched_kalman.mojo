@@ -158,7 +158,12 @@ comptime RD_MAX = 8
 comptime RD2_MAX = RD_MAX * RD_MAX
 comptime LOG_2PI = Float32(1.8378770664093453)
 comptime KAPPA = Float32(1e6)
-comptime KALMAN_TPB = 32
+# AFCL-P12: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Two SIMD groups per block amortize scheduling for independent series; each
+# lane retains the full Kalman recurrence and its state. Register pressure can
+# outweigh the benefit. Explicit caller overrides of kalman_tpb still win.
+comptime AFCL_P12 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P12"]()
+comptime KALMAN_TPB = 64 if AFCL_P12 else 32
 comptime INIT_TPB = 128
 
 

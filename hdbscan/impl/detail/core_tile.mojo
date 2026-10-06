@@ -38,12 +38,12 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
-from hdbscan.impl.detail.fast_apple import HDB_CORE_TILE
+from hdbscan.impl.detail.fast_apple import HDB_CORE_TILE, AFCL_G04
 
 
 comptime CT_TPB = 128
 """Rows per block, one per thread."""
-comptime CT_TILE = 64
+comptime CT_TILE = 32 if AFCL_G04 else 64
 """Reference rows staged per threadgroup tile."""
 comptime CT_KMAX = 16
 """Largest k the register top-k holds; above it the k-NN route runs."""

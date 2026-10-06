@@ -115,6 +115,7 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from core.identity_trace import IdentityTrace
+from gaussian_process.afcl_prediction import AFCL_L11, AFCL_GP_VAR_TPB
 from gaussian_process.checks.gp_sabotage import (
     GP_SAB_NONE,
     gp_sabotage_touches_kernel_matrix,
@@ -1578,6 +1579,7 @@ def gp_predictive_variance(
                 block_dim=(GP_VAR_PTS, GP_VAR_SEGS, 1),
             )
         else:
+            var var_tpb = AFCL_GP_VAR_TPB if AFCL_L11 else elem_tpb
             ctx.enqueue_function[gp_variance_kernel](
                 var_out.unsafe_ptr(),
                 std_out.unsafe_ptr(),
@@ -1586,8 +1588,8 @@ def gp_predictive_variance(
                 Int32(n_train),
                 Int32(n_star),
                 kss,
-                grid_dim=(grid, 1, 1),
-                block_dim=(elem_tpb, 1, 1),
+                grid_dim=((n_star + var_tpb - 1) // var_tpb, 1, 1),
+                block_dim=(var_tpb, 1, 1),
             )
     trace.record_device(ctx, "gp.var", var_out, n_star)
     trace.record_device(ctx, "gp.clamped", clamped, n_star)

@@ -65,6 +65,7 @@ deviation `fill.mojo` and `split_points.mojo` already record.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
+from gbdt.apple_fast_classical import AFCL_T12
 
 from gbdt.ctrs.index_wrapper import (
     CTR_SEGMENT_START_BIT,
@@ -73,7 +74,7 @@ from gbdt.ctrs.index_wrapper import (
 )
 
 
-comptime CTR_BLOCK_SIZE = 256
+comptime CTR_BLOCK_SIZE = 128 if AFCL_T12 else 256
 """`const ui32 blockSize = 256`, every launcher in `ctr_calcers.cu`."""
 
 comptime CTR_DOCS_PER_THREAD = 4

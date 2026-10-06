@@ -28,6 +28,15 @@ from xtrees.shap import (
 from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_tab_row_unit
 
 comptime TPB = 128
+# AFCL-T11: two SIMD groups per query/fold block reduce private TreeSHAP
+# state per workgroup. This does not enable the rejected row-pair candidate.
+# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
+comptime AFCL_T11 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_T11"]()
+)
+comptime QUERY_TPB = 64 if AFCL_T11 else TPB
 comptime BUF_BYTES = 128 * 1024 * 1024
 comptime UNITS_MAX = 1 << 20
 
@@ -120,6 +129,10 @@ def _uid() -> Int:
 
 def _grid(units: Int) -> Int:
     return (units + TPB - 1) // TPB
+
+
+def _query_grid(units: Int) -> Int:
+    return (units + QUERY_TPB - 1) // QUERY_TPB
 
 
 def parent_kernel(units: Int32, offsets: I32P, n_trees: Int32, colid: I32P, left: I32P, d: Int32, parent: I32P,
@@ -462,7 +475,7 @@ def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceB
                             fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(),
                             fo.cached_leaf_mf.value().unsafe_ptr(), fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(),
                             fo.cached_nint.value().unsafe_ptr(), fo.cached_needl.value().unsafe_ptr(), fo.cached_needr.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
+                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_query_grid(row_units), block_dim=QUERY_TPB)
                     else:
                         ctx.enqueue_function[tab_row_kernel[0]](
                             Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
@@ -470,7 +483,7 @@ def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceB
                             fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(),
                             fo.cached_leaf_mf.value().unsafe_ptr(), fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(),
                             fo.cached_nint.value().unsafe_ptr(), fo.cached_needl.value().unsafe_ptr(), fo.cached_needr.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
+                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_query_grid(row_units), block_dim=QUERY_TPB)
             elif use_table:
                 ran = True
                 if sl * k <= TABLE_ACC:
@@ -479,14 +492,14 @@ def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceB
                         fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(),
                         fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), fo.cached_leaf_mf.value().unsafe_ptr(),
                         fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
+                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_query_grid(row_units), block_dim=QUERY_TPB)
                 else:
                     ctx.enqueue_function[table_row_kernel[0]](
                         Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
                         fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(),
                         fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), fo.cached_leaf_mf.value().unsafe_ptr(),
                         fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
+                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_query_grid(row_units), block_dim=QUERY_TPB)
         comptime for wi in range(6):
             comptime W = 8 << wi
             if not ran and width == W:
@@ -494,12 +507,12 @@ def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceB
                     Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), fo.offsets.unsafe_ptr(),
                     fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(),
                     fo.parent.unsafe_ptr(), cover.unsafe_ptr(), fo.tscale.unsafe_ptr(), fo.slot.unsafe_ptr(),
-                    dx.unsafe_ptr(), Int32(r0), buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units),
-                    block_dim=TPB)
+                    dx.unsafe_ptr(), Int32(r0), buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_query_grid(row_units),
+                    block_dim=QUERY_TPB)
         var fu = d * k * rc
         ctx.enqueue_function[fold_kernel](
             Int32(fu), Int32(r0), Int32(rc), Int32(n_trees), Int32(d), Int32(k), Int32(sl), fo.slot.unsafe_ptr(),
-            buf.unsafe_ptr(), dphi.unsafe_ptr(), grid_dim=_grid(fu), block_dim=TPB)
+            buf.unsafe_ptr(), dphi.unsafe_ptr(), grid_dim=_query_grid(fu), block_dim=QUERY_TPB)
         r0 += rc
     ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=phi), src_buf=dphi)
     _check_meta(ctx, fo.meta, 0)
