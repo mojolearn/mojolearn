@@ -404,3 +404,39 @@ def fast_panel_solve_inv(
     _ = lv^
     _ = pr^
     _ = pk^
+
+
+# NEVER RUN — PENDING VALIDATION: F02 actual public pinned-panel entrance.
+def chol_shared_left_kernel[GUARD: Bool](
+    a: MutPointer[Float32,MutAnyOrigin],stop: MutPointer[Int32,MutAnyOrigin],
+    n_in: Int32,j0_in: Int32,w_in: Int32,k_in: Int32,p0_in: Int32,
+):
+    # Preserve the production first-refusal word before any MMA/barrier.
+    comptime if GUARD:
+        if stop.unsafe_load(0)!=Int32(0):return
+    var n=Int(n_in);var j0=Int(j0_in);var p0=Int(p0_in)
+    var input=a.unsafe_offset(j0*n+p0)
+    scoped_kernel[64,64,False,True,True](
+        a.unsafe_offset(j0*n+j0),input,input,
+        Int32(n-j0),w_in,k_in,n_in,Int32(1),Int32(1),n_in,k_in,n_in,
+    )
+
+
+def try_chol_shared_left[GUARD: Bool](
+    ctx: DeviceContext,mut a: DeviceBuffer[DType.float32],mut stop: DeviceBuffer[DType.int32],
+    n: Int,j0: Int,w: Int,np: Int,p_lo: Int,
+) raises -> Bool:
+    comptime if CHOL_SHARED_SUB:
+        # The production left-looking caller guarantees completed 32-wide
+        # panels and owned stop state. Bound only actual kernel/stride limits.
+        if n<=0 or n*n>2147483647 or w<=0 or w>64 or np<=p_lo:return False
+        var k=(np-p_lo)*32
+        ctx.enqueue_function[chol_shared_left_kernel[GUARD]](
+            a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            stop.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n),Int32(j0),Int32(w),Int32(k),Int32(p_lo*32),
+            grid_dim=(((n-j0+63)//64)*((w+63)//64),1,1),block_dim=(128,1,1),
+        )
+        shared_sub_record(True)
+        return True
+    return False

@@ -295,7 +295,7 @@ The one thing in the RAPIDS trees that IS portable source and IS implemented her
 # =========================================================================
 """
 
-from cholesky.checks.fast_trsm import FTP_MAX_NB, FTS_BLOCK, fast_trsm_panel_kernel, fast_gemm_nt_sub_lower, fast_panel_solve_inv
+from cholesky.checks.fast_trsm import FTP_MAX_NB, FTS_BLOCK, fast_trsm_panel_kernel, fast_gemm_nt_sub_lower, fast_panel_solve_inv, try_chol_shared_left
 from cholesky.checks.chol_fast_tall import CHOL_FAST_TALL, CTL_NB, chol_fast_tall_panel
 from std.gpu import block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
@@ -1447,6 +1447,9 @@ def _chol_left_launch[GUARD: Bool](
     n: Int, j0: Int, w: Int, np: Int, p_lo: Int,
 ) raises:
     comptime if CHOL_APPLE_LEFT:
+        # F02 shared subtract must enter the public pinned-width left route.
+        # Its default-off guard leaves the promoted MMA schedule unchanged.
+        if try_chol_shared_left[GUARD](ctx,a,stop,n,j0,w,np,p_lo):return
         var rows = n - j0
         if w > 32:
             ctx.enqueue_function[chol_left_update_amma_kernel[64, GUARD]](
