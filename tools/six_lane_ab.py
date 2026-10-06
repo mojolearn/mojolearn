@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import ast
 import hashlib
+import functools
 import json
 import os
 import platform
@@ -155,6 +156,12 @@ def work_id(w):
 
 
 def expand_workload(value):
+    return _expand_workload_cached(json.dumps(value,sort_keys=True))
+
+
+@functools.lru_cache(maxsize=None)
+def _expand_workload_cached(encoded):
+    value=json.loads(encoded)
     if isinstance(value,str):
         for prefix,source in [('classical:', 'tools/classical_two_datasets.py'),('classical/', 'tools/classical_two_datasets.py'),('more:', 'tools/bench_board_more.py'),('expanded:', 'tools/bench_board_algos.py'),('classical2/','tools/bench_board_more.py'),('algos/','tools/bench_board_algos.py')]:
             if value.startswith(prefix):
@@ -176,13 +183,13 @@ def matrix(doc):
         for vendor in c['vendors']:
             workloads=[w for value in c.get('workloads',[]) for w in expand_workload(value)]
             for w in workloads or [dict(id='MISSING_WORKLOAD',status='no saved workload mapping')]:
-                gaps=list(c['problems'])+c.get('source_gaps',[])
+                gaps=list(c['problems'])
                 gaps+=['Full dataset/version/hash, dimensions, settings, cap audit and accepted artifacts must be supplied from the frozen saved recipe.']
                 if c['A']==c['B']:gaps.append('Reused incumbent/no distinct A configuration; historical comparison is not new work')
-                if c['A']['runtime'] or c.get('runtime_by_member'):
+                if runtime_requirements(c,work_id(w),{item['id']:item for item in configs}):
                     gaps.append('Declared runtime operation/settings require a matching existing saved race; never change a race to reach this arm')
                 key=sha_value([c['id'],vendor,w])[:20]
-                cells.append(dict(key=key,configuration=c['id'],implementation_ids=c['members'],vendor=vendor,mode=c['mode'],workload=w,workload_id=work_id(w),status='INCOMPATIBLE' if c['problems'] else 'ALIAS' if c.get('alias_of') else 'RETAINED_DEPENDENCY' if c['campaign_role']=='incumbent_dependency' else 'SOURCE_REJECTED' if c['campaign_role']=='source_rejected' else 'PENDING_COVERAGE',blockers=gaps,
+                cells.append(dict(key=key,configuration=c['id'],implementation_ids=c['members'],vendor=vendor,mode=c['mode'],workload=w,workload_id=work_id(w),status='INCOMPATIBLE' if c['problems'] else 'ALIAS' if c.get('alias_of') else 'RETAINED_DEPENDENCY' if c['campaign_role']=='incumbent_dependency' else 'SOURCE_REJECTED' if c['campaign_role']=='source_rejected' else 'PENDING_COVERAGE',blockers=gaps,source_coverage_pending=c.get('source_gaps',[]),
                     campaign_role=c['campaign_role'],alias_of=c.get('alias_of'),promotion_vote=c['mode']=='fast' or vendor in ('nvidia','amd'),identity_group='same-arm-across-columns' if c['mode']=='identical' else 'task-quality',planned_excluded_warmups=1,planned_scored_samples=1,actual_samples=0))
     return dict(schema='mojolearn.six-lane-matrix/1',base_main=doc['base_main'],configurations=configs,cells=cells,execution='NOT EXECUTED',qualification=doc['qualification'])
 
@@ -438,7 +445,7 @@ def queue(args):
     for cell in mat['cells']:
         if cell['vendor']!=args.vendor or (args.select and cell['configuration'] not in args.select):continue
         c=configs[cell['configuration']];recipe=recipes.get(cell['key'])
-        job=dict(key=cell['key'],mode=cell['mode'],implementation_ids=cell['implementation_ids'],master_selection=c,workload_id=cell['workload_id'],matrix_status=cell['status'],blocked=list(cell['blockers']),arms={a:dict(configuration=c[a],argv=[],environment=c[a]['environment']) for a in ('A','B')})
+        job=dict(key=cell['key'],mode=cell['mode'],implementation_ids=cell['implementation_ids'],master_selection=c,workload_id=cell['workload_id'],matrix_status=cell['status'],source_coverage_pending=cell.get('source_coverage_pending',[]),blocked=list(cell['blockers']),arms={a:dict(configuration=c[a],argv=[],environment=c[a]['environment']) for a in ('A','B')})
         if cell['status']!='PENDING_COVERAGE':job['blocked'].append('Not an independent new executable candidate: '+cell['status'])
         if recipe:
             required=('dataset_sha256','dimensions','estimator_settings','timed_boundary','intrinsic_caps','full_dataset_coverage','artifact_provenance','benchmark_sha256','workload','packages','coverage_resolutions','resource_policy')
