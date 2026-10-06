@@ -159,9 +159,14 @@ def ls_backtrack(
                 ctx, param, f, fx, x, grad, step, drt, xp, n, scalar, ls_iters,
                 stage, fresh, gradp, dg_ready,
             )
-    # I12 new candidate remains default off. Qualification is pending: native
-    # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
-    # NEVER RUN — PENDING MEASUREMENT
+    # I12 speculative exact trials, sourcecbcc8dcd33 (2026-10-06):
+    # candidate/base at rows/features100000/32 and131071/17, logistic fit:
+    # NVIDIA10.023369->7.590443ms (0.757x WIN),3.239601->7.315078ms
+    # (2.258x LOSS); AMD4.386173->12.212702ms (2.784x LOSS),
+    # 3.790993->8.790008ms (2.319x LOSS). Keep candidate OFF.
+    # One same-process warmup/score; synthetic public caller components,
+    # not full-board qualification. Accepted identity/compilation reused.
+    # Evidence: overnight-ab-20261006/{amd,nvidia} normalized I12 receipts.
     comptime if GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]():
         if param.linesearch==LBFGS_LS_BT_ARMIJO and param.max_linesearch>0 and n>0 and n<=(16*1024*1024-96)//32:
             return ls_backtrack_exact_trials(ctx,param,f,fx,x,grad,step,drt,xp,n,scalar,ls_iters,stage,fresh,gradp,dg_ready)

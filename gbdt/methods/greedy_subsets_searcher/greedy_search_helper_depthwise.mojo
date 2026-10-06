@@ -1187,9 +1187,22 @@ comptime GBDT_LG_BATCH = 1 if not _LG_FAST_APPLE else (
 #: to min(2 * max_leaves, 1 << max_depth) leaf slots; a fit whose doubled
 #: slots would not fit the pool's leaf histograms, or whose histogram cells
 #: would pass the Int32 offset range, keeps one leaf per iteration.
+# I17 exact-batch control, source5b467815b (2026-10-06): OFF/ON
+# on complete10-tree Lossguide fits at rows/features10000/17,10001/18,32769/9:
+# AMD1.894/2.328/1.989 (OFF loses); matching NVIDIA single-switch data pending.
+# lg_exact is guarded by Lossguide; lg_exact_off Depthwise runs are the same
+# effective route and excluded from A/B ratios. Its inheritance guard also
+# stays inactive there because lg_any_folded is False. Raw timings retained.
+# legacy_both_off disables exact batching AND inherited partition: AMD
+# Depthwise1.092/1.306/1.150, Lossguide2.055/2.508/2.108; NVIDIA
+# Depthwise1.149/1.063/1.265, Lossguide1.926/1.945/2.038 (both OFF loses).
+# These combined controls remain distinct through inheritance on Depthwise;
+# do not attribute their Lossguide ratios to one switch. One same-process
+# warmup/score, synthetic public caller component, accepted identity reused.
+# Existing defaults retained; no full-board or new cross-vendor qualification.
+# Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurements, I17.
 comptime LG_EXACT_ID = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # I17 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     and not is_defined["MOJOLEARN_GBDT_LG_EXACT_ID_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
