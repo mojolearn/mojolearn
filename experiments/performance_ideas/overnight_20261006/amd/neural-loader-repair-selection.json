@@ -1,0 +1,18 @@
+{
+  "source_sha": "59fd136091514ddbbca6e75ba7493684a048e9b2",
+  "archive_sha256": "045cf48bc0f56da12704b400107ef683c3da197cdfefa3279557b26ba727c99b",
+  "remote_harness": "/root/opponent-harness-neural-59fd136091",
+  "reason": "Register frozen dynamic twin modules for Torch Dynamo import by name",
+  "status": "QUEUED_AFTER_RESOURCE_RETRY",
+  "arms_by_race": {
+    "neural/lm-forward/bytes/shape=full": [
+      "torch-compile-fp32",
+      "torch-compile-bf16"
+    ]
+  },
+  "races": [
+    "neural/lm-forward/bytes/shape=full"
+  ],
+  "before": "2026-10-06T07:35:13Z",
+  "adapter_commit": "eef36a327"
+}
