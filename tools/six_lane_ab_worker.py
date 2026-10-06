@@ -154,11 +154,15 @@ def run(args):
     if actual_shapes!=work['actual_shapes']:raise ValueError('Observed shapes differ; hidden cap or dataset drift')
     params_module=load('tools/classical_two_datasets.py','master_parameter_records')
     actual_settings=params_module.params_record(getattr(runner,'record',getattr(runner,'params_obj',getattr(runner,'params',None))))
+    from six_lane_classification_variants import normalize_parameter_record
+    actual_settings=normalize_parameter_record(work,actual_settings)
     if actual_settings!=work['estimator_settings_record']:raise ValueError('Observed estimator settings differ from the saved race')
     info=getattr(runner,'info',{})
     if info.get('numeric_mode_used')!=job['mode']:raise ValueError('Native numeric-mode readback is missing or differs')
     if info.get('vendor_used')!=work['runtime_vendor']:raise ValueError('Native runtime vendor is missing or differs')
     output=capture(outputs,'all declared consumed outputs',expected_paths=work['output_paths'])
+    from six_lane_classification_variants import validate_output_scope
+    validate_output_scope(work,output)
     if output['missing_state']:raise ValueError('Incomplete consumed output scope')
     state=capture_model(runner,work.get('model_state_paths'))
     # The unchanged quality functions own metric definitions. Gate outcomes are
@@ -187,7 +191,9 @@ def run(args):
     for index in range(work.get('repeated_operations',0)):
         again=time.perf_counter();values,done,parts=complete_operation(module,family,work,data,runner)
         parts['repeated_seconds']=done-again
-        repeated.append(dict(index=index,timings=parts,outputs=capture(values,'repeated consumed outputs',expected_paths=work['output_paths']),model_state=capture_model(runner,work.get('model_state_paths'))))
+        repeated_output=capture(values,'repeated consumed outputs',expected_paths=work['output_paths'])
+        validate_output_scope(work,repeated_output)
+        repeated.append(dict(index=index,timings=parts,outputs=repeated_output,model_state=capture_model(runner,work.get('model_state_paths'))))
     from six_lane_evidence import retain_values
     values_path=args.output.with_suffix('.values.json');retain_values(outputs,values_path)
     counts=dict(excluded_warmups=int(args.phase=='warmup'),scored=int(args.phase=='scored'))

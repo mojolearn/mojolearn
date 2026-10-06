@@ -16,6 +16,9 @@ LANES = ('tsvd', 'incremental-pca', 'randomized-svd', 'gaussian-rp', 'sparse-rp'
 
 
 def original_id(workload_id):
+    from six_lane_classification_variants import SUFFIX as classification_suffix
+    if workload_id.endswith(classification_suffix):
+        return workload_id[:-len(classification_suffix)]
     return workload_id[:-len(SUFFIX)] if workload_id.endswith(SUFFIX) else workload_id
 
 
@@ -45,7 +48,8 @@ def variant_cell(cell):
 
 def append_registered_cells(cells):
     # Original capped cells remain untouched and independently pending/measured.
-    return cells + [variant_cell(cell) for cell in cells if eligible(cell)]
+    from six_lane_classification_variants import append_registered_cells as append_classification
+    return append_classification(cells) + [variant_cell(cell) for cell in cells if eligible(cell)]
 
 
 def digest(path):
@@ -78,6 +82,9 @@ def validate_variant(facts, cell=None):
     and the projector's retained full input receipt.
     """
     reg = facts.get('registered_input_variant')
+    if reg and reg.get('variant') == 'classification-full-v1':
+        from six_lane_classification_variants import validate_variant as validate_classification
+        return validate_classification(facts, cell)
     if not reg:
         if facts.get('changes_frozen_race') or '@input=' in facts.get('job', {}).get('workload_id', ''):
             raise ValueError('Unregistered frozen-race change')
