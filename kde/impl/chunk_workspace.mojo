@@ -14,6 +14,7 @@ from std.atomic import Atomic,Ordering
 
 # I20 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Pool requires IDENTICAL + MOJOLEARN_IDN_KDE_PARTIAL_POOL; original allocation path retained.
+# Default OFF; enabling it remains a pending experiment, not a promoted route.
 comptime KDE_CHUNK_POOL_ON=GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_KDE_PARTIAL_POOL"]()
 comptime KDE_CHUNK_POOL_BYTES=64*1024*1024
 
