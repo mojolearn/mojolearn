@@ -298,9 +298,15 @@ def rbc_canonicalize_row_order(
     if n_queries <= 0 or nnz <= 0:
         return
 
-    # I13 new candidate remains default off. Qualification is pending: native
-    # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
-    # NEVER RUN — PENDING MEASUREMENT
+    # I13 sourcecbcc8dcd3303 (2026-10-06) scoped LOSER on both vendors:
+    # degree-buckets / explicit MERGE-control ratios MI325X3.641/5.649 and
+    # L40S1.650/1.802 at rows/degree100000/32 and131071/16. Actual CSR row
+    # canonicalization plus readback; uniform-degree fixtures do not qualify
+    # skewed or dense-row workloads. One same-process warmup/score per arm,
+    # accepted identity evidence reused. Keep degree buckets default OFF;
+    # no default promotion from these representative component measurements.
+    # Evidence: experiments/performance_ideas/measurements/20261006/index.json,
+    # I13 same-source/same-machine pairs, exact binary hashes and raw receipts.
     comptime if is_defined["MOJOLEARN_RBC_CANON_DEGREE_BUCKETS"]():
         rbc_canonicalize_degree_buckets(ctx, adj_ia, adj_ja, n_queries, nnz)
         return
