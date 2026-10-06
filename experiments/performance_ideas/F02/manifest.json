@@ -110,6 +110,10 @@
     "pca": [
       "core",
       "x_decomp"
+    ],
+    "mcd": [
+      "core",
+      "x_metrics"
     ]
   },
   "paired_build": true,
