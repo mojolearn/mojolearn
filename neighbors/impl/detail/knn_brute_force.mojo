@@ -229,6 +229,12 @@ comptime KNN_APPLE_MMA_DIST = (
 #: answered by the tiled arm (`neighbors/impl/detail/certified_mma_knn.mojo`).
 #: Same keys, same bits. `-D MOJOLEARN_KNN_CERTIFIED_MMA_OFF` keeps the
 #: tiled arm for every query.
+# I15 M3 2026-10-06 measured Apple-only public KNN component: n100000/q2000/
+# d8/k8 baseline19.793ms candidate10.354ms (B/A0.5231); n131071/q1024/d17/k16
+# baseline20.326ms candidate14.339ms (0.7055). One same-process warmup+score;
+# timingdriver f32549d28, ab-20261006/repairs-i15-f32549d28. Prior identity
+# evidence reused, no new numerical oracle or cross-vendor IDENTICAL vote.
+# Confirm existing Apple-only default; keep OFF escape. No default change.
 comptime KNN_CERTIFIED_MMA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_COLUMN == COLUMN_APPLE
