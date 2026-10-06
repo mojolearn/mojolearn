@@ -19,7 +19,7 @@ def recipe(root, idea="I01", **overrides):
     (directory / "probe.mojo").write_text("def main():\n    pass\n")
     record = {
         "schema": 1, "id": idea, "title": "Executable experiment",
-        "mode": p.mode_for(idea), "vendors": ["apple"] if idea.startswith("F") else ["nvidia", "amd"],
+        "mode": p.mode_for(idea), "vendors": ["apple"] if p.mode_for(idea) == "fast" else ["nvidia", "amd"],
         "status": "source_ready", "implementation_paths": [f"experiments/performance_ideas/{idea}/probe.mojo"],
         "validation_paths": [], "candidate_defines": ["MOJOLEARN_EXPERIMENT=1"],
         "baseline_defines": [], "depends_on": [], "quality_gates": ["public_quality", "actual_route"],
@@ -34,9 +34,9 @@ def recipe(root, idea="I01", **overrides):
 
 
 def test_modes_cover_exact_requested_partition():
-    assert len(p.EXPECTED) == 60
+    assert len(p.EXPECTED) == 114
     assert sum(p.mode_for(x) == "identical" for x in p.EXPECTED) == 40
-    assert sum(p.mode_for(x) == "fast" for x in p.EXPECTED) == 20
+    assert sum(p.mode_for(x) == "fast" for x in p.EXPECTED) == 74
 
 
 def test_missing_ideas_stay_missing(tmp_path):

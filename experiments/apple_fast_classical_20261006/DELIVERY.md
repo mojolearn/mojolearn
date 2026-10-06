@@ -26,3 +26,13 @@ not worked around by patching the toolchain.
 Evidence paths: `README.md`, `ideas.json`, `lanes/{linear,geometry,trees,preprocessing}.{json,md}`,
 and source paths named in each lane manifest. `select.py` is unexecuted offline
 configuration glue and cannot launch a compiler or workload.
+
+## Follow-up integration
+
+The source follow-up registers all 54 cards with the shared experiment catalog,
+resolves controls from one authoritative lane entry, packages all affected native
+bindings consistently in each A/B arm, and adds audited full-workload adapters.
+It also provides empty measurement-board inputs with explicit unqualified status.
+See `INTEGRATION.md`, `INTEGRATION_SCOPE.md`, `BUILD_INTEGRATION.md`, and
+`WORKLOAD_INTEGRATION.md`. These are programmed integrations, not executed results.
+All compilation, verification and measurement prohibitions remain in force.

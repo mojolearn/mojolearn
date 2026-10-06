@@ -29,13 +29,18 @@ def catalog() -> dict[str, dict]:
 
 def configuration(entries: list[dict], choices: tuple[str, ...]) -> dict:
     defines = set()
+    excluded = {"MOJOLEARN_NUMERIC_IDENTICAL", "MOJOLEARN_NUMERIC_DETERMINISTIC"}
     env = {}
     for entry, arm in zip(entries, choices):
         defines.update(entry[f'{arm}_defines'])
+        excluded.update(entry.get('defines_absent_in_both_arms', []))
         for key, value in entry.get(f'{arm}_env', {}).items():
             if key in env and env[key] != value:
                 raise ValueError(f'Conflicting {key} requirements; emit these cards separately')
             env[key] = value
+    conflicts = {define.split('=', 1)[0] for define in defines} & excluded
+    if conflicts:
+        raise ValueError('Selected caller routes require these defines absent: ' + ', '.join(sorted(conflicts)))
     return {
         'cards': {entry['id']: arm for entry, arm in zip(entries, choices)},
         'defines': sorted(defines),
@@ -43,7 +48,7 @@ def configuration(entries: list[dict], choices: tuple[str, ...]) -> dict:
         'status': 'source_configuration_only_not_executed',
         'required_numeric_mode': 'fast',
         'required_target': 'apple',
-        'exclude_defines': ['MOJOLEARN_NUMERIC_IDENTICAL', 'MOJOLEARN_NUMERIC_DETERMINISTIC'],
+        'exclude_defines': sorted(excluded),
     }
 
 

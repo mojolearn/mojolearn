@@ -585,6 +585,10 @@ uncompiled, unverified and unmeasured behavior. All quality and speed remain pen
 
 ## Source delivery and selecting arms
 
+The [shared experiment integration](INTEGRATION.md) now registers every card in
+`tools/performance_ideas.py`, with paired build packages, full-workload adapters
+and source-only board inputs. The standalone selector below remains available.
+
 The implementation records are the authority for actual source scope; the cards
 above preserve the hypotheses written before delegation. Some broad ideas narrowed
 to a supported caller schedule or extended a fusion that already existed. These
