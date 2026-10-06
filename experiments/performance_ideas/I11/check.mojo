@@ -3,6 +3,9 @@
 IDs, two vocabularies, two widths, padding and dirty dense output.
 Exact counts, run boundaries, stable original positions, dense gradients,
 and unwritten permutation tails are independently verified."""
+# I11 experiment qualification pending: compile/fixtures do not establish
+# four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
+# defaults stay unchanged; this campaign attributes explicit experiment arms.
 from max.gpu.host import DeviceContext
 from embedding.checks.embedding_check import _upload_i32, _upload_f32, _download_i32, _download_f32, _zeros_i32_list, compare_i32, compare_f32
 from embedding.checks.embedding_identical import identical_embedding_backward_into, emb_sabotage_name
