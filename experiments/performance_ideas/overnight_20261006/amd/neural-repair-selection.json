@@ -1,0 +1,22 @@
+{
+  "source_sha": "3e55ba47e581fa75dffba286327d023f96801831",
+  "base_sha": "b0f5242d244ef75cd9ba7d78ca92e10008d75510",
+  "patch_commits": [
+    "e5c2fc3af92d4cf1b9461b03a48557dcd590d3e3",
+    "48880bba249ad7f975da1523b07d83ad4b50a462",
+    "8b0bdf4d4a7d145eec60e82f06b1f5a4ac05b948"
+  ],
+  "races": [
+    "neural/lm-forward/bytes/shape=full",
+    "neural/lm-train-step/bytes/shape=full",
+    "neural/mamba1-forward/gaussian/shape=full",
+    "neural/mamba2-forward/gaussian/shape=full",
+    "neural/mamba3-forward/gaussian/shape=full",
+    "neural/samba-forward/bytes/shape=full",
+    "neural/samba-train-step/bytes/shape=full",
+    "neural/transformer-forward/gaussian/shape=full"
+  ],
+  "before": "2026-10-06T07:27:12Z",
+  "reason": "Missing frozen corpus resources and opponent-only binding prerequisite",
+  "archive_sha256": "b8b768cf6ddab6552de0ddbd5d9a5bbbd6a514c9750a91a5b0a0b2cacadf5993"
+}
