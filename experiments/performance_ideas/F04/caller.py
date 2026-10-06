@@ -34,7 +34,11 @@ def exercise(args):
             draw(*arrays,n_samples=count,random_state=113,numeric_mode='fast')
             assert all(np.array_equal(x,y) for x,y in zip(results,retained))
             try: draw(*arrays,n_samples=-1,random_state=109,numeric_mode='fast')
-            except (ValueError,RuntimeError): pass
+            except Exception as error:
+                # Mojo Error crosses the Python extension as plain Exception.
+                # The existing public wrapper allocates a zero-length output
+                # before this invalid count reaches its native buffer guard.
+                assert str(error)=='mojolearn: null int32 buffer address', str(error)
             else: raise AssertionError('negative count accepted')
             cases[str(widths)]=dict(contract=dict(rows=rows,widths=widths,count=count,seed=109),
                 metrics=dict(sampling_errors=dict(value=0,rtol=0,atol=0)),public_ms=elapsed,
