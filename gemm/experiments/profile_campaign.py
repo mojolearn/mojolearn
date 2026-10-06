@@ -20,7 +20,10 @@ def main():
     parser.add_argument('--mojo', default='mojo')
     parser.add_argument('--mojo-include', action='append', default=[])
     parser.add_argument('--build-only', action='store_true')
+    parser.add_argument('--run-only', action='store_true')
     args = parser.parse_args()
+    if args.build_only and args.run_only:
+        parser.error('build-only and run-only are mutually exclusive')
     repo = Path(__file__).resolve().parents[2]
     cfg = json.loads(args.config.read_text())
     sha = subprocess.check_output(['git','rev-parse','HEAD'], cwd=repo, text=True).strip()
@@ -41,8 +44,15 @@ def main():
         command = ['bash',str(slot),*argv]
         buildlog = binary.with_suffix('.build.log')
         env = os.environ | {'MOJOLEARN_COMPILE_JOBS':'1'}
-        with buildlog.open('w') as log:
-            rc = subprocess.run(command,cwd=repo,env=env,stdout=log,stderr=subprocess.STDOUT).returncode
+        if args.run_only:
+            previous = json.loads((args.evidence/'receipt.json').read_text())
+            old_arm = next((entry for entry in previous['arms'] if entry['arm']==arm['name']),None)
+            if previous['source_sha'] != sha or old_arm is None or old_arm['build_rc'] or not binary.is_file():
+                parser.error('run-only requires a green binary receipt at this frozen source')
+            rc = 0
+        else:
+            with buildlog.open('w') as log:
+                rc = subprocess.run(command,cwd=repo,env=env,stdout=log,stderr=subprocess.STDOUT).returncode
         receipt = dict(id=cfg['id'],arm=arm['name'],source_sha=sha,build_rc=rc,
                        build_argv=command,build_log=str(buildlog),runs=[],qualification='build_failed' if rc else 'build_passed_run_owed')
         receipts.append(receipt)
