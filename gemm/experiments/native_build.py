@@ -34,7 +34,7 @@ def main():
     if not source.is_relative_to(repo) or not source.is_file():
         parser.error('source must be an existing file in this frozen worktree')
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    command = [args.mojo, 'build', '-j1', '-I', str(repo)]
+    command = ['pixi', 'run', args.mojo, 'build', '-j1', '-I', str(repo)]
     if args.mode == 'identical':
         command += ['-D', 'MOJOLEARN_NUMERIC_IDENTICAL=1']
     column = 'CPU' if args.vendor == 'host' else args.vendor.upper()

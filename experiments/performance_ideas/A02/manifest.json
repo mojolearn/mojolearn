@@ -1,18 +1,21 @@
 {
   "schema": 1,
   "id": "A02",
-  "title": "Compare supported one and two-page operand staging",
+  "title": "Compare production one/two-page staging and bounded one/two/four-plane resource controls",
   "mode": "identical",
   "vendors": [
     "nvidia",
     "amd",
     "apple"
   ],
-  "status": "source_ready",
+  "status": "build_passed",
   "implementation_paths": [
     "gemm/experiments/profile_campaign.py",
     "gemm/experiments/profile_check.mojo",
-    "gemm/checks/gemm_identical.mojo"
+    "gemm/checks/gemm_identical.mojo",
+    "experiments/performance_ideas/A02/check.mojo",
+    "gemm/experiments/bounded_staging.mojo",
+    "gemm/experiments/bounded_staging_check.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_GEMM_ONE_PAGE=1"
@@ -40,14 +43,16 @@
   ],
   "validation_paths": [
     "gemm/checks/gemm_step_arms_check.mojo",
-    "core/gemm_identity_check.mojo"
+    "core/gemm_identity_check.mojo",
+    "gemm/experiments/bounded_staging_check.mojo"
   ],
   "depends_on": [],
   "quality_gates": [
     "same-version NVIDIA/AMD/Apple/host output bits",
     "exact intermediate outputs and poison control",
     "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
-    "Campaign receipt contains explicit baseline and independently compiled candidate arms; do not rebuild for run-only"
+    "Campaign receipt contains explicit baseline and independently compiled candidate arms; do not rebuild for run-only",
+    "Four-plane bounded adapter is separate from production tiled reuse: all output bits/tails/barriers must pass, shared bytes and full caller/resource costs must be charged; no async overlap or production-depth promotion is inferred"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
   "blocker": null,
@@ -61,5 +66,15 @@
     "{vendor}",
     "--build-only"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "validation_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A02/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
+  ]
 }

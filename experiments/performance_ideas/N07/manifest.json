@@ -64,5 +64,8 @@
     "{output}",
     "--source-sha",
     "{source_sha}"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }

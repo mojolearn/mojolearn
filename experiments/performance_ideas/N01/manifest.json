@@ -65,5 +65,15 @@
     "--vendor",
     "{vendor}",
     "--build-only"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/N01/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
   ]
 }
