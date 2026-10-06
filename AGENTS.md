@@ -121,23 +121,26 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 
 ## No Python in the runtime
 
-Python is good, and the right tool, for the glue layer: the public API, connecting to external code (NumPy, scikit-learn
-style interfaces, users' objects), argument checks and choosing bindings. It is the API shell only: check arguments, choose a binding, pass buffers, return results. No Python runs in the
-runtime: no loops over data, no NumPy or Python arithmetic on data, no Python-side sorting, sampling, reductions, label
-processing over rows, or worker threads in fit, transform, predict, score or training steps, in any mode or on any vendor.
-All runtime work is Mojo: on the device for GPU routes, in the host binding for CPU-only installs. Text and file handling
-that cannot be Mojo is an explicit CPU-only input step before the runtime, marked `# cpu-route: <reason>`.
-Every existing violation is debt to remove (the checker baseline `tools/hooks/host_routes_baseline.tsv`, class py-compute),
-and no change may add one.
+Owner clarification (2026-10-06, supersedes earlier Python API/glue exceptions):
+Python is ONLY for PyPI packaging/distribution and testing. NEVER USE PYTHON IN
+PRODUCT EXECUTION. This includes public API wrappers, argument/data preparation,
+binding selection/orchestration, fit, transform, predict, score, training and
+consumed-output processing. Product execution belongs in compiled Mojo/native
+bindings; no Python loops, callbacks, worker threads or NumPy/SciPy/scikit-learn
+computation, conversions or fallbacks may execute on a product path, in any mode
+or on any vendor. Preserve supported interfaces and semantics through native
+implementation; do not remove features to claim compliance.
 
-Owner reaffirmation (2026-10-06): NEVER USE PYTHON IN THE RUNTIME. NumPy, SciPy,
-scikit-learn and other Python packages must not supply MojoLearn runtime computation,
-including sparse/dense conversion, preprocessing, label handling, model orchestration
-over data or output reductions hidden in helper calls. Installing a missing Python
-package is not a repair for such a violation. Use Mojo device kernels for GPU routes
-and Mojo host bindings for CPU-only routes. Preserve optional Python API interoperability.
-Audit transitive callees and the actual timed boundary, including preparation and
-consumed outputs; a helper's old "outside the clock" comment is not evidence.
-Keep necessary offline dataset preparation explicitly separate and recorded; do not
-move estimator runtime work outside the timer to make a benchmark pass. Retained
-baseline entries are unresolved debt, never exemptions or proof of compliance.
+Python test/benchmark controllers, test-data preparation and independent test
+oracles remain allowed as testing tools. Keep their work explicitly distinguished
+from product execution and accurately included in or excluded from declared timing
+boundaries. Do not move product work outside a timer or relabel it as testing to
+hide a violation. Installing a missing Python package is not a runtime repair.
+
+Audit transitive callees and the actual whole-operation boundary; a helper's old
+"outside the clock" comment is not evidence. Existing checker baseline entries
+are debt to remove, never exemptions, and an empty baseline is not proof that
+all product paths are native. Repair in separate source freezes, preserving
+original measurement/failure evidence and valid completed cells. If supported
+Mojo/Modular functionality is missing, record the blocker and wait for support;
+do not invent a Python fallback or unsupported toolchain workaround.
