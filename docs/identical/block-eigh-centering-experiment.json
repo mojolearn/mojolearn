@@ -1,0 +1,82 @@
+{
+  "status": "EXPERIMENTAL_DEFAULT_OFF_FULL_QUALIFICATION_PENDING",
+  "base_source": "a006da73d78634683cfc77a12dcb99666c55748c",
+  "numerical_patch_commit": "dfd8ac21e5ed34591ffebdd286a3d09866faa56a",
+  "latest_test_commit": "fa351dce3b458b8efb1aeb2b3e62352ce8bda5fa",
+  "historical_failures": [
+    "Uncentered exact captured pivot refuses60/120/180/240sweeps. Original limits/tolerances retained.",
+    "42ea centering prototype was local-only: full-path review found local eigenvalues also used in outer updates. dfd restores shifts on host and GPU; do not use42ea alone.",
+    "First full-host test compile refused tuple iteration;55c9 uses supportedList iteration. Failedlog preserved."
+  ],
+  "retained_local_pivot": {
+    "status": "LOCAL_PIVOT_QUALITY_PASS",
+    "residual": 4.153763212249148e-10,
+    "orthogonality": 2.3633201500859454e-06,
+    "eigenvalue_relative_error": 3.210055035274551e-11,
+    "threshold": 0.0002,
+    "threshold_source": "tools/identical_wave_quality.py:eigh",
+    "candidate": "a10394bae70b02ae7dd498f6556d474db1cecec4",
+    "guard_cases_passed": 5,
+    "artifact_sha256": "51e8ab2745eaec6f87c578655436958dc9806247590cfe341cfe97166c2ad7f4",
+    "limitations": "Captured local pivot only; full block decomposition, cross-vendor bits and timing unqualified"
+  },
+  "full_host_small": {
+    "status": "PASS",
+    "cases": [
+      {
+        "n": 64,
+        "residual": 7.842793295237698e-09,
+        "orthogonality": 3.4692347548893205e-06,
+        "eigenvalue_error": 0.0,
+        "status": "PASS"
+      },
+      {
+        "n": 65,
+        "residual": 5.78204254765422e-09,
+        "orthogonality": 3.0274435718785347e-06,
+        "eigenvalue_error": 0.0,
+        "status": "PASS"
+      },
+      {
+        "n": 96,
+        "residual": 8.549694382808074e-09,
+        "orthogonality": 7.3147309708808075e-06,
+        "eigenvalue_error": 0.0,
+        "status": "PASS"
+      }
+    ],
+    "threshold": 0.0002,
+    "threshold_source": "tools/identical_wave_quality.py:eigh",
+    "scope": "Full host block engine forced on small fixtures; default activation-size and GPU qualification pending"
+  },
+  "full_host_activation_sizes": {
+    "status": "PASS",
+    "cases": [
+      {
+        "n": 512,
+        "residual": 4.186863959678534e-08,
+        "orthogonality": 6.922218349999816e-05,
+        "eigenvalue_error": 3.5762786865234375e-07,
+        "status": "PASS"
+      },
+      {
+        "n": 513,
+        "residual": 4.067903102126087e-08,
+        "orthogonality": 6.743136949169939e-05,
+        "eigenvalue_error": 2.384185791015625e-07,
+        "status": "PASS"
+      }
+    ],
+    "threshold": 0.0002,
+    "threshold_source": "tools/identical_wave_quality.py:eigh",
+    "scope": "Full host block engine at default512 activation and neighboring513; GPU and original4096 fixture qualification pending"
+  },
+  "review": "Independent static review found no blocker for isolated candidate compile; shared shift recomputed from unchangedA, restored before outer update, oneGPUwriter per eigenvalue. Mathematical translation invariance does not itself provefloat32accuracy.",
+  "missing": [
+    "Original4096 dense normalizedrankone publicquality fixture",
+    "Actual GPUbinding compile/readback",
+    "NVIDIA/AMD/Apple/host sameinput words within thisversion",
+    "Full residual/orthogonality and speed decision"
+  ],
+  "policy": "No new GPUlaunch until user-requested main consolidation; leave defaultOFF; no numerical failure is called timing success."
+}

@@ -1,0 +1,83 @@
+{
+  "status": "PASS",
+  "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+  "harness_sha": "11420aa8fe6db02332e8044203f096c714f6ad7c",
+  "retained_baseline_harness": "ad1d9ec2e4c7f906b05e9a305971967272a0dcf5",
+  "retained_baseline_lanes": [
+    "gemm",
+    "transformer-forward"
+  ],
+  "comparisons": {
+    "group-slack2": [
+      {
+        "race": "neural/gemm/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 28.560270002344623,
+        "candidate_ms": 28.595039999345317,
+        "candidate_over_baseline": 1.001217425360399
+      },
+      {
+        "race": "neural/mlp-train-step/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 2.961237005365547,
+        "candidate_ms": 3.3501840007374994,
+        "candidate_over_baseline": 1.1313461214577587
+      },
+      {
+        "race": "neural/transformer-forward/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 3.490076996968128,
+        "candidate_ms": 3.6983810059609823,
+        "candidate_over_baseline": 1.0596846456894249
+      }
+    ],
+    "one-page": [
+      {
+        "race": "neural/gemm/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 28.560270002344623,
+        "candidate_ms": 29.70098899822915,
+        "candidate_over_baseline": 1.039940763717951
+      },
+      {
+        "race": "neural/mlp-train-step/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 2.961237005365547,
+        "candidate_ms": 3.474611999990884,
+        "candidate_over_baseline": 1.173365047679446
+      },
+      {
+        "race": "neural/transformer-forward/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 3.490076996968128,
+        "candidate_ms": 3.5499119985615835,
+        "candidate_over_baseline": 1.0171443213560718
+      }
+    ],
+    "group-slack8": [
+      {
+        "race": "neural/gemm/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 28.560270002344623,
+        "candidate_ms": 28.468933000112884,
+        "candidate_over_baseline": 0.9968019559260385
+      },
+      {
+        "race": "neural/mlp-train-step/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 2.961237005365547,
+        "candidate_ms": 3.491013005259447,
+        "candidate_over_baseline": 1.178903613231222
+      },
+      {
+        "race": "neural/transformer-forward/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 3.490076996968128,
+        "candidate_ms": 3.6705909951706417,
+        "candidate_over_baseline": 1.051722067553045
+      }
+    ]
+  },
+  "promotion": false,
+  "one_sample": true
+}

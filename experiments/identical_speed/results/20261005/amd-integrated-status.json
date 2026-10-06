@@ -1,0 +1,12 @@
+{
+  "phase": "INTEGRATED_AB_FAILED",
+  "pid": 243433,
+  "time": 1791250004.540394,
+  "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+  "harness_sha": "ad1d9ec2e4c7f906b05e9a305971967272a0dcf5",
+  "outcomes": {
+    "baseline": 0
+  },
+  "promotion": false,
+  "error": "AssertionError('neural/mlp-train-step/gaussian/shape=full')"
+}

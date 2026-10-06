@@ -3165,6 +3165,9 @@ def _mfma_run(
     comptime KS = 16
     comptime SSTRIDE = KS + TUNED_VECLEN
     comptime PAGE_BYTES = (128 + 128) * SSTRIDE * 4
+    # 2026-10-05 one-page screen: NVIDIA B/A 1.013586 (slower), AMD
+    # 0.991303 (single-sample near-neutral); not a combined timing win.
+    # Exact cases retained in experiments/identical_speed/results/20261005/.
     comptime PAGES = 1 if is_defined["MOJOLEARN_GEMM_ONE_PAGE"]() else lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
     var part = contract_partition(k)
     var leaf = part[0]
@@ -6349,6 +6352,48 @@ comptime GEMM_KSPLIT_KS = 16
 #: The rule's hand-count checks (`check_kpack_rule_hand_counts` and the
 #: section 4 counts) hold the shipped numbers, so they are expected to
 #: refuse under an arm: the arms are for timing against each other.
+# 2026-10-05 measured A/B record (frozen a006da73d, one sample per arm):
+# experiments/identical_speed/results/20261005/{nvidia,amd}-screen.json
+# retains every case, timings, bit hashes, compiler flags and binary hashes.
+# NVIDIA: body-tiles B/A geometric mean 0.779911 (~22.0% lower time),
+# slack2 0.855287 (~14.5% lower). AMD slack2 0.995711 (essentially neutral).
+# All 180 NVIDIA and 108 AMD pairs matched bits. These are separate arms:
+# body-tiles + slack2 together was NOT tested; their speedups do not add.
+# slack8 did not win: NVIDIA 1.048267 (4.83% slower), AMD 0.999053.
+# Keep unsuccessful arms available explicitly so the experiment is reproducible.
+# Initial public-harness attempt was incomplete: AMD baseline GEMM and
+# transformer succeeded; MLP timing succeeded but its driver emitted hash=null,
+# so the identity audit correctly refused it before candidate execution.
+# amd-integrated-{status,baseline-board,error} records retain that failure.
+# Harness-only fix 11420aa8 records complete weights/AdamW state outside timing.
+# These flags remain opt-in until the full-lane identity/timing checks finish;
+# a synthetic win alone does not prove a model-level gain or the combined arm.
+# Follow-up actual public harness, AMD MI325X, a006 binaries + 11420aa8
+# state-evidence fix: all 9 candidate/lane comparisons MATCH; independently
+# reloaded all model/AdamW/metadata arrays and checked dtype/shape/raw bytes.
+# One excluded warmup + one scored sample; timings are not significance tests.
+# B/A (GEMM, MLP train step, transformer): slack2 1.0012/1.1313/1.0597;
+# one-page 1.0399/1.1734/1.0171; slack8 0.9968/1.1789/1.0517.
+# Decision: no AMD default switch. Correct bits but no material timing win;
+# model lanes regressed in this sample. Preserve these arms for reproducibility.
+# Coverage: GEMM4096^3, full harness transformer, and harness SmallMLP
+# (8->16->3, batch256); this does NOT establish large-model training behavior.
+# Prior GEMM/transformer baseline timings retained with old ad1d provenance;
+# only baseline MLP was rerun. Original missing-hash failure remains recorded.
+# Evidence: experiments/identical_speed/results/20261005/amd-integrated-resume/.
+# Final owner capture 6ed220677906c67fe99968d5394309304494c1650f43f0a42dd3d46904b36dcd.
+# NVIDIA real public-harness follow-up (same frozen a006, harness11420aa8):
+# all15 candidate/lane comparisons MATCH, including full saved MLP state.
+# One warmup/sample; B/A (GEMM, MLP, transformer):
+# slack2 0.9868/1.0092/1.4520; body-tiles 1.0163/1.0018/1.4029;
+# one-page 1.0336/1.0178/1.0219; slack8 1.0240/1.0401/1.4360;
+# packed64 1.2068/1.0092/1.0575. No end-to-end default winner identified.
+# In particular the synthetic body-tiles/slack2 wins did NOT carry through
+# these public workloads. Keep defaults unchanged on both vendors. This is
+# single-sample evidence, not a statistically established regression claim.
+# Exact shapes/old retained baseline origins are recorded alongside results:
+# experiments/identical_speed/results/20261005/nvidia-integrated-resume/.
+# Final capture bdd685793e39f274a99bbf7319fbd1263cb9169908645eeb39d40a73403af41b.
 comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime GEMM_KSPLIT_SLACK = (
     2 if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]()) else (
@@ -7764,6 +7809,9 @@ comptime GEMM_KPACK_PAGE_GUARD_BYTES = 1024
 #: a thread's cells, their chains and their fold are unchanged):
 #: `-D MOJOLEARN_GEMM_KPACK_RPT4=1` (64-row tile), `-D MOJOLEARN_GEMM_KPACK_CPT4=1`
 #: (64-column tile).
+# 2026-10-05 packed64 screen: NVIDIA B/A 1.015291 (~1.53% slower),
+# all bits matched. No timing win; retain explicit arm, do not enable default.
+# Raw per-case evidence: experiments/identical_speed/results/20261005/nvidia-screen.json.
 comptime GEMM_KPACK_RPT = TUNED_RPT if is_defined["MOJOLEARN_GEMM_KPACK_RPT4"]() else TUNED_RPT * 2
 comptime GEMM_KPACK_CPT = TUNED_CPT if (
     is_defined["MOJOLEARN_GEMM_KPACK_CPT4"]() or lib_gemm_kpack_narrow_for[TARGET_COLUMN]()

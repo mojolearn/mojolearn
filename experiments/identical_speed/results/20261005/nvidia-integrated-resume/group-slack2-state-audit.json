@@ -1,0 +1,47 @@
+{
+  "status": "PASS",
+  "digest": "c23d617a0fc8428b9bcb89b3feb583c53516e837940ca194585c350bff3da92f",
+  "npz": "/root/campaign-results/integrated-neural-ab-resume/group-slack2/raw/neural/shape-full/mlp-train-step-gaussian-ours.outputs.npz",
+  "keys": [
+    "state.metadata_json",
+    "state.optimizer.flags",
+    "state.optimizer.m",
+    "state.optimizer.step",
+    "state.optimizer.v",
+    "state.weight.bias1",
+    "state.weight.bias2",
+    "state.weight.weight1",
+    "state.weight.weight2"
+  ],
+  "shapes": {
+    "state.weight.weight1": [
+      16,
+      8
+    ],
+    "state.weight.bias1": [
+      16
+    ],
+    "state.weight.weight2": [
+      3,
+      16
+    ],
+    "state.weight.bias2": [
+      3
+    ],
+    "state.optimizer.m": [
+      195
+    ],
+    "state.optimizer.v": [
+      195
+    ],
+    "state.optimizer.flags": [
+      4
+    ],
+    "state.optimizer.step": [
+      1
+    ],
+    "state.metadata_json": [
+      401
+    ]
+  }
+}

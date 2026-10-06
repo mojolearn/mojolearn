@@ -1,3 +1,6 @@
+# Experiment status: RF/ET builds passed on NVIDIA, AMD and Apple.
+# Full A/B measurements and scored-state comparisons are PENDING; merging
+# this harness into main does not enable a candidate or claim a speedup.
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -982,6 +985,7 @@ def build_parser():
                         "store lookup)")
     p.add_argument("--list-arms", action="store_true",
                    help="print the roster for the lane and exit")
+    p.add_argument("--save-scored-models", help="fresh directory for final own RF/ET model and existing scored predictions; untimed, no extra fit or prediction")
     p.add_argument("--infer", action="store_true",
                    help="after the fit rounds, time batch prediction too: every arm "
                         "predicts with its own last fitted model on the held-out rows "
@@ -1018,6 +1022,58 @@ def seed_draws(lane, cfg, data):
     if getattr(data, "cat_idx", None):
         parts.append("CatBoost's and ours CTR permutations")
     return "; ".join(parts)
+
+
+def retain_scored_forest(arm, retained):
+    """Capture the existing OUTSIDE-clock score result; never fit or predict again."""
+    original = arm.score
+    def score(model, data):
+        triples = original(model, data)
+        retained[arm.name] = (model, [(metric, value, np.asarray(pred).copy())
+                                     for metric, value, pred in triples], data)
+        return triples
+    arm.score = score
+
+
+def save_scored_forests(directory, retained, live_names):
+    """Export final scored models and the exact prediction bytes already scored."""
+    from pathlib import Path
+    import hashlib
+    from identical_forest_state_fixture import arrays_hash
+    root = Path(directory)
+    root.mkdir(parents=True, exist_ok=False)
+    receipts = {}
+    for name in sorted(live_names):
+        if not name.startswith("ours"):
+            continue
+        model, triples, data = retained[name]
+        folder = root / name
+        folder.mkdir()
+        model.save(folder / "model.npz")
+        with np.load(folder / "model.npz", allow_pickle=False) as saved:
+            state = {k: saved[k].copy() for k in saved.files if k != "device"}
+        required = {"offsets", "colid", "quesval", "left_child", "leaves", "meta"}
+        if not required <= state.keys():
+            raise ValueError("incomplete forest model export")
+        predictions = {str(i) + ":" + metric: pred for i, (metric, _, pred) in enumerate(triples)}
+        if not predictions or any(not np.isfinite(p).all() for p in predictions.values()):
+            raise ValueError("missing or nonfinite scored predictions")
+        np.savez(folder / "predictions.npz", **predictions)
+        actual_inputs = {"X_train": np.asarray(data._ours_X), "y_train": np.asarray(data._ours_y),
+                         "X_test": np.asarray(data._ours_Xtest), "y_test": np.asarray(data.y_test)}
+        import bench_board_params as BP
+        receipts[name] = dict(input_hash=arrays_hash(actual_inputs),
+                              inputs={k: dict(shape=list(v.shape), dtype=v.dtype.str,
+                                              sha256=arrays_hash({k:v})) for k,v in actual_inputs.items()},
+                              model_params_record=BP.arm_record(model),
+                              model_native_config=dict(model._cfg),
+                              model_state_hash=arrays_hash(state), prediction_hash=arrays_hash(predictions),
+                              model_file_sha256=hashlib.sha256((folder / "model.npz").read_bytes()).hexdigest(),
+                              metrics=[dict(metric=k, value=float(v)) for k, v, _ in triples],
+                              state_members={k: dict(shape=list(v.shape), dtype=v.dtype.str) for k,v in state.items()})
+    (root / "receipt.json").write_text(json.dumps(receipts, indent=2, allow_nan=False) + "\n")
+    if not receipts:
+        raise ValueError("no successful scored own forest to export")
 
 
 def main(argv=None):
@@ -1205,6 +1261,15 @@ def main(argv=None):
     # arm's FITTED tree count against the count this lane asked for. Without
     # it the shapes are still reported and that one check is skipped; an
     # expectation is never invented.
+    retained_scores = {}
+    if args.save_scored_models:
+        if lane not in ("rf", "et"):
+            raise ValueError("--save-scored-models currently supports RF/ET only")
+        if os.path.exists(args.save_scored_models):
+            raise ValueError("--save-scored-models requires a fresh directory")
+        for arm in arms:
+            if arm.name.startswith("ours"):
+                retain_scored_forest(arm, retained_scores)
     models = {}
     if args.infer:
         # Keep each arm's LAST fitted model for the inference phase. The
@@ -1221,6 +1286,8 @@ def main(argv=None):
         import forest_board_arms
         fit_context = forest_board_arms.TreeMem(lane).context
     live = spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg, fit_context=fit_context)
+    if args.save_scored_models:
+        save_scored_forests(args.save_scored_models, retained_scores, {a.name for a in live})
     if args.infer:
         names = {a.name for a in live}
         run_inference(lane, [a for a in arms if a.name in names],

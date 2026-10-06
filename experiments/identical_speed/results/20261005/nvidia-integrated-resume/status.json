@@ -1,0 +1,23 @@
+{
+  "phase": "INTEGRATED_AB_PASS",
+  "pid": 4881,
+  "time": 1791250895.282797,
+  "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+  "harness_sha": "11420aa8fe6db02332e8044203f096c714f6ad7c",
+  "prior_capture": "e0fc7f5cfabed21e64acfff63a1fef36c2d32ede714005c0e9073b08c4d82f98",
+  "outcomes": {
+    "baseline": 0,
+    "baseline-mlp-state-readback": 0,
+    "group-slack2": 0,
+    "group-slack2-state-readback": 0,
+    "body-tiles": 0,
+    "body-tiles-state-readback": 0,
+    "one-page": 0,
+    "one-page-state-readback": 0,
+    "group-slack8": 0,
+    "group-slack8-state-readback": 0,
+    "packed64": 0,
+    "packed64-state-readback": 0
+  },
+  "promotion": false
+}

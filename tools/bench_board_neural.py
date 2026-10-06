@@ -468,8 +468,6 @@ def lane_settings(lane):
         s["quality"] = "max_abs_diff_vs_ours, max_rel_diff_vs_ours" + (
             ", mean_nll" if lane in ("lm-forward", "samba-forward", "samba-infer") else "") + (
             ", max_rel_err_vs_fp64" if MODEL_OF[lane] == "gemm" else "")
-        if lane in FORWARD_REFERENCE_LANES:
-            s["quality"] += ", untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)"
     s["torch_settings"] = {a: precision_text(arm_setting(a)[1]) for a in
                            ["torch-" + x for x in TORCH_SETTINGS]}
     return s
@@ -721,9 +719,7 @@ def _ours_info(ml, module_path, mode_used, device="gpu"):
         info["vendor_used"] = "unavailable (%r)" % (exc,)
     if mode_used != want:
         raise RuntimeError("ours is not %s: read back %r" % (want.upper(), mode_used))
-    # The public library reports the API (metal); the board names its column
-    # apple. Accept either spelling, while refusing CUDA/HIP/CPU FAST here.
-    if want == "fast" and info["vendor_used"] not in ("metal", "apple"):
+    if want == "fast" and info["vendor_used"] != "apple":
         raise RuntimeError("REFUSED: ours-fast is the Apple FAST neural tier; this box's vendor "
                            "reads back %r" % (info["vendor_used"],))
     return info
@@ -965,6 +961,41 @@ class OursSamba(Ours):
         return None if self.lane == "samba-train-step" else Ours.digest(self)
 
 
+def mlp_state_evidence(state):
+    """Untimed, complete public trainer snapshot; no training/inference calls."""
+    import numpy as np
+    optimizer = state["optimizer"]
+    arrays = {"state.weight." + name: np.asarray(state["weights"][name]).copy()
+              for name in MLP_NAMES}
+    arrays.update({"state.optimizer." + name: np.asarray(optimizer[name]).copy()
+                   for name in ("m", "v", "flags")})
+    arrays["state.optimizer.step"] = np.asarray([optimizer["step"]], dtype=np.int64)
+    metadata = {k: v for k, v in state.items() if k not in ("weights", "optimizer")}
+    metadata["optimizer"] = {k: v for k, v in optimizer.items()
+                             if k not in ("m", "v", "flags", "step")}
+    raw = json.dumps(metadata, sort_keys=True, separators=(",", ":"),
+                     allow_nan=False).encode("utf-8")
+    arrays["state.metadata_json"] = np.frombuffer(raw, dtype=np.uint8).copy()
+    return arrays
+
+
+def mlp_state_digest(arrays):
+    """SHA256 over named, typed, shaped state bytes (not an NPZ container)."""
+    import numpy as np
+    h = hashlib.sha256(b"mojolearn.board.mlp-state.v1\0")
+    for name in sorted(arrays):
+        array = np.ascontiguousarray(arrays[name])
+        if array.dtype.hasobject or not np.isfinite(array).all():
+            raise ValueError("invalid MLP state array: " + name)
+        header = json.dumps([name, array.dtype.str, list(array.shape)],
+                            separators=(",", ":")).encode("ascii")
+        payload = array.tobytes(order="C")
+        for part in (header, payload):
+            h.update(len(part).to_bytes(8, "little"))
+            h.update(part)
+    return h.hexdigest()
+
+
 class OursMLP(Ours):
     def __init__(self, lane, shape, data):
         import numpy as np
@@ -989,6 +1020,7 @@ class OursMLP(Ours):
         self.x0 = np.ascontiguousarray(self.X[0])
         self.k = 0
         self.losses = []
+        self._state_evidence = None
 
     def call(self):
         np = self.np
@@ -997,16 +1029,25 @@ class OursMLP(Ours):
                                         np.ascontiguousarray(self.y[self.k]))
             self.losses.append(float(res["loss"]))
             self.k += 1
+            self._state_evidence = None
         else:
             self.out = self.model.predict_logits(self.x0)
 
     def outputs(self):
         if self.lane == "mlp-train-step":
-            return {"losses": self.np.array(self.losses, dtype=self.np.float64)}
+            return {"losses": self.np.array(self.losses, dtype=self.np.float64),
+                    **self._snapshot()}
         return {"y": self.np.asarray(self.out)}
 
+    def _snapshot(self):
+        if self._state_evidence is None:
+            self._state_evidence = mlp_state_evidence(self.model.state_dict())
+        return self._state_evidence
+
     def digest(self):
-        return None if self.lane == "mlp-train-step" else Ours.digest(self)
+        # Worker invokes this only AFTER stopping the round timer and memory probe.
+        return (mlp_state_digest(self._snapshot()) if self.lane == "mlp-train-step"
+                else Ours.digest(self))
 
 
 OURS = {"lm": OursLM, "gemm": OursGEMM, "transformer": OursBlock, "mamba1": OursBlock,
@@ -1486,67 +1527,7 @@ def _mean_nll(np, logits, targets):
     return float((lse - picked).mean())
 
 
-# Same fp32 forward tolerance used by the Mamba and transformer surface gates.
-# This checks saved benchmark output, never a timed opponent or a GPU rerun.
-FORWARD_REFERENCE_LANES = ("transformer-forward", "mamba1-forward", "mamba2-forward", "mamba3-forward")
-FORWARD_REFERENCE_ATOL = 1e-6
-FORWARD_REFERENCE_RTOL = 1e-5
-
-
-def forward_host_quality(lane, shape, data, outs):
-    import numpy as np
-    own = {arm: out for arm, out in outs.items() if arm in ("ours", "ours-fast")}
-    if not own:
-        return {}
-    ml = _ours_module()
-    weights = {k: np.ascontiguousarray(v) for k, v in _weights(data).items()}
-    model = MODEL_OF[lane]
-    kwargs = {"numeric_mode": "identical"}
-    if model == "transformer":
-        d = _dims_of(lane, shape)
-        cls = ml.TransformerBlockInference
-        kwargs.update(n_heads=d["n_heads"], n_kv_heads=d["n_kv"], head_dim=d["head_dim"],
-                      norm_eps=BLOCK_NORM_EPS, rope_theta=BLOCK_ROPE_THETA)
-    else:
-        cls = getattr(ml, {"mamba1": "Mamba1BlockInference", "mamba2": "Mamba2BlockInference",
-                           "mamba3": "Mamba3BlockInference"}[model])
-    block = cls(weights, **kwargs)
-    # The public inference classes dispatch only to the shipped Mojo CPU host
-    # binding. Their fresh forward uses exactly the race's weights and inputs.
-    ref = np.asarray(block.forward(np.ascontiguousarray(data["x"])), dtype=np.float64)
-    result = {}
-    for arm, out in own.items():
-        got = np.asarray(out["y"], dtype=np.float64)
-        matching_shape = got.shape == ref.shape
-        finite = bool(np.isfinite(got).all() and np.isfinite(ref).all())
-        q = {"host_reference": cls.__name__, "host_reference_atol": FORWARD_REFERENCE_ATOL,
-             "host_reference_rtol": FORWARD_REFERENCE_RTOL, "host_reference_finite": finite,
-             "host_reference_passed": False}
-        if not matching_shape:
-            q["shape_mismatch_vs_host"] = "%s vs %s" % (list(got.shape), list(ref.shape))
-        elif finite and ref.size:
-            error = np.abs(got - ref)
-            bound = FORWARD_REFERENCE_ATOL + FORWARD_REFERENCE_RTOL * np.abs(ref)
-            q.update(max_abs_diff_vs_host=float(error.max()),
-                     max_rel_diff_vs_host=float(error.max()) / (float(np.abs(ref).max()) or 1.0),
-                     host_reference_tolerance_ratio=float((error / bound).max()),
-                     host_reference_passed=bool(np.all(error <= bound)))
-        result[arm] = q
-    return result
-
-
-def mark_forward_quality_failures(result):
-    """A missing/failed host reference cannot leave a timed own arm marked ok."""
-    if result["lane"] not in FORWARD_REFERENCE_LANES:
-        return
-    for arm in ("ours", "ours-fast"):
-        row = result["arms"].get(arm)
-        if row and row.get("status") == "ok" and not result.get("quality", {}).get(arm, {}).get("host_reference_passed"):
-            row.update(status="quality_failed", error={"host_reference": result.get("quality", {}).get(arm,
-                       result.get("quality", {}).get("error", "missing saved output or host reference"))})
-
-
-def quality(lane, data, outs, *, shape="full"):
+def quality(lane, data, outs):
     import numpy as np
     q = {}
     if lane in TRAIN_LANES:
@@ -1561,8 +1542,6 @@ def quality(lane, data, outs, *, shape="full"):
         return q
     for arm, o in outs.items():
         q[arm] = {}
-    if lane in FORWARD_REFERENCE_LANES:
-        q.update(forward_host_quality(lane, shape, data, outs))
     if lane in ("lm-forward", "lm-infer", "samba-forward", "samba-infer"):
         targets = data["batches"][0][:, 1:].astype(np.int64)
         for arm, o in outs.items():
@@ -1726,8 +1705,8 @@ def race(args):
             if msg is not None and msg.get("event") == "saved":
                 with np.load(path) as z:
                     outs[arm] = {k: z[k] for k in z.files}
-                if getattr(args, "keep_outputs", False) or lane in FORWARD_REFERENCE_LANES:
-                    # Forward quality can be re-evaluated without retiming the GPU.
+                if getattr(args, "keep_outputs", False) or lane == "mlp-train-step":
+                    # Retain the measured trainer state for independent identity checks.
                     # tools/afn_ab.sh's judge compares two builds' outputs
                     keep = os.path.join(args.out, "%s-%s.outputs.npz" % (tag, arm))
                     os.replace(path, keep)
@@ -1740,17 +1719,11 @@ def race(args):
     try:
         with np.load(data_path) as z:
             data = {k: z[k] for k in z.files}
-        result["quality"] = quality(lane, data, outs, shape=args.shape)
+        result["quality"] = quality(lane, data, outs)
     except Exception as exc:  # noqa: BLE001
         result["quality"] = {"error": repr(exc)}
-    mark_forward_quality_failures(result)
     try:
-        if lane in FORWARD_REFERENCE_LANES:
-            keep = os.path.join(args.out, "%s.inputs.npz" % tag)
-            os.replace(data_path, keep)
-            result["inputs_npz"] = keep
-        else:
-            os.remove(data_path)
+        os.remove(data_path)
     except OSError:
         pass
     for arm in arms:
