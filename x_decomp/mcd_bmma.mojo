@@ -44,8 +44,8 @@ from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, McdCompactWorkspac
 # Existing ordered-covariance HOLD is not waived by this separate candidate.
 # See docs/apple-fast/ab/mcd-g1-gram.md and EXPERIMENTS.md (MCD_FAST_G1_GRAM).
 # NEVER RUN — PENDING MEASUREMENT: opt-in MCD self-Gram route.
-# M3 F02/mcd 2026-10-06 measurement attempt failed in baseline fixture:
-# metric y_true uses floating labels but API accepts integer/string labels.
+# M3 F02/mcd 2026-10-06 measurement attempt failed in baseline score:
+# metric input reached classification with floating labels; origin needs repair.
 # No A/B timing admitted; retain OFF pending fixture repair (not an identity
 # or compilation failure). Caller 67d0efb29; reused artifact provenance and
 # retained log: ~/mojolearn-evidence/ab-overnight-20261006/m3/
