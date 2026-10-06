@@ -57,4 +57,5 @@ def threshold_graph[FUSED: Bool](ctx: DeviceContext,mut q: DeviceBuffer[DType.fl
         ctx.enqueue_function[distance_kernel](q,x,distances,Int32(rows),Int32(cols),Int32(dims),grid_dim=((rows*cols+127)//128,1,1),block_dim=(128,1,1))
     ctx.enqueue_function[decision_kernel[FUSED]](q,x,distances,flags,Int32(rows),Int32(cols),Int32(dims),eps,grid_dim=((rows*cols+127)//128,1,1),block_dim=(128,1,1))
     rbc_exclusive_scan_launch(ctx,positions,flags,rows*cols)
-    ctx.enqueue_function[fill_kernel](flags,positions,indptr,indices,Int32(rows),Int32(cols),grid_dim=((rows*cols+127)//128,1,1),block_dim=(128,1,1))
+    var fill_cells=max(rows*cols,rows+1)
+    ctx.enqueue_function[fill_kernel](flags,positions,indptr,indices,Int32(rows),Int32(cols),grid_dim=((fill_cells+127)//128,1,1),block_dim=(128,1,1))
