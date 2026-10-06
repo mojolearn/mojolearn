@@ -79,11 +79,25 @@ comptime AFN_ATTN_ROPE_CACHE = AFN_ATTN_ON and (
 )
 comptime AFN_ATTN_GQA_TILE = AFN_ATTN_ON and (
     # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# Scored FAST quality: 3/3 metrics within the existing bands; PASS.
+# F07/gqa M3 2026-10-06: 3 retained public-caller timings;
+# B/A range 0.7077..2.7525, mixed/regressing; retain OFF.
+# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
+# Scored quality metrics and per-arm build/hash provenance retained at
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F07/gqa.
+# No combined-switch or full-board default claim from these component cases.
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_GQA_TILE"]()
 )
 #: FLASH is also what GQA_TILE runs (at GROUP 1 when n_kv == n_heads).
 comptime AFN_ATTN_FLASH = AFN_ATTN_ON and (
     # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# Scored FAST quality: 3/3 metrics within the existing bands; PASS.
+# F07/default M3 2026-10-06: 3 retained public-caller timings;
+# B/A range 0.1752..0.8973, mixed/regressing; retain OFF.
+# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
+# Scored quality metrics and per-arm build/hash provenance retained at
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F07/default.
+# No combined-switch or full-board default claim from these component cases.
     AFN_ATTN_ALL or AFN_ATTN_GQA_TILE or is_defined["MOJOLEARN_AFN_ATTN_FLASH"]()
 )
 comptime AFN_ATTN_FUSE_PRE = AFN_ATTN_ON and (
@@ -802,6 +816,20 @@ struct FlashCallerAudit(Defaultable, Movable):
 
 comptime FLASH_AUDIT = _Global[StorageType=FlashCallerAudit, name="AppleFlashCallerAudit", init_fn=FlashCallerAudit.__init__]
 # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# Scored FAST quality: 3/3 metrics within the existing bands; PASS.
+# F07/default M3 2026-10-06: 3 retained public-caller timings;
+# B/A range 0.1752..0.8973, mixed/regressing; retain OFF.
+# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
+# Scored quality metrics and per-arm build/hash provenance retained at
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F07/default.
+# No combined-switch or full-board default claim from these component cases.
+# Scored FAST quality: 3/3 metrics within the existing bands; PASS.
+# F07/gqa M3 2026-10-06: 3 retained public-caller timings;
+# B/A range 0.7077..2.7525, mixed/regressing; retain OFF.
+# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
+# Scored quality metrics and per-arm build/hash provenance retained at
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F07/gqa.
+# No combined-switch or full-board default claim from these component cases.
 comptime AFN_FLASH_AUDIT_ON = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN_ATTN_AUDIT"]()
 
 def afn_flash_call_count(grouped: Bool) raises -> Int:

@@ -41,23 +41,37 @@ comptime AFN_LM_NOSYNC = BYTE_LM_FAST_APPLE and (
 #: -D MOJOLEARN_AFN_LM_BWD_NOSYNC: the block backward's RMSNorm stage drops
 #: the three host waits the non-IDENTICAL tiers kept there ("old fences",
 #: transformer_backward.mojo `_bwd_rms_norm_kernels`): 6 per layer.
+# F08/default M3 Ultra 2026-10-06: promote this FAST Apple switch only.
+# Whole train-checkpoint-refusal task [2,7,24,3,1,8,40,2,513], 12 steps:
+# candidate/baseline trajectory 0.8766, first step 0.9357; heldout loss
+# 6.231029987335205 equal, resume_error=0 on both, refusal/recovery captured.
+# One excluded warmup and one scored trajectory; one shape, no universal
+# hardware claim. Caller67d0efb29; reused artifact hashes/builds in
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F08/default.
+# Identity/compile receipts reused, not rerun. Active frozen binaries unchanged.
+# Explicit OFF permits rollback and future baseline captures.
 comptime AFN_LM_BWD_NOSYNC = BYTE_LM_FAST_APPLE and (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
-    is_defined["MOJOLEARN_AFN_LM_BWD_NOSYNC"]() or _AFN_LM_ALL
+    not is_defined["MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF"]()
 )
 #: -D MOJOLEARN_AFN_LM_BWD_FUSE: the block backward takes IDENTICAL's fused
 #: Apple routes on FAST (fused SiLU-gate VJP, norm2 + residual fused, the
 #: shipped norm kernel arm), which FAST had been routed around.
+# F08/fused M3 2026-10-06: B/A trajectory0.9494, first-step0.8546 on the
+# same 12-step/513-vocab task; heldout/resume unchanged. Small single-shape
+# gain remains tentative; retain OFF. Same caller/build provenance and
+# evidence root as F08/default above, results/F08/fused; no identity retest.
 comptime AFN_LM_BWD_FUSE = BYTE_LM_FAST_APPLE and (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_AFN_LM_BWD_FUSE"]() or _AFN_LM_ALL
 )
 #: -D MOJOLEARN_AFN_LM_PARAM_VIEWS: every block's nine weights are views of
 #: the flat `param` and its nine weight gradients views of the flat `grad`,
 #: re-bound each step: no unpack and no pack launch (2 per layer), and the
 #: 18 per-layer separately allocated buffers are dropped.
+# F08/views M3 2026-10-06: B/A trajectory0.9765 but first-step1.0455;
+# heldout/resume unchanged. Mixed small single-sample gain; retain OFF.
+# Same 12-step task and provenance, evidence results/F08/views; promoting
+# NOSYNC does not claim the unmeasured combination with views or fusion.
 comptime AFN_LM_PARAM_VIEWS = BYTE_LM_FAST_APPLE and (
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_AFN_LM_PARAM_VIEWS"]() or _AFN_LM_ALL
 )
 #: -D MOJOLEARN_AFN_LM_HEAD_FUSE: softmax, cross entropy, the mean loss and

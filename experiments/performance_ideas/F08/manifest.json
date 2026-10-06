@@ -16,7 +16,9 @@
   "candidate_defines": [
     "MOJOLEARN_AFN_LM_BWD_NOSYNC"
   ],
-  "baseline_defines": [],
+  "baseline_defines": [
+    "MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF"
+  ],
   "build_argv": [
     "{python}",
     "experiments/performance_ideas/apple_fast/build_pair.py",
@@ -57,10 +59,12 @@
       "MOJOLEARN_AFN_LM_BWD_NOSYNC"
     ],
     "fused": [
-      "MOJOLEARN_AFN_LM_BWD_FUSE"
+      "MOJOLEARN_AFN_LM_BWD_FUSE",
+      "MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF"
     ],
     "views": [
-      "MOJOLEARN_AFN_LM_PARAM_VIEWS"
+      "MOJOLEARN_AFN_LM_PARAM_VIEWS",
+      "MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF"
     ]
   },
   "binding": "byte_lm",
@@ -78,5 +82,6 @@
     "{output}/arms",
     "--output",
     "{output}/run"
-  ]
+  ],
+  "measurement_decision": "2026-10-06 M3 default NOSYNC promoted; use explicit NOSYNC_OFF for historical baseline and independent fused/views experiments. Reuse original frozen artifacts for active campaign."
 }

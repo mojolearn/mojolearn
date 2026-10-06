@@ -979,6 +979,13 @@ class SmallByteLanguageModelTrainer:
         """Lock held. Resolve AUTO (`resident=None`, cpu2-l11-neural): the
         resident session when the binding carries every session entry, the
         stateless path otherwise. An explicit bool is returned as given."""
+        # F03 M3 2026-10-06 confirms this already-enabled default: explicit
+        # resident vs stateless 12-step trajectories B/A=0.5125 and0.5565,
+        # vocab257/131, shape[2,7,24,3,1,8,40,2,V], seed738. Heldout loss
+        # and checkpoint resume error equal; failed-update recovery captured.
+        # One warmup+one scored trajectory; caller67d0efb29 and reused binary
+        # provenance: ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/
+        # results/F03/default. No compile/identity retest, no new API default.
         if self._resident is None:
             binding = self._binding()
             self._resident = all(callable(getattr(binding, name, None)) for name in _SESSION_ENTRIES)  # glue: binding entry names
