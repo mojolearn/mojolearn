@@ -7079,6 +7079,8 @@ def _shipped_body_kpack_hg[
             else:
                 # `-D MOJOLEARN_GEMM_NV_FS4_OFF` keeps the profile-wide stack.
                 comptime if not is_defined["MOJOLEARN_GEMM_NV_FS4_OFF"]():
+                    # N02 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+                    # FS2 requires explicit define and <=2 logical fold leaves on NVIDIA; incumbent FS4 retained.
                     comptime if is_defined["MOJOLEARN_IDN_GEMM_FS2"]():
                         if gemm_kpack_fold_slots_for(
                             contract_partition(k)[1], gemm_default_ksplit_leaves(m,n,k)
