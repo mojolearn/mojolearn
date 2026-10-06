@@ -903,7 +903,8 @@
     },
     "data_root": "/root/datasets/gbm-bench",
     "data_sha256": {
-      "istella": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef"
+      "istella": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+      "taxi": "10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15"
     },
     "datasets": [
       "taxi",
@@ -46496,26 +46497,51 @@
       "cells": [
         {
           "arm": "torch-eager-fp32",
-          "comparability": {},
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
           "dataset": "gaussian",
           "device": "gpu",
+          "device_name": "NVIDIA L40S",
           "family": "neural",
-          "hash": null,
+          "hash": "36d95a7acf9d34c4",
           "hash_stable": null,
           "lane": "mamba2-forward",
           "library": "torch",
-          "max_ms": null,
-          "median_ms": null,
-          "memory": {},
-          "min_ms": null,
+          "library_version": "2.13.0+cu129",
+          "max_ms": 25.929467752575874,
+          "median_ms": 25.929467752575874,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3228.4,
+            "peak_host_mb": 1191.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3228.4,
+            "warmup_host_mb": 1191.3
+          },
+          "min_ms": 25.929467752575874,
           "mode": "opponent",
           "neural_shape": "full",
-          "peak_gpu_mb": null,
-          "peak_host_mb": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3228.4,
+          "peak_host_mb": 1191.4,
           "quality": {},
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
-          "rounds": 0,
+          "rounds": 1,
           "rows": null,
           "rows_tag": "full",
           "settings": {
@@ -46546,35 +46572,63 @@
             },
             "warmup_rounds": 1
           },
+          "shape": "B1 L2048 DM384",
           "source": "measured this run",
-          "status": "UNKNOWN(no race json, rc 1)",
-          "store": "not stored (key fields missing: device, library_version, params_sha256, data_sha256)",
-          "times_ms": [],
-          "verdict": "UNKNOWN",
-          "warmup_ms": null
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            25.929467752575874
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 295.81404849886894
         },
         {
           "arm": "torch-eager-tf32",
-          "comparability": {},
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
           "dataset": "gaussian",
           "device": "gpu",
+          "device_name": "NVIDIA L40S",
           "family": "neural",
-          "hash": null,
+          "hash": "c6447f94bc46fb3d",
           "hash_stable": null,
           "lane": "mamba2-forward",
           "library": "torch",
-          "max_ms": null,
-          "median_ms": null,
-          "memory": {},
-          "min_ms": null,
+          "library_version": "2.13.0+cu129",
+          "max_ms": 25.42291022837162,
+          "median_ms": 25.42291022837162,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3228.4,
+            "peak_host_mb": 1186.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3228.4,
+            "warmup_host_mb": 1186.4
+          },
+          "min_ms": 25.42291022837162,
           "mode": "opponent",
           "neural_shape": "full",
-          "peak_gpu_mb": null,
-          "peak_host_mb": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3228.4,
+          "peak_host_mb": 1186.5,
           "quality": {},
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
-          "rounds": 0,
+          "rounds": 1,
           "rows": null,
           "rows_tag": "full",
           "settings": {
@@ -46605,35 +46659,63 @@
             },
             "warmup_rounds": 1
           },
+          "shape": "B1 L2048 DM384",
           "source": "measured this run",
-          "status": "UNKNOWN(no race json, rc 1)",
-          "store": "not stored (key fields missing: device, library_version, params_sha256, data_sha256)",
-          "times_ms": [],
-          "verdict": "UNKNOWN",
-          "warmup_ms": null
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            25.42291022837162
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 297.49685898423195
         },
         {
           "arm": "torch-compile-fp32",
-          "comparability": {},
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
           "dataset": "gaussian",
           "device": "gpu",
+          "device_name": "NVIDIA L40S",
           "family": "neural",
-          "hash": null,
+          "hash": "27a3ab9eda12981e",
           "hash_stable": null,
           "lane": "mamba2-forward",
           "library": "torch",
-          "max_ms": null,
-          "median_ms": null,
-          "memory": {},
-          "min_ms": null,
+          "library_version": "2.13.0+cu129",
+          "max_ms": 28.463294729590416,
+          "median_ms": 28.463294729590416,
+          "memory": {
+            "children_mb": 12967.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3228.4,
+            "peak_host_mb": 1256.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3228.4,
+            "warmup_host_mb": 1277.7
+          },
+          "min_ms": 28.463294729590416,
           "mode": "opponent",
           "neural_shape": "full",
-          "peak_gpu_mb": null,
-          "peak_host_mb": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3228.4,
+          "peak_host_mb": 1256.0,
           "quality": {},
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
-          "rounds": 0,
+          "rounds": 1,
           "rows": null,
           "rows_tag": "full",
           "settings": {
@@ -46664,35 +46746,63 @@
             },
             "warmup_rounds": 1
           },
+          "shape": "B1 L2048 DM384",
           "source": "measured this run",
-          "status": "UNKNOWN(no race json, rc 1)",
-          "store": "not stored (key fields missing: device, library_version, params_sha256, data_sha256)",
-          "times_ms": [],
-          "verdict": "UNKNOWN",
-          "warmup_ms": null
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            28.463294729590416
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 6003.822227939963
         },
         {
           "arm": "torch-compile-tf32",
-          "comparability": {},
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
           "dataset": "gaussian",
           "device": "gpu",
+          "device_name": "NVIDIA L40S",
           "family": "neural",
-          "hash": null,
+          "hash": "a4f69a94d2fa9e39",
           "hash_stable": null,
           "lane": "mamba2-forward",
           "library": "torch",
-          "max_ms": null,
-          "median_ms": null,
-          "memory": {},
-          "min_ms": null,
+          "library_version": "2.13.0+cu129",
+          "max_ms": 28.163708746433258,
+          "median_ms": 28.163708746433258,
+          "memory": {
+            "children_mb": 12801.3,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3228.4,
+            "peak_host_mb": 1208.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3228.4,
+            "warmup_host_mb": 1227.9
+          },
+          "min_ms": 28.163708746433258,
           "mode": "opponent",
           "neural_shape": "full",
-          "peak_gpu_mb": null,
-          "peak_host_mb": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3228.4,
+          "peak_host_mb": 1208.1,
           "quality": {},
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
-          "rounds": 0,
+          "rounds": 1,
           "rows": null,
           "rows_tag": "full",
           "settings": {
@@ -46723,35 +46833,63 @@
             },
             "warmup_rounds": 1
           },
+          "shape": "B1 L2048 DM384",
           "source": "measured this run",
-          "status": "UNKNOWN(no race json, rc 1)",
-          "store": "not stored (key fields missing: device, library_version, params_sha256, data_sha256)",
-          "times_ms": [],
-          "verdict": "UNKNOWN",
-          "warmup_ms": null
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            28.163708746433258
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 4402.6395957916975
         },
         {
           "arm": "torch-eager-bf16",
-          "comparability": {},
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
           "dataset": "gaussian",
           "device": "gpu",
+          "device_name": "NVIDIA L40S",
           "family": "neural",
-          "hash": null,
+          "hash": "945142a9f61d8989",
           "hash_stable": null,
           "lane": "mamba2-forward",
           "library": "torch",
-          "max_ms": null,
-          "median_ms": null,
-          "memory": {},
-          "min_ms": null,
+          "library_version": "2.13.0+cu129",
+          "max_ms": 21.152963861823082,
+          "median_ms": 21.152963861823082,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 1692.8,
+            "peak_host_mb": 1326.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 1692.8,
+            "warmup_host_mb": 1326.0
+          },
+          "min_ms": 21.152963861823082,
           "mode": "opponent",
           "neural_shape": "full",
-          "peak_gpu_mb": null,
-          "peak_host_mb": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 1692.8,
+          "peak_host_mb": 1326.1,
           "quality": {},
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
-          "rounds": 0,
+          "rounds": 1,
           "rows": null,
           "rows_tag": "full",
           "settings": {
@@ -46782,35 +46920,63 @@
             },
             "warmup_rounds": 1
           },
+          "shape": "B1 L2048 DM384",
           "source": "measured this run",
-          "status": "UNKNOWN(no race json, rc 1)",
-          "store": "not stored (key fields missing: device, library_version, params_sha256, data_sha256)",
-          "times_ms": [],
-          "verdict": "UNKNOWN",
-          "warmup_ms": null
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            21.152963861823082
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 166.9421959668398
         },
         {
           "arm": "torch-compile-bf16",
-          "comparability": {},
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
           "dataset": "gaussian",
           "device": "gpu",
+          "device_name": "NVIDIA L40S",
           "family": "neural",
-          "hash": null,
+          "hash": "945142a9f61d8989",
           "hash_stable": null,
           "lane": "mamba2-forward",
           "library": "torch",
-          "max_ms": null,
-          "median_ms": null,
-          "memory": {},
-          "min_ms": null,
+          "library_version": "2.13.0+cu129",
+          "max_ms": 25.70132352411747,
+          "median_ms": 25.70132352411747,
+          "memory": {
+            "children_mb": 12882.3,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 1692.8,
+            "peak_host_mb": 1382.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 1692.8,
+            "warmup_host_mb": 1401.2
+          },
+          "min_ms": 25.70132352411747,
           "mode": "opponent",
           "neural_shape": "full",
-          "peak_gpu_mb": null,
-          "peak_host_mb": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 1692.8,
+          "peak_host_mb": 1382.1,
           "quality": {},
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
-          "rounds": 0,
+          "rounds": 1,
           "rows": null,
           "rows_tag": "full",
           "settings": {
@@ -46841,12 +47007,15 @@
             },
             "warmup_rounds": 1
           },
+          "shape": "B1 L2048 DM384",
           "source": "measured this run",
-          "status": "UNKNOWN(no race json, rc 1)",
-          "store": "not stored (key fields missing: device, library_version, params_sha256, data_sha256)",
-          "times_ms": [],
-          "verdict": "UNKNOWN",
-          "warmup_ms": null
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            25.70132352411747
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 4800.516473129392
         }
       ],
       "command": [
@@ -46880,27 +47049,145 @@
       "dataset": "gaussian",
       "env": {},
       "family": "neural",
-      "finished": "2026-10-06T05:40:47Z",
+      "finished": "2026-10-06T05:51:10Z",
       "host": {
         "hostname": "24a11adce16e",
         "pod_id": null
       },
       "id": "neural/mamba2-forward/gaussian/shape=full",
       "infer_cells": [],
+      "inputs": {
+        "inputs": "every tensor default_rng(7).uniform over mamba/corpus/gen_corpus.py's default range for it",
+        "lane": "mamba2-forward",
+        "ranges": {
+          "A_log": [
+            0.0,
+            2.75
+          ],
+          "D": [
+            0.5,
+            1.5
+          ],
+          "block_norm.weight": [
+            0.5,
+            1.5
+          ],
+          "conv1d.bias": [
+            -0.125,
+            0.125
+          ],
+          "conv1d.weight": [
+            -0.5,
+            0.5
+          ],
+          "dt_bias": [
+            -7.0,
+            -2.0
+          ],
+          "in_proj.weight": [
+            -0.015625,
+            0.015625
+          ],
+          "norm.weight": [
+            0.5,
+            1.5
+          ],
+          "out_proj.weight": [
+            -0.015625,
+            0.015625
+          ]
+        },
+        "seed": 7,
+        "sha256": {
+          "w:A_log": "83d592935783a1b7",
+          "w:D": "d6fcc56658084354",
+          "w:block_norm.weight": "cb75423c968fcd4f",
+          "w:conv1d.bias": "619f82ae24b279c8",
+          "w:conv1d.weight": "11f8ece4dbbe1d7e",
+          "w:dt_bias": "37c3edb243616f21",
+          "w:in_proj.weight": "43dec39eafd7e8d0",
+          "w:norm.weight": "d0bda8647af01457",
+          "w:out_proj.weight": "0ff00c2cbb222378",
+          "x": "6557709b687a1f9c"
+        },
+        "shape": {
+          "batch": 1,
+          "d_model": 384,
+          "label": "B1 L2048 DM384",
+          "length": 2048,
+          "name": "full"
+        },
+        "steps": 2
+      },
       "lane": "mamba2-forward",
       "log": "logs/neural.mamba2-forward.gaussian.shape-full.log",
       "our_arms": {},
-      "params_check": "NOT CHECKED (the driver printed no BOARD-PARAMS line)",
+      "params": {
+        "arms": {
+          "torch-compile-bf16": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-compile-tf32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-eager-bf16": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-eager-tf32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "neural",
+        "lane": "neural/mamba2-forward",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
       "race_json": "raw/neural/shape-full/mamba2-forward-gaussian.json",
-      "rc": 1,
+      "rc": 0,
       "rows": null,
       "shape": "full",
       "skipped_opponents": [],
-      "started": "2026-10-06T05:40:47Z",
-      "status": "failed",
+      "started": "2026-10-06T05:50:41Z",
+      "status": "done",
       "stored_arms": [],
       "stored_now": 0,
-      "wall_s": 0.2
+      "wall_s": 29.6
     },
     "neural/mlp-train-step/gaussian/shape=full": {
       "arms": [
@@ -48416,7 +48703,7 @@
       "dataset": "bytes",
       "env": {},
       "family": "neural",
-      "finished": "2026-10-06T05:41:06Z",
+      "finished": "2026-10-06T05:51:11Z",
       "host": {
         "hostname": "24a11adce16e",
         "pod_id": null
@@ -48432,7 +48719,7 @@
       "rows": null,
       "shape": "full",
       "skipped_opponents": [],
-      "started": "2026-10-06T05:41:06Z",
+      "started": "2026-10-06T05:51:11Z",
       "status": "failed",
       "stored_arms": [],
       "stored_now": 0,
@@ -56052,6 +56339,1561 @@
       "stored_arms": [],
       "stored_now": 3,
       "wall_s": 28.1
+    },
+    "trees/gbdt-symmetric-1000/taxi/rows=full": {
+      "arms": [
+        "catboost-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "catboost-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": "lane=gbdt-symmetric-1000 arms=catboost-gpu leaves=catboost-gpu:255408 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "trees",
+          "fit": "trees=1000 leaves=255408 depth=- src=get_tree_leaf_counts",
+          "hash": "ee505b1b25a543b2",
+          "hash_stable": true,
+          "lane": "gbdt-symmetric-1000",
+          "library": "catboost",
+          "library_version": "1.2.10",
+          "max_ms": 10686.341,
+          "median_ms": 10686.341,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 428.0,
+            "peak_host_mb": 1191.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 428.0,
+            "warmup_host_mb": 1095.0
+          },
+          "min_ms": 10686.341,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "catboost",
+            "params": {
+              "boosting_type": "Plain",
+              "bootstrap_type": "No",
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_bin": 255,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_samples_leaf": 1,
+              "n_estimators": 1000,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "reg_lambda": 1.0,
+              "scale_pos_weight": 1.3101271632087197,
+              "score_function": "Cosine",
+              "seed": 7,
+              "subsample": null
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 428.0,
+          "peak_host_mb": 1191.5,
+          "quality": {
+            "auc": 0.631685,
+            "logloss": 0.52824
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, 1000 trees (CatBoost's own default iteration count; see CATBOOST_DEFAULTS)",
+              "harness": "NVIDIA gbm-bench",
+              "trees_source": "https://github.com/catboost/catboost/blob/e628c03fb0e6b760592652a995163f26be7ea7d3/catboost/private/libs/options/boosting_options.cpp#L13",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, 1000 trees (CatBoost's own default iteration count; see CATBOOST_DEFAULTS)",
+                "harness": "NVIDIA gbm-bench",
+                "trees_source": "https://github.com/catboost/catboost/blob/e628c03fb0e6b760592652a995163f26be7ea7d3/catboost/private/libs/options/boosting_options.cpp#L13",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "n_estimators": 1000,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxi-4110786x16",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            10686.341
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 10716.676
+        },
+        {
+          "arm": "catboost-cpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": "lane=gbdt-symmetric-1000 arms=catboost-gpu leaves=catboost-gpu:255408 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one"
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-symmetric-1000",
+          "library": "catboost",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, 1000 trees (CatBoost's own default iteration count; see CATBOOST_DEFAULTS)",
+              "harness": "NVIDIA gbm-bench",
+              "trees_source": "https://github.com/catboost/catboost/blob/e628c03fb0e6b760592652a995163f26be7ea7d3/catboost/private/libs/options/boosting_options.cpp#L13",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, 1000 trees (CatBoost's own default iteration count; see CATBOOST_DEFAULTS)",
+                "harness": "NVIDIA gbm-bench",
+                "trees_source": "https://github.com/catboost/catboost/blob/e628c03fb0e6b760592652a995163f26be7ea7d3/catboost/private/libs/options/boosting_options.cpp#L13",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "n_estimators": 1000,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxi-4110786x16",
+          "source": "measured this run",
+          "status": "REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)",
+          "store": "not stored (key fields missing: library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "gbdt-symmetric-1000",
+        "--dataset",
+        "taxi",
+        "--devices",
+        "gpu",
+        "--arms",
+        "catboost-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "cuda",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T05:51:35Z",
+      "fit_verdict_line": "lane=gbdt-symmetric-1000 arms=catboost-gpu leaves=catboost-gpu:255408 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one",
+      "host": {
+        "hostname": "24a11adce16e",
+        "pod_id": null
+      },
+      "id": "trees/gbdt-symmetric-1000/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "catboost-gpu",
+          "batch": "test",
+          "batch_rows": 500000,
+          "call": "catboost predict_proba(X, task_type GPU, thread_count -1), column 1",
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": "984f414791f9fdf5",
+          "hash_stable": true,
+          "lane": "gbdt-symmetric-1000",
+          "library": "catboost",
+          "max_ms": 139.887,
+          "median_ms": 139.887,
+          "memory": {},
+          "min_ms": 139.887,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "auc": 0.631685,
+            "auc_matches_fit": true,
+            "logloss": 0.52824,
+            "logloss_matches_fit": true
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, 1000 trees (CatBoost's own default iteration count; see CATBOOST_DEFAULTS)",
+              "harness": "NVIDIA gbm-bench",
+              "trees_source": "https://github.com/catboost/catboost/blob/e628c03fb0e6b760592652a995163f26be7ea7d3/catboost/private/libs/options/boosting_options.cpp#L13",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, 1000 trees (CatBoost's own default iteration count; see CATBOOST_DEFAULTS)",
+                "harness": "NVIDIA gbm-bench",
+                "trees_source": "https://github.com/catboost/catboost/blob/e628c03fb0e6b760592652a995163f26be7ea7d3/catboost/private/libs/options/boosting_options.cpp#L13",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "n_estimators": 1000,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            139.887
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 147.645
+        },
+        {
+          "arm": "catboost-gpu",
+          "batch": "large",
+          "batch_rows": 1000000,
+          "call": "catboost predict_proba(X, task_type GPU, thread_count -1), column 1",
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": "e10c94dbd88e4f22",
+          "hash_stable": true,
+          "lane": "gbdt-symmetric-1000",
+          "library": "catboost",
+          "max_ms": 211.074,
+          "median_ms": 211.074,
+          "memory": {},
+          "min_ms": 211.074,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, 1000 trees (CatBoost's own default iteration count; see CATBOOST_DEFAULTS)",
+              "harness": "NVIDIA gbm-bench",
+              "trees_source": "https://github.com/catboost/catboost/blob/e628c03fb0e6b760592652a995163f26be7ea7d3/catboost/private/libs/options/boosting_options.cpp#L13",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, 1000 trees (CatBoost's own default iteration count; see CATBOOST_DEFAULTS)",
+                "harness": "NVIDIA gbm-bench",
+                "trees_source": "https://github.com/catboost/catboost/blob/e628c03fb0e6b760592652a995163f26be7ea7d3/catboost/private/libs/options/boosting_options.cpp#L13",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "n_estimators": 1000,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            211.074
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 192.368
+        }
+      ],
+      "lane": "gbdt-symmetric-1000",
+      "log": "raw/trees/gbdt-symmetric-1000.taxi.rows-full.log",
+      "notes": [
+        "lane=gbdt-symmetric-1000 arms=ours metric=devices delta=1.000000 reason=devices=gpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so",
+        "lane=gbdt-symmetric-1000 arms=catboost-gpu metric=mismatch delta=0.000000 reason=seed 7 on every arm through its own argument (random_state, random_seed, seed); each library draws from its own generator, so the streams are not shared: split-score noise (random_strength 1) on ours and CatBoost"
+      ],
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "catboost-gpu": {
+            "library": "catboost",
+            "params": {
+              "boosting_type": "Plain",
+              "bootstrap_type": "No",
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_bin": 255,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_samples_leaf": 1,
+              "n_estimators": 1000,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "reg_lambda": 1.0,
+              "scale_pos_weight": 1.3101271632087197,
+              "score_function": "Cosine",
+              "seed": 7,
+              "subsample": null
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "trees",
+        "lane": "gbdt-symmetric-1000",
+        "problems": [],
+        "reference": "catboost-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T05:51:11Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 24.5
+    },
+    "trees/gbdt-symmetric/taxi/rows=full": {
+      "arms": [
+        "catboost-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "catboost-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": "lane=gbdt-symmetric arms=catboost-gpu leaves=catboost-gpu:127408 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "trees",
+          "fit": "trees=500 leaves=127408 depth=- src=get_tree_leaf_counts",
+          "hash": "067b804ae395e892",
+          "hash_stable": true,
+          "lane": "gbdt-symmetric",
+          "library": "catboost",
+          "library_version": "1.2.10",
+          "max_ms": 5981.976,
+          "median_ms": 5981.976,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 428.0,
+            "peak_host_mb": 1127.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 428.0,
+            "warmup_host_mb": 1090.2
+          },
+          "min_ms": 5981.976,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "catboost",
+            "params": {
+              "boosting_type": "Plain",
+              "bootstrap_type": "No",
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_bin": 255,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_samples_leaf": 1,
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "reg_lambda": 1.0,
+              "scale_pos_weight": 1.3101271632087197,
+              "score_function": "Cosine",
+              "seed": 7,
+              "subsample": null
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 428.0,
+          "peak_host_mb": 1127.4,
+          "quality": {
+            "auc": 0.63031,
+            "logloss": 0.528616
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxi-4110786x16",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            5981.976
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 6054.34
+        },
+        {
+          "arm": "catboost-cpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": "lane=gbdt-symmetric arms=catboost-gpu leaves=catboost-gpu:127408 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one"
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-symmetric",
+          "library": "catboost",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxi-4110786x16",
+          "source": "measured this run",
+          "status": "REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against)",
+          "store": "not stored (key fields missing: library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "gbdt-symmetric",
+        "--dataset",
+        "taxi",
+        "--devices",
+        "gpu",
+        "--arms",
+        "catboost-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "cuda",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T05:51:50Z",
+      "fit_verdict_line": "lane=gbdt-symmetric arms=catboost-gpu leaves=catboost-gpu:127408 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one",
+      "host": {
+        "hostname": "24a11adce16e",
+        "pod_id": null
+      },
+      "id": "trees/gbdt-symmetric/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "catboost-gpu",
+          "batch": "test",
+          "batch_rows": 500000,
+          "call": "catboost predict_proba(X, task_type GPU, thread_count -1), column 1",
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": "714c5ae09c3a8f34",
+          "hash_stable": true,
+          "lane": "gbdt-symmetric",
+          "library": "catboost",
+          "max_ms": 77.007,
+          "median_ms": 77.007,
+          "memory": {},
+          "min_ms": 77.007,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "auc": 0.63031,
+            "auc_matches_fit": true,
+            "logloss": 0.528616,
+            "logloss_matches_fit": true
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            77.007
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 84.495
+        },
+        {
+          "arm": "catboost-gpu",
+          "batch": "large",
+          "batch_rows": 1000000,
+          "call": "catboost predict_proba(X, task_type GPU, thread_count -1), column 1",
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": "551e668d3404f2a9",
+          "hash_stable": true,
+          "lane": "gbdt-symmetric",
+          "library": "catboost",
+          "max_ms": 140.397,
+          "median_ms": 140.397,
+          "memory": {},
+          "min_ms": 140.397,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            140.397
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 156.427
+        }
+      ],
+      "lane": "gbdt-symmetric",
+      "log": "raw/trees/gbdt-symmetric.taxi.rows-full.log",
+      "notes": [
+        "lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=gpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so",
+        "lane=gbdt-symmetric arms=catboost-gpu metric=mismatch delta=0.000000 reason=seed 7 on every arm through its own argument (random_state, random_seed, seed); each library draws from its own generator, so the streams are not shared: split-score noise (random_strength 1) on ours and CatBoost"
+      ],
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "catboost-gpu": {
+            "library": "catboost",
+            "params": {
+              "boosting_type": "Plain",
+              "bootstrap_type": "No",
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_bin": 255,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_samples_leaf": 1,
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "random_strength": 1.0,
+              "reg_lambda": 1.0,
+              "scale_pos_weight": 1.3101271632087197,
+              "score_function": "Cosine",
+              "seed": 7,
+              "subsample": null
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "trees",
+        "lane": "gbdt-symmetric",
+        "problems": [],
+        "reference": "catboost-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T05:51:35Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 14.4
+    },
+    "trees/iforest/taxi/rows=full": {
+      "arms": [
+        "cuml-iforest-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-iforest-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": "lane=iforest arms=cuml-iforest-gpu leaves=- spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "trees",
+          "fit": "trees=- leaves=- depth=- src=none",
+          "hash": "fa3fa07799f7dc28",
+          "hash_stable": true,
+          "lane": "iforest",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 124.792,
+          "median_ms": 124.792,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 430.0,
+            "peak_host_mb": 1287.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 430.0,
+            "warmup_host_mb": 1286.7
+          },
+          "min_ms": 124.792,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "bootstrap": false,
+              "contamination": "auto",
+              "max_depth": null,
+              "max_features": 1.0,
+              "max_samples": 256,
+              "n_estimators": 100,
+              "seed": 7
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 430.0,
+          "peak_host_mb": 1287.5,
+          "quality": {
+            "auc": 0.551846
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "bootstrap": false,
+              "max_features": 1.0,
+              "max_samples": 256,
+              "n_estimators": 100,
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxi-4110786x16",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            124.792
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 497.314
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "iforest",
+        "--dataset",
+        "taxi",
+        "--devices",
+        "gpu",
+        "--arms",
+        "cuml-iforest-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "cuda",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T05:51:55Z",
+      "fit_verdict_line": "lane=iforest arms=cuml-iforest-gpu leaves=- spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one",
+      "host": {
+        "hostname": "24a11adce16e",
+        "pod_id": null
+      },
+      "id": "trees/iforest/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-iforest-gpu",
+          "batch": "test",
+          "batch_rows": 500000,
+          "call": "cuml IsolationForest.score_samples(host X)",
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": "c3e863f2ef144f0b",
+          "hash_stable": true,
+          "lane": "iforest",
+          "library": "cuml",
+          "max_ms": 23.92,
+          "median_ms": 23.92,
+          "memory": {},
+          "min_ms": 23.92,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "auc": 0.551846,
+            "auc_matches_fit": true
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "bootstrap": false,
+              "max_features": 1.0,
+              "max_samples": 256,
+              "n_estimators": 100,
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            23.92
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 16.926
+        },
+        {
+          "arm": "cuml-iforest-gpu",
+          "batch": "large",
+          "batch_rows": 1000000,
+          "call": "cuml IsolationForest.score_samples(host X)",
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": "d54bfe9e6d6a67d7",
+          "hash_stable": true,
+          "lane": "iforest",
+          "library": "cuml",
+          "max_ms": 10.816,
+          "median_ms": 10.816,
+          "memory": {},
+          "min_ms": 10.816,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "bootstrap": false,
+              "max_features": 1.0,
+              "max_samples": 256,
+              "n_estimators": 100,
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            10.816
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 47.999
+        }
+      ],
+      "lane": "iforest",
+      "log": "raw/trees/iforest.taxi.rows-full.log",
+      "notes": [
+        "lane=iforest arms=* metric=auc delta=0.763285 reason=proxy AUC: anomaly score against the minority class (label 0) of taxi, no planted anomalies",
+        "lane=iforest arms=ours metric=devices delta=1.000000 reason=devices=gpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so",
+        "lane=iforest arms=cuml-iforest-gpu metric=mismatch delta=0.000000 reason=seed 7 on every arm through its own argument (random_state, random_seed, seed); each library draws from its own generator, so the streams are not shared: row subsamples, split features and thresholds"
+      ],
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-iforest-gpu": {
+            "library": "cuml",
+            "params": {
+              "bootstrap": false,
+              "contamination": "auto",
+              "max_depth": null,
+              "max_features": 1.0,
+              "max_samples": 256,
+              "n_estimators": 100,
+              "seed": 7
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "trees",
+        "lane": "iforest",
+        "problems": [],
+        "reference": "cuml-iforest-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T05:51:50Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 4.8
+    },
+    "trees/rf/taxi/rows=full": {
+      "arms": [
+        "cuml-rf-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-rf-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": "lane=rf arms=cuml-rf-gpu leaves=- spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "trees",
+          "fit": "trees=- leaves=- depth=- src=none",
+          "hash": "4a1cf6c5b4f507ec",
+          "hash_stable": true,
+          "lane": "rf",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 20650.996,
+          "median_ms": 20650.996,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 444.0,
+            "peak_host_mb": 1601.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 440.0,
+            "warmup_host_mb": 1540.4
+          },
+          "min_ms": 20650.996,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "bootstrap": true,
+              "class_weight": null,
+              "max_bin": 128,
+              "max_depth": 8,
+              "max_features": "sqrt",
+              "max_leaves": -1,
+              "max_samples": 1.0,
+              "min_samples_leaf": 1,
+              "min_split_gain": 0.0,
+              "n_estimators": 500,
+              "seed": 7
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 444.0,
+          "peak_host_mb": 1601.6,
+          "quality": {
+            "auc": 0.617836,
+            "logloss": 0.525954
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "bootstrap": true,
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "max_depth": 8,
+              "max_samples": 1.0,
+              "min_impurity_decrease": 0.0,
+              "min_samples_leaf": 1,
+              "min_samples_split": 2,
+              "n_bins": 128,
+              "n_estimators": 500,
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "taxi-4110786x16",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            20650.996
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 19750.428
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "rf",
+        "--dataset",
+        "taxi",
+        "--devices",
+        "gpu",
+        "--arms",
+        "cuml-rf-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "cuda",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T05:52:39Z",
+      "fit_verdict_line": "lane=rf arms=cuml-rf-gpu leaves=- spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one",
+      "host": {
+        "hostname": "24a11adce16e",
+        "pod_id": null
+      },
+      "id": "trees/rf/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-rf-gpu",
+          "batch": "test",
+          "batch_rows": 500000,
+          "call": "cuml RandomForest.predict_proba(host X) (FIL conversion refused: 'RandomForestClassifier' object has no attribute 'convert_to_fil_model')",
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": "4a1cf6c5b4f507ec",
+          "hash_stable": true,
+          "lane": "rf",
+          "library": "cuml",
+          "max_ms": 9.351,
+          "median_ms": 9.351,
+          "memory": {},
+          "min_ms": 9.351,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "auc": 0.617836,
+            "auc_matches_fit": true,
+            "logloss": 0.525954,
+            "logloss_matches_fit": true
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "bootstrap": true,
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "max_depth": 8,
+              "max_samples": 1.0,
+              "min_impurity_decrease": 0.0,
+              "min_samples_leaf": 1,
+              "min_samples_split": 2,
+              "n_bins": 128,
+              "n_estimators": 500,
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            9.351
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 10.617
+        },
+        {
+          "arm": "cuml-rf-gpu",
+          "batch": "large",
+          "batch_rows": 1000000,
+          "call": "cuml RandomForest.predict_proba(host X) (FIL conversion refused: 'RandomForestClassifier' object has no attribute 'convert_to_fil_model')",
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": "95940a60c3a677c5",
+          "hash_stable": true,
+          "lane": "rf",
+          "library": "cuml",
+          "max_ms": 22.631,
+          "median_ms": 22.631,
+          "memory": {},
+          "min_ms": 22.631,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "bootstrap": true,
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "max_depth": 8,
+              "max_samples": 1.0,
+              "min_impurity_decrease": 0.0,
+              "min_samples_leaf": 1,
+              "min_samples_split": 2,
+              "n_bins": 128,
+              "n_estimators": 500,
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            22.631
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 66.43
+        }
+      ],
+      "lane": "rf",
+      "log": "raw/trees/rf.taxi.rows-full.log",
+      "notes": [
+        "lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so",
+        "lane=rf arms=cuml-rf-gpu metric=mismatch delta=0.000000 reason=seed 7 on every arm through its own argument (random_state, random_seed, seed); each library draws from its own generator, so the streams are not shared: row bootstrap (rf), per-node feature draws, ET thresholds; LightGBM derives its bag"
+      ],
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-rf-gpu": {
+            "library": "cuml",
+            "params": {
+              "bootstrap": true,
+              "class_weight": null,
+              "max_bin": 128,
+              "max_depth": 8,
+              "max_features": "sqrt",
+              "max_leaves": -1,
+              "max_samples": 1.0,
+              "min_samples_leaf": 1,
+              "min_split_gain": 0.0,
+              "n_estimators": 500,
+              "seed": 7
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "trees",
+        "lane": "rf",
+        "problems": [],
+        "reference": "cuml-rf-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T05:51:55Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 44.6
     }
   },
   "schema": "mojolearn-bench-board/1",
@@ -58074,5 +59916,5 @@
       "wall_s": 0.2
     }
   ],
-  "updated": "2026-10-06T05:50:41Z"
+  "updated": "2026-10-06T05:52:39Z"
 }
