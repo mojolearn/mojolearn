@@ -787,7 +787,7 @@ def _batched_loglike_grad_stacked(
         r.ws.info_loop.unsafe_ptr(), Int32(batch_size), Int32(M1),
         grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
     )
-    var ll = _ll_finish(ctx, r.ws.loglike.unsafe_ptr(), d_bad, batch_size)
+    var ll = _ll_finish(ctx, r.ws.loglike.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_bad, batch_size)
     _ = d_bad^
     _ = y_ext^
     _ = x_ext^
@@ -981,7 +981,7 @@ def batched_loglike_grad_x(
         )
         ctx.synchronize()
         _ = pert^
-    var ll = _ll_finish(ctx, base.ws.loglike.unsafe_ptr(), d_bad, batch_size)
+    var ll = _ll_finish(ctx, base.ws.loglike.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_bad, batch_size)
     _ = d_bad^
     _ = base^
     return ll^
