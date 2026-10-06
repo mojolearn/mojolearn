@@ -3,12 +3,16 @@
 Every distance word and original index is checked; duplicate tie sets and
 geometries must agree. Existing certified bound-compaction gate is also
 run, so inconclusive bound behavior retains exact candidate semantics."""
+from max.gpu.host import DeviceContext
+from experiments.performance_ideas.I15.certified_caller import check_certified_caller
 from neighbors.checks.query_batch_check import _case
 from neighbors.checks.knn_check import check_fused_griddimx_merge
 from neighbors.checks.knn_identity_check import check_knn_fused_tie_set_is_geometry_invariant
 from neighbors.checks.knn_selector_bound_compact_check import check_case as bound_case
 
 def main() raises:
+    var ctx=DeviceContext()
+    check_certified_caller(ctx)
     for n in [255, 257, 1031]:
         for k in [1, 17, 129]:
             _case(n, 37, 19, k)
