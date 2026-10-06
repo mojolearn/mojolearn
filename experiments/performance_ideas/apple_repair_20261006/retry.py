@@ -20,6 +20,7 @@ ARM = 'sklearn-cpu'
 MAX_SECONDS = 300
 RECIPES = {
     ('algos/lars/istella/rows=full', 'sklearn-cpu'): 'reg-istella',
+    ('algos/lars-stable/istella/rows=full', 'sklearn-cpu'): 'reg-istella',
     ('algos/dart/istella/rows=full', 'xgboost-cpu'): 'cls-istella',
     ('algos/dart-reg/istella/rows=full', 'xgboost-cpu'): 'reg-istella',
 }
@@ -45,6 +46,8 @@ def coverage(board_path, race_id, arm):
     quality = cell.get('quality', {})
     if (not quality or quality.get('finite') is False or quality.get('error')
             or any(isinstance(value, float) and not math.isfinite(value) for value in quality.values())):
+        return dict(status='FAILED_QUALITY', **details)
+    if '/lars-stable/' in race_id and quality.get('r2', -math.inf) < 0:
         return dict(status='FAILED_QUALITY', **details)
     receipts = cell.get('state_receipts', [])
     if (len(receipts) != 1 or receipts[0].get('output_status') != 'ok'
@@ -73,7 +76,9 @@ def main():
         parser.error('Select a LARS/DART opponent repair and a positive finite maximum duration')
     failed_raw = args.failed_result.read_bytes()
     failed = json.loads(failed_raw)
-    if (failed.get('race') != args.race or failed.get('arm') != args.arm
+    stabilization = args.race == 'algos/lars-stable/istella/rows=full'
+    original_race = RACE if stabilization else args.race
+    if (failed.get('race') != original_race or failed.get('arm') != args.arm
             or not (str(failed.get('status', '')).startswith('FAILED')
                     or failed.get('status') in ('BUDGET_LIMIT', 'NOT_RUN_BUDGET_EXHAUSTED'))):
         parser.error('Original receipt must name this failed opponent cell; never replay a measured cell')
@@ -127,6 +132,10 @@ def main():
                   retry_of=str(args.failed_result), retry_of_status=failed['status'],
                   retry_of_sha256=hashlib.sha256(failed_raw).hexdigest(),
                   inherited_deadline_at=deadline, source_sha=actual, returncode=None)
+    if stabilization:
+        result['recipe_change'] = dict(original_race=original_race,
+                                      eps_before=2.0**-52, eps_after=2.0**-26,
+                                      scope='Separate opt-in recipe; historical LARS unchanged')
     # Waiting for the active batch also consumes the inherited total budget.
     # There is no new two-hour clock when this process acquires the machine.
     with (args.runtime / 'gpu.lock').open('a') as lock:
@@ -175,7 +184,8 @@ def main():
         allowance = min(args.max_seconds, deadline-time.time())
         if allowance <= 0:
             return finish(dict(result, status='NOT_RUN_BUDGET_EXHAUSTED', elapsed_seconds=0))
-        command = [python, '-u', str(Path(__file__).with_name('selected_board.py')),
+        driver = 'lars_stable_board.py' if stabilization else 'selected_board.py'
+        command = [python, '-u', str(Path(__file__).with_name(driver)),
                    '--vendor', 'apple', '--modes', 'identical', '--families', 'algos',
                    '--rows', 'full', '--rounds', '1', '--python-env', python, '--skip-install',
                    '--no-smoke-gate', '--opponents-only', '--skip-failed',

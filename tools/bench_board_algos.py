@@ -247,6 +247,25 @@ _add("lars", xlane="linear", ours="Lars", task="reg", block="reg",
                                                  random_state=SEED),
      cuml="cuml.experimental.linear_model:Lars",   # eps set on every arm: a default is not a matched value
      cuml_params=dict(n_nonzero_coefs=500, fit_intercept=True, eps=2.220446049250313e-16))
+if os.environ.get("MOJOLEARN_BENCH_LARS_STABLE") == "1":
+    # A separate, opt-in recipe: never rewrite the historical LARS setting or
+    # claim its failed quality was repaired under the original configuration.
+    # sklearn documents increasing eps for ill-conditioned Cholesky factors.
+    # sqrt(binary64 epsilon) reserves half the precision for their diagonal
+    # stabilization; this hypothesis applies to any shape, not a board size.
+    # Set the same explicit value on every compared implementation. Timing and
+    # quality remain unproven until measured; this is not a runtime default.
+    _LARS_STABLE_EPS = 2.0 ** -26
+    _add("lars-stable", xlane="linear", ours="Lars", task="reg", block="reg",
+         sk="sklearn.linear_model:Lars",
+         params=dict(n_nonzero_coefs=500, fit_intercept=True,
+                     eps=_LARS_STABLE_EPS, random_state=SEED),
+         cuml="cuml.experimental.linear_model:Lars",
+         cuml_params=dict(n_nonzero_coefs=500, fit_intercept=True, eps=_LARS_STABLE_EPS),
+         notes=["Opt-in stabilization experiment: eps=sqrt(binary64 machine epsilon) "
+                "on every arm; original lars recipe and failure evidence remain unchanged. "
+                "Require finite held-out quality and R2 >= 0 (constant-mean baseline) "
+                "before accepting this experiment's quality; no default promotion."])
 _add("lasso-lars", xlane="linear", ours="LassoLars", task="reg", block="reg",
      sk="sklearn.linear_model:LassoLars", params=dict(alpha=0.01, max_iter=500, random_state=SEED))
 _add("quantile", xlane="linear", ours="QuantileRegressor", task="reg", block="reg",
@@ -2571,7 +2590,7 @@ def _build_est(lane, arm, D):
         h = D["X"].shape[1] // 2
         Xa, Ya, Xqa, Yqa = X[:, :h], X[:, h:], Xq[:, :h], Xq[:, h:]
 
-    lars_float64 = lane == "lars" and arm == "sklearn-cpu"
+    lars_float64 = lane in ("lars", "lars-stable") and arm == "sklearn-cpu"
     if lars_float64:
         # sklearn Lars explicitly retains consistent input precision for its
         # Gram/Cholesky solver. Its float32 ill-conditioned recovery overflowed
