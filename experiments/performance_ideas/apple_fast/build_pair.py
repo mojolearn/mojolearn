@@ -72,7 +72,7 @@ def main():
     native_checks={}
     for check in card.get('variant_native_checks',{}).get(a.variant,card.get('native_checks',[])):
         destination=a.output/check['name']
-        command=['pixi','run','mojo','build','-j','1','--target-cpu','apple-m1','--target-accelerator','metal:1','-I','.','-I','bindings']
+        command=['pixi','run','mojo','build','-j','1','--target-cpu','apple-m1','--target-accelerator','metal:1','-D','MOJOLEARN_COLUMN_APPLE=1','-I','.','-I','bindings']
         for token in candidate:command.extend(['-D',token])
         command.extend([check['source'],'-o',str(destination)])
         with destination.with_suffix('.build.log').open('x') as stream:

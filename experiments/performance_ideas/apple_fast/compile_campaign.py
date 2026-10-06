@@ -40,8 +40,12 @@ def matrix():
             prerequisites.append(add('core','identical',[],consumer+'/input_transport_helpers'))
             checks=[]
             for check in card.get('variant_native_checks',{}).get(variant,card.get('native_checks',[])):
+                compile_arms=check.get('compile_arms',['A','B'])
+                if not compile_arms or set(compile_arms)-{'A','B'}:
+                    raise ValueError('invalid native compile arms: '+consumer+'/'+check['name'])
                 for arm,defines in [('A',baseline),('B',candidate)]:
-                    checks.append(add(check['name'],'fast',defines,consumer+'/native/'+arm,check['source']))
+                    if arm in compile_arms:
+                        checks.append(add(check['name'],'fast',defines,consumer+'/native/'+arm,check['source']))
             variants.append(dict(idea=idea,variant=variant,arms=arms,prerequisites=prerequisites,native_checks=checks))
     return dict(schema=1,vendor='apple',target_column='apple',status='compiler_pending',qualification='none',
         jobs=list(jobs.values()),variants=variants)
@@ -98,7 +102,7 @@ def main():
             MOJOLEARN_MOJO_BUILD_FLAGS=flags,MOJOLEARN_BUILD_EXTRA_DEFINES='')
         if job['source']:
             binary=directory/'native-check'
-            command=['pixi','run','mojo','build','-j','1','--target-cpu','apple-m1','--target-accelerator','metal:1','-I','.','-I','bindings']
+            command=['pixi','run','mojo','build','-j','1','--target-cpu','apple-m1','--target-accelerator','metal:1','-D','MOJOLEARN_COLUMN_APPLE=1','-I','.','-I','bindings']
             for token in job['defines']:command.extend(['-D',token])
             command.extend([job['source'],'-o',str(binary)])
         else:

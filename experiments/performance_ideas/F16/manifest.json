@@ -60,7 +60,11 @@
   "native_checks": [
     {
       "name": "F16-independent-gradient",
-      "source": "arima/checks/product_df_quality_check.mojo"
+      "source": "arima/checks/product_df_quality_check.mojo",
+      "compile_arms": [
+        "B"
+      ],
+      "role": "candidate-only independent gradient oracle; public incumbent binding remains the A control"
     }
   ],
   "paired_build": true,

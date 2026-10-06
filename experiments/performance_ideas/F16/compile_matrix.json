@@ -24,16 +24,12 @@
   ],
   "arms": [
     {
-      "name": "baseline",
-      "source": "arima/checks/product_df_quality_check.mojo",
-      "defines": []
-    },
-    {
       "name": "product_df_tail",
       "source": "arima/checks/product_df_quality_check.mojo",
       "defines": [
         "MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL=1"
       ]
     }
-  ]
+  ],
+  "baseline_scope": "Public incumbent ARIMA binding remains A in apple_fast/compile_campaign; independent gradient checker requires PRODUCT_DF_ON and is candidate-only."
 }
