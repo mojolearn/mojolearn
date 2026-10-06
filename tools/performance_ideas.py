@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -38,6 +39,18 @@ STAGES = {"build": "build_argv", "validate": "validation_argv", "time": "timing_
 
 class ExperimentError(ValueError):
     """An invalid recipe or evidence prerequisite."""
+
+
+def apple_neural_catalog():
+    # not tested: source-only AFN26 cards have a separate namespace/schema.
+    # Load metadata glue only; no compiler, binding, or numerical driver.
+    path = Path(__file__).with_name("apple_fast_neural_ideas.py")
+    spec = importlib.util.spec_from_file_location("performance_afn26_catalog", path)
+    if spec is None or spec.loader is None:
+        raise ExperimentError("Apple FAST neural catalog adapter is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def mode_for(idea: str) -> str:
@@ -353,7 +366,8 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument("--require-ready", action="store_true")
     for name in ["plan", "execute"]:
         command = commands.add_parser(name)
-        command.add_argument("id", choices=EXPECTED)
+        command.add_argument("id", help="legacy idea ID or source-only AFN26-A01/T01/M01/E01/X01 namespace")
+        command.add_argument("--variant", help="named AFN26 A/B variant; required when the card has several")
         command.add_argument("--stage", choices=STAGES, required=True)
         command.add_argument("--vendor", choices=["nvidia", "amd", "apple", "host"], required=True)
         command.add_argument("--output", type=Path, required=True)
@@ -368,6 +382,29 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     root = args.root.resolve()
+    # not tested: new ideas/combinations are discoverable and plannable here,
+    # without claiming executable full-workload or quality recipes.
+    if args.command in {"plan", "execute"} and args.id.startswith("AFN26-"):
+        if args.vendor != "apple":
+            raise ExperimentError("AFN26 experiments apply only to Apple GPU FAST")
+        if args.command == "execute":
+            raise ExperimentError(
+                "AFN26 is source-only and not tested: execution is disabled; "
+                "resolve frozen builds, full-workload coverage and quality recipes first"
+            )
+        try:
+            proposal = apple_neural_catalog().plan(args.id, args.variant, root)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ExperimentError(str(exc)) from exc
+        proposal.update(
+            source_sha=git(root, "rev-parse", "HEAD"),
+            requested_stage=args.stage, requested_arm=args.arm,
+            requested_output=str(args.output.resolve()),
+        )
+        print(json.dumps(proposal, indent=2))
+        return 0
+    if args.command in {"plan", "execute"} and args.variant is not None:
+        raise ExperimentError("--variant selects AFN26 cards; legacy manifest recipes retain their own variant controls")
     records, errors = catalog(root)
     errors.extend(validate_dependencies(records))
     if args.command == "check":
@@ -378,13 +415,19 @@ def main(argv: list[str] | None = None) -> int:
             blocked = [idea for idea, r in records.items() if r["status"].startswith("blocked_")]
             if blocked:
                 errors.append("Unimplemented prerequisites: " + ", ".join(blocked))
-        print(json.dumps({"records": len(records), "missing": missing, "errors": errors}, indent=2))
+        print(json.dumps({"records": len(records), "missing": missing, "errors": errors,
+                          "scope": "legacy executable manifests; AFN26 source-only cards are not validated here"}, indent=2))
         return int(bool(errors))
     if errors:
         raise ExperimentError("; ".join(errors))
     if args.command == "list":
         rows = [{"id": idea, "mode": mode_for(idea), **records.get(idea, {"status": "missing"})}
                 for idea in EXPECTED if args.mode is None or mode_for(idea) == args.mode]
+        if args.mode in (None, "fast"):
+            try:
+                rows.extend(apple_neural_catalog().cards(root))
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                raise ExperimentError(str(exc)) from exc
         if args.json:
             print(json.dumps(rows, indent=2))
         else:

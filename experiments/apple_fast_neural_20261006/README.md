@@ -57,3 +57,50 @@ No manifest checker, linter, syntax checker or numerical driver was run either.
 The authored documents and inline notes are the retained delivery evidence.
 Git hooks are bypassed for the requested commit/push so they cannot trigger
 the prohibited compilation or verification. Main is not merged or pushed.
+
+## Integration status and entry points
+
+The initial delivery connected source controls to runtime kernels and supplied
+standalone metadata. It did **not** connect that metadata to the existing
+experiment tools. The integration follow-up adds the shared adapter
+[`tools/apple_fast_neural_ideas.py`](../../tools/apple_fast_neural_ideas.py)
+and source-only entry points in all three existing tools:
+
+```text
+python3 tools/performance_ideas.py list --mode fast
+python3 tools/performance_ideas.py plan AFN26-E08 --variant threads64 --stage build --vendor apple --output /tmp/AFN26-E08
+python3 tools/neural_experiments.py --apple-fast-plan AFN26-E08 --variant threads64
+bash tools/afn_ab.sh --experiment-plan AFN26-E08 --variant threads64
+bash tools/afn_ab.sh --experiment-list
+```
+
+These commands were **not run**. They are authored metadata-only interfaces.
+The global IDs are `AFN26-A01` through `AFN26-X08` in their respective ranges;
+the prefix avoids colliding with the legacy AMD IDENTICAL `A01` card. Every
+interface reads the existing family/interaction JSON as its single source of
+A/B defines. Plans include binding scripts, define transport, potential public
+driver routes, and explicit missing coverage. New inline integration comments
+also say `not tested`.
+
+The legacy runtime-toggle runner's `MOVED` digest rejection is not applied to
+these FAST plans: task quality is the acceptance rule, and changed bits alone
+are allowed. Its existing numerical execution path remains separate.
+
+| Integration layer | Status |
+| --- | --- |
+| Runtime switches, new kernel bodies and existing call sites | Programmed on this branch; not compiled or verified |
+| Individual A/B controls and interaction combinations | Authored in the shared catalog |
+| Main experiment discovery and existing neural/A-B plan entry points | Programmed by the integration follow-up; not run |
+| Fully executable, frozen, end-to-end A/B harness for every affected operation | **Still pending**; metadata and prospective legacy command arrays are not this harness |
+| Exact full-dataset mapping, route evidence and quality acceptance | **Still pending**, including MLP multistep and CNN/embedding consumers |
+| Board admission, default promotion, main merge | Not performed |
+
+`performance_ideas.py execute AFN26-...` refuses before invoking any builder or
+driver. Its legacy `check` command reports its old executable-manifest scope
+and does not pretend to validate this different, untested source catalog.
+Legacy positional `afn_ab.sh` still builds and measures: only the new
+`--experiment-plan` / `--experiment-list` entry points are metadata-only.
+The plan names those legacy commands as prospective, unqualified routes, not
+execution-ready whole-operation qualification. Multiple affected bindings
+must eventually be frozen together; separate legacy one-binding runs do not
+prove the combined configuration. No evidence or completed work is invented.
