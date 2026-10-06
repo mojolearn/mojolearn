@@ -80,8 +80,8 @@ def normalize(route):
   if not candidates:continue
   b=candidates[0]
   for ix,(bm,cm) in enumerate(zip(b['measurements'],c['measurements'])):
-   if c['candidate_id']=='I17' and c['arm']=='candidate' and cm.get('policy')=='Depthwise':
-    row=common(c,c['key']+'/case'+str(ix));row.update(status='NO_DISTINCT_RUNTIME_ARM',returncode=0,policy='Depthwise',limitation='Resident frontier switch affects Lossguide only; Depthwise has same runtime route. Raw timing preserved.');rows.append(row);continue
+   if c['candidate_id']=='I17' and c['arm'] in ['candidate','lg_exact_off'] and cm.get('policy')=='Depthwise':
+    row=common(c,c['key']+'/case'+str(ix));row.update(status='NO_DISTINCT_RUNTIME_ARM',returncode=0,policy='Depthwise',limitation='Resident frontier and exact-batch controls affect Lossguide only; this Depthwise control has the same runtime route. Inherited-partition controls remain distinct. Raw timing preserved.');rows.append(row);continue
    put(b,c,bm.get('elapsed_ns'),cm.get('elapsed_ns'),c['key']+'/case'+str(ix))
  atom(E/(route+'-repair-normalized-measurements.json'),dict(rows=rows,updated=time.time(),snapshot=str(snap)))
 while True:
