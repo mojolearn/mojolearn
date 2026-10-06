@@ -287,3 +287,42 @@ def test_bayesian_gmm_reg_covar_per_dataset(tmp_path, monkeypatch):
 
 def test_no_other_lane_has_dataset_params():
     assert sorted(k for k, s in A.LANES.items() if s.get("dataset_params")) == ["bayesian-gmm"]
+
+
+@pytest.mark.parametrize('lane', ['gcn', 'graphsage', 'resnet-block'])
+@pytest.mark.parametrize('comparable', [False, True])
+def test_own_layer_retains_outputs_without_false_opponent_comparison(monkeypatch, lane, comparable):
+    """Exercise the real adapter with stub layers; no GPU or Torch installation."""
+    class Tensor:
+        def __init__(self, value): self.value = np.asarray(value, dtype=np.float32)
+        @property
+        def shape(self): return self.value.shape
+        def detach(self): return self
+        def cpu(self): return self
+        def numpy(self): return self.value
+    class Generator:
+        def manual_seed(self, seed): return self
+    torch = types.SimpleNamespace(Generator=Generator,
+                                  randn=lambda shape, generator: Tensor(np.ones(shape)))
+    monkeypatch.setitem(sys.modules, 'torch', torch)
+    ref = types.SimpleNamespace(state_dict=lambda: {'conv.weight': Tensor([3.])})
+    monkeypatch.setattr(A, '_layer_inputs', lambda *args: (lambda: ref, Tensor([[1., 2.]]), ()))
+    class Layer:
+        def __init__(self, random_state=0, **kw): self.seed = random_state
+        def forward(self, x): return x + self.seed
+        def backward(self, dy): return dy
+    if comparable:
+        Layer.load_state_dict = lambda self, state: None
+    monkeypatch.setattr(A, '_ours_class', lambda lane: ('FixtureLayer', Layer))
+    monkeypatch.setattr(A, '_ours_info', lambda lane: {})
+    import bench_board_host_quality as host
+    gpu, cpu = A._build_layer(lane, 'ours', {}), A._build_layer(lane, 'ours', {})
+    for runner in (gpu, cpu):
+        runner.fit(); runner.infer()
+    actual, reference = gpu.outputs(), cpu.outputs()
+    assert set(actual) == {'y' if comparable else 'own_y'}
+    assert actual[next(iter(actual))].shape == (1, 2)
+    assert host.compare(actual, reference) == {'relative_error_vs_own_host': 0.}
+    q = A.quality(lane, {}, {'ours': actual, 'torch-eager-fp32': {'y': np.zeros((1, 2))}})
+    assert bool(q['ours']) is comparable
+    assert gpu.info['output_comparable'] is comparable

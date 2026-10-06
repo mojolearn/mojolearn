@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-05T12:36:10Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-05T12:36:10Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 1 planned, 393 done, 28 failed, 0 pending. Cells: 1491 (MODE-MISMATCH 5, REFUSED 70, ok 1413, stale: latest IDENTICAL sweep error 3).
+Races: 1 planned, 393 done, 28 failed, 0 pending. Cells: 1415 (MODE-MISMATCH 5, REFUSED 70, ok 1340).
 
 Inference cells: 833 (REFUSED 102, ok 731).
 
@@ -68,7 +68,6 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | affinity-prop | taxi | silhouette (higher is better) | 0.184644 | 0.184644 | sklearn-cpu 0.184644 |
 | algos | affinity-prop | taxi | ari_vs_ours (1 is our partition exactly) | 1.000000 | - | sklearn-cpu 1.000000 |
 | algos | als | taxi-zones | recall_at_10 (higher is better) | 0.053995 | 0.053995 | implicit-cpu 0.056786 |
-| algos | als | text | recall_at_10 (higher is better) | 0.548738 | 0.548738 | implicit-cpu 0.548200 |
 | algos | ard | istella | r2 (higher is better) | 0.327004 | -0.124856 | sklearn-cpu 0.327436 |
 | algos | ard | istella | rmse (lower is better) | 0.685278 | 0.885949 | sklearn-cpu 0.685058 |
 | algos | ard | taxi | r2 (higher is better) | 0.909190 | 0.909193 | sklearn-cpu 0.909190 |
@@ -199,12 +198,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | enet-cv | taxi | rmse (lower is better) | 4.804490 | 4.804540 | sklearn-cpu 4.804486 |
 | algos | factor-analysis | istella | mean_log_likelihood (higher is better) | 99.487100 | 99.487208 | sklearn-cpu 98.122830 |
 | algos | factor-analysis | taxi | mean_log_likelihood (higher is better) | -14.823700 | -14.823653 | sklearn-cpu -14.823723 |
-| algos | fastica | istella | mean_abs_excess_kurtosis | 356.288827 | - | sklearn-cpu 922.531077 |
+| algos | fastica | istella | mean_abs_excess_kurtosis | 356.288827 | 356.288855 | sklearn-cpu 922.531077 |
 | algos | fastica | taxi | mean_abs_excess_kurtosis | 13.205464 | 13.205123 | sklearn-cpu 13.764740 |
-| algos | gamma | istella | r2 (higher is better) | 0.218164 | 0.218164 | sklearn-cpu - |
-| algos | gamma | istella | rmse (lower is better) | 0.738615 | 0.738615 | sklearn-cpu - |
-| algos | gamma | taxi | r2 (higher is better) | -231.912000 | -231.911806 | sklearn-cpu - |
-| algos | gamma | taxi | rmse (lower is better) | 243.071000 | 243.070661 | sklearn-cpu - |
 | algos | garch | synthetic | mean_llf (higher is better) | -1938.220000 | -1938.222656 | arch-cpu -1938.221004 |
 | algos | garch | taxi-hourly | mean_llf (higher is better) | -1131.910000 | -1131.723763 | arch-cpu -1129.806866 |
 | algos | gaussian-nb | istella | accuracy (higher is better) | 0.876570 | 0.876570 | sklearn-cpu 0.876530 |
@@ -237,7 +232,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | huber | istella | rmse (lower is better) | 0.838221 | 0.838333 | sklearn-cpu 0.839574 |
 | algos | huber | taxi | r2 (higher is better) | 0.900215 | 0.900215 | sklearn-cpu 0.900215 |
 | algos | huber | taxi | rmse (lower is better) | 5.031170 | 5.031174 | sklearn-cpu 5.031163 |
-| algos | incremental-pca | istella | explained_variance_fraction | 0.999994 | - | sklearn-cpu 1.000000 |
+| algos | incremental-pca | istella | explained_variance_fraction | 0.999994 | 0.999994 | sklearn-cpu 1.000000 |
 | algos | incremental-pca | taxi | explained_variance_fraction | 0.999995 | 0.999995 | sklearn-cpu 0.999995 |
 | algos | isomap | istella | trustworthiness_k15 (higher is better, 1 at most) | 0.853298 | 0.853294 | sklearn-cpu 0.853294 |
 | algos | isomap | taxi | trustworthiness_k15 (higher is better, 1 at most) | 0.771828 | 0.771828 | sklearn-cpu 0.771828 |
@@ -296,8 +291,6 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | lda-clf | taxi | logloss (lower is better) | 0.539763 | 0.539763 | sklearn-cpu 0.539767 |
 | algos | lda | taxi-zones | perplexity | 45.221800 | 45.221819 | sklearn-cpu 44.897929 |
 | algos | lda | text | perplexity | 266.719000 | 266.718786 | sklearn-cpu 266.944425 |
-| algos | linearsvr | taxi | r2 (higher is better) | 0.899813 | - | sklearn-cpu 0.899800 |
-| algos | linearsvr | taxi | rmse (lower is better) | 5.041290 | - | sklearn-cpu 5.042000 |
 | algos | lle | istella | trustworthiness_k15 (higher is better, 1 at most) | 0.895277 | 0.895277 | sklearn-cpu 0.849140 |
 | algos | lle | taxi | trustworthiness_k15 (higher is better, 1 at most) | 0.826083 | 0.826083 | sklearn-cpu 0.770758 |
 | algos | lof | istella | fraction_flagged | 0.033610 | 0.033610 | sklearn-cpu 0.033610 |
@@ -421,10 +414,6 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | pls | istella | rmse (lower is better) | 0.703930 | 0.703930 | sklearn-cpu 0.703930 |
 | algos | pls | taxi | r2 (higher is better) | 0.905216 | 0.905216 | sklearn-cpu 0.905216 |
 | algos | pls | taxi | rmse (lower is better) | 4.903469 | 4.903469 | sklearn-cpu 4.903467 |
-| algos | poisson | istella | r2 (higher is better) | 0.243601 | 0.243602 | sklearn-cpu - |
-| algos | poisson | istella | rmse (lower is better) | 0.726500 | 0.726500 | sklearn-cpu - |
-| algos | poisson | taxi | r2 (higher is better) | 0.035748 | 0.035757 | sklearn-cpu - |
-| algos | poisson | taxi | rmse (lower is better) | 15.639800 | 15.639762 | sklearn-cpu - |
 | algos | poly-count-sketch | istella | kernel_rel_error (lower is better) | 0.040849 | 0.332130 | sklearn-cpu 0.040849 |
 | algos | poly-count-sketch | taxi | kernel_rel_error (lower is better) | 0.096596 | 0.093442 | sklearn-cpu 0.096596 |
 | algos | prophet | synthetic | forecast_rmse (lower is better) | 1.014910 | 1.015149 | prophet-cpu 1.015319 |
@@ -439,8 +428,6 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | qn-reg | taxi | rmse (lower is better) | 4.805040 | 4.805040 | sklearn-cpu - |
 | algos | qr | istella | relative_gram_difference | 0.0009027 | 1.539e-07 | numpy-cpu 2.472e-08; torch-gpu - |
 | algos | qr | taxi | relative_gram_difference | 5.579e-07 | 5.579e-07 | numpy-cpu 3.024e-08; torch-gpu - |
-| algos | quantile | istella | r2 (higher is better) | -0.039998 | -0.039998 | - |
-| algos | quantile | istella | rmse (lower is better) | 0.851877 | 0.851877 | - |
 | algos | quantile | taxi | r2 (higher is better) | 0.899875 | 0.899596 | sklearn-cpu 0.899678 |
 | algos | quantile | taxi | rmse (lower is better) | 5.039731 | 5.046749 | sklearn-cpu 5.044706 |
 | algos | radius-neighbors | istella | neighbors_total | 1220718 | 1220718 | sklearn-cpu 1220718 |
@@ -500,16 +487,10 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | select-r-regression | istella | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
 | algos | select-r-regression | taxi | n_selected | 5.000000 | 5 | sklearn-cpu 5 |
 | algos | select-r-regression | taxi | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
-| algos | sgd-clf | istella | accuracy (higher is better) | 0.920350 | - | sklearn-cpu - |
-| algos | sgd-clf | taxi | accuracy (higher is better) | 0.755330 | - | sklearn-cpu - |
 | algos | sgd-ocsvm | istella | fraction_flagged | 0.040420 | 0.00044 | sklearn-cpu 0.093340 |
 | algos | sgd-ocsvm | istella | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
 | algos | sgd-ocsvm | taxi | fraction_flagged | 0.055570 | 0.027950 | sklearn-cpu 0.007020 |
 | algos | sgd-ocsvm | taxi | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
-| algos | sgd-reg | istella | r2 (higher is better) | 0.327829 | - | sklearn-cpu - |
-| algos | sgd-reg | istella | rmse (lower is better) | 0.684858 | - | sklearn-cpu - |
-| algos | sgd-reg | taxi | r2 (higher is better) | 0.908969 | - | sklearn-cpu - |
-| algos | sgd-reg | taxi | rmse (lower is better) | 4.805410 | - | sklearn-cpu - |
 | algos | sgd | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-compile-fp32 0.000000; torch-eager-fp32 - |
 | algos | simple-imputer | istella | masked_rmse | 346849.000000 | 346849.129968 | sklearn-cpu 346849.129968 |
 | algos | simple-imputer | taxi | masked_rmse | 5.985180 | 5.985180 | sklearn-cpu 5.985180 |
@@ -546,10 +527,6 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | tree-shap | taxi | max_additivity_error | 3.888e-05 | 3.858e-05 | lightgbm-cpu 5.684e-13; shap-cpu 0.0001199; xgboost-cpu 0.0001199 |
 | algos | tsne | istella | trustworthiness_k15 (higher is better, 1 at most) | 0.992039 | 0.992124 | sklearn-cpu 0.991970 |
 | algos | tsne | taxi | trustworthiness_k15 (higher is better, 1 at most) | 0.998869 | 0.998921 | sklearn-cpu 0.998860 |
-| algos | tweedie | istella | r2 (higher is better) | -24.412400 | -24.412547 | sklearn-cpu - |
-| algos | tweedie | istella | rmse (lower is better) | 4.210980 | 4.210993 | sklearn-cpu - |
-| algos | tweedie | taxi | r2 (higher is better) | -10.074400 | -10.074406 | sklearn-cpu - |
-| algos | tweedie | taxi | rmse (lower is better) | 53.002600 | 53.002580 | sklearn-cpu - |
 | algos | var | synthetic | forecast_rmse (lower is better) | 1.140790 | 1.140864 | statsmodels-cpu 1.144945 |
 | algos | var | taxi-hourly | forecast_rmse (lower is better) | 33.168000 | 33.167951 | statsmodels-cpu 33.167986 |
 | algos | voting-clf | istella | accuracy (higher is better) | 0.918360 | 0.918350 | sklearn-cpu 0.918480 |
@@ -672,8 +649,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | svr | istella | rmse (lower is better) | 0.680816 | 0.680816 | sklearn-cpu 0.680821 |
 | classical2 | svr | taxi | r2 (higher is better) | 0.767550 | 0.767551 | sklearn-cpu 0.767550 |
 | classical2 | svr | taxi | rmse (lower is better) | 7.680409 | 7.680395 | sklearn-cpu 7.680414 |
-| classical2 | tsvd | istella | relative_reconstruction_error (lower is better) | 0.0001219 | - | sklearn-cpu 0.000122 |
-| classical2 | tsvd | istella | explained_variance_ratio_sum (higher is better) | - | - | sklearn-cpu 1.000000 |
+| classical2 | tsvd | istella | explained_variance_ratio_sum (higher is better) | - | 0.999992 | sklearn-cpu 1.000000 |
+| classical2 | tsvd | istella | relative_reconstruction_error (lower is better) | 0.0001219 | 0.002554 | sklearn-cpu 0.000122 |
 | classical2 | tsvd | taxi | explained_variance_ratio_sum (higher is better) | - | 0.999965 | sklearn-cpu 0.999965 |
 | classical2 | tsvd | taxi | relative_reconstruction_error (lower is better) | 0.003257 | 0.003257 | sklearn-cpu 0.003257 |
 | classical2 | umap | istella | trustworthiness_k15 (higher is better, 1 at most) | 0.982091 | 0.979535 | umap-learn-cpu 0.978822; umap-learn-cpu-unseeded 0.976636 |
@@ -714,49 +691,6 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | neural | samba-train-step | bytes | loss_last_abs_diff_vs_ours (0 is our value exactly) | - | - | torch-eager-fp32 0.000000; torch-compile-fp32 -; torch-eager-bf16 0.0001612; torch-compile-bf16 - |
 | neural | transformer-forward | gaussian | max_abs_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 4.768e-07; torch-compile-fp32 4.768e-07; torch-eager-bf16 0.001819; torch-compile-bf16 0.001819 |
 | neural | transformer-forward | gaussian | max_rel_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-fp32 1.02e-07; torch-compile-fp32 1.02e-07; torch-eager-bf16 0.0003893; torch-compile-bf16 0.0003893 |
-| trees | et | istella | logloss (lower is better) | 0.189989 | - | sklearn-et-cpu 0.190100 |
-| trees | et | istella | auc (higher is better) | 0.937987 | - | sklearn-et-cpu 0.937900 |
-| trees | et | taxi | logloss (lower is better) | 0.526142 | - | sklearn-et-cpu 0.526000 |
-| trees | et | taxi | auc (higher is better) | 0.618907 | - | sklearn-et-cpu 0.619000 |
-| trees | gbdt-categorical | taxi | auc (higher is better) | 0.630830 | - | lightgbm-cpu 0.632700 |
-| trees | gbdt-categorical | taxi | logloss (lower is better) | 0.528440 | - | lightgbm-cpu - |
-| trees | gbdt-categorical | taxicat | logloss (lower is better) | 0.528399 | - | - |
-| trees | gbdt-categorical | taxicat | auc (higher is better) | 0.630905 | - | - |
-| trees | gbdt-depthwise | istella | logloss (lower is better) | 0.156903 | - | xgboost-cpu - |
-| trees | gbdt-depthwise | istella | auc (higher is better) | 0.983190 | - | xgboost-cpu 0.983600 |
-| trees | gbdt-depthwise | taxi | logloss (lower is better) | 0.527929 | - | xgboost-cpu - |
-| trees | gbdt-depthwise | taxi | auc (higher is better) | 0.632351 | - | xgboost-cpu 0.631000 |
-| trees | gbdt-lossguide | istella | logloss (lower is better) | 0.148902 | - | lightgbm-cpu - |
-| trees | gbdt-lossguide | istella | auc (higher is better) | 0.983670 | - | lightgbm-cpu 0.983800 |
-| trees | gbdt-lossguide | taxi | logloss (lower is better) | 0.528132 | - | lightgbm-cpu - |
-| trees | gbdt-lossguide | taxi | auc (higher is better) | 0.631865 | - | lightgbm-cpu 0.632200 |
-| trees | gbdt-multiclass | istella | mlogloss (lower is better) | 0.258413 | - | xgboost-cpu - |
-| trees | gbdt-multiclass | istella | accuracy (higher is better) | 0.907556 | - | xgboost-cpu 0.910100 |
-| trees | gbdt-multiclass | taxi | mlogloss (lower is better) | 1.012590 | - | xgboost-cpu - |
-| trees | gbdt-multiclass | taxi | accuracy (higher is better) | 0.599380 | - | xgboost-cpu 0.601100 |
-| trees | gbdt-ordered | istella | logloss (lower is better) | 0.190385 | - | catboost-cpu - |
-| trees | gbdt-ordered | istella | auc (higher is better) | 0.979529 | - | catboost-cpu 0.979300 |
-| trees | gbdt-ordered | taxi | logloss (lower is better) | 0.529280 | - | catboost-cpu - |
-| trees | gbdt-ordered | taxi | auc (higher is better) | 0.628294 | - | catboost-cpu 0.627700 |
-| trees | gbdt-rank-pairlogit | istella | map (higher is better) | 0.854545 | - | xgboost-cpu 0.872800 |
-| trees | gbdt-rank-pairlogit | istella | ndcg10 (higher is better) | 0.719953 | - | xgboost-cpu - |
-| trees | gbdt-rank-yetirank | istella | ndcg10 (higher is better) | 0.680466 | - | lightgbm-cpu - |
-| trees | gbdt-rank-yetirank | istella | ndcg5 (higher is better) | 0.614035 | - | lightgbm-cpu - |
-| trees | gbdt-rank-yetirank | istella | map (higher is better) | 0.814182 | - | lightgbm-cpu 0.858400 |
-| trees | gbdt-symmetric-1000 | istella | logloss (lower is better) | 0.170400 | - | catboost-cpu - |
-| trees | gbdt-symmetric-1000 | istella | auc (higher is better) | 0.982434 | - | catboost-cpu 0.982300 |
-| trees | gbdt-symmetric-1000 | taxi | logloss (lower is better) | 0.528216 | - | catboost-cpu - |
-| trees | gbdt-symmetric-1000 | taxi | auc (higher is better) | 0.631675 | - | catboost-cpu 0.631600 |
-| trees | gbdt-symmetric | istella | auc (higher is better) | 0.980155 | - | catboost-cpu 0.979900 |
-| trees | gbdt-symmetric | istella | logloss (lower is better) | 0.186496 | - | catboost-cpu - |
-| trees | gbdt-symmetric | taxi | logloss (lower is better) | 0.528595 | - | catboost-cpu - |
-| trees | gbdt-symmetric | taxi | auc (higher is better) | 0.630376 | - | catboost-cpu 0.630300 |
-| trees | iforest | istella | auc (higher is better) | 0.830358 | - | sklearn-iforest-cpu 0.827900 |
-| trees | iforest | taxi | auc (higher is better) | 0.551846 | - | sklearn-iforest-cpu 0.552800 |
-| trees | rf | istella | logloss (lower is better) | 0.182017 | - | lightgbm-cpu 0.195400 |
-| trees | rf | istella | auc (higher is better) | 0.945385 | - | lightgbm-cpu 0.945400 |
-| trees | rf | taxi | logloss (lower is better) | 0.525953 | - | lightgbm-cpu 0.526400 |
-| trees | rf | taxi | auc (higher is better) | 0.617838 | - | lightgbm-cpu 0.617000 |
 
 ## Inference at a glance
 
@@ -1007,249 +941,6 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | classical | pca | taxi | Xq | 500000 | 45.1 | 44.4 | no | sklearn-cpu 21.6 ms (IDENTICAL/arm 2.055); torch-gpu - ms (IDENTICAL/arm -) |
 | classical | svc | istella | Xq | 10000 | 68.6 | 47.5 | yes | sklearn-cpu 1833.3 ms (IDENTICAL/arm 0.026) |
 | classical | svc | taxi | Xq | 10000 | 28.2 | 44.9 | yes | sklearn-cpu 1331.6 ms (IDENTICAL/arm 0.034) |
-
-## Trees
-
-### et / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 4034.0 | 4034.0..4034.0 | 1 | - | - | - | - | auc=0.937987, logloss=0.189989 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 4360.0, 'baseline_quality_text': 'auc=0.938, logloss=0.19', 'display_rounded': True}) |
-| sklearn-et-cpu | scikit-learn | cpu | opponent | 30617.0 | 30617.0..30617.0 | 1 | - | - | - | - | auc=0.937900, logloss=0.190100 | - | None | - | ok ({'fill': 'page opponent', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### et / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 2854.0 | 2854.0..2854.0 | 1 | - | - | - | - | auc=0.618907, logloss=0.526142 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 3376.0, 'baseline_quality_text': 'auc=0.6189, logloss=0.5261', 'display_rounded': True}) |
-| sklearn-et-cpu | scikit-learn | cpu | opponent | 20629.0 | 20629.0..20629.0 | 1 | - | - | - | - | auc=0.619000, logloss=0.526000 | - | None | - | ok ({'fill': 'page opponent', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-categorical / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 25520.0 | 25520.0..25520.0 | 1 | - | - | - | - | auc=0.630830, logloss=0.528440 | - | None | - | ok ({'tag': 'the flag does not lower quality vs FAST main (A/B digests or noise', 'kind': 'A/B', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 63398.0, 'baseline_quality_text': 'auc=0.6302, logloss=0.5286', 'display_rounded': True}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 58904.0 | 58904.0..58904.0 | 1 | - | - | - | - | auc=0.632700 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-categorical / taxicat (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 37105.0 | 37105.0..37105.0 | 1 | - | - | - | - | auc=0.630905, logloss=0.528399 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-depthwise / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 16551.0 | 16551.0..16551.0 | 1 | - | - | - | - | auc=0.983190, logloss=0.156903 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 19062.0, 'baseline_quality_text': 'auc=0.9802, logloss=0.1819', 'display_rounded': True}) |
-| xgboost-cpu | xgboost | cpu | opponent | 23218.0 | 23218.0..23218.0 | 1 | - | - | - | - | auc=0.983600 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-depthwise / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 10812.0 | 10812.0..10812.0 | 1 | - | - | - | - | auc=0.632351, logloss=0.527929 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 13994.0, 'baseline_quality_text': 'auc=0.6258, logloss=0.53', 'display_rounded': True}) |
-| xgboost-cpu | xgboost | cpu | opponent | 10435.0 | 10435.0..10435.0 | 1 | - | - | - | - | auc=0.631000 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-lossguide / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 18364.0 | 18364.0..18364.0 | 1 | - | - | - | - | auc=0.983670, logloss=0.148902 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 106296.0, 'baseline_quality_text': 'auc=0.9838, logloss=0.1488', 'display_rounded': True}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 55012.0 | 55012.0..55012.0 | 1 | - | - | - | - | auc=0.983800 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-lossguide / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 12721.0 | 12721.0..12721.0 | 1 | - | - | - | - | auc=0.631865, logloss=0.528132 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 44556.0, 'baseline_quality_text': 'auc=0.631, logloss=0.5283', 'display_rounded': True}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 51864.0 | 51864.0..51864.0 | 1 | - | - | - | - | auc=0.632200 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-multiclass / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 25728.0 | 25728.0..25728.0 | 1 | - | - | - | - | accuracy=0.907556, mlogloss=0.258413 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 21754.0, 'baseline_quality_text': 'accuracy=0.9033, mlogloss=0.2809', 'display_rounded': True}) |
-| xgboost-cpu | xgboost | cpu | opponent | 105535.0 | 105535.0..105535.0 | 1 | - | - | - | - | accuracy=0.910100 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-multiclass / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 14938.0 | 14938.0..14938.0 | 1 | - | - | - | - | accuracy=0.599380, mlogloss=1.012590 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 14685.0, 'baseline_quality_text': 'accuracy=0.5967, mlogloss=1.023', 'display_rounded': True}) |
-| xgboost-cpu | xgboost | cpu | opponent | 45500.0 | 45500.0..45500.0 | 1 | - | - | - | - | accuracy=0.601100 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-ordered / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 63554.0 | 63554.0..63554.0 | 1 | - | - | - | - | auc=0.979529, logloss=0.190385 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| catboost-cpu | catboost | cpu | opponent | 385098.0 | 385098.0..385098.0 | 1 | - | - | - | - | auc=0.979300 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-ordered / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 56105.0 | 56105.0..56105.0 | 1 | - | - | - | - | auc=0.628294, logloss=0.529280 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| catboost-cpu | catboost | cpu | opponent | 99253.0 | 99253.0..99253.0 | 1 | - | - | - | - | auc=0.627700 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-rank-pairlogit / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 3038.0 | 3038.0..3038.0 | 1 | - | - | - | - | map=0.854545, ndcg10=0.719953 | - | None | - | ok ({'tag': 'the flag does not lower quality vs FAST main (A/B digests or noise', 'kind': 'A/B', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 3997.0, 'baseline_quality_text': 'map=0.8414, ndcg10=0.7093, ndcg5=0.6398', 'display_rounded': True}) |
-| xgboost-cpu | xgboost | cpu | opponent | 8355.0 | 8355.0..8355.0 | 1 | - | - | - | - | map=0.872800 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-rank-yetirank / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 3350.0 | 3350.0..3350.0 | 1 | - | - | - | - | map=0.814182, ndcg10=0.680466, ndcg5=0.614035 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 25773.0, 'baseline_quality_text': 'map=0.8149, ndcg10=0.681, ndcg5=0.6151', 'display_rounded': True}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 7083.0 | 7083.0..7083.0 | 1 | - | - | - | - | map=0.858400 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-symmetric-1000 / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 32889.0 | 32889.0..32889.0 | 1 | - | - | - | - | auc=0.982434, logloss=0.170400 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 21364.0, 'baseline_quality_text': 'auc=0.9756, logloss=0.2112', 'display_rounded': True}) |
-| catboost-cpu | catboost | cpu | opponent | 120805.0 | 120805.0..120805.0 | 1 | - | - | - | - | auc=0.982300 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-symmetric-1000 / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 22353.0 | 22353.0..22353.0 | 1 | - | - | - | - | auc=0.631675, logloss=0.528216 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 19086.0, 'baseline_quality_text': 'auc=0.6239, logloss=0.5306', 'display_rounded': True}) |
-| catboost-cpu | catboost | cpu | opponent | 55261.0 | 55261.0..55261.0 | 1 | - | - | - | - | auc=0.631600 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-symmetric / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 14292.0 | 14292.0..14292.0 | 1 | - | - | - | - | auc=0.980155, logloss=0.186496 | - | None | - | ok ({'tag': 'SYM_EST_ALL rab4 M3 A/B 2026-10-05', 'kind': 'A/B', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 11943.0, 'baseline_quality_text': 'auc=0.9756, logloss=0.2112', 'display_rounded': True}) |
-| catboost-cpu | catboost | cpu | opponent | 60136.0 | 60136.0..60136.0 | 1 | - | - | - | - | auc=0.979900 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### gbdt-symmetric / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 11253.0 | 11253.0..11253.0 | 1 | - | - | - | - | auc=0.630376, logloss=0.528595 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 9520.0, 'baseline_quality_text': 'auc=0.6239, logloss=0.5306', 'display_rounded': True}) |
-| catboost-cpu | catboost | cpu | opponent | 28188.0 | 28188.0..28188.0 | 1 | - | - | - | - | auc=0.630300 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### iforest / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 262.0 | 262.0..262.0 | 1 | - | - | - | - | auc=0.830358 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 437.0, 'baseline_quality_text': 'auc=0.8304', 'display_rounded': True}) |
-| sklearn-iforest-cpu | scikit-learn | cpu | opponent | 304.0 | 304.0..304.0 | 1 | - | - | - | - | auc=0.827900 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### iforest / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 85.8 | 85.8..85.8 | 1 | - | - | - | - | auc=0.551846 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 119.0, 'baseline_quality_text': 'auc=0.5518', 'display_rounded': True}) |
-| sklearn-iforest-cpu | scikit-learn | cpu | opponent | 575.0 | 575.0..575.0 | 1 | - | - | - | - | auc=0.552800 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### rf / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 10162.0 | 10162.0..10162.0 | 1 | - | - | - | - | auc=0.945385, logloss=0.182017 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 13810.0, 'baseline_quality_text': 'auc=0.9454, logloss=0.182', 'display_rounded': True}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 67210.0 | 67210.0..67210.0 | 1 | - | - | - | - | auc=0.945400, logloss=0.195400 | - | None | - | ok ({'fill': 'page opponent', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### rf / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 10708.0 | 10708.0..10708.0 | 1 | - | - | - | - | auc=0.617838, logloss=0.525953 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 10796.0, 'baseline_quality_text': 'auc=0.6178, logloss=0.526', 'display_rounded': True}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 53864.0 | 53864.0..53864.0 | 1 | - | - | - | - | auc=0.617000, logloss=0.526400 | - | None | - | ok ({'fill': 'page opponent', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
 
 ## Classical
 
@@ -3412,9 +3103,9 @@ race: done, driver rc 0, log `logs/classical2.tsvd.istella.rows-full.log`, ran o
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | - | - | 0 | - | - | 3702.9 | - | - | - | LIKE-FOR-LIKE-SPAN | wheel | stale: latest IDENTICAL sweep error ({'sweep': 'race-idn5-tsvd-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:14:50Z', 'previous_measurement': {'arm': 'ours', 'comparability': {'span': {'input_home': 'host', 'inside_clock': 'fit', 'pre_clock_fit': False, 'upload_ms_untimed': None}, 'span_asymmetry': []}, 'dataset': 'istella', 'device': 'gpu', 'device_name': 'Apple M3 Ultra', 'family': 'classical2', 'hash': '17200d78b09c6420', 'hash_stable': None, 'installed_wheel': 'wheel', 'lane': 'tsvd', 'library': 'mojolearn', 'library_version': '0.8.34', 'max_ms': 447.0538749592379, 'median_ms': 447.0538749592379, 'memory': {'children_mb': 1.7, 'gpu_method': 'Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)', 'host_method': 'macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)', 'peak_gpu_mb': None, 'peak_host_mb': 3702.9, 'rounds_sampled': 1, 'warmup_gpu_mb': None, 'warmup_host_mb': 3700.6}, 'min_ms': 447.0538749592379, 'mode': 'identical', 'mode_witness': 'identical', 'neural_shape': None, 'params': {'library': 'mojolearn', 'params': {'algorithm': 'covariance_eigh', 'n_components': 10, 'n_iter': 5, 'seed': 7, 'tol': 0.0}, 'source': 'get_params'}, 'peak_gpu_mb': None, 'peak_host_mb': 3702.9, 'quality': {'explained_variance_ratio_sum': 0.9999921076474112, 'relative_reconstruction_error': 0.0025539223380432992}, 'ratio_ours_fast_over': None, 'ratio_ours_identical_over': None, 'rounds': 1, 'rows': None, 'rows_tag': 'full', 'settings': {'block': 'tsvd', 'config': {'commit': 'e0f7a4e31578c8eeef376f3ce715d846bfee8d4c', 'entry': 'tSVD', 'harness': 'cuML benchmark (RAPIDS)', 'url': 'https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py'}, 'driver': 'tools/bench_board_more.py', 'interleaved': True, 'lane_config': {'mismatches': ["algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'"], 'params': "n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7", 'quality': "explained-variance ratio sum (TruncatedSVD's definition), relative reconstruction error", 'rows': '1000000 stride rows of the train split, raw (sentinel cleaned, not scaled)', 'timed': 'fit'}, 'rounds': 1, 'rows_cap': None, 'seed': 7, 'warmup_rounds': 1}, 'shape': 'X 1000000x220', 'status': 'ok', 'times_ms': [423.69116700137965], 'verdict': 'LIKE-FOR-LIKE-SPAN', 'warmup_ms': 458.09170897700824, 'source': {'sweep': 'race-ident-tsvd-istella', 'head': 'cf94a6be6', 'finished': '2026-10-04T19:42:22Z', 'previous_median_ms': 423.69116700137965, 'previous_hash': '17200d78b09c6420'}, 'quality_text': 'explained_variance_ratio_sum=0.999992, relative_reconstruction_error=0.00255392'}, 'failure': {'command': ['/Users/ec2-user/board-0834/cache/venv/bin/python', '/Users/ec2-user/mq/wt/freeze_idn-20261005/tools/bench_board_more.py', 'worker', '--arm', 'ours', '--lane', 'tsvd', '--dataset', 'istella', '--data', '/Users/ec2-user/board-0834/cache/more-data/rows-full'], 'digest_stable': None, 'digests': [], 'error': {'error': 'Exception("the device Jacobi did not converge in 60 sweeps at n_cols = 220 (round-robin order; off-diagonal mass 3.2571788e+36, or //A//_F moved) against a tolerance of 1e-07. cuSOLVER\'s syevj has the same failure mode and the same remedy, which is more sweeps. A non-symmetric covariance produces this too; see check_covariance_is_symmetric.")', 'event': 'error', 'stage': 'round 0'}, 'failed_round': 0, 'info': {'device': 'gpu', 'device_name': 'Apple M3 Ultra', 'input_home': 'host', 'library': 'mojolearn', 'module_path': '/Users/ec2-user/mq/wt/freeze_idn-20261005/python/mojolearn/__init__.py', 'n_features': 220, 'numeric_mode_env': 'identical', 'numeric_mode_how': 'numeric_mode_used()', 'numeric_mode_used': 'identical', 'pre_clock_fit': False, 'vendor_used': 'metal', 'version': '0.8.37'}, 'median_ms': None, 'mem': [], 'ms': [], 'params_record': {'__record__': True, 'library': 'mojolearn', 'params': {'algorithm': 'covariance_eigh', 'n_components': 10, 'n_iter': 5, 'n_oversamples': 10, 'power_iteration_normalizer': 'auto', 'random_state': 7, 'tol': 0.0}, 'source': 'get_params'}, 'span': {'input_home': 'host', 'inside_clock': 'fit', 'pre_clock_fit': False, 'upload_ms_untimed': None}, 'status': 'error', 'warmup_ms': None}}) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 447.1 | 447.1..447.1 | 1 | - | - | 3702.9 | - | explained_variance_ratio_sum=0.999992, relative_reconstruction_error=0.002554 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-ident-tsvd-istella', 'head': 'cf94a6be6', 'finished': '2026-10-04T19:42:22Z', 'previous_median_ms': 423.69116700137965, 'previous_hash': '17200d78b09c6420'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 921.0 | 921.0..921.0 | 1 | - | - | 3706.5 | - | relative_reconstruction_error=0.0001219 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'TSVD_FAST_POOL rab15 (COLVAR also on) M3 A/B 2026-10-05', 'kind': 'A/B', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 406.04616701602936, 'previous_quality': {'explained_variance_ratio_sum': 0.9999921076474112, 'relative_reconstruction_error': 0.0025539223380432992}, 'previous_status': 'ok', 'previous_hash': '17200d78b09c6420', 'baseline_ms': 406.04616701602936, 'baseline_quality_text': 'explained_variance_ratio_sum=1, relative_reconstruction_error=0.002554', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 1407.7 | 1407.7..1407.7 | 1 | - | 0.654 | 2018.5 | - | explained_variance_ratio_sum=1.000000, relative_reconstruction_error=0.000122 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 1407.7 | 1407.7..1407.7 | 1 | 0.318 | 0.654 | 2018.5 | - | explained_variance_ratio_sum=1.000000, relative_reconstruction_error=0.000122 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4401,18 +4092,6 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | alpha | 1.0 | 1.0 |
 | n_estimators | 15 | 15 |
 | seed | 7 | 7 |
-
-### als / text (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 127109.0 | 127109.0..127109.0 | 1 | - | - | - | - | recall_at_10=0.548738 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| implicit-cpu | implicit | cpu | opponent | 321338.0 | 321338.0..321338.0 | 1 | 0.398 | 0.396 | - | - | recall_at_10=0.548200 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 127972.8 | 127972.8..127972.8 | 1 | - | - | - | - | recall_at_10=0.548738 | - | None | - | ok ({'sweep': 'race-idn5-als-text', 'head': 'af93ebe0a', 'finished': '2026-10-05T05:55:16Z', 'previous_median_ms': 127744.0, 'previous_hash': None, 'previous_status': 'ok', 'history': [{'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}]}) |
-
-parameters: NOT CHECKED
 
 ### ard / istella (rows full, shape X 100000x220; Xq 100000x220; y 100000; yq 100000)
 
@@ -7650,9 +7329,9 @@ race: done, driver rc 0, log `logs/algos.fastica.istella.rows-full.log`, ran on 
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | - | - | 0 | - | - | 4054.6 | - | - | - | LIKE-FOR-LIKE-SPAN | wheel | stale: latest IDENTICAL sweep error ({'sweep': 'race-idn5-fastica-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T06:58:32Z', 'previous_measurement': {'arm': 'ours', 'comparability': {'span': {'input_home': 'host', 'inside_clock': 'fit(X)', 'pre_clock_fit': False, 'upload_ms_untimed': None}, 'span_asymmetry': []}, 'dataset': 'istella', 'device': 'gpu', 'device_name': 'Apple M3 Ultra', 'family': 'algos', 'hash': 'ddc1cb2ff6a7a382', 'hash_stable': None, 'installed_wheel': 'wheel', 'lane': 'fastica', 'library': 'mojolearn', 'library_version': '0.8.34', 'max_ms': 1588.3502500073519, 'median_ms': 1588.3502500073519, 'memory': {'children_mb': 1.7, 'gpu_method': 'Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)', 'host_method': 'macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)', 'peak_gpu_mb': None, 'peak_host_mb': 4054.6, 'rounds_sampled': 1, 'warmup_gpu_mb': None, 'warmup_host_mb': 3851.5}, 'min_ms': 1588.3502500073519, 'mode': 'identical', 'mode_witness': 'identical', 'neural_shape': None, 'params': {'library': 'mojolearn', 'params': {'algorithm': 'parallel', 'max_iter': 200, 'n_components': 8, 'seed': 7, 'tol': 0.0001, 'whiten': 'unit-variance'}, 'source': 'get_params'}, 'peak_gpu_mb': None, 'peak_host_mb': 4054.6, 'quality': {'mean_abs_excess_kurtosis': 356.2888553372582}, 'ratio_ours_fast_over': None, 'ratio_ours_identical_over': None, 'rounds': 1, 'rows': None, 'rows_tag': 'full', 'settings': {'config': "the board's own settings (no NVIDIA harness entry)", 'driver': 'tools/bench_board_algos.py', 'interleaved': True, 'lane_config': {'block': 'tsvd', 'datasets': ['taxi', 'istella'], 'expansion_lane': 'decomp', 'kind': 'est', 'mismatches': [], 'notes': [], 'ours_class': 'mojolearn.FastICA', 'params': {'algorithm': 'parallel', 'fun': 'logcosh', 'max_iter': 200, 'n_components': 8, 'random_state': 7, 'tol': 0.0001, 'whiten': 'unit-variance', 'whiten_solver': 'svd'}, 'quality': 'mean /excess kurtosis/ of the recovered sources on Xq', 'sklearn': 'sklearn.decomposition:FastICA', 'task': 'transform', 'timed_fit': 'fit(X)', 'timed_infer': 'transform(Xq)'}, 'rounds': 1, 'rows_cap': None, 'seed': 7, 'warmup_rounds': 1}, 'shape': 'X 900000x220; Xq 100000x220', 'status': 'ok', 'times_ms': [1588.3502500073519], 'verdict': 'LIKE-FOR-LIKE-SPAN', 'warmup_ms': 1577.5370839983225}, 'failure': {'command': ['/Users/ec2-user/board-0834/cache/venv/bin/python', '/Users/ec2-user/mq/wt/freeze_idn-20261005/tools/bench_board_algos.py', 'worker', '--arm', 'ours', '--lane', 'fastica', '--dataset', 'istella', '--data', '/Users/ec2-user/board-0834/cache/algos-data/rows-full'], 'digest_stable': None, 'digests': [], 'error': {'error': "Exception('eigh: the round-robin Jacobi did not converge in 60 sweeps at n = 220 (off-diagonal mass 6.603381e+31 of inf). An unconverged decomposition is not returned as if it were one (DEVIATION 590).')", 'event': 'error', 'stage': 'round 0'}, 'failed_round': 0, 'infer_ms': [], 'infer_warmup_ms': None, 'info': {'config': "mojolearn.FastICA(algorithm='parallel', fun='logcosh', max_iter=200, n_components=8, random_state=7, tol=0.0001, whiten='unit-variance', whiten_solver='svd')", 'device': 'gpu', 'device_name': 'Apple M3 Ultra', 'input_home': 'host', 'library': 'mojolearn', 'module_path': '/Users/ec2-user/mq/wt/freeze_idn-20261005/python/mojolearn/__init__.py', 'numeric_mode_env': 'identical', 'numeric_mode_how': '_mojolearn_x_decomp numeric_mode constant', 'numeric_mode_used': 'identical', 'pre_clock_fit': False, 'vendor_used': 'metal', 'version': '0.8.37'}, 'median_ms': None, 'mem': [], 'ms': [], 'params_record': {'__record__': True, 'library': 'mojolearn', 'params': {'algorithm': 'parallel', 'fun': 'logcosh', 'fun_args': None, 'max_iter': 200, 'n_components': 8, 'random_state': 7, 'tol': 0.0001, 'w_init': None, 'whiten': 'unit-variance', 'whiten_solver': 'svd'}, 'source': 'get_params'}, 'span': {'input_home': 'host', 'inside_clock': 'fit(X)', 'pre_clock_fit': False, 'upload_ms_untimed': None}, 'status': 'error', 'warmup_ms': None}}) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 1588.4 | 1588.4..1588.4 | 1 | - | - | 4054.6 | - | mean_abs_excess_kurtosis=356.288855 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 1375.4 | 1375.4..1375.4 | 1 | - | - | 4058.2 | - | mean_abs_excess_kurtosis=356.288827 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| sklearn-cpu | scikit-learn | cpu | opponent | 16795.7 | 16795.7..16795.7 | 1 | - | 0.082 | 4160.3 | - | mean_abs_excess_kurtosis=922.531077 | - | LIKE-FOR-LIKE-SPAN | - | ok (stored (measured 2026-09-30T19:20:04Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 16795.7 | 16795.7..16795.7 | 1 | 0.095 | 0.082 | 4160.3 | - | mean_abs_excess_kurtosis=922.531077 | - | LIKE-FOR-LIKE-SPAN | - | ok (stored (measured 2026-09-30T19:20:04Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -7731,30 +7410,6 @@ inference call, ours: transform(Xq)(Xq)
 inference call, ours-fast: transform(Xq)(Xq)
 
 inference call, sklearn-cpu: transform(Xq)(Xq)
-
-### gamma / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 1551.0 | 1551.0..1551.0 | 1 | - | - | - | - | r2=0.218164, rmse=0.738615 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 107798.0 | 107798.0..107798.0 | 1 | 0.017 | 0.014 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 1878.3 | 1878.3..1878.3 | 1 | - | - | - | - | finite=True, r2=0.218164, rmse=0.738615 | - | None | - | ok ({'sweep': 'race-idn5-gamma-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T06:58:39Z', 'previous_median_ms': 1889.0, 'previous_hash': None, 'previous_status': 'ok', 'history': [{'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}]}) |
-
-parameters: NOT CHECKED
-
-### gamma / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 47.7 | 47.7..47.7 | 1 | - | - | - | - | r2=-231.912000, rmse=243.071000 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 360.0 | 360.0..360.0 | 1 | 0.105 | 0.133 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 37.8 | 37.8..37.8 | 1 | - | - | - | - | finite=True, r2=-231.911806, rmse=243.070661 | - | None | - | ok ({'sweep': 'race-idn5-gamma-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T06:58:40Z', 'previous_median_ms': 52.7, 'previous_hash': None, 'previous_status': 'ok', 'history': [{'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}]}) |
-
-parameters: NOT CHECKED
 
 ### garch / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
 
@@ -8596,9 +8251,9 @@ race: done, driver rc 0, log `logs/algos.incremental-pca.istella.rows-full.log`,
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | identical | - | - | 0 | - | - | 2660.4 | - | - | - | LIKE-FOR-LIKE-SPAN | wheel | stale: latest IDENTICAL sweep error ({'sweep': 'race-idn5-incremental-pca-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:02:16Z', 'previous_measurement': {'arm': 'ours', 'comparability': {'span': {'input_home': 'host', 'inside_clock': 'fit(X)', 'pre_clock_fit': False, 'upload_ms_untimed': None}, 'span_asymmetry': []}, 'dataset': 'istella', 'device': 'gpu', 'device_name': 'Apple M3 Ultra', 'family': 'algos', 'hash': '1148569c2418aee0', 'hash_stable': None, 'installed_wheel': 'wheel', 'lane': 'incremental-pca', 'library': 'mojolearn', 'library_version': '0.8.34', 'max_ms': 2905.4652499908116, 'median_ms': 2905.4652499908116, 'memory': {'children_mb': 1.7, 'gpu_method': 'Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)', 'host_method': 'macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)', 'peak_gpu_mb': None, 'peak_host_mb': 2660.4, 'rounds_sampled': 1, 'warmup_gpu_mb': None, 'warmup_host_mb': 2304.3}, 'min_ms': 2905.4652499908116, 'mode': 'identical', 'mode_witness': 'identical', 'neural_shape': None, 'params': {'library': 'mojolearn', 'params': {'batch_size': 65536, 'n_components': 10, 'seed': 'none (deterministic)', 'whiten': False}, 'source': 'get_params'}, 'peak_gpu_mb': None, 'peak_host_mb': 2660.4, 'quality': {'explained_variance_fraction': 0.9999937855121286}, 'ratio_ours_fast_over': None, 'ratio_ours_identical_over': None, 'rounds': 1, 'rows': None, 'rows_tag': 'full', 'settings': {'config': {'commit': 'e0f7a4e31578c8eeef376f3ce715d846bfee8d4c', 'entry': 'IncrementalPCA', 'harness': 'cuML benchmark (RAPIDS)', 'url': 'https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py'}, 'driver': 'tools/bench_board_algos.py', 'interleaved': True, 'lane_config': {'block': 'tsvd', 'cuml': 'cuml.decomposition:IncrementalPCA', 'datasets': ['taxi', 'istella'], 'expansion_lane': 'decomp', 'kind': 'est', 'mismatches': [], 'notes': [], 'ours_class': 'mojolearn.IncrementalPCA', 'params': {'batch_size': 65536, 'n_components': 10, 'whiten': False}, 'quality': 'explained-variance fraction of the centered rows by the components', 'sklearn': 'sklearn.decomposition:IncrementalPCA', 'task': 'transform', 'timed_fit': 'fit(X)', 'timed_infer': 'transform(Xq)'}, 'rounds': 1, 'rows_cap': None, 'seed': 7, 'warmup_rounds': 1}, 'shape': 'X 900000x220; Xq 100000x220', 'status': 'ok', 'times_ms': [2905.4652499908116], 'verdict': 'LIKE-FOR-LIKE-SPAN', 'warmup_ms': 2973.893541988218}, 'failure': {'command': ['/Users/ec2-user/board-0834/cache/venv/bin/python', '/Users/ec2-user/mq/wt/freeze_idn-20261005/tools/bench_board_algos.py', 'worker', '--arm', 'ours', '--lane', 'incremental-pca', '--dataset', 'istella', '--data', '/Users/ec2-user/board-0834/cache/algos-data/rows-full'], 'digest_stable': None, 'digests': [], 'error': {'error': "Exception('eigh: the round-robin Jacobi did not converge in 60 sweeps at n = 220 (off-diagonal mass 5.9260233e+31 of inf). An unconverged decomposition is not returned as if it were one (DEVIATION 590).')", 'event': 'error', 'stage': 'round 0'}, 'failed_round': 0, 'infer_ms': [], 'infer_warmup_ms': None, 'info': {'config': 'mojolearn.IncrementalPCA(batch_size=65536, n_components=10, whiten=False)', 'device': 'gpu', 'device_name': 'Apple M3 Ultra', 'input_home': 'host', 'library': 'mojolearn', 'module_path': '/Users/ec2-user/mq/wt/freeze_idn-20261005/python/mojolearn/__init__.py', 'numeric_mode_env': 'identical', 'numeric_mode_how': '_mojolearn_x_decomp numeric_mode constant', 'numeric_mode_used': 'identical', 'pre_clock_fit': False, 'vendor_used': 'metal', 'version': '0.8.37'}, 'median_ms': None, 'mem': [], 'ms': [], 'params_record': {'__record__': True, 'library': 'mojolearn', 'params': {'batch_size': 65536, 'n_components': 10, 'whiten': False}, 'source': 'get_params'}, 'span': {'input_home': 'host', 'inside_clock': 'fit(X)', 'pre_clock_fit': False, 'upload_ms_untimed': None}, 'status': 'error', 'warmup_ms': None}}) |
+| mojolearn IDENTICAL | mojolearn | gpu | identical | 2905.5 | 2905.5..2905.5 | 1 | - | - | 2660.4 | - | explained_variance_fraction=0.999994 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 2250.7 | 2250.7..2250.7 | 1 | - | - | 2665.4 | - | explained_variance_fraction=0.999994 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| sklearn-cpu | scikit-learn | cpu | opponent | 5745.4 | 5745.4..5745.4 | 1 | - | 0.392 | 1803.1 | - | explained_variance_fraction=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (stored (measured 2026-09-30T19:16:06Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 5745.4 | 5745.4..5745.4 | 1 | 0.506 | 0.392 | 1803.1 | - | explained_variance_fraction=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (stored (measured 2026-09-30T19:16:06Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -10558,17 +10213,6 @@ inference call, ours: transform(Xq)(Xq)
 inference call, ours-fast: transform(Xq)(Xq)
 
 inference call, sklearn-cpu: transform(Xq)(Xq)
-
-### linearsvr / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 27.0 | 27.0..27.0 | 1 | - | - | - | - | r2=0.899813, rmse=5.041290 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': 183.0, 'baseline_quality_text': 'r2=0.8998, rmse=5.041', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 83935.0 | 83935.0..83935.0 | 1 | - | - | - | - | r2=0.899800, rmse=5.042000 | - | None | - | ok ({'fill': 'page opponent', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
 
 ### lion / synthetic (rows full, shape -)
 
@@ -14107,30 +13751,6 @@ inference call, ours-fast: predict(Xq)(Xq)
 
 inference call, sklearn-cpu: predict(Xq)(Xq)
 
-### poisson / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 2168.0 | 2168.0..2168.0 | 1 | - | - | - | - | r2=0.243601, rmse=0.726500 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 110378.0 | 110378.0..110378.0 | 1 | 0.024 | 0.020 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 2638.5 | 2638.5..2638.5 | 1 | - | - | - | - | finite=True, r2=0.243602, rmse=0.726500 | - | None | - | ok ({'sweep': 'race-idn5-poisson-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:04:17Z', 'previous_median_ms': 2624.0, 'previous_hash': None, 'previous_status': 'ok', 'history': [{'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}]}) |
-
-parameters: NOT CHECKED
-
-### poisson / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 79.7 | 79.7..79.7 | 1 | - | - | - | - | r2=0.035748, rmse=15.639800 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 442.0 | 442.0..442.0 | 1 | 0.148 | 0.180 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 65.5 | 65.5..65.5 | 1 | - | - | - | - | finite=True, r2=0.035757, rmse=15.639762 | - | None | - | ok ({'sweep': 'race-idn5-poisson-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:04:18Z', 'previous_median_ms': 77.7, 'previous_hash': None, 'previous_status': 'ok', 'history': [{'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}]}) |
-
-parameters: NOT CHECKED
-
 ### poly-count-sketch / istella (rows full, shape X 100000x220; Xq 1000x220; y 100000; yq 1000)
 
 race: done, driver rc 0, log `logs/algos.poly-count-sketch.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
@@ -14720,17 +14340,6 @@ inference call, ours: transform(Xq)(Xq)
 inference call, ours-fast: transform(Xq)(Xq)
 
 inference call, sklearn-cpu: transform(Xq)(Xq)
-
-### quantile / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 764.0 | 764.0..764.0 | 1 | - | - | - | - | r2=-0.039998, rmse=0.851877 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 859.5 | 859.5..859.5 | 1 | - | - | - | - | finite=True, r2=-0.039998, rmse=0.851877 | - | None | - | ok ({'sweep': 'race-idn5-quantile-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:04:52Z', 'previous_median_ms': 806.0, 'previous_hash': None, 'previous_status': 'ok', 'history': [{'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}]}) |
-
-parameters: NOT CHECKED
 
 ### quantile / taxi (rows full, shape X 100000x11; Xq 100000x11; y 100000; yq 100000)
 
@@ -16070,28 +15679,6 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | library (source) | mojolearn (get_params) | mojolearn (get_params) |
 | seed | "none (deterministic)" | "none (deterministic)" |
 
-### sgd-clf / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 2959.0 | 2959.0..2959.0 | 1 | - | - | - | - | accuracy=0.920350 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 28886.0 | 28886.0..28886.0 | 1 | - | - | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### sgd-clf / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 2452.0 | 2452.0..2452.0 | 1 | - | - | - | - | accuracy=0.755330 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 5435.0 | 5435.0..5435.0 | 1 | - | - | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
 ### sgd-ocsvm / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
 race: done, driver rc 0, log `logs/algos.sgd-ocsvm.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
@@ -16189,28 +15776,6 @@ inference call, ours: predict(Xq)(Xq)
 inference call, ours-fast: predict(Xq)(Xq)
 
 inference call, sklearn-cpu: predict(Xq)(Xq)
-
-### sgd-reg / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 2935.0 | 2935.0..2935.0 | 1 | - | - | - | - | r2=0.327829, rmse=0.684858 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 47274.0 | 47274.0..47274.0 | 1 | - | - | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
-
-### sgd-reg / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 2434.0 | 2434.0..2434.0 | 1 | - | - | - | - | r2=0.908969, rmse=4.805410 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 5242.0 | 5242.0..5242.0 | 1 | - | - | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-
-parameters: NOT CHECKED
 
 ### sgd / synthetic (rows full, shape -)
 
@@ -17458,30 +17023,6 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | n_components | 2 | 2 |
 | perplexity | 30.0 | 30.0 |
 | seed | 7 | 7 |
-
-### tweedie / istella (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 1547.0 | 1547.0..1547.0 | 1 | - | - | - | - | r2=-24.412400, rmse=4.210980 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 108690.0 | 108690.0..108690.0 | 1 | 0.017 | 0.014 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 1876.9 | 1876.9..1876.9 | 1 | - | - | - | - | finite=True, r2=-24.412547, rmse=4.210993 | - | None | - | ok ({'sweep': 'race-idn5-tweedie-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:14:57Z', 'previous_median_ms': 1886.0, 'previous_hash': None, 'previous_status': 'ok', 'history': [{'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}]}) |
-
-parameters: NOT CHECKED
-
-### tweedie / taxi (rows unrecorded, shape -)
-
-race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
-
-| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn FAST | mojolearn | gpu | fast | 48.9 | 48.9..48.9 | 1 | - | - | - | - | r2=-10.074400, rmse=53.002600 | - | None | - | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no FAST cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 333.0 | 333.0..333.0 | 1 | 0.085 | 0.147 | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
-| mojolearn IDENTICAL | mojolearn | gpu | identical | 28.2 | 28.2..28.2 | 1 | - | - | - | - | finite=True, r2=-10.074406, rmse=53.002580 | - | None | - | ok ({'sweep': 'race-idn5-tweedie-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:14:58Z', 'previous_median_ms': 45.1, 'previous_hash': None, 'previous_status': 'ok', 'history': [{'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}]}) |
-
-parameters: NOT CHECKED
 
 ### var / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
 

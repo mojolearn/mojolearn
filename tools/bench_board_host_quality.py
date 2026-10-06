@@ -8,8 +8,11 @@ import sys
 
 def compare(actual, reference):
     import numpy as np
-    if not actual or actual.keys() != reference.keys():
-        raise ValueError('Host reference output fields differ')
+    if not actual or not reference:
+        raise ValueError('Host reference output is empty')
+    if actual.keys() != reference.keys():
+        raise ValueError('Host reference output fields differ: actual=%s reference=%s'
+                         % (sorted(actual), sorted(reference)))
     errors = []
     for key in actual:
         a, b = np.asarray(actual[key]), np.asarray(reference[key])

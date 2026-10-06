@@ -263,6 +263,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.delenv("STUB_REFUSE", raising=False)
     out = tmp_path / "out"
     base = ["--out", str(out), "--python-env", sys.executable, "--skip-install",
+            "--with-opponents",  # These stub schema tests explicitly exercise opponent cells.
             "--data-root", str(data), "--tree-driver", str(trees),
             "--classical-driver", str(classical), "--neural-driver", str(neural),
             "--more-driver", str(more),
@@ -314,7 +315,7 @@ def test_plan_apple_carries_fast_and_identical_arms():
                           + len([l for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu"]) + more + tasks + algos)
     for r in races:
         if r["family"] == "neural":
-            assert r["our_arms"] == {"ours": "identical"}, r["id"]
+            assert r["our_arms"] == {"ours": "identical", "ours-fast": "fast"}, r["id"]
             continue
         modes = sorted(r["our_arms"].values())
         assert modes == ["fast", "identical"], r["id"]
@@ -359,7 +360,7 @@ def test_plan_filters_and_counts():
     races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000)
     assert [r["id"] for r in races] == ["trees/rf/taxi/rows=5000"]
     s = bb.plan_summary(races)
-    assert s == {"races": 1, "cells": 4,
+    assert s == {"races": 1, "cells": 4, "unsupported_races": 0,
                  "by_family": {"trees": {"races": 1, "cells": 4}}}
 
 
@@ -896,7 +897,10 @@ def test_neural_driver_tables_and_arm_refusals(tmp_path):
                   str(tmp_path / "o"), "--work", str(tmp_path / "w"), "--rounds", "1"])
 
 
-def test_neural_driver_inputs_and_quality(tmp_path):
+def test_neural_driver_inputs_and_quality(tmp_path, monkeypatch):
+    # This unit checks inter-arm quality math; actual saved-output host checks
+    # have independent pass/failure coverage in test_neural_forward_quality.py.
+    monkeypatch.setattr(bbn, "forward_host_quality", lambda *a: {"ours": {"host_reference_passed": True}})
     np = pytest.importorskip("numpy")
     path = str(tmp_path / "in.npz")
     rec = bbn.make_inputs("mlp-train-step", "small", 3, path)
@@ -926,7 +930,7 @@ def test_neural_driver_inputs_and_quality(tmp_path):
                                           "torch-compile-bf16": {"y": y[:1]}})
     assert q["torch-eager-fp32"] == {"max_abs_diff_vs_ours": 0.5, "max_rel_diff_vs_ours": 0.5 / 11}
     assert "shape_mismatch_vs_ours" in q["torch-compile-bf16"]
-    assert q["ours"] == {}
+    assert q["ours"] == {"host_reference_passed": True}
 
 
 # --- the classical2 family ---------------------------------------------------
@@ -1437,3 +1441,14 @@ def test_gpu_only_guard_refuses_cpu_races():
     with pytest.raises(SystemExit, match="our CPU never races"):
         bb.base_cell({"vendor": "nvidia"}, {"id": "x", "family": "algos", "lane": "pca"},
                      "ours-cpu", "identical")
+
+
+@pytest.mark.parametrize('quality', [{'error': 'host output empty'}, {'error': None},
+                                     {'error': '', 'relative_error_vs_own_host': 0.}])
+def test_smoke_explicit_quality_error_never_counts_as_evidence(quality):
+    race = next(r for r in bb.plan_races('amd', ['identical'], rows=2000)
+                if r['lane'] == 'gcn')
+    race = dict(race, arms=['ours'], opponents=[])
+    rec = {'status': 'done', 'params_check': 'MATCHED',
+           'cells': [{'arm': 'ours', 'status': 'ok', 'median_ms': 1., 'quality': quality}]}
+    assert any(reason.startswith('quality error:') for _, reason in bb.smoke_verdict(race, rec, 'amd'))

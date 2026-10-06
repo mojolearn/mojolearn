@@ -1,0 +1,226 @@
+{
+  "schema": 1,
+  "source_branch": "integration/identical-all-20261004",
+  "source_tip": "98811d173891a1328533d26af3cd1d1b1395f5f2",
+  "base_main": "e5f3b578b",
+  "reviewed_commits": [
+    {
+      "source_commit": "acdbefde131e018946f5b379d44bd8ca8e7ce444",
+      "subject": "Reconcile all retained Apple IDENTICAL sweep rows and render extra races",
+      "decision": "PARTIAL_INTEGRATION",
+      "reason": "Keep board importer/renderer fixes and tests; exclude three historical rendered/data snapshots to avoid replacing current evidence.",
+      "integrated_commit": "366fb4fff",
+      "excluded_paths": [
+        "bench/results/bench_board/m3ultra-0834/BOARD.md",
+        "bench/results/bench_board/m3ultra-0834/board.json",
+        "docs/apple-fast/BOARD_M3_IDENTICAL.md"
+      ]
+    },
+    {
+      "source_commit": "727d2faa300254058c7e93c2983ea7ed38421f95",
+      "subject": "Bootstrap missing Git before frozen PTX CPU build body",
+      "decision": "INTEGRATED",
+      "integrated_commit": "7531d9b04ea4a9c5043f252fcb8243f03d6ccf50"
+    },
+    {
+      "source_commit": "cf3fa9577d0e6303b38dbfdb6d91b0d2e7dd6285",
+      "subject": "ops: add owner-heartbeat RunPod lease and verified idle cleanup",
+      "decision": "INTEGRATED",
+      "integrated_commit": "e63527a58da25f9198c7bf9fd2858a1db176c252"
+    },
+    {
+      "source_commit": "3a3eca0aebe1f4cb6fa3c2d78cbcfb6034eba442",
+      "subject": "bench: accept Metal vendor readback for Apple FAST neural rows",
+      "decision": "INTEGRATED",
+      "integrated_commit": "cdead461a945d82c23ba3c1916f3ee4ed52ffdbd"
+    },
+    {
+      "source_commit": "a9688fe18066c19fdf7b5c6d004d8a38b669672f",
+      "subject": "Package and verify optional Apple FAST ByteLM alongside IDENTICAL",
+      "decision": "INTEGRATED",
+      "integrated_commit": "bc548a73fa7c0cb4e1ced6abe4b05c5831c1d5a2"
+    },
+    {
+      "source_commit": "58acfb90782ac231c1498822f3fb1c47b776bd50",
+      "subject": "bench: bind paired NVIDIA boards to actual worker artifact paths",
+      "decision": "INTEGRATED",
+      "integrated_commit": "529dacb0e31ded55ca0dd84d8303b255ee8fe00b"
+    },
+    {
+      "source_commit": "81b783e26b3865c0a5282f8a689f7ba134cd8c9b",
+      "subject": "Report KernelPCA geometry quality without opponent runs",
+      "decision": "INTEGRATED",
+      "integrated_commit": "85c172c0fdeb01ad66c6d7abc1a0589c80d363c0"
+    },
+    {
+      "source_commit": "9582815e6a0fb95625616ea8290658c147fe5c1b",
+      "subject": "bench: score IVF recall at its declared neighbor count",
+      "decision": "INTEGRATED",
+      "integrated_commit": "911d4f082598ef6c55e7e6a2542483e3a23a1752"
+    },
+    {
+      "source_commit": "f24c65f55282c800d40bd55698d3f74cfbb0469b",
+      "subject": "bench: record unsupported FAST low-bit APIs without timing them",
+      "decision": "INTEGRATED",
+      "integrated_commit": "3c46449f389076519886b62033209088ebdfe4a3"
+    },
+    {
+      "source_commit": "28d042ecdb62db6e6c6874e141ca6f45e6ab23a4",
+      "subject": "Check saved neural forwards against untimed Mojo host references",
+      "decision": "INTEGRATED",
+      "integrated_commit": "2289f22b6048a9bfd22f12bc251615e527a0de77"
+    },
+    {
+      "source_commit": "4cecd334e9c81d9da0f6150c907fd6ff975ba83c",
+      "subject": "fix(board): pass declared category bounds to our CategoricalNB",
+      "decision": "INTEGRATED",
+      "integrated_commit": "b9f5c4ba4671f15f675097e1446f7fea1751874c"
+    },
+    {
+      "source_commit": "c387d02d8c79627c1f913f2f1bc7d2fdaea9a09c",
+      "subject": "Retain forward inputs and outputs for untimed quality reevaluation",
+      "decision": "INTEGRATED",
+      "integrated_commit": "98563d145d8b5f374cc074d361b8a6343a3a24d0"
+    },
+    {
+      "source_commit": "95f2960a7b5801027ef463f978e586408302d491",
+      "subject": "ops: renew AMD steward during use and delete after verified idle",
+      "decision": "INTEGRATED",
+      "integrated_commit": "7a3825cdc879f045137a123afc91403adf4e0fe2"
+    },
+    {
+      "source_commit": "eb6ad9c3181202a0d20295bb7a06d3ea2b7f0c2f",
+      "subject": "Compute untimed own-host quality when no opponent output is present",
+      "decision": "INTEGRATED",
+      "integrated_commit": "ab69ea1064dcdc92e9bba9287eb71090b563c033"
+    },
+    {
+      "source_commit": "16ba8db5ad2746b4018813ecbb56c31b14162f4c",
+      "subject": "fix: remove stale schedule import and read embedding mode from its binding",
+      "decision": "INTEGRATED",
+      "integrated_commit": "3d39d2a9ed3382ad13925703e82ad44daed3a8dc"
+    },
+    {
+      "source_commit": "356c38c172e9efb316c0d1e7c8d063367e001289",
+      "subject": "bench: verify explicit frozen source layouts for native GPU evidence",
+      "decision": "INTEGRATED",
+      "integrated_commit": "a95d250aec0adb3d5945d47c49a63097967eef61"
+    },
+    {
+      "source_commit": "7c632cf103182e52878db4ee756cc47b04018547",
+      "subject": "fix(board): hash nested host binding files for reference provenance",
+      "decision": "INTEGRATED",
+      "integrated_commit": "b181489e11603d0fb2e1ebe8cab710b54bd27e89"
+    },
+    {
+      "source_commit": "3bf289df09cdf20cf017932fdd53f959a2300243",
+      "subject": "bench: inventory actual nested host and GPU binding loads",
+      "decision": "INTEGRATED",
+      "integrated_commit": "b19bc6c20807ac3d506a668d2f3122fb0aa7a8fe"
+    },
+    {
+      "source_commit": "b90d51ac913af95e19dd9601be69b40b438959d1",
+      "subject": "Keep FAST bisect buffer slots stable through center readback",
+      "decision": "INTEGRATED",
+      "integrated_commit": "771ae74ad7cc189c3248f82ed2d4b0fc65dd1ff9"
+    },
+    {
+      "source_commit": "b6c296d0fb094f9869ecfe98f4ac28118f61cfcd",
+      "subject": "Restore DART skip probability argument encoding",
+      "decision": "INTEGRATED",
+      "integrated_commit": "d3a47e569b8ce263203e9c9300358c22caac1206"
+    },
+    {
+      "source_commit": "c95121440f6f16219f71a224f5ea6a0d19acef89",
+      "subject": "fix(board): match host reference warmup and sample history",
+      "decision": "INTEGRATED",
+      "integrated_commit": "8a57f40a52c025904dab99cd632f40f122c1945e"
+    },
+    {
+      "source_commit": "91d6960d92616c307c298b53588e7895c8af5d24",
+      "subject": "ops: allow exact dedicated single-GPU campaign lease ownership",
+      "decision": "INTEGRATED",
+      "integrated_commit": "b680b1081cc445775bed2af60f90bd389080b1f8"
+    },
+    {
+      "source_commit": "96231c6ab4864dd012b0c133134854e17adb34b2",
+      "subject": "bench: pin actual worker runtime mappings for native PTX pairing",
+      "decision": "INTEGRATED",
+      "integrated_commit": "75a7af9ee259d9ca50a06bf3c10becbbbd57bfc7"
+    },
+    {
+      "source_commit": "eef739d214c26b3220e5765c7eb4edec3d8f3cad",
+      "subject": "bench: include the core extension in actual worker provenance",
+      "decision": "INTEGRATED",
+      "integrated_commit": "906c4ec91081fe876444f33820fc689105768d8b"
+    },
+    {
+      "source_commit": "6bb93e34728e923d8ad98e949dc7a3ed075aeb09",
+      "subject": "Diagnose Apple FAST LLE with ordered residual GEMM",
+      "decision": "INTEGRATED",
+      "integrated_commit": "5ac38ff44cca2aa397d5caebe377b06bf308f992"
+    },
+    {
+      "source_commit": "48b2373131c6404b021c966647b797e77347375b",
+      "subject": "Extend LLE precision diagnostic to projection products",
+      "decision": "INTEGRATED",
+      "integrated_commit": "6b69ffa2aa9ad74e82c29c64954a642f52fcb263"
+    },
+    {
+      "source_commit": "9fc8e6feca79ff19d315cf072d66e102e1ec3107",
+      "subject": "Scope Apple FAST LLE construction and LU precision to its GPU kit",
+      "decision": "INTEGRATED",
+      "integrated_commit": "f0d5c0eff8438a60cb1135745cf6014e672515d6"
+    },
+    {
+      "source_commit": "f867b50e8f09c493ef8c2c939aded6b3a9f0910e",
+      "subject": "Use valid Mojo parameter name for LLE product output",
+      "decision": "INTEGRATED",
+      "integrated_commit": "e3d1c60807497f5ac963392560fa198e2985f082"
+    },
+    {
+      "source_commit": "98811d173891a1328533d26af3cd1d1b1395f5f2",
+      "subject": "docs: merge GPU performance experiment proposals into IDENTICAL integration",
+      "decision": "ALREADY_PRESENT",
+      "reason": "Performance proposals document is byte-identical to current main; do not duplicate it."
+    }
+  ],
+  "supplemental_fixes": [
+    {
+      "source_commit": "2a3c461406f1c81e8dbf74e3d82d0a6e021a5784",
+      "reason": "Known AMD capture/handoff race must not be reintroduced."
+    },
+    {
+      "source_commit": "b72458e2620e00bec18fe91bdf2b39c75a425d83",
+      "reason": "Preserve explicit user smoke override with artifact guards."
+    },
+    {
+      "source_commit": "f4e64e875",
+      "reason": "Retain own-layer output fields and refuse quality errors; later repair to imported host-quality code."
+    }
+  ],
+  "numerical_review": {
+    "LLE": "Integrate all four commits together: later campaign handoff accepted full f867 series after 6 fits, 12 scope checks and 7 independent array audits. Earlier failing intermediate diagnostic is not the final outcome.",
+    "bisect": "Delay buffer-table pop until center readbacks; exact source matches previously compiled/tested f867.",
+    "DART": "Restore missing scalar skip probability encoding; exact source matches previously tested f867.",
+    "current_block_eigh": "Preserve existing main centered block-eigh change, default OFF. Its GPU qualification remains pending."
+  },
+  "compile_evidence": {
+    "source": "f867b50e8f09c493ef8c2c939aded6b3a9f0910e",
+    "retained_status": "next-freeze/linux-managed-f867/artifacts/build-status.json",
+    "status": "COMPILE_PASS",
+    "scope": "Prior frozen imported numerical changes, not a claim of a new complete-tree build or timing run."
+  },
+  "measurement_policy": "Do not mutate or relabel active frozen campaign jobs; no A/B default promotion in this reconciliation.",
+  "validation": {
+    "status": "PASS",
+    "log": "branch-review/pytest-final.log",
+    "baseline_board_test_failures": 9,
+    "baseline_note": "Old board schema tests omitted explicit opponent opt-in and expected obsolete Apple neural tier support. Updated tests preserve actual current behavior.",
+    "pytest_passed": 244,
+    "subtests_passed": 4,
+    "explicit_smoke_override_checks": 4,
+    "shell_syntax": "PASS",
+    "diff_check": "PASS"
+  }
+}

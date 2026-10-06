@@ -56,6 +56,13 @@ def steward(c,*args,timeout=180):
     return command(c,['bash',c['steward_script'],*args],timeout=timeout)
 
 
+class WorkResumed(Exception):
+    """A job began between the cheap completion probe and capture recheck."""
+    def __init__(self, observed):
+        super().__init__('work resumed during capture admission')
+        self.observed = observed
+
+
 def probe(c,full=False):
     # Credentials live outside remote_out. The inventory code never follows
     # symlinks; capture refuses an ambiguous filesystem tree.
@@ -70,15 +77,16 @@ progress=hashlib.sha256(json.dumps(sorted((str(p.relative_to(root)),p.stat().st_
 done=(root/'DONE').is_file()
 exitfile=root/'cmd.exit'
 result=dict(done=done,shared_queue_busy=pending,progress=progress,deadline=int(guard.read_text().strip()),command_exit=exitfile.read_text().strip() if exitfile.exists() else None)
-if FULL:
-    if not done or pending:raise RuntimeError('work not finished')
+if FULL and done and not pending:
     result['rows']=inventory(root)
 print(json.dumps(result))
 '''
-    script=script.replace('root=Path(ROOT)','root=Path('+repr(c['remote_out'])+')').replace('if FULL:','if '+repr(full)+':')
+    script=script.replace('root=Path(ROOT)','root=Path('+repr(c['remote_out'])+')').replace('if FULL and','if '+repr(full)+' and')
     shell='python3 -c '+shlex.quote(script)
     doc=json.loads(steward(c,'ssh',shell,timeout=1800 if full else 120))
     if doc['deadline']<=time.time():raise ValueError('remote orphan deadline expired')
+    if full and (not doc['done'] or doc['shared_queue_busy']):
+        raise WorkResumed(doc)
     return doc
 
 
@@ -166,6 +174,13 @@ def manage(c,once=False):
                     atomic(statusfile,state);notify(c,local,'TERMINATED','Idle45elapsed; steward down verified provider404');return
             if errors >= 3:
                 steward(c,'extend','90')
+            errors=0
+        except WorkResumed as resumed:
+            # A serialized handoff can remove DONE after our first probe. It is
+            # healthy active work, not an owner/transport failure. In particular
+            # never retain the old idle clock or publish its capture as current.
+            state=dict(status='MANAGING',manager_pid=os.getpid(),droplet_id=c['droplet_id'],owner_id=c['owner_id'],idle_since=None,capture_digest=None,last_probe=resumed.observed,capture_deferred='work resumed',updated_at=time.time())
+            atomic(statusfile,state)
             errors=0
         except Exception as error:
             errors+=1

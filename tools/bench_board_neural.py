@@ -1771,9 +1771,8 @@ def race(args):
             if msg is not None and msg.get("event") == "saved":
                 with np.load(path) as z:
                     outs[arm] = {k: z[k] for k in z.files}
-                if (getattr(args, "keep_outputs", False)
-                        or lane in FORWARD_REFERENCE_LANES or lane == "mlp-train-step"):
-                    # Retain forward outputs and trainer state for independent checks.
+                if getattr(args, "keep_outputs", False) or lane == "mlp-train-step" or lane in FORWARD_REFERENCE_LANES:
+                    # Retain the measured trainer state for independent identity checks.
                     # tools/afn_ab.sh's judge compares two builds' outputs
                     keep = os.path.join(args.out, "%s-%s.outputs.npz" % (tag, arm))
                     os.replace(path, keep)
