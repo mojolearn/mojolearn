@@ -3547,10 +3547,8 @@ def main(argv=None):
     box = box_fingerprint(ctx)
     if artifact_identity:
         box["artifact_identity"] = artifact_identity
-        box["artifact_hardware"] = capture(["nvidia-smi", "--query-gpu=uuid,name,compute_cap,driver_version",
-                                             "--format=csv,noheader,nounits"], timeout=30).strip()
-        if not box["artifact_hardware"] or "\n" in box["artifact_hardware"]:
-            raise SystemExit("bench_board: guarded run requires exactly one physical NVIDIA GPU")
+        box["artifact_hardware"] = _load_tool("bench_board_provenance").hardware_receipt(
+            "cuda" if vendor == "nvidia" else "hip")
         ctx["artifact_hardware"] = box["artifact_hardware"]
     ctx["box"] = box
     ctx["retime"] = args.retime_opponents
