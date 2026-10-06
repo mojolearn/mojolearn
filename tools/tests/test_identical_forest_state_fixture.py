@@ -50,6 +50,43 @@ class ScoredExportTests(unittest.TestCase):
             self.assertEqual(len(json.loads((out/'receipt.json').read_text())['ours']['model_state_hash']),64)
         self.assertEqual(calls,[1])
 
+    def test_real_binary_score_none_metric_is_preserved_without_object_array(self):
+        import sys, tempfile, json
+        from types import SimpleNamespace
+        sys.path.insert(0, str(Path(__file__).parents[1]))
+        path=Path(__file__).parents[2]/'bench/speed/forest_speed_arm.py'
+        spec=importlib.util.spec_from_file_location('forest_score_none', path)
+        f=importlib.util.module_from_spec(spec); spec.loader.exec_module(f)
+        class Model:
+            _cfg={"n_estimators":3}
+            calls=0
+            def fit(self,*args): raise AssertionError('extra fit')
+            def predict_proba(self,X):
+                self.calls+=1
+                return np.array([[.9,.1],[.2,.8]],np.float32)
+            def save(self,path):
+                np.savez(path,**{k:np.array([0,1],np.int32) for k in ('offsets','colid','quesval','left_child','leaves','meta')})
+        X=np.zeros((2,2),np.float32);y=np.array([0,1],np.int64)
+        data=SimpleNamespace(task='binary',X_test=X,y_test=y,_ours_X=X,_ours_y=y,_ours_Xtest=X)
+        arm=SimpleNamespace(name='ours',score=f.spec.score_sklearn_like)
+        model=Model();retained={};f.retain_scored_forest(arm,retained)
+        triples=arm.score(model,data)
+        self.assertIsNone(triples[1][2]);self.assertIsNone(retained['ours'][1][1][2])
+        with tempfile.TemporaryDirectory() as tmp:
+            out=Path(tmp)/'fresh';f.save_scored_forests(out,retained,{'ours'})
+            with np.load(out/'ours/predictions.npz',allow_pickle=False) as saved:
+                self.assertEqual(saved.files,['0:logloss'])
+                np.testing.assert_array_equal(saved['0:logloss'],triples[0][2])
+            receipt=json.loads((out/'receipt.json').read_text())['ours']
+            self.assertEqual([x['metric'] for x in receipt['metrics']],['logloss','auc'])
+            self.assertEqual(receipt['metrics'][1]['value'],triples[1][1])
+        self.assertEqual(model.calls,1)
+        for triples in [[('auc',1.,None)],[('bad',1.,np.array(['not numeric']))],[('bad',1.,np.array([np.nan]))]]:
+            with tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaisesRegex(ValueError,'missing, nonnumeric or nonfinite'):
+                    f.save_scored_forests(Path(tmp)/'fresh',{'ours':(model,triples,data)},{'ours'})
+
+
 class PublicSurfaceTests(unittest.TestCase):
     def test_family_constructor_keywords(self):
         import ast

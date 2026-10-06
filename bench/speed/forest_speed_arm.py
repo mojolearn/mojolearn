@@ -1029,7 +1029,7 @@ def retain_scored_forest(arm, retained):
     original = arm.score
     def score(model, data):
         triples = original(model, data)
-        retained[arm.name] = (model, [(metric, value, np.asarray(pred).copy())
+        retained[arm.name] = (model, [(metric, value, None if pred is None else np.asarray(pred).copy())
                                      for metric, value, pred in triples], data)
         return triples
     arm.score = score
@@ -1055,9 +1055,15 @@ def save_scored_forests(directory, retained, live_names):
         required = {"offsets", "colid", "quesval", "left_child", "leaves", "meta"}
         if not required <= state.keys():
             raise ValueError("incomplete forest model export")
-        predictions = {str(i) + ":" + metric: pred for i, (metric, _, pred) in enumerate(triples)}
-        if not predictions or any(not np.isfinite(p).all() for p in predictions.values()):
-            raise ValueError("missing or nonfinite scored predictions")
+        # Binary scorer emits (logloss, value, vector) and (auc, value, None):
+        # None means the metric shares the previous prediction vector, not an
+        # object-valued prediction. Preserve both metrics, export only vectors.
+        # This fixes a post-timing export refusal; the scored fit is unchanged.
+        predictions = {str(i) + ":" + metric: pred
+                       for i, (metric, _, pred) in enumerate(triples) if pred is not None}
+        if not predictions or any(p.dtype.kind not in "biuf" or not np.isfinite(p).all()
+                                  for p in predictions.values()):
+            raise ValueError("missing, nonnumeric or nonfinite scored predictions")
         np.savez(folder / "predictions.npz", **predictions)
         actual_inputs = {"X_train": np.asarray(data._ours_X), "y_train": np.asarray(data._ours_y),
                          "X_test": np.asarray(data._ours_Xtest), "y_test": np.asarray(data.y_test)}
