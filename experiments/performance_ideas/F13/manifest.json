@@ -11,7 +11,8 @@
     "core/forest_inference.mojo",
     "experiments/performance_ideas/F13/caller.py",
     "xtrees/shap_device.mojo",
-    "bindings/_mojolearn_trees.mojo"
+    "bindings/_mojolearn_trees.mojo",
+    "bindings/_mojolearn_x_trees.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_FOREST_FAST_SHARED_ROWS"
@@ -64,7 +65,7 @@
     "packed-layout": []
   },
   "variant_bindings": {
-    "shap": "trees"
+    "shap": "x_trees"
   },
   "variant_prerequisite_bindings": {
     "shap": [
@@ -87,5 +88,6 @@
     "packed-layout": [
       "MOJOLEARN_FOREST_SEPARATE_NODES"
     ]
-  }
+  },
+  "measurement_repair": "2026-10-06 actual TreeExplainer calls x_trees; build only affected A/B x_trees artifacts with its own row-pair audit, reuse RF/core prerequisites"
 }
