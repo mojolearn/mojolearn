@@ -87,5 +87,8 @@
     "MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF=1",
     "--define",
     "MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
