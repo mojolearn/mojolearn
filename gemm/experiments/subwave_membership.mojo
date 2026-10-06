@@ -11,7 +11,7 @@ from std.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceContext
 
 
-def membership_kernel[PAIRED: Bool](out: MutPointer[UInt32,MutAnyOrigin],active: Int32,groups: Int32):
+def membership_kernel[PAIRED: Bool](output: MutPointer[UInt32,MutAnyOrigin],active: Int32,groups: Int32):
     var tid = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     var width = WARP_SIZE
     comptime if PAIRED:
@@ -26,7 +26,7 @@ def membership_kernel[PAIRED: Bool](out: MutPointer[UInt32,MutAnyOrigin],active:
         value += shuffle_xor(value,UInt32(offset))
         offset *= 2
     if group < Int(groups) and lane == 0:
-        out.unsafe_store(group,value)
+        output.unsafe_store(group,value)
 
 
 def main() raises:
