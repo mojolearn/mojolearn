@@ -9,33 +9,35 @@
     "apple",
     "host"
   ],
-  "status": "blocked_toolchain",
+  "status": "build_passed",
   "implementation_paths": [
     "gemm/experiments/profile_check.mojo",
-    "gemm/checks/gemm_identical.mojo"
+    "gemm/checks/gemm_identical.mojo",
+    "gemm/experiments/profile_campaign.py"
   ],
   "candidate_defines": [
     "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1"
   ],
   "baseline_defines": [],
   "build_argv": [
-    "pixi",
-    "run",
-    "mojo",
-    "build",
-    "-j1",
-    "-D",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "-I",
-    "{repo}",
-    "-D",
-    "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1",
-    "{repo}/gemm/experiments/profile_check.mojo",
-    "-o",
-    "{output}"
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/I01/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
   ],
   "run_argv": [
-    "{output}"
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/I01/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
   ],
   "validation_paths": [
     "gemm/checks/gemm_step_arms_check.mojo",
@@ -45,8 +47,20 @@
   "quality_gates": [
     "same-version NVIDIA/AMD/Apple/host output bits",
     "exact intermediate outputs and poison control",
-    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower"
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Native harness instantiates explicit control and candidate; all compared cells and poison/failure gates required"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
-  "blocker": "Mojo 1.0.0 front-end accepted source; local executable link cannot locate CompilerRT. I01-build.log retained; no device qualification."
+  "blocker": null,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/I01/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ],
+  "build_uses_compile_slot": true
 }
