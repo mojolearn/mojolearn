@@ -36,8 +36,11 @@ def main() raises:
         raise Error("invalid shape or orientation")
     comptime mask = (
         Int(is_defined["MOJOLEARN_GEMM_ONE_PAGE"]())
+        # I01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         + 2 * Int(is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]())
+        # I01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         + 4 * Int(is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"]())
+        # I01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         + 8 * Int(is_defined["MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY"]())
         + 16 * Int(is_defined["MOJOLEARN_GEMM_KPACK_RPT4"]())
     )

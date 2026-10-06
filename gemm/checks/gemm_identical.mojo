@@ -6402,10 +6402,13 @@ comptime GEMM_KSPLIT_KS = 16
 # Final capture bdd685793e39f274a99bbf7319fbd1263cb9169908645eeb39d40a73403af41b.
 comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime GEMM_KSPLIT_SLACK = (
+    # I01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     2 if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]()) else (
+        # I01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         8 if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"]()) else 4
     )
 )
+# I01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
 comptime IDN_GEMM_GROUP_TILES_BODY = _IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY"]()
 #: `S` the `ksplit` TRIAL arm reads (kernel matrix SCHEDULING row, 2591;
 #: 2595 moved it to `lib_gemm_block_parallelism_trial_for`, which is the
