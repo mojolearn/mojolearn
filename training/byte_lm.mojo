@@ -2005,9 +2005,12 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
     # B2,L32,d_model32,two blocks). Driver selects noshadow/OOP Adam without
     # fault injection, admitting this distinct status path. One same-process
     # warmup/score; accepted identity reused, no additional validation.
-    # AMD matching timing and full application qualification remain pending;
-    # this single representative fixture keeps live status default OFF.
-    # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json, I10.
+    # Matching MI325X3.066/3.087ms gives live/base0.993 (near-neutral small gain).
+    # Both paired receipts share frozen source, per-vendor machine and case;
+    # full application qualification remains pending. This single synthetic
+    # step does not justify promotion: live status stays default OFF.
+    # Evidence: experiments/performance_ideas/measurements/20261006/index.json,
+    # I10 AMD/NVIDIA; retained per-arm binary hashes and raw capture paths.
     comptime if is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]():
         # This mechanism changes scheduling only on the existing admitted
         # OOP Adam path. Fault builds keep the required post-fault scan;

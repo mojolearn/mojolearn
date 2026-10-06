@@ -41,7 +41,15 @@ comptime _ID_ONLY_UNSTABLE = is_defined["MOJOLEARN_EMB_SABOTAGE_SORT_KEY_ID_ONLY
 # (or MOJOLEARN_IDN_ALL_OFF) restores the bitonic network.
 comptime EMB_RADIX_SORT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # I11 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+    # I11 sourcecbcc8dcd3303 (2026-10-06) scoped WINNER on both vendors:
+    # radix/baseline ratios AMD0.920/0.958, NVIDIA0.675/0.489. Rows/vocab/width
+    # 65536/4096/64 and131071/8192/32; AMD0.705/0.766 and0.713/0.744ms,
+    # NVIDIA0.439/0.651 and0.574/1.173ms. Actual PLAN_SORT backward plus
+    # gradient readback, one same-process warmup/score; identity evidence reused.
+    # Synthetic caller scope, not full training workloads. Retain the already
+    # enabled default; these measurements do not constitute a new promotion.
+    # Evidence: experiments/performance_ideas/measurements/20261006/index.json,
+    # I11 AMD/NVIDIA same-source/same-machine pairs with exact binary hashes.
     and not (is_defined["MOJOLEARN_IDN_EMB_RADIX_SORT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
     and not _REVERSE_TIES
     and not _ID_ONLY_UNSTABLE
