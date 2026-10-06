@@ -6,6 +6,8 @@
   python tools/identical_speed_ab.py build --vendor nvidia --arch sm_89 --out /path/build
   python tools/identical_speed_ab.py run --build /path/build --out /path/results
   python tools/identical_speed_ab.py run --build /path/apple-build --out /path/id --identity-only
+  python tools/identical_speed_ab.py run --build /path/build --out /path/id --identity-only --identity-shapes light
+  python tools/identical_speed_ab.py compare-identity --left /path/apple/id/results.json --right /path/nvidia/id/results.json --out /path/comparison.json
 
 This is synthetic kernel screening, not a model speed claim or a default-flip
 gate. One excluded warmup and one measured sample per arm, per owner policy.
@@ -39,6 +41,73 @@ SCREENS = [dict(name=f"screen-{m}-{n}-{k}-{op}", m=m, n=n, k=k,
                            (2048, 768, 1024), (2049, 769, 1025),
                            (512, 256, 4096), (513, 257, 4097)]
            for op in range(3)]
+
+
+def identity_cases(suite):
+    """Light identity includes real dispatch paths, with every timer disabled.
+
+    Tiny fixtures alone take the same fallback tile in several experiment
+    arms. Add an aligned tile, a ragged tile and a long reduction, each in
+    NN/NT/TN. These are test inputs, never dispatch thresholds. No model fit,
+    dataset download, warmup/sample timing or performance verdict is involved.
+    """
+    if suite == "tiny":
+        return CHECKS
+    if suite != "light":
+        raise ValueError("unknown identity suite")
+    shapes = {(1024, 512, 768), (1025, 513, 769), (512, 256, 4096)}
+    return CHECKS + [dict(c, name=c["name"].replace("screen-", "identity-"), timed=0)
+                     for c in SCREENS if (c["m"], c["n"], c["k"]) in shapes]
+
+
+def compare_identity(left, right):
+    """Compare complete recorded output fingerprints; fail on missing coverage."""
+    expected = None
+    indexed = []
+    for report in (left, right):
+        if report.get("status") != "PASS" or report.get("scope") != "identity-only":
+            raise ValueError("both reports must be complete, untimed identity runs")
+        cases = identity_cases(report.get("identity_shapes", "tiny"))
+        fixtures = {c["name"]: c for c in cases}
+        profiles = report["build"]["profiles"]
+        required = {(name, c["name"]) for name in profiles for c in cases}
+        if report["expected_pairs"] != len(required) or len(report["pairs"]) != len(required):
+            raise ValueError("incomplete identity coverage")
+        rows = {}
+        for pair in report["pairs"]:
+            key = (pair["profile"], pair["case"]["name"])
+            if fixtures.get(key[1]) != pair["case"]:
+                raise ValueError("identity fixture does not match the declared suite")
+            if key in rows or pair["bits"] != "MATCH" or pair["case"]["timed"] != 0:
+                raise ValueError("duplicate, mismatched or timed identity case")
+            if set(pair["arms"]) != {"baseline", pair["profile"]}:
+                raise ValueError("missing baseline or candidate")
+            if any(row["ns"] != 0 for row in pair["arms"].values()):
+                raise ValueError("identity report contains timings")
+            rows[key] = pair
+        if set(rows) != required or (expected is not None and required != expected):
+            raise ValueError("identity case sets differ")
+        expected = required
+        indexed.append(rows)
+    if left["build"]["commit"] != right["build"]["commit"]:
+        raise ValueError("compiled source commits differ")
+    if left["build"]["vendor"] == right["build"]["vendor"]:
+        raise ValueError("cross-vendor identity requires different vendors")
+    outputs = 0
+    for key in expected:
+        a, b = (rows[key] for rows in indexed)
+        if a["case"] != b["case"]:
+            raise ValueError("fixture definitions differ")
+        for arm in a["arms"]:
+            x, y = a["arms"][arm], b["arms"][arm]
+            if x["hash"] != y["hash"] or x["mask"] != y["mask"]:
+                raise ValueError(f"cross-vendor output mismatch: {key} {arm}")
+            outputs += 1
+    return {"status": "PASS", "compiled_source": left["build"]["commit"],
+            "vendors": [left["build"]["vendor"], right["build"]["vendor"]],
+            "pairs": len(expected), "output_fingerprints_compared": outputs,
+            "timed_samples": 0, "method": "FNV-1a64 over every output byte; tiny cases also compare every word to flat plan",
+            "scope": "lightweight GEMM identity only; not full model or arbitrary toggle combinations"}
 
 
 def sha(path):
@@ -173,10 +242,13 @@ def run(args):
             raise ValueError(f"unverified binary: {name}")
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    cases = CHECKS if args.identity_only else CHECKS + SCREENS
+    cases = identity_cases(args.identity_shapes) if args.identity_only else CHECKS + SCREENS
     report = {"schema": 1, "status": "RUNNING", "build": manifest,
               "scope": "identity-only" if args.identity_only else "synthetic-kernel-screen",
-              "samples_per_arm": 1, "expected_pairs": len(cases) * len(manifest["profiles"]),
+              "samples_per_arm": 0 if args.identity_only else 1,
+              "identity_shapes": args.identity_shapes if args.identity_only else None,
+              "runner_sha256": sha(__file__),
+              "expected_pairs": len(cases) * len(manifest["profiles"]),
               "pairs": [], "failure": None}
     write_json(out / "results.json", report)
     try:
@@ -228,7 +300,12 @@ def main():
     p.add_argument("--build", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--identity-only", action="store_true")
+    p.add_argument("--identity-shapes", choices=("tiny", "light"), default="tiny")
     p.add_argument("--timeout", type=int, default=300)
+    p = subs.add_parser("compare-identity")
+    p.add_argument("--left", type=Path, required=True)
+    p.add_argument("--right", type=Path, required=True)
+    p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "plan":
         print(json.dumps({"base": git("rev-parse", "HEAD"), "profiles": selected(None),
@@ -236,6 +313,11 @@ def main():
                           "status": "UNMEASURED"}, indent=2))
     elif args.command == "build":
         build(args)
+    elif args.command == "compare-identity":
+        report = compare_identity(json.loads(args.left.read_text()), json.loads(args.right.read_text()))
+        report["reports"] = [{"path": str(p), "sha256": sha(p)} for p in (args.left, args.right)]
+        write_json(args.out, report)
+        print(json.dumps(report))
     else:
         run(args)
 

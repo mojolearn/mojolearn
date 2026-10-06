@@ -749,7 +749,8 @@ def _cpu_model():
 
 def _host_info():
     info = {"cpu_model": _cpu_model(), "os_cpu_count": os.cpu_count(),
-            "thread_env": {k: os.environ.get(k) for k in THREAD_ENV}}
+            "thread_env": {k: os.environ.get(k) for k in _cq.INHERITED_CAPS},
+            "cpu_resource_policy": os.environ.get("MOJOLEARN_BENCH_CPU_POLICY", "unrecorded")}
     try:
         info["sched_affinity_cpus"] = len(os.sched_getaffinity(0))
     except (AttributeError, OSError):

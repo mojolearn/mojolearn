@@ -3168,6 +3168,11 @@ def _mfma_run(
     # 2026-10-05 one-page screen: NVIDIA B/A 1.013586 (slower), AMD
     # 0.991303 (single-sample near-neutral); not a combined timing win.
     # Exact cases retained in experiments/identical_speed/results/20261005/.
+    # EXPERIMENT: default OFF; enable only with MOJOLEARN_GEMM_ONE_PAGE.
+    # NEVER TESTED by this campaign: combinations with the other experiments.
+    # NOT PERFORMANCE-QUALIFIED: the recorded checks do not enable this flag.
+    # Individual-arm history is retained above. See the light-identity record
+    # beside GEMM_KSPLIT_SLACK for the tested cases and remaining limits.
     # A02 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     comptime PAGES = 1 if is_defined["MOJOLEARN_GEMM_ONE_PAGE"]() else lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
     var part = contract_partition(k)
@@ -6405,6 +6410,21 @@ comptime GEMM_KSPLIT_KS = 16
 # Exact shapes/old retained baseline origins are recorded alongside results:
 # experiments/identical_speed/results/20261005/nvidia-integrated-resume/.
 # Final capture bdd685793e39f274a99bbf7319fbd1263cb9169908645eeb39d40a73403af41b.
+# EXPERIMENTS: SLACK_2, SLACK_8 and TILES_BODY remain default OFF. A normal
+# build keeps slack 4 and disables the body-tile override. NEVER TESTED by
+# this campaign: combined defines, including ONE_PAGE/KPACK_RPT4 combinations.
+# NOT PERFORMANCE-QUALIFIED: identity checks alone never enable these flags.
+# Individual-arm measurements above are historical; no new measurement is
+# required to keep these experiments available with their defaults OFF.
+# Light identity, 2026-10-05: Apple M4 and NVIDIA RTX 4090 each PASS 135/135
+# baseline/candidate pairs (27 fixtures x 5 individual arms). All 270 output
+# fingerprints MATCH across vendors (FNV-1a64 over every output byte); the
+# 18 tiny fixtures also compare every word to the flat reference plan.
+# Frozen a006da73d binaries were reused: the complete local Mojo import
+# closure has only comment changes through this record; toolchain unchanged.
+# ZERO timed samples. This checks GEMM only, not full models or combined
+# defines. Apple checks identity; these scheduling changes target NVIDIA/AMD.
+# Evidence: experiments/identical_speed/results/20261005/light-identity/.
 comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime GEMM_KSPLIT_SLACK = (
     # I01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
@@ -7832,6 +7852,9 @@ comptime GEMM_KPACK_PAGE_GUARD_BYTES = 1024
 # 2026-10-05 packed64 screen: NVIDIA B/A 1.015291 (~1.53% slower),
 # all bits matched. No timing win; retain explicit arm, do not enable default.
 # Raw per-case evidence: experiments/identical_speed/results/20261005/nvidia-screen.json.
+# EXPERIMENT: KPACK_RPT4 is default OFF and NOT PERFORMANCE-QUALIFIED.
+# NEVER TESTED by this campaign: combined scheduling toggles.
+# Individual-arm evidence is recorded above.
 # N01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
 comptime GEMM_KPACK_RPT = TUNED_RPT if is_defined["MOJOLEARN_GEMM_KPACK_RPT4"]() else TUNED_RPT * 2
 comptime GEMM_KPACK_CPT = TUNED_CPT if (

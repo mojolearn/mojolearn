@@ -82,6 +82,21 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 - A promoted source change starts a new freeze; never mutate binaries or settings inside an active frozen run. Repair and
   rerun only affected cells, preserving valid completed evidence. Do not repeat already decided experiments unchanged.
 
+## Full-machine CPU race resources (owner, 2026-10-05)
+
+- Every CPU race arm gets the full machine allocation: opponents and our CPU arms wherever measured.
+  No inherited laptop/test caps or `MOJOLEARN_BENCH_THREADS=1` overrides in a race. Use all-core
+  estimator settings where supported and run measurement arms serially; do not introduce competing jobs.
+- On dedicated Apple machines, leave CPU libraries unrestricted. On rented Linux machines respect the
+  actual cgroup allocation, not the host's larger visible CPU count. Do not claim all cores are busy:
+  serial algorithms, library defaults and nested parallelism may legitimately use fewer threads.
+- Preserve algorithm semantics (including seeded UMAP) and documented nested-pool settings (implicit's
+  BLAS=1 inside its parallel solver). Do not remove correctness settings just to raise utilization.
+- Record worker resource policy, thread environment and effective pools with measurement evidence.
+  A controller's environment alone does not prove an old worker's thread count. Keep unproven historical
+  resource claims explicit; do not label every previous CPU result as one-core without worker evidence.
+- These resource rules do not expand the selected race arms or alter another session's active frozen run.
+
 ## No Python in the runtime
 
 Python is good, and the right tool, for the glue layer: the public API, connecting to external code (NumPy, scikit-learn

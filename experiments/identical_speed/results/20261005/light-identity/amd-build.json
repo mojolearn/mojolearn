@@ -1,0 +1,140 @@
+{
+  "arch": "gfx942",
+  "arms": {
+    "baseline": {
+      "command": [
+        "/root/prepared-speed-ab/mojo-wrapper.py",
+        "build",
+        "-j",
+        "1",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "--target-accelerator",
+        "gfx942",
+        "-D",
+        "MOJOLEARN_COLUMN_AMD",
+        "-I",
+        "/root/mojolearn-speed-ab",
+        "/root/mojolearn-speed-ab/bench/gemm_schedule_ab.mojo",
+        "-o",
+        "/root/campaign-results/amd/baseline"
+      ],
+      "exit_code": 0,
+      "file": "baseline",
+      "mask": 0,
+      "sha256": "80f948865aa211ff715f2092d984ee6a66efdc141350e4f09ef6083c9339abfa"
+    },
+    "group-slack2": {
+      "command": [
+        "/root/prepared-speed-ab/mojo-wrapper.py",
+        "build",
+        "-j",
+        "1",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "--target-accelerator",
+        "gfx942",
+        "-D",
+        "MOJOLEARN_COLUMN_AMD",
+        "-D",
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1",
+        "-I",
+        "/root/mojolearn-speed-ab",
+        "/root/mojolearn-speed-ab/bench/gemm_schedule_ab.mojo",
+        "-o",
+        "/root/campaign-results/amd/group-slack2"
+      ],
+      "exit_code": 0,
+      "file": "group-slack2",
+      "mask": 2,
+      "sha256": "4c0491133feb72493af241c54163d794b50b4046ca77d406dfffb0de0b1d76b8"
+    },
+    "group-slack8": {
+      "command": [
+        "/root/prepared-speed-ab/mojo-wrapper.py",
+        "build",
+        "-j",
+        "1",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "--target-accelerator",
+        "gfx942",
+        "-D",
+        "MOJOLEARN_COLUMN_AMD",
+        "-D",
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8=1",
+        "-I",
+        "/root/mojolearn-speed-ab",
+        "/root/mojolearn-speed-ab/bench/gemm_schedule_ab.mojo",
+        "-o",
+        "/root/campaign-results/amd/group-slack8"
+      ],
+      "exit_code": 0,
+      "file": "group-slack8",
+      "mask": 4,
+      "sha256": "6616fe16c86289fcb591249871fafd23f6749d7f61cffc1532970ee88fadf962"
+    },
+    "one-page": {
+      "command": [
+        "/root/prepared-speed-ab/mojo-wrapper.py",
+        "build",
+        "-j",
+        "1",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "--target-accelerator",
+        "gfx942",
+        "-D",
+        "MOJOLEARN_COLUMN_AMD",
+        "-D",
+        "MOJOLEARN_GEMM_ONE_PAGE=1",
+        "-I",
+        "/root/mojolearn-speed-ab",
+        "/root/mojolearn-speed-ab/bench/gemm_schedule_ab.mojo",
+        "-o",
+        "/root/campaign-results/amd/one-page"
+      ],
+      "exit_code": 0,
+      "file": "one-page",
+      "mask": 1,
+      "sha256": "32a868d1f244fd1389c5f2411b61c4041f7a85911e0ed12818051a3e1d7fbdf9"
+    }
+  },
+  "commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "host": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+  "host_machine": "x86_64",
+  "host_system": "Linux",
+  "profiles": {
+    "group-slack2": {
+      "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2",
+      "hypothesis": "Coarser aligned leaf groups reduce workspace and fold traffic, at the cost of fewer blocks.",
+      "mask": 2,
+      "vendors": [
+        "nvidia",
+        "amd"
+      ]
+    },
+    "group-slack8": {
+      "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8",
+      "hypothesis": "Finer aligned leaf groups expose more parallelism, at the cost of workspace and fold traffic.",
+      "mask": 4,
+      "vendors": [
+        "nvidia",
+        "amd"
+      ]
+    },
+    "one-page": {
+      "define": "MOJOLEARN_GEMM_ONE_PAGE",
+      "hypothesis": "Lower shared-memory use can admit more resident blocks; loses double-buffer prefetch.",
+      "mask": 1,
+      "vendors": [
+        "nvidia",
+        "amd"
+      ]
+    }
+  },
+  "schema": 1,
+  "status": "COMPILE_PASS",
+  "vendor": "amd"
+}

@@ -1,30 +1,47 @@
-"""Thread caps for board workers on a cgroup CPU quota. Stdlib only: the board controller imports it under a
-system python that has no numpy."""
+"""Full-allocation CPU resources for race workers (stdlib only).
+
+Race workers must not inherit laptop/check-only thread caps. A real Linux cgroup
+quota is the allocation, not a benchmark handicap. Libraries choose their normal
+parallelism on unrestricted machines; this does not make serial algorithms parallel.
+"""
 import os
 
 THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
-              "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
+              "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS",
+              "GOTO_NUM_THREADS", "NUMBA_NUM_THREADS")
+INHERITED_CAPS = THREAD_ENV + ("OMP_THREAD_LIMIT", "NUMEXPR_MAX_THREADS",
+                              "LOKY_MAX_CPU_COUNT", "MOJOLEARN_BENCH_THREADS",
+                              "MOJOLEARN_CPU_THREADS")
 
 
 def cpu_quota_threads():
-    """The CPU count a cgroup quota grants when it is below the visible count (a RunPod pod shows 128 CPUs on a
-    13.6-CPU quota): there every thread pool sized from os.cpu_count() is throttled. MOJOLEARN_BENCH_THREADS
-    overrides. None when unset and no quota binds (the box's defaults stand)."""
-    v = os.environ.get("MOJOLEARN_BENCH_THREADS", "").strip()
-    if v:
-        return int(v)
+    """Return a binding cgroup v2 CPU allocation; no user thread-count override.
+
+    The former MOJOLEARN_BENCH_THREADS override could silently import a one-core
+    diagnostic setting into races. Owner policy (2026-10-05): races always get
+    the full allocation, including opponents and our own CPU workers.
+    """
     try:
-        q, p = open("/sys/fs/cgroup/cpu.max").read().split()[:2]
-        n = int(int(q) / int(p)) if q != "max" else None
-    except (OSError, ValueError):
+        with open("/sys/fs/cgroup/cpu.max") as f:
+            q, p = f.read().split()[:2]
+        n = max(1, int(int(q) / int(p))) if q != "max" else None
+    except (OSError, ValueError, ZeroDivisionError):
         return None
     return n if n and n < (os.cpu_count() or n + 1) else None
 
 
 def apply_cpu_quota(env):
-    """After a worker env drops inherited thread caps: cap every pool at the cgroup quota (cpu_quota_threads)."""
+    """Remove diagnostic caps, then respect only the actual machine allocation.
+
+    Apply after caller overrides too. Algorithm-specific nested-pool settings
+    (implicit's single-thread BLAS inside its parallel solver) are applied by
+    their own adapters; they are not a one-core allocation for the whole arm.
+    """
+    for key in INHERITED_CAPS:
+        env.pop(key, None)
     n = cpu_quota_threads()
     if n:
-        for k in THREAD_ENV + ("MOJOLEARN_CPU_THREADS",):
-            env[k] = str(n)
+        for key in THREAD_ENV + ("MOJOLEARN_CPU_THREADS",):
+            env[key] = str(n)
+    env["MOJOLEARN_BENCH_CPU_POLICY"] = "full-allocation"
     return env
