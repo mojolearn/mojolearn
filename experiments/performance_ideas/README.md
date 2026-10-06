@@ -5,6 +5,10 @@ This directory implements the cards in
 Each card has its own source changes and manifest. Candidates remain opt-in;
 source availability and a successful build do not establish a performance win.
 
+See the [implementation ledger](IMPLEMENTATION_STATUS.md) for individual source
+commits and remaining sub-arms, and [Apple FAST coverage](apple_fast/coverage.md)
+for the public callers and transport dependency attestations.
+
 | Cards | Numeric mode | Qualification targets |
 | --- | --- | --- |
 | I01–I24 | IDENTICAL | NVIDIA and AMD performance; NVIDIA, AMD, Apple and host identity |

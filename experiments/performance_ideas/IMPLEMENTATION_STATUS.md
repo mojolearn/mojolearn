@@ -19,7 +19,7 @@ correctness gates, and completion timing contract. Existing scheduling ideas
 are implemented as campaigns rather than copied production kernels. New paths
 include bounded scratch and state reuse, GQA tile sharing, live optimizer
 status, speculative canonical solver trials, compact graph/IVF tasks, retained
-forest histograms, ragged float sorting, component batching, factor reuse,
+forest histograms, ragged float sorting, component batching, factor and TSQR trailing-strip reuse, persistent bounded KDE scratch,
 and compensated Apple products and likelihood gradients.
 
 `source_ready` means the source and recipe exist. `build_passed` records a
@@ -31,7 +31,8 @@ comparison, or performance win is inferred from a successful compiler exit.
 ## Card inventory
 
 The first source commit is shown for review; follow-up commits contain expanded
-caller checks and fixes. Read a card's scope alongside its manifest.
+caller checks and fixes. Read a card's scope alongside its manifest. The [Apple FAST coverage](apple_fast/coverage.md)
+records the real callers, independent oracles, dependencies and remaining sub-arms.
 
 | Card | Mode | First source commit | Recipe status | Scope or caller |
 | --- | --- | --- | --- | --- |
@@ -54,13 +55,13 @@ caller checks and fixes. Read a card's scope alongside its manifest.
 | [I17](I17/manifest.json) | IDENTICAL | `efa812db6` | source_ready | [scope](I17/coverage.md) |
 | [I18](I18/manifest.json) | IDENTICAL | `673eeb28c` | source_ready | [scope](I18/coverage.md) |
 | [I19](I19/manifest.json) | IDENTICAL | `c3fc4818d` | source_ready | [scope](I19/coverage.md) |
-| [I20](I20/manifest.json) | IDENTICAL | `164d32cb3` | source_ready | [scope](I20/coverage.md) |
+| [I20](I20/manifest.json) | IDENTICAL | `164d32cb3` | build_passed | [scope](I20/coverage.md) |
 | [I21](I21/manifest.json) | IDENTICAL | `bce4f9a3a` | source_ready | [scope](I21/coverage.md) |
 | [I22](I22/manifest.json) | IDENTICAL | `0a20cc4c2` | source_ready | [scope](I22/coverage.md) |
 | [I23](I23/manifest.json) | IDENTICAL | `ec616906a` | source_ready | [scope](I23/coverage.md) |
 | [I24](I24/manifest.json) | IDENTICAL | `d08a5beec` | source_ready | [scope](I24/coverage.md) |
 | [A01](A01/manifest.json) | IDENTICAL | `856db1e30` | source_ready | manifest |
-| [A02](A02/manifest.json) | IDENTICAL | `d986c950d` | source_ready | manifest |
+| [A02](A02/manifest.json) | IDENTICAL | `d986c950d` | build_passed | manifest |
 | [A03](A03/manifest.json) | IDENTICAL | `c0639fdce` | source_ready | manifest |
 | [A04](A04/manifest.json) | IDENTICAL | `cd0f72238` | build_passed | manifest |
 | [A05](A05/manifest.json) | IDENTICAL | `69d10e5ec` | source_ready | manifest |
@@ -71,7 +72,7 @@ caller checks and fixes. Read a card's scope alongside its manifest.
 | [N02](N02/manifest.json) | IDENTICAL | `b697705b2` | build_passed | manifest |
 | [N03](N03/manifest.json) | IDENTICAL | `598815aec` | build_passed | manifest |
 | [N04](N04/manifest.json) | IDENTICAL | `956a06c91` | source_ready | manifest |
-| [N05](N05/manifest.json) | IDENTICAL | `354893b1e` | source_ready | manifest |
+| [N05](N05/manifest.json) | IDENTICAL | `354893b1e` | build_passed | manifest |
 | [N06](N06/manifest.json) | IDENTICAL | `b1f07842d` | build_passed | manifest |
 | [N07](N07/manifest.json) | IDENTICAL | `23c1574b6` | build_passed | manifest |
 | [N08](N08/manifest.json) | IDENTICAL | `7138c44f8` | build_passed | manifest |
@@ -102,8 +103,8 @@ The individual IDENTICAL coverage files explicitly identify original-card
 sub-arms that are not implemented by the current candidate. These include
 new versioned scan/reduction profiles (I09, I22, I23), direct SGD OVR and shared
 folds (I12), integrated geometric coarse-candidate certification (I15),
-additional frontier residency (I17), multi-tree/weighted histogram algebra
-(I18), all data-preparation consumers (I19), centered GMM tiles (I21), and
+additional model-fragment residency (I17), multi-tree/weighted histogram algebra
+(I18), remaining data-preparation consumers beyond quantiles (I19), centered GMM tiles (I21), and
 broader metric/preprocessing pass fusion (I24). They must not be represented
 as completed merely because their card has an executable experiment.
 
