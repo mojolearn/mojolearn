@@ -60,3 +60,28 @@ The source checkout must already match the reviewed SHA, be clean, and include e
 Root stages an artifact directory only after `manifest.status == OK` and every arm, prerequisite and native-check file hash matches. M3 runs `pair.py --idea F14 --variant ann --arms <staged-arms> --output <new-capture-dir>` on the same frozen source. Existing M2/M3 queues and staging only; no lane SSH or new machines. F16 additionally runs its attested independent native checker before public captures.
 
 M3 orchestration validates the environment/hardware without importing mojolearn; only isolated captures load the product. Use the existing test environment (`pixi run -e test python`) or an already supported oracle environment for M3. Python assertions must remain enabled. ANN candidate-count equality is an explicit cross-arm semantic field gate. M3's selected Python must have NumPy available; these harnesses do not install it or import PyTorch. Source-package isolation must retain the attested core and required secondary bindings (for example training for Mamba/normalization, x_decomp for LLE, RF for SHAP). A missing dependency, non-FAST/non-Metal binding, caller exception, wrong variant, hash/source mismatch or native-oracle failure stops the run and retains its exit/log. `pair.py` quality PASS only admits the captured caller comparison; repeated timing, peak device memory and strongest-opponent admission remain separate gates.
+
+## Static caller and queued package audit
+
+Reviewed the F01–F20 public fixture calls against the Python source on this experiment branch. This is a source audit and Python syntax check; it does not establish GPU execution, task quality or performance. The common fixture reads every returned scalar/array before ending its timer. Constructor `numeric_mode` keywords supplied through `NumericModeMixin` were checked against its wrapper rather than only the underlying constructor signature.
+
+| Cards | API and result contract inspected |
+| --- | --- |
+| F01, F02, F11 | PCA fitted singular values/noise/components and transform/inverse shapes; LU tuple and solve; Cholesky `L_`, `info_`, `logdet_`; `lstsq` four-result tuple; randomized SVD three-result tuple; LLE fitted embedding |
+| F03, F08 | LanguageModelConfig positional fields and registry offsets; trainer train_step dict, evaluate float, state export/load, close/reopen, logits shape |
+| F04, F19 | Resample multiple arrays produce a list, wrapped as a tuple for complete consumption; one array produces one array; indices, permutation and weighted refusal |
+| F05 | Native qn_fit and decision-function argument layouts and existing softmax quality case identifiers |
+| F06 | MCD/elliptic fitted location, covariance and support arrays and random_state/numeric_mode constructor parameters |
+| F07 | Transformer weights/head parameters, allocate_state/forward, full block Float64 oracle and GQA K/V expansion |
+| F09, F20 | CE float or loss/gradient pair; linear backward input/weight pair; chunked head loss/input/weight triple; SGD parameter-list constructor and gradient-list step; LayerNorm backward and affine gradient fields |
+| F10 | Corpus input/reference layouts, Mamba weight constructors and dt_limit availability, carried forward/step, named zero-state backward dictionary, actual SGD update arguments; every family has length-four training cases |
+| F12 | GradientBoosting loss, grow_policy, categorical/one-hot constructor parameters and fit group_id; prediction and loss_curve layouts |
+| F13 | RandomForest fitted prediction/probability; TreeExplainer background and expected_value; multiclass SHAP `(rows, features, classes)` fold |
+| F14 | Exact NearestNeighbors fit/kneighbors distance/index pair; approximate ANN remains a separate root-owned fixture and admission |
+| F15 | MiniBatchKMeans labels/centers/n_iter_; DBSCAN brute memory budget; HDBSCAN fitted labels and Boruvka rounds |
+| F16, F17 | AutoARIMA endog/search/fit/forecast; selected order/ic and fitted ARIMA params/n_iter/retcode/llf; search calls the TSA stationarity binding |
+| F18 | KDE fit, mutable bandwidth and score_samples, immutable fitted source and recovery paths |
+
+The audit found and corrected missing FAST TSA dependencies in both AutoARIMA cards. Every paired build additionally compiles the exact-source IDENTICAL core with no experiment defines as the sole `input_transport_helpers` dependency: public `_buffer._native` uses this tier even when the estimator is FAST. The pair installer admits only this explicit role at `identical/_mojolearn.so` and the card's enumerated FAST prerequisites, checking source, mode, Apple target, defines and binary hashes. The called estimator binding must still report FAST/Metal and match its A/B hash. Earlier artifacts lacking this helper cannot qualify the corrected source.
+
+Every card exposes its paired quality capture as `validation_argv`; a build makes both arms once (`paired_build: true`). Queue qualification must use an existing Python environment with NumPy, such as `pixi run -e test python`, and hardware-only pair admission occurs before importing the isolated product. The paired builder pins both the Apple vendor and target column and uses both supported build-flag environment interfaces. No artifact from another source SHA, arbitrary installed library or rebuild on the M3 can satisfy the source-frozen pair.
