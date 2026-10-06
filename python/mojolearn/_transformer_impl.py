@@ -1382,6 +1382,42 @@ class TransformerBlock(NumericModeMixin):
             tape._consumed = True
             ext.transformer_session_backward_tape(tape._session, addrs, tape._token)
         return dict(zip(("x",) + self._W_NAMES, grads))
+    def _forward_with_tape(self, x):
+        """Internal NI36/48: native immutable single-use forward owner."""
+        ext = self._extension()
+        enabled = (getattr(ext, "transformer_forward_tape_enabled")
+                   if _exports(ext, "transformer_forward_tape_enabled") else None)
+        if (not callable(enabled) or not enabled()
+                or getattr(self, "_extended", False)
+                or getattr(self, "_int15", None) is not None):
+            return self.forward(x), None
+        x = _batch_tokens(x, "TransformerBlock._forward_with_tape", self.d_model, False)
+        b, l = int(x.shape[0]), int(x.shape[1])
+        y = _buffers.empty(x.shape, "<f4")
+        w = self._w
+        params = [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+                  self.head_dim, self.intermediate, self.window]
+        with self._runtime_lock:
+            handle = ext.transformer_forward_tape(
+                [_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr(y)], params)  # glue: pass parameter buffer addresses
+        return y, (ext, handle, tuple(x.shape), tuple(a.shape for a in w))  # glue: retain parameter shape metadata
+
+    def _backward_from_tape(self, tape, grad_output):
+        ext, handle, shape, weight_shapes = tape
+        what = "TransformerBlock._backward_from_tape"
+        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
+                         what, "grad_output", shape)
+        grads = [_buffers.empty(shape, "<f4")] + [
+            _buffers.empty(s, "<f4") for s in weight_shapes]  # glue: allocate native output buffers by shape
+        with self._runtime_lock:
+            ext.transformer_backward_tape(handle, [_addr_ro(dy)] + [_addr(g) for g in grads])  # glue: pass gradient buffer addresses
+        return dict(zip(("x",) + self._W_NAMES, grads))
+
+    @staticmethod
+    def _close_forward_tape(tape):
+        if tape is not None:
+            ext, handle, _, _ = tape
+            ext.transformer_close_tape(handle)
 
     def backward(self, x, grad_output):
         """The zero-state prefill VJP: `x` `(B, L, d_model)` float32 and

@@ -29,7 +29,16 @@ comptime LN_FOLD_BLOCK = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_d
 
 def ln_fold_rows(M: Int) -> Int:
     """Rows per block: the smallest power of two R >= 64 with R * R >= M."""
+    # NI51 independent V arm: more independent parameter-gradient leaves;
+    # sqrt(M) growth still bounds scratch. Shared HostExec/DeviceExec operation
+    # source; only neural LayerNorm changes. Default OFF, validation NOT RUN.
     var r = 64
+    comptime if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and LN_FOLD_BLOCK
+        and is_defined["MOJOLEARN_IDN_SEQ_LN_LEAF32"]()
+        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    ):
+        r = 32
     while r * r < M:
         r *= 2
     return r

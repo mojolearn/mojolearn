@@ -35,6 +35,19 @@ from sequence.moe_tiled import TILE_P
 
 comptime MOE_GROUP_TPB = 256
 
+# NI53: independent stable-packing A/B, default OFF. One expert owns its pair
+# list; it scans pair IDs ascending, writes every routed pair once, and never
+# changes capacity or drops a token. Counts/offsets retain exact integer sums.
+# This removes scatter atomics and makes packing reproducible; it trades O(E P)
+# cheap expert comparisons for atomics, so whole-workload benefit is unproven.
+# Host item execution is unaffected because it consumes original pair IDs.
+# This S subarm does not claim a MoE backward/training path that does not exist.
+comptime MOE_STABLE_PACK = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_MOE_STABLE_PACK"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
 
 def moe_group_blocks(n_pairs: Int, n_experts: Int, n_tiles: Int) -> Int:
     """The products' grid upper bound: sum over e of ceil(c_e / TILE_P) x

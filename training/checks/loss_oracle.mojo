@@ -41,6 +41,10 @@ from training.checks.loss_contract import (
 
 
 
+from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2
+from training.loss_reduction_v2 import loss_token_tree_v2_host
+
+
 def ce_fold(
     values: List[Float32], base: Int, count: Int, ones: List[Float32]
 ) -> Float32:
@@ -56,6 +60,8 @@ def ce_total_fold(values: List[Float32], count: Int, ones: List[Float32]) -> Flo
     """NN54 v2 changes only row-total order; normalization stays unchanged."""
     comptime if NN54_LOSS_PROFILE:
         return nn_reduce_host_admitted[128, False](rebind[MutPointer[Float32, MutAnyOrigin]](values.unsafe_ptr()), count)
+    comptime if IDN_LOSS_TOKEN_TREE_V2:
+        return loss_token_tree_v2_host(values, 0, count)
     return ce_fold(values, 0, count, ones)
 
 
@@ -141,7 +147,11 @@ def _row_combine(
 def ce_forward_oracle(
     logits: List[Float32], targets: List[Int32], cfg: CeConfig
 ) raises -> CeStages:
-    """**THE NORMATIVE FORWARD ANSWER of `mojolearn.identical.loss.ce.fp32.v1`.** Scalar, single threaded, host. That is deterministic, the same on every vendor, and admitted."""
+    """Native host forward under CE_NUMERICAL_PROFILE.
+
+    The default retains v1; NI35 selects its separate L12 token-total tree.
+    NI35's source has not been compiled or checked for cross-column identity.
+    """
     var n = ce_refuse_inputs(logits, targets, cfg)
     var v = cfg.vocab
     var smoothing = cfg.smoothing_is_spelled()

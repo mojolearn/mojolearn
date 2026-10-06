@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Source-only NI19--NI36 experiments, 2026-10-06; all new arms default OFF.
+
+These are scheduling/storage candidates with the existing arithmetic graph,
+except NI20's attention, NI34's chunked head and NI35's CE token-total graph.
+No build, identity, quality or performance evidence has been collected for
+this revision. Full-workload NVIDIA/AMD A/B and host/Apple identity remain
+required before any promotion. MOJOLEARN_IDN_ALL_OFF suppresses every arm.
+"""
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+comptime _ENABLED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+# NI23: rotate K while writing the packed attention layout. S; same products
+# and add, with all saved stages retained. Full prefill only by cache semantics.
+comptime IDN_ROPE_CACHE = _ENABLED and is_defined["MOJOLEARN_IDN_ROPE_CACHE"]()
+# NI24: only owned training-prefill callers may omit the persistent cache copy.
+comptime IDN_TRAIN_NO_DECODE_CACHE = _ENABLED and is_defined["MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE"]()
+# NI25 S sub-arm: serial original statistics, cooperative output scaling.
+comptime IDN_RMS_ROW_BLOCK = _ENABLED and is_defined["MOJOLEARN_IDN_RMS_ROW_BLOCK"]()
+# NI26: preserve both silu_out and gated for tracing and backward.
+comptime IDN_TRAIN_SWIGLU = _ENABLED and is_defined["MOJOLEARN_IDN_TRAIN_SWIGLU"]()
+# NI27: views are rebound to the current owned arena after optimizer swaps.
+comptime IDN_LM_PARAM_VIEWS = _ENABLED and is_defined["MOJOLEARN_IDN_LM_PARAM_VIEWS"]()
+# NI32: reuse validation only inside one owned, immutable byte-training call.
+comptime IDN_LM_OWNED_TOKENS = _ENABLED and is_defined["MOJOLEARN_IDN_LM_OWNED_TOKENS"]()
+# NI33: keep the original per-cell divides and the same ignored-row stores.
+comptime IDN_CE_GRAD_FUSED = _ENABLED and is_defined["MOJOLEARN_IDN_CE_GRAD_FUSED"]()
+# NI36 narrow sub-arm: dA and dW GEMMs run serially on the same queue, so
+# their disjoint scratch lifetimes can share one allocation. No tape alias.
+comptime IDN_TRAIN_BACKWARD_SCRATCH = _ENABLED and is_defined["MOJOLEARN_IDN_TRAIN_BACKWARD_SCRATCH"]()
+# NI35: explicit V arithmetic profile for the CE token-total fold only.
+# Vocabulary folds, objective divisor, dlogits and optimizer are unchanged.
+comptime IDN_LOSS_TOKEN_TREE_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2"]()
+# NI34: the existing explicit config stays supported; this opt-in chooses it
+# for default-constructed byte configs and enables compatible Samba callers.
+comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
+# NI36/NI48: immutable native forward tapes, consumed exactly once.
+comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and is_defined["MOJOLEARN_IDN_SAMBA_FORWARD_TAPE"]()
+
+# NI20: fixed tile32 online attention numerical graph on every column.
+comptime IDN_ATTENTION_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_ATTENTION_V2"]()

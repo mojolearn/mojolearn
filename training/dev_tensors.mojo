@@ -38,6 +38,10 @@ from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_m
 from gemm.experiments.neural_plans import NN12
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from training.estimator import identical_ce_loss_dev
+from training.neural_identical_experiments import IDN_TRAIN_BACKWARD_SCRATCH
+from training.neural_gemm_workspace import (
+    IDN_TRAINING_GEMM_WORKSPACE, training_gemm_cached_into, training_gemm_cached_close,
+)
 
 comptime IDN_TRAIN_DEV_TENSORS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -110,6 +114,12 @@ def train_dev_free(ctx: DeviceContext, h: Int) raises:
         pool[].workspace[h].close(ctx)
     pool[].b[h] = ctx.enqueue_create_buffer[DType.float32](1)
     pool[].n[h] = 0
+    comptime if IDN_TRAINING_GEMM_WORKSPACE:
+        var any_live = False
+        for i in range(len(pool[].n)):  # small-loop(pool: device-array handles): inspect allocation metadata, never tensor elements
+            any_live = any_live or pool[].n[i] > 0
+        if not any_live:
+            training_gemm_cached_close(ctx)
 
 
 def train_dev_view(ctx: DeviceContext, h: Int, n: Int, name: String) raises -> DeviceBuffer[DType.float32]:
@@ -162,6 +172,8 @@ def train_linear_forward_dev(ctx: DeviceContext, c_h: Int, a_h: Int, w_h: Int, m
     comptime if NEURAL_WORKSPACE_REUSE_ENABLED:
         var pool = _DEV_POOL.get_or_create_ptr()
         pool[].workspace[c_h].run(ctx,c,a,w,m,n,k,OP_NT)
+    elif IDN_TRAINING_GEMM_WORKSPACE:
+        training_gemm_cached_into(ctx, c, a, w, m, n, k, OP_NT)
         ctx.synchronize()
     else:
         var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, n, k))
@@ -204,12 +216,16 @@ def train_linear_backward_dev(
             pool[].workspace[dw_h].run(ctx,dw,a,dc,bc[1],bc[2],bc[3],bc[0])
         ctx.synchronize()
     else:
-        var ws_a = ctx.enqueue_create_buffer[DType.float32](
-            identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
-        )
-        var ws_b = ctx.enqueue_create_buffer[DType.float32](
-            identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
-        )
+        var na = identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
+        var nb = identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
+        var ws_a = ctx.enqueue_create_buffer[DType.float32](max(na, nb) if IDN_TRAIN_BACKWARD_SCRATCH else na)
+        var ws_b: DeviceBuffer[DType.float32]
+        comptime if IDN_TRAIN_BACKWARD_SCRATCH:
+            # NI36: both GEMMs enqueue onto this SAME in-order context and the
+            # final wait precedes release; dA/dW themselves remain distinct.
+            ws_b = ws_a.create_sub_buffer[DType.float32](0, nb)
+        else:
+            ws_b = ctx.enqueue_create_buffer[DType.float32](nb)
         identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
         identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
         ctx.synchronize()

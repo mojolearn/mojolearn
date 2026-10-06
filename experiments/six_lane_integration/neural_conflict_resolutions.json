@@ -1,0 +1,132 @@
+[
+  {
+    "path": "bindings/_mojolearn_mamba.mojo",
+    "conflict_blocks": 2,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "gemm/experiments/neural_tiled.mojo",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "mamba/host/gen/mamba3_backward.mojo",
+    "conflict_blocks": 3,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "mamba/impl/modules/mamba3_backward.mojo",
+    "conflict_blocks": 3,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "mamba/impl/modules/ssd_minimal.mojo",
+    "conflict_blocks": 4,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "python/mojolearn/_expansion_cnn.py",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "python/mojolearn/_transformer_impl.py",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "sequence/exec_device.mojo",
+    "conflict_blocks": 3,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "sequence/moe_group.mojo",
+    "conflict_blocks": 2,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "sequence/recurrent.mojo",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "sequence/recurrent_scan.mojo",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "tools/mamba_host_gen.py",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "training/byte_lm.mojo",
+    "conflict_blocks": 9,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "training/byte_lm_config.mojo",
+    "conflict_blocks": 2,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "training/byte_lm_host.mojo",
+    "conflict_blocks": 2,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "training/byte_lm_host_backward.mojo",
+    "conflict_blocks": 2,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "training/byte_lm_host_kernels.mojo",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "training/checks/loss.mojo",
+    "conflict_blocks": 5,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "training/checks/loss_oracle.mojo",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "training/dev_tensors.mojo",
+    "conflict_blocks": 2,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "training/loss_host_rows.mojo",
+    "conflict_blocks": 2,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "transformer/checks/transformer_backward.mojo",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "transformer/checks/transformer_backward_oracle.mojo",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "transformer/checks/transformer_oracle.mojo",
+    "conflict_blocks": 1,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "transformer/impl/llama/modeling_llama.mojo",
+    "conflict_blocks": 12,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  },
+  {
+    "path": "x_cnn/device.mojo",
+    "conflict_blocks": 16,
+    "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
+  }
+]

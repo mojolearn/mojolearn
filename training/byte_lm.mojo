@@ -42,6 +42,9 @@ from core.step_glue import (
 from core.device_scan import DeviceScanScratch, device_first_token_oob
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from training.neural_identical_experiments import (
+    IDN_LM_PARAM_VIEWS, IDN_LM_OWNED_TOKENS, IDN_TRAIN_NO_DECODE_CACHE,
+)
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_afn import (
     AFN_LM_HEAD_FUSE, AFN_LM_NOSYNC, AFN_LM_PARAM_VIEWS, BYTE_LM_FAST_APPLE,
@@ -70,7 +73,7 @@ from embedding.checks.embedding_identical import (
 )
 from embedding.owned_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
 from training.neural_ab_lifetime import NN62_LIFETIME_ARENA, NeuralLifetimeArena, NeuralLiveRange
-from embedding.checks.embedding_oracle import EmbConfig
+from embedding.checks.embedding_oracle import EmbConfig, emb_refuse_shape
 from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
 from training.checks.loss import (
     ANY_LOSS_SABOTAGE, identical_ce_forward_into, identical_ce_backward_into,
@@ -819,9 +822,15 @@ comptime NN60_BLOCK_VIEWS = (
 )
 comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS
 comptime BYTE_LM_EMB_HEAD_VIEWS = (
-    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS)
+    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS)
     and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
 )
+
+# NI27 source candidate, not a promotion of the Apple FAST experiment.
+# Only aliases change; every gradient writer keeps the same arithmetic.
+# Both parameter and gradient views are rebound before each use, including
+# after the transactional optimizer swaps param with shadow_p. Unverified.
+comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or IDN_LM_PARAM_VIEWS
 
 
 def _bind_emb_head(ctx: DeviceContext, mut tb: ByteBuffers, config: ByteConfig) raises:
@@ -1372,13 +1381,18 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     # A host round trip costs about a dozen kernel launches on Metal.
     # Device-to-device: every parameter byte copied once (blocks, emb, head).
     timing_tick(ctx, ton, tk, "step.unpack_weights")
-    timing_bytes(ton, "step.unpack_weights_bytes", config.n_total() * 4)
+    var head_param_cells = 2 * config.vocab_size * config.d_model
+    var unpack_cells = 0 if BYTE_LM_BLOCK_VIEWS else config.n_total() - head_param_cells
+    if not BYTE_LM_EMB_HEAD_VIEWS:
+        unpack_cells += head_param_cells
+    timing_bytes(ton, "step.unpack_weights_bytes", unpack_cells * 4)
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
     var ce = CeConfig.causal_lm(config.vocab_size)
-    comptime if NN51_RESIDENT_TOKEN_VALIDATION:
+    comptime if NN51_RESIDENT_TOKEN_VALIDATION or IDN_LM_OWNED_TOKENS:
         # byte_require_tokens_device above completed the range admission on
         # these owned IDs. No mutation occurs between that check and gather.
         # Source draft only: all-vendor identity/full-step qualification pending.
+        emb_refuse_shape(emb, M)
         identical_embedding_forward_prerefused_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
     else:
         identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
@@ -1408,6 +1422,7 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
                     norm1_ready=norm1_ready,
+                    retain_decode_cache=not IDN_TRAIN_NO_DECODE_CACHE,
                     next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
@@ -1416,12 +1431,13 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not NN28_DEAD_TRAINING_CACHE)
+                    norm1_ready=norm1_ready, retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
         else:
             if fuse_next:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
                     norm1_ready=norm1_ready,
+                    retain_decode_cache=not IDN_TRAIN_NO_DECODE_CACHE,
                     next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
@@ -1430,7 +1446,7 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not NN28_DEAD_TRAINING_CACHE)
+                    norm1_ready=norm1_ready, retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
         if _byte_layer_sync():
             step_count_sync()
             ctx.synchronize()
@@ -1781,7 +1797,7 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
                 _ = tr.embedding_runs.pop()
             tr.embedding_runs.append(OwnedEmbeddingRuns(ctx, tr.buffers.ids, M, emb))
         tr.embedding_runs[0].backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x, emb)
-    elif NN51_RESIDENT_TOKEN_VALIDATION:
+    elif NN51_RESIDENT_TOKEN_VALIDATION or IDN_LM_OWNED_TOKENS:
         # The immediately preceding forward in this gradient operation owned
         # and validated the same IDs. This skips a redundant ID download only.
         identical_embedding_backward_prerefused_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
@@ -1802,7 +1818,8 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     # A host round trip costs about a dozen kernel launches on Metal.
     # Device-to-device: every gradient byte copied once into `grad`.
     timing_tick(ctx, ton, tk, "step.pack_grads")
-    timing_bytes(ton, "step.pack_grads_bytes", config.n_total() * 4)
+    var packed_cells = 2 * config.vocab_size * config.d_model if BYTE_LM_BLOCK_VIEWS else config.n_total()
+    timing_bytes(ton, "step.pack_grads_bytes", packed_cells * 4)
     _ = trace
     return loss
 
@@ -2153,7 +2170,9 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
     # step does not justify promotion: live status stays default OFF.
     # Evidence: experiments/performance_ideas/measurements/20261006/index.json,
     # I10 AMD/NVIDIA; retained per-arm binary hashes and raw capture paths.
-    comptime if is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]():
+    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+                and is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]()
+                and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()):
         # This mechanism changes scheduling only on the existing admitted
         # OOP Adam path. Fault builds keep the required post-fault scan;
         # the path already refuses fault injection before it changes state.

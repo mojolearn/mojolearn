@@ -35,7 +35,7 @@ from x_cnn.device import gcn_loops_device
 # lane fam-neural (2026-10-04): the `_m` forms of the entries that had none
 from x_cnn.device import idn_flags, adaptive_pool_m, graph_op_m, gcn_norm_m, pad2d_m, chan_copy_m
 # lane fam2-neural (2026-10-04): the device epoch (order, Adam scalars and losses on the device)
-from x_cnn.ops import idn2_flags, epoch_key, adam_hyper_base, AH_ROW
+from x_cnn.ops import idn2_flags, epoch_key, adam_hyper_base, AH_ROW, neural_tape_budget_bytes, neural_numerical_profile
 from x_cnn.device import (
     epoch_rows_download, res_gather_pair_perm, adam_hyper_resident, adam_hyper_download, opt_many_resident_h,
     softmax_xent_res_loss,
@@ -1341,6 +1341,14 @@ def idn2_flags_binding() raises -> PythonObject:
     return PythonObject(idn2_flags())
 
 
+def neural_tape_budget_binding() raises -> PythonObject:
+    return PythonObject(neural_tape_budget_bytes())
+
+
+def neural_numerical_profile_binding() raises -> PythonObject:
+    return PythonObject(neural_numerical_profile())
+
+
 def _seed64(lo: PythonObject, hi: PythonObject) raises -> UInt64:
     return (UInt64(Int(py=hi)) << UInt64(32)) | UInt64(Int(py=lo))
 
@@ -1568,6 +1576,8 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[gcn_loops_binding]("x_cnn_gcn_loops")
         m.def_function[idn_flags_binding]("x_cnn_idn_flags")
         m.def_function[idn2_flags_binding]("x_cnn_idn2_flags")
+        m.def_function[neural_tape_budget_binding]("x_cnn_neural_tape_budget_bytes")
+        m.def_function[neural_numerical_profile_binding]("x_cnn_numerical_profile")
         m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
         m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
         m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")

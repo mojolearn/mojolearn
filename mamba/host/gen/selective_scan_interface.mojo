@@ -146,7 +146,8 @@ from std.sys.compile import is_defined
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
 from mamba.host.gen.identity_trace import IdentityTrace
-from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
+from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mamba.host.gen.device_optimizations import identical_selective_scan_window
 #: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA1_CHUNKSCAN`
 #: runs the scan as a chunked parallel scan (afn_selective_scan.mojo); every
 #: other build takes the kernel below unchanged.
@@ -247,6 +248,12 @@ comptime ANY_SABOTAGE = (
     or SAB_S10_DESCENDING
     or SAB_S5_EXP2
 )
+
+
+# NI38 S subarm, independent of the unfinished V affine composition. Native
+# host keeps the original serial graph, as do checkpoint/backward consumers.
+# Off unless explicitly selected; no current default or sabotage path changes.
+comptime IDN_M1_STATE_WINDOW = False
 
 
 def mamba_scan_sabotage_name() -> String:
@@ -563,7 +570,11 @@ def selective_scan_fn(
 
     var total = batch * dim
     if total > 0:
-        comptime if AFN_MAMBA1_CHUNKSCAN:
+        comptime if IDN_M1_STATE_WINDOW:
+            identical_selective_scan_window[MAX_DSTATE](
+                ctx, out, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
+            )
+        elif AFN_MAMBA1_CHUNKSCAN:
             afn_selective_scan_chunked[MAX_DSTATE](
                 ctx, out, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
             )

@@ -12,7 +12,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
 from sequence.moe_group import (
     MOE_GROUP_TPB, moe_group_count_all_kernel, moe_group_offsets_all_kernel, moe_group_scatter_all_kernel,
-    moe_group_zero_all_kernel, NN44_STABLE_GROUP, moe_group_stable_all_kernel,
+    moe_group_zero_all_kernel, NN44_STABLE_GROUP, MOE_STABLE_PACK, moe_group_stable_all_kernel,
 )
 from sequence.moe_reg import (
     MOE_DEVGROUP,
@@ -40,7 +40,9 @@ from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_A
 from sequence.coop import COOP_W, apply_coop
 from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
 from sequence.ops import OP_THETA
-from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW
+from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_COL
+from sequence.adafactor import AF_COL_CHUNK_FOLD
+from sequence.adafactor_candidates import AF_COL_LANES, af_col_chunk_kernel
 from sequence.theta_spec import THETA_SPEC
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
@@ -48,7 +50,7 @@ from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
 from sequence.ets_team import ETS_TEAM, ets_team
 from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
 from sequence.ops import OP_ETS, OP_GARCH
-from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_bwd_scan_kernel, cell_fwd_scan_kernel, scan_block
+from sequence.recurrent_scan import SEQ_LSTM_ROW_SERIAL_SCAN, OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_bwd_scan_kernel, cell_fwd_scan_kernel, scan_block
 from x_linear.ops import IP
 from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
@@ -644,16 +646,24 @@ struct DeviceExec(Exec):
         for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
             if v > I32_MAX or v < -I32_MAX - 1:
                 raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
+        # NI54 neural optimizer-only opcode. Every lane's logical leaf is
+        # shared with HostExec's op_af_col; no statistical estimator op moves.
+        comptime if AF_COL_CHUNK_FOLD and OP == OP_AF_COL:
+            self.ctx.enqueue_function[af_col_chunk_kernel](
+                a.p0, a.p1, Int32(a.i0), Int32(a.i1), a.f0,
+                grid_dim=(n, 1, 1), block_dim=(AF_COL_LANES, 1, 1),
+            )
+            return
         # lane apple-fast-gap-lstm (sequence/recurrent_scan.mojo): the whole
         # recurrence of a layer, one block per batch row (n = B rows)
-        comptime if OP == OP_CELL_FWD_SCAN:
+        comptime if OP == OP_CELL_FWD_SCAN and not SEQ_LSTM_ROW_SERIAL_SCAN:
             self.ctx.enqueue_function[cell_fwd_scan_kernel](
                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
                 Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
                 grid_dim=(n, 1, 1), block_dim=(scan_block(a.i0, a.i2), 1, 1),
             )
             return
-        comptime if OP == OP_CELL_BWD_SCAN:
+        comptime if OP == OP_CELL_BWD_SCAN and not SEQ_LSTM_ROW_SERIAL_SCAN:
             self.ctx.enqueue_function[cell_bwd_scan_kernel](
                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
                 Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
@@ -686,7 +696,7 @@ struct DeviceExec(Exec):
                     a.p7, a.p5, a.p6, a.p8, Int32(a.i3), Int32(a.i5), Int32(a.i7),
                     grid_dim=((a.i3 + gt) // gt, 1, 1), block_dim=(gt, 1, 1),
                 )
-                comptime if NN44_STABLE_GROUP:
+                comptime if NN44_STABLE_GROUP or MOE_STABLE_PACK:
                     self.ctx.enqueue_function[moe_group_stable_all_kernel](
                         a.p2, a.p5, a.p4, Int32(gp), Int32(a.i3),
                         grid_dim=((a.i3 + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
@@ -726,10 +736,16 @@ struct DeviceExec(Exec):
                         self.ctx.enqueue_function[moe_group_offsets_kernel](
                             a.p7, a.p5, Int32(a.i3), grid_dim=(1, 1, 1), block_dim=(MOE_RT, 1, 1),
                         )
-                        self.ctx.enqueue_function[moe_group_scatter_kernel](
-                            a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
-                            grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
-                        )
+                        comptime if MOE_STABLE_PACK:
+                            self.ctx.enqueue_function[moe_group_stable_scatter_kernel](
+                                a.p2, a.p5, a.p4, Int32(npairs), Int32(a.i3),
+                                grid_dim=((a.i3 + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                            )
+                        else:
+                            self.ctx.enqueue_function[moe_group_scatter_kernel](
+                                a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
+                                grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                            )
                 comptime if MOE_MMA:
                     # lane apple-fast-gap-misc: simdgroup matrix products
                     # (sequence/moe_mma.mojo), MOJOLEARN_MOE_FAST_MMA*
@@ -860,7 +876,7 @@ struct DeviceExec(Exec):
                     block_dim=(GT_TPB, 1, 1),
                 )
                 return
-        comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:
+        comptime if SEQ_LSTM_ROW_SERIAL_SCAN or (OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN):
             comptime GROUP = 4 if C58_FORECAST4 and (OP == OP_THETA or OP == OP_ETS or OP == OP_GARCH) else 1
             var tasks = (n + GROUP - 1) // GROUP
             self.ctx.enqueue_function[seq_kernel[OP]](

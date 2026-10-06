@@ -862,8 +862,9 @@ def identical_embedding_forward_prerefused_into(
     n_positions: Int,
     cfg: EmbConfig,
 ) raises:
-    """Seams G1 and G2 for a caller that ALREADY refused the ids on the host
-    list it uploaded (`emb_refuse_ids`, contract 8) and owns 9.1: the gather
+    """Seams G1 and G2 for an owning caller that ALREADY refused the exact
+    immutable ids (host-list admission or an owned device token scan),
+    performed shape refusal and owns 9.1: the gather
     launch only. `identical_embedding_forward_into` reads the device ids back
     into a new pinned buffer and walks them on the host a second time (two
     waits); a caller that uploaded a refused host list repeats nothing here
@@ -884,8 +885,9 @@ def identical_embedding_backward_prerefused_into(
     plan: Int = PLAN_SCAN,
     block_threads: Int = EMB_TPB,
 ) raises:
-    """Seams E0 through E4 for a caller that already refused the ids on the
-    host list it uploaded; `identical_embedding_backward_into` without the
+    """Seams E0 through E4 for an owning caller that already refused the
+    exact immutable ids by host-list admission or an owned device token scan;
+    `identical_embedding_backward_into` without the
     device id read-back. `counts`, `run_begin` and `perm` need no initial
     value: both plans write every cell the fold reads."""
     _emb_backward_refuse_launch(ctx, plan, block_threads)

@@ -1,0 +1,960 @@
+{
+  "schema_version": 1,
+  "lane": "mamba_and_neural_sequence",
+  "branch": "ideas/neural-identical-20261006-v2",
+  "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-neural-identical-ideas-v2",
+  "scope": "NEURAL ONLY: NI37 through NI54",
+  "owner_constraint": "No compile or verify; no builds, tests, lint, import validation, candidate execution, timing, merge or push were performed.",
+  "default_policy": "All NEW candidates are default OFF and disabled by MOJOLEARN_IDN_ALL_OFF; existing source defaults are preserved. Existing default ON entries are reused routes, not promotions.",
+  "measurement_status": "NOT RUN. No speed, identity, quality or full-workload admission claims.",
+  "contracts": {
+    "S": "same existing arithmetic graph; scheduling/storage only, unverified",
+    "V": "new explicitly specified graph shared by host/NVIDIA/AMD/Apple; historical bits may change, unverified"
+  },
+  "experiments": [
+    {
+      "id": "NI37",
+      "title": "Parallel causal depthwise convolution",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "mamba/impl/modules/afn_defines.mojo",
+        "mamba/impl/modeling/modeling_mamba.mojo",
+        "mamba/impl/modules/mamba2.mojo",
+        "mamba/host/gen/modeling_mamba.mojo",
+        "mamba/host/gen/mamba2.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "Reuse existing IDN_MAMBA_CONV_CELL on GPU. Host serial cells are the same arithmetic. Existing default ON is preserved, not a new promotion.",
+      "dependencies": [],
+      "remaining_work": [
+        "Run authorized future full Mamba1/2 and Samba workloads including prefill, decode, backward and convolution carry boundaries.",
+        "Reused old component evidence does not satisfy this campaign's full-dataset coverage."
+      ],
+      "quality_risks": [
+        "Short tails and carried windows must preserve tap order, bias seed, saved preactivation and SiLU."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI38",
+      "title": "Versioned Mamba 1 affine chunk scan",
+      "status": "partial_source_unverified",
+      "implementation_paths": [
+        "mamba/impl/ops/identical_scan_window.mojo",
+        "mamba/impl/ops/selective_scan_interface.mojo",
+        "mamba/impl/ops/selective_scan_backward.mojo",
+        "mamba/host/gen/selective_scan_interface.mojo",
+        "tools/mamba_host_gen.py",
+        "mamba/host/gen/device_optimizations.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_M1_STATE_WINDOW"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "A real default-OFF S alternative is wired: one device thread per independent (batch,channel,state) chain walks bounded 64-token windows, then an output kernel runs the original ascending state fold and D skip. Only storage/parallel ownership changes. Host and backward checkpoints keep the exact original graph; carried state remains the existing public ABI. This is explicitly not the catalog V affine-composition implementation.",
+      "dependencies": [],
+      "remaining_work": [
+        "The original V affine time-parallel scan remains pending: define an absolute-position augmented carry/checkpoint representation and matching forward/backward/prefill/decode/serialized-state contracts on host and all GPUs.",
+        "The implemented S alternative needs future full Mamba1/Samba forward/backward/decode quality and identity evidence, plus end-to-end timing including allocation, all window launches and final scratch drain.",
+        "Keep V and S experiment IDs/receipts distinguishable; never claim the original affine graph was implemented by the S alternative."
+      ],
+      "quality_risks": [
+        "No recurrence reassociation or accuracy shortcut is introduced by the implemented S subarm, but identity and quality are unverified.",
+        "Bounded window materialization adds traffic and launches and can lose despite additional state-axis parallelism.",
+        "The V arm cannot reuse the old checkpoint recomputation unless the saved states actually match the new graph."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [
+        {
+          "name": "state_window",
+          "status": "wired_candidate_unverified",
+          "candidate_defines": [
+            "MOJOLEARN_IDN_M1_STATE_WINDOW"
+          ],
+          "baseline_defines": [],
+          "candidate_env": {},
+          "baseline_env": {},
+          "numerical_contract": "S",
+          "arithmetic_version": "mojolearn.identical.mamba1.fp32.v1; unchanged recurrence/checkpoint graph",
+          "dependencies": [],
+          "implementation_paths": [
+            "mamba/impl/ops/identical_scan_window.mojo",
+            "mamba/impl/ops/selective_scan_interface.mojo",
+            "mamba/impl/ops/selective_scan_backward.mojo",
+            "mamba/host/gen/selective_scan_interface.mojo",
+            "tools/mamba_host_gen.py",
+            "mamba/host/gen/device_optimizations.mojo"
+          ],
+          "remaining_work": [
+            "Full Mamba1/Samba forward/backward/decode identity, quality and end-to-end A/B remain unrun.",
+            "Include scratch allocation, both launches per bounded window and final lifetime drain in timing.",
+            "The host generator mapping and tracked host-safe signature were edited but not executed or verified."
+          ],
+          "quality_risks": [
+            "This schedule preserves the original recurrence and output fold by source intent; it is unverified.",
+            "Window traffic and added launches can regress performance."
+          ],
+          "note": "Implemented S subarm: selective_scan_fn dispatches to bounded state-parallel window kernels; host, carried state and backward checkpoint use the unchanged scalar graph. The original V affine proposal below remains pending."
+        },
+        {
+          "name": "original_versioned_affine_scan",
+          "status": "design_pending",
+          "candidate_defines": [],
+          "baseline_defines": [],
+          "numerical_contract": "V",
+          "candidate_env": {},
+          "baseline_env": {},
+          "dependencies": [
+            "versioned absolute-position carry/checkpoint schema"
+          ],
+          "implementation_paths": [],
+          "remaining_work": [
+            "Specify and implement matching host/GPU affine composition, checkpoint recomputation, backward and arbitrary prefill/decode boundaries before adding a selector."
+          ],
+          "quality_risks": [
+            "Reusing the old serial checkpoint after reassociation would differentiate inconsistent saved states."
+          ],
+          "note": "Not wired: absolute carry/checkpoint/serialization and derivative contracts still required.",
+          "arithmetic_version": "UNSPECIFIED_PENDING_ABSOLUTE_CARRY_CONTRACT"
+        }
+      ],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified.",
+      "integration_chain": [
+        "Mamba1Block native forward / decode / backward forward-recompute",
+        "modeling_mamba.mamba_mixer_forward -> selective_scan_fn",
+        "IDN_M1_STATE_WINDOW -> identical_selective_scan_window",
+        "scan_window_state_kernel -> scan_window_output_kernel",
+        "host serial recurrence and backward checkpoint remain the existing S counterpart"
+      ],
+      "host_generation_note": "tools/mamba_host_gen.py routes identical_scan_window imports to disabled host-safe signatures and forces IDN_M1_STATE_WINDOW=False; tracked host counterpart/stub updated by source edits only."
+    },
+    {
+      "id": "NI39",
+      "title": "Cache Mamba exponentials and decays",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "mamba/impl/modules/ssd_minimal.mojo",
+        "mamba/host/gen/ssd_minimal.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_M2_YOFF_EXP_CACHE"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "New Mamba2 Yoff exp(dacs) cache computes the exact portable expression once per logical token/head/chunk position. All output channels read it. The unchanged scalar host expression is the S counterpart. Buffer is retained through a drain.",
+      "dependencies": [],
+      "remaining_work": [
+        "Measure allocation and explicit lifetime drain inside full Mamba2/Samba operation boundary.",
+        "Additional Mamba3 and backward decay consumers remain separate pending subarms.",
+        "Future generated-host refresh should retain the scalar equivalent or restate the exact cache; no generator or verification was run here."
+      ],
+      "quality_risks": [
+        "Extra workspace and completion wait may regress latency; do not promote from saved exp counts.",
+        "Cache stores only exp(dacs), never substitute exp(a+b) for a product of exp terms."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI40",
+      "title": "Tile Mamba 2 SSD interactions",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "mamba/impl/modules/afn_defines.mojo",
+        "mamba/impl/modules/ssd_minimal.mojo",
+        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "mamba/host/gen/ssd_minimal.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_M2_RETAIN_GL"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "Reuse the real retained G*L arm with existing shared SSD Ydiag/Cstate forward and backward tiles. Existing tile defaults and retained-GL default OFF are preserved.",
+      "dependencies": [],
+      "remaining_work": [
+        "Time full Mamba2 and Samba forward/backward; saved I08 cells do not cover every intended dataset.",
+        "Record whether retained-GL capacity admission actually selected the candidate."
+      ],
+      "quality_risks": [
+        "Retained intermediate lifetime forces a drain; tile pressure, partial chunks and all structural zero FMA steps matter."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [
+        {
+          "name": "existing_ssd_tiles",
+          "candidate_defines": [],
+          "baseline_defines": [
+            "MOJOLEARN_IDN_M2_SSD_TILES_OFF"
+          ],
+          "numerical_contract": "S",
+          "status": "existing_candidate_unverified",
+          "candidate_env": {},
+          "baseline_env": {},
+          "dependencies": [],
+          "implementation_paths": [
+            "mamba/impl/modules/afn_defines.mojo",
+            "mamba/impl/modules/ssd_minimal.mojo",
+            "mamba/impl/ops/mamba2_ssd_backward.mojo",
+            "mamba/host/gen/ssd_minimal.mojo"
+          ],
+          "remaining_work": [
+            "Time full Mamba2 and Samba forward/backward; saved I08 cells do not cover every intended dataset.",
+            "Record whether retained-GL capacity admission actually selected the candidate."
+          ],
+          "quality_risks": [
+            "Retained intermediate lifetime forces a drain; tile pressure, partial chunks and all structural zero FMA steps matter."
+          ],
+          "note": "same-chain Ydiag/Cstate and paired backward tiling"
+        }
+      ],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI41",
+      "title": "Skip mathematically unused SSD triangle",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "mamba/impl/modules/ssd_minimal.mojo",
+        "mamba/host/gen/ssd_minimal.mojo",
+        "mamba/impl/ops/mamba2_ssd_backward.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_M2_CB_LOWER_OFF"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "Reuse IDN_M2_CB_LOWER. Existing source initializes required upper-triangle diagnostic slots to zero and keeps output/backward consumers on the causal lower triangle. Existing default ON unchanged.",
+      "dependencies": [],
+      "remaining_work": [
+        "Retain complete forward/backward and trace-consumer coverage for full workloads; do not count only the CB formation kernel."
+      ],
+      "quality_risks": [
+        "Trace stage above the diagonal differs from legacy full-square trace; recorded profile/version must distinguish it.",
+        "Inclusive diagonal, tail padding and future backward consumers must not read omitted products."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI42",
+      "title": "Tile Mamba 3 interactions on all supported GPUs",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "mamba/impl/ops/mamba3_siso.mojo",
+        "mamba/host/gen/mamba3_siso.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_MAMBA3_LEGACY_YINTRA"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "New resource-admitted yintra arm selects the existing exact tile on every GPU with a 256-thread block and 10,240-byte shared page. It removes the NVIDIA-only work-count requirement for this opt-in; scalar host chains remain unchanged.",
+      "dependencies": [],
+      "remaining_work": [
+        "Measure tile versus forced scalar plus a separate A/B against the original routing rule on neighboring and non-board shapes.",
+        "Qualify full Mamba3/Samba forward/backward and interaction with existing S16 backward tiles; backward itself is reused, not newly rewritten."
+      ],
+      "quality_risks": [
+        "Small tiles may underutilize the device or regress; no measured winner.",
+        "Historical default routing is preserved as B; cells in which old/new routes coincide are not distinct implementation comparisons."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [
+        {
+          "name": "historical_routing_B",
+          "candidate_defines": [
+            "MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE"
+          ],
+          "baseline_defines": [],
+          "numerical_contract": "S",
+          "status": "wired_candidate_unverified",
+          "candidate_env": {},
+          "baseline_env": {},
+          "dependencies": [],
+          "implementation_paths": [
+            "mamba/impl/ops/mamba3_siso.mojo",
+            "mamba/host/gen/mamba3_siso.mojo"
+          ],
+          "remaining_work": [
+            "Measure tile versus forced scalar plus a separate A/B against the original routing rule on neighboring and non-board shapes.",
+            "Qualify full Mamba3/Samba forward/backward and interaction with existing S16 backward tiles; backward itself is reused, not newly rewritten."
+          ],
+          "quality_risks": [
+            "Small tiles may underutilize the device or regress; no measured winner.",
+            "Historical default routing is preserved as B; cells in which old/new routes coincide are not distinct implementation comparisons."
+          ],
+          "note": "required old-rule comparison, includes identical-route cells visibly"
+        }
+      ],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI43",
+      "title": "Linear work Mamba 3 angle gradient",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "mamba/impl/modules/mamba3_backward.mojo",
+        "mamba/host/gen/mamba3_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "New linear-work carry cache refines the already-versioned existing chunk suffix. One owner per chain replaces chunk totals in place with descending exclusive carries. Token re-walks and angle/dt folds stay unchanged. Host and GPU kernels/launches are written.",
+      "dependencies": [
+        "existing IDN_M3_ANGLE_DT_SUFFIX"
+      ],
+      "remaining_work": [
+        "Run full Mamba3/Samba backward and training trajectories including long sequences and tails.",
+        "Retain the original V suffix-vs-serial experiment separately; this new S subarm does not claim to invent it.",
+        "No host generator or host source validation was run; both source counterparts were edited directly."
+      ],
+      "quality_risks": [
+        "The prepass requires an ordered launch boundary; sums scratch must not be consumed concurrently.",
+        "Performance trades an extra launch for removal of O(chunk_count^2) repeated total folds."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [
+        {
+          "name": "existing_versioned_suffix",
+          "candidate_defines": [],
+          "baseline_defines": [
+            "MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF"
+          ],
+          "numerical_contract": "V",
+          "status": "existing_candidate_unverified",
+          "candidate_env": {},
+          "baseline_env": {},
+          "dependencies": [
+            "existing IDN_M3_ANGLE_DT_SUFFIX"
+          ],
+          "implementation_paths": [
+            "mamba/impl/modules/mamba3_backward.mojo",
+            "mamba/host/gen/mamba3_backward.mojo"
+          ],
+          "remaining_work": [
+            "Run full Mamba3/Samba backward and training trajectories including long sequences and tails.",
+            "Retain the original V suffix-vs-serial experiment separately; this new S subarm does not claim to invent it.",
+            "No host generator or host source validation was run; both source counterparts were edited directly."
+          ],
+          "quality_risks": [
+            "The prepass requires an ordered launch boundary; sums scratch must not be consumed concurrently.",
+            "Performance trades an extra launch for removal of O(chunk_count^2) repeated total folds."
+          ],
+          "note": "existing canonical chunk suffix vs legacy serial suffix, unchanged defaults"
+        }
+      ],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI44",
+      "title": "Canonical Mamba parameter gradient folds",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "mamba/host/gen/mamba2_ssd_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_M2_GRAD_LEAF128"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "V",
+      "implementation_scope": "New Mamba2 subarm uses absolute 128-row gradient leaves instead of existing 256-row leaves. Existing partial/fold kernels and scratch-size helpers use the new granularity on host and every GPU. The tile merge and final scale placement are unchanged.",
+      "dependencies": [
+        "existing IDN_M2_BWD_FOLD_TILED"
+      ],
+      "remaining_work": [
+        "Mamba1 and Mamba3 parameter folds remain separate pending implementations.",
+        "Qualify all changed Mamba2 convolution/A/dt gradients, gradient oracles and optimizer trajectories on full workloads.",
+        "Reconcile independent diagnostic/oracle fold descriptions with the candidate version before later validation."
+      ],
+      "quality_risks": [
+        "Cancellation and gradient rounding change; same-vendor self-consistency alone is insufficient.",
+        "Extra partial storage and launch work may outweigh shorter chains."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [],
+      "arithmetic_version": "ni44-experimental-canonical-fold-20261006",
+      "checkpoint_contract": "Experimental V fold requires identical source/define configuration on host and every GPU for the whole training trajectory. No migration or mixed-version checkpoint admission is introduced. Frozen build/define provenance and candidate graph must accompany later checkpoint/trajectory evidence; numeric-mode IDENTICAL alone is not the version identifier."
+    },
+    {
+      "id": "NI45",
+      "title": "Mamba scratch arenas and generation keyed weights",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "mamba/impl/modules/afn_defines.mojo",
+        "mamba/impl/modules/afn_arena.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "bindings/_mojolearn_mamba.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_MAMBA_ARENA_OFF"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "Reuse existing Mamba arena, context-keyed GEMM workspace and Mamba3 session-stage capacity reuse. No new weight-generation API or unsafe pointer-identity shortcut was introduced.",
+      "dependencies": [],
+      "remaining_work": [
+        "Optimizer generation stamps require an owned mutation/public binding contract; current Mamba3 weight retention compares bytes and cannot safely be relabeled generation-keyed.",
+        "Measure cold setup and repeated use separately, including failures and session shape changes."
+      ],
+      "quality_risks": [
+        "External mutable weights, context reuse and failed calls must not reuse stale device data."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [
+        {
+          "name": "gemm_workspace",
+          "candidate_defines": [],
+          "baseline_defines": [
+            "MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF"
+          ],
+          "numerical_contract": "S",
+          "status": "existing_candidate_unverified",
+          "candidate_env": {},
+          "baseline_env": {},
+          "dependencies": [],
+          "implementation_paths": [
+            "mamba/impl/modules/afn_defines.mojo",
+            "mamba/impl/modules/afn_arena.mojo",
+            "mamba/impl/modules/idn_gemm_ws.mojo",
+            "bindings/_mojolearn_mamba.mojo"
+          ],
+          "remaining_work": [
+            "Optimizer generation stamps require an owned mutation/public binding contract; current Mamba3 weight retention compares bytes and cannot safely be relabeled generation-keyed.",
+            "Measure cold setup and repeated use separately, including failures and session shape changes."
+          ],
+          "quality_risks": [
+            "External mutable weights, context reuse and failed calls must not reuse stale device data."
+          ],
+          "note": "Alternative explicitly recorded from source; unverified."
+        },
+        {
+          "name": "mamba3_session_stage_reuse",
+          "candidate_defines": [],
+          "baseline_defines": [
+            "MOJOLEARN_IDN_M3_SESSION_STAGE_REUSE_OFF"
+          ],
+          "numerical_contract": "S",
+          "status": "existing_candidate_unverified",
+          "candidate_env": {},
+          "baseline_env": {},
+          "dependencies": [],
+          "implementation_paths": [
+            "mamba/impl/modules/afn_defines.mojo",
+            "mamba/impl/modules/afn_arena.mojo",
+            "mamba/impl/modules/idn_gemm_ws.mojo",
+            "bindings/_mojolearn_mamba.mojo"
+          ],
+          "remaining_work": [
+            "Optimizer generation stamps require an owned mutation/public binding contract; current Mamba3 weight retention compares bytes and cannot safely be relabeled generation-keyed.",
+            "Measure cold setup and repeated use separately, including failures and session shape changes."
+          ],
+          "quality_risks": [
+            "External mutable weights, context reuse and failed calls must not reuse stale device data."
+          ],
+          "note": "Alternative explicitly recorded from source; unverified."
+        }
+      ],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI46",
+      "title": "Fuse Mamba elementwise state preparation",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "mamba/impl/modeling/modeling_mamba.mojo",
+        "mamba/impl/modeling/afn_mamba1_fused.mojo",
+        "mamba/host/gen/modeling_mamba.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "New IDENTICAL opt-in reuses actual Mamba1 token-convolution/window and split/A-exp fusion. Bias/tap order and exact portable exp/SiLU remain the scalar host statements; every saved convolution/split stage is retained. Sabotage builds use original kernels.",
+      "dependencies": [],
+      "remaining_work": [
+        "Mamba3 and other elementwise fusion subarms remain separate pending IDENTICAL wiring.",
+        "Future full Mamba1/Samba forward/backward/decode coverage must include convolution state carries and stage exports.",
+        "No claim that prior Apple FAST timings establish IDENTICAL benefit."
+      ],
+      "quality_risks": [
+        "Very short requests, old/new window aliasing, stage materialization and consumer lifetime need coverage."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI47",
+      "title": "State space chunk boundary contract",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "mamba/impl/modules/mamba3.mojo",
+        "bindings/_mojolearn_mamba.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "New default-OFF Mamba3 resident-decode subarm retains one native stage allocation with capacity for a full physical open chunk plus the next token. Every step rebinds logical q0, t_work and nc, checks capacity and zeroes stage storage. The existing boundary state, canonical chunk graph, export/load format and report values are unchanged; all device vendors use the same source and scalar host arithmetic stays unchanged.",
+      "dependencies": [],
+      "remaining_work": [
+        "Qualify full streamed decode, arbitrary exported/reloaded chunk offsets, batch sizes, failure invalidation and interactions with retained forward tapes.",
+        "Measure cold setup and repeated decoding separately, counting the larger maximum-capacity zero fills; no benefit inferred from allocation count.",
+        "Original V absolute-position boundary format needed by the NI38 affine graph remains a separate unimplemented subarm; this S capacity route does not redefine it."
+      ],
+      "quality_risks": [
+        "Only active logical lengths may address/stride the maximum-capacity buffers; stale tail words must remain zero.",
+        "Checkpoint/load retains the original state representation; tapes and decode workspaces must not share mutable ownership."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [
+        {
+          "name": "versioned_absolute_boundary_schema",
+          "status": "design_pending",
+          "candidate_defines": [],
+          "baseline_defines": [],
+          "numerical_contract": "V",
+          "candidate_env": {},
+          "baseline_env": {},
+          "dependencies": [],
+          "implementation_paths": [
+            "mamba/impl/modules/mamba3.mojo",
+            "bindings/_mojolearn_mamba.mojo"
+          ],
+          "remaining_work": [
+            "Qualify full streamed decode, arbitrary exported/reloaded chunk offsets, batch sizes, failure invalidation and interactions with retained forward tapes.",
+            "Measure cold setup and repeated decoding separately, counting the larger maximum-capacity zero fills; no benefit inferred from allocation count.",
+            "Original V absolute-position boundary format needed by the NI38 affine graph remains a separate unimplemented subarm; this S capacity route does not redefine it."
+          ],
+          "quality_risks": [
+            "Only active logical lengths may address/stride the maximum-capacity buffers; stale tail words must remain zero.",
+            "Checkpoint/load retains the original state representation; tapes and decode workspaces must not share mutable ownership."
+          ],
+          "note": "Required if NI38 affine composition changes the state graph."
+        }
+      ],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified.",
+      "integration_chain": [
+        "Mamba3DecodeSession.step Python API shell",
+        "mamba3_session_step native binding -> _m3_session_step_run",
+        "IDN_M3_DECODE_WINDOW_REUSE -> retained Mamba3DeviceStages",
+        "reuse_decode_window(state.buf_len) -> mamba3_block_forward",
+        "existing state/report exports remain unchanged"
+      ]
+    },
+    {
+      "id": "NI48",
+      "title": "Reuse Samba forward stages in backward",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py",
+        "python/mojolearn/_samba_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "python/mojolearn/_transformer_impl.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_SAMBA_FORWARD_TAPE"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "Real native owned single-use Mamba3 and transformer forward tapes are wired into Samba loss_and_grads. Mamba3 tape owns immutable native input, weight and stage snapshots from the actual forward and invokes mamba3_prefill_backward_on directly; it bypasses forward rerun and byte comparisons. Samba retains available block handles, uses tape backward and closes consumed/unreached handles in finally. Host capability returns false and preserves equivalent recompute arithmetic. API shell performs only validation, allocation and native dispatch. No forward cache is presumed immutable without ownership.",
+      "dependencies": [
+        "NI36 transformer native owned forward tape",
+        "native single-use immutable snapshot ownership"
+      ],
+      "remaining_work": [
+        "Future full Samba train trajectories must qualify identity/quality, failed forward/backward cleanup, invalid/consumed handles, external parameter mutation and mixed block types.",
+        "Measure whole forward-plus-backward and peak lifetime memory; each snapshot currently uses a fresh owner and does not claim generation-keyed weight upload savings.",
+        "Host retains recomputation as the S counterpart; no native host tape speedup is claimed.",
+        "Activation checkpoint/recompute budgeting and tape fanout are not exposed by the single-use API."
+      ],
+      "quality_risks": [
+        "Input/weights are frozen by native copies rather than mutable Python references; both successful and failed backward consume the handle.",
+        "Forward tapes retain many buffers and can increase peak memory; real quality/identity has not been verified.",
+        "No permission to compile or run this integration was given; ownership and API behavior remain source-only."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified.",
+      "integration_chain": [
+        "Samba.loss_and_grads -> _forward(retain_tapes=True)",
+        "Mamba3Block._forward_with_tape -> mamba3_forward_tape native owner",
+        "mamba3_block_forward retains owned input/weights/stages",
+        "Samba reverse loop -> Mamba3Block._backward_from_tape",
+        "mamba3_backward_tape -> mamba3_prefill_backward_on",
+        "Samba finally -> _close_forward_tape; native host falls back to original recompute arithmetic"
+      ]
+    },
+    {
+      "id": "NI49",
+      "title": "Repair recurrent persistent scan before timing",
+      "status": "partial_source_unverified",
+      "implementation_paths": [
+        "sequence/recurrent_scan.mojo",
+        "sequence/recurrent.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/dispatch.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "Historical cooperative-SCAN constant-prediction failures remain explicit and default OFF. Added independent default-OFF ROW_SERIAL_SCAN: one executor item owns a complete batch row, executes the exact existing host scan body over units/timesteps on GPU through the ordinary packed executor kernel, and needs no cross-thread recurrent state reads or barriers. It removes T launches with a conservative ownership schedule. Also repaired the mixed-define leak that let FAST WIDE reassociate backward gate partials under IDENTICAL. Neither change establishes quality recovery for the old failed arm.",
+      "dependencies": [],
+      "remaining_work": [
+        "When authorized, diagnose the old cooperative SCAN with per-step state/gradient evidence; its original constant-prediction cause is still not established.",
+        "Qualify ROW_SERIAL_SCAN independently on full LSTM/GRU/RNN training and all host/GPU columns before timing or promotion.",
+        "Compare reduced launch overhead against reduced within-row parallelism; a scheduling alternative is not a measured performance win."
+      ],
+      "quality_risks": [
+        "Prior 8bb42b7de Args change did not fix accuracy 0.9608 to 0.5002 or regression r2 0.9804 to -0.1043; failures remain authoritative.",
+        "Current arm is explicitly unqualified, never a speed winner."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [
+        {
+          "name": "row_serial_scan",
+          "status": "wired_candidate_unverified",
+          "candidate_defines": [
+            "MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN"
+          ],
+          "baseline_defines": [],
+          "candidate_env": {},
+          "baseline_env": {},
+          "numerical_contract": "S",
+          "arithmetic_version": "existing sequence per-cell recurrence and gradient graph; unchanged",
+          "dependencies": [],
+          "implementation_paths": [
+            "sequence/recurrent_scan.mojo",
+            "sequence/recurrent.mojo",
+            "sequence/exec_device.mojo",
+            "sequence/dispatch.mojo"
+          ],
+          "remaining_work": [
+            "No quality recovery has been established: run future full LSTM/GRU/RNN trajectories and cross-column state/gradient identity before admitting performance.",
+            "Measure launch savings and loss of within-row parallelism end-to-end.",
+            "Keep the original failed cooperative scan separate; this candidate does not establish its failure cause."
+          ],
+          "quality_risks": [
+            "Prior 8bb42b7de Args change did not fix accuracy 0.9608 to 0.5002 or regression r2 0.9804 to -0.1043; failures remain authoritative.",
+            "Current arm is explicitly unqualified, never a speed winner."
+          ],
+          "note": "Implemented independent repair candidate. Recurrent forward/backward select OP_CELL_*_SCAN, DeviceExec selects ordinary seq_kernel items, and shared op_cell_*_scan bodies own one entire row. No within-kernel inter-thread state dependency. B is the existing per-timestep model path with this define omitted."
+        },
+        {
+          "name": "original_failed_cooperative_scan",
+          "status": "partial_source_unverified",
+          "candidate_defines": [
+            "MOJOLEARN_IDN_SEQ_LSTM_SCAN"
+          ],
+          "baseline_defines": [],
+          "numerical_contract": "S",
+          "candidate_env": {},
+          "baseline_env": {},
+          "dependencies": [],
+          "implementation_paths": [
+            "sequence/recurrent_scan.mojo",
+            "sequence/recurrent.mojo",
+            "sequence/exec_device.mojo",
+            "sequence/dispatch.mojo"
+          ],
+          "remaining_work": [
+            "Known constant-prediction failures must be diagnosed and corrected before the old cooperative arm may be timed or admitted."
+          ],
+          "quality_risks": [
+            "Prior 8bb42b7de Args change did not fix accuracy 0.9608 to 0.5002 or regression r2 0.9804 to -0.1043; failures remain authoritative.",
+            "Current arm is explicitly unqualified, never a speed winner."
+          ],
+          "note": "Original broken SCAN remains default OFF and not admitted; source repair/alternative does not erase recorded accuracy/r2 failure evidence.",
+          "arithmetic_version": "intended existing graph; quality failure unresolved"
+        }
+      ],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified.",
+      "integration_chain": [
+        "recurrent.forward / recurrent.backward",
+        "SEQ_LSTM_ROW_SERIAL_SCAN -> SEQ_LSTM_SCAN -> OP_CELL_FWD_SCAN / OP_CELL_BWD_SCAN",
+        "DeviceExec skips cooperative scan kernels and reaches seq_kernel[OP]",
+        "sequence.dispatch.apply -> op_cell_fwd_scan / op_cell_bwd_scan",
+        "HostExec uses those same operation bodies"
+      ]
+    },
+    {
+      "id": "NI50",
+      "title": "Tiled same chain neural sequence GEMM",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "sequence/gemm_tiled.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/recurrent.mojo",
+        "sequence/mlp_fit.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "Reuse existing exact ascending-chain tiled sequence GEMM on NVIDIA/AMD; Apple and host retain their existing scalar/cooperative same-operation chains. No shared statistical estimator route was changed.",
+      "dependencies": [],
+      "remaining_work": [
+        "Limit workload selection to neural recurrent, MLP and applicable MoE callers.",
+        "Record actual tile/epilogue/strided caller admission so an unused route is not timed as a new candidate."
+      ],
+      "quality_risks": [
+        "Transpose forms, accumulation and output aliases retain original operation semantics; generic GEMM identity is not a substitute for sequence graph identity."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI51",
+      "title": "Versioned recurrent gradients and LayerNorm folds",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "sequence/recurrent.mojo",
+        "sequence/layernorm.mojo",
+        "sequence/ops.mojo",
+        "sequence/exec.mojo",
+        "sequence/exec_device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_SEQ_WGRAD_LEAF256"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "V",
+      "implementation_scope": "New recurrent minimum leaf256 arm reuses existing canonical split/fold kernels and sqrt(K) scratch-bounding growth. Separate LayerNorm parameter-gradient leaf32 arm uses existing blocks and sqrt(M) growth. Shared executor source gives host and every GPU the same graph.",
+      "dependencies": [],
+      "remaining_work": [
+        "Measure each arm and their applicable full-training combinations separately.",
+        "LayerNorm mean/variance/dx graph is unchanged; broader norm-tree experiments are still pending.",
+        "Independent recurrent/LayerNorm oracles must select or explicitly describe the candidate version for future validation."
+      ],
+      "quality_risks": [
+        "Parameter gradients and optimizer trajectories change; admission requires full quality, not only a forward digest.",
+        "Shorter leaves add partial work; no benchmark-derived thresholds were introduced."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [
+        {
+          "name": "layernorm_parameter_leaf32",
+          "candidate_defines": [
+            "MOJOLEARN_IDN_SEQ_LN_LEAF32"
+          ],
+          "baseline_defines": [],
+          "numerical_contract": "V",
+          "status": "wired_candidate_unverified",
+          "candidate_env": {},
+          "baseline_env": {},
+          "dependencies": [],
+          "implementation_paths": [
+            "sequence/recurrent.mojo",
+            "sequence/layernorm.mojo",
+            "sequence/ops.mojo",
+            "sequence/exec.mojo",
+            "sequence/exec_device.mojo"
+          ],
+          "remaining_work": [
+            "Measure each arm and their applicable full-training combinations separately.",
+            "LayerNorm mean/variance/dx graph is unchanged; broader norm-tree experiments are still pending.",
+            "Independent recurrent/LayerNorm oracles must select or explicitly describe the candidate version for future validation."
+          ],
+          "quality_risks": [
+            "Parameter gradients and optimizer trajectories change; admission requires full quality, not only a forward digest.",
+            "Shorter leaves add partial work; no benchmark-derived thresholds were introduced."
+          ],
+          "note": "Alternative explicitly recorded from source; unverified."
+        }
+      ],
+      "arithmetic_version": "ni51-experimental-canonical-fold-20261006",
+      "checkpoint_contract": "Experimental V fold requires identical source/define configuration on host and every GPU for the whole training trajectory. No migration or mixed-version checkpoint admission is introduced. Frozen build/define provenance and candidate graph must accompany later checkpoint/trajectory evidence; numeric-mode IDENTICAL alone is not the version identifier."
+    },
+    {
+      "id": "NI52",
+      "title": "Neural MLP device epoch shuffle and batches",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "sequence/mlp.mojo",
+        "sequence/mlp_fit.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "New scheduling-only subarm removes unused host N-row permutation construction under existing device epochs and emits no-shuffle identity indices via the executor. Existing Feistel row mapping, seed/epoch keys, resident batches and curve fold remain unchanged. Host and GPU use the same item operation.",
+      "dependencies": [
+        "existing MLP_EPOCH_DEV"
+      ],
+      "remaining_work": [
+        "Future full multi-epoch fit coverage must include shuffle on/off, tails, early stopping and complete row coverage.",
+        "The existing V epoch-permutation arm remains a separate legacy comparison; no new permutation invented."
+      ],
+      "quality_risks": [
+        "Float32 encoded row-ID bounds and resume epoch keys remain the existing contract."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [
+        {
+          "name": "existing_device_epochs",
+          "candidate_defines": [],
+          "baseline_defines": [
+            "MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF"
+          ],
+          "numerical_contract": "V",
+          "status": "existing_candidate_unverified",
+          "candidate_env": {},
+          "baseline_env": {},
+          "dependencies": [
+            "existing MLP_EPOCH_DEV"
+          ],
+          "implementation_paths": [
+            "sequence/mlp.mojo",
+            "sequence/mlp_fit.mojo"
+          ],
+          "remaining_work": [
+            "Future full multi-epoch fit coverage must include shuffle on/off, tails, early stopping and complete row coverage.",
+            "The existing V epoch-permutation arm remains a separate legacy comparison; no new permutation invented."
+          ],
+          "quality_risks": [
+            "Float32 encoded row-ID bounds and resume epoch keys remain the existing contract."
+          ],
+          "note": "Alternative explicitly recorded from source; unverified."
+        }
+      ],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI53",
+      "title": "MoE stable routing and grouped expert execution",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "sequence/moe_group.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/moe_reg.mojo",
+        "sequence/moe_tiled.mojo",
+        "sequence/pyapi.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_MOE_STABLE_PACK"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "implementation_scope": "New stable expert-owned scatter is wired in both existing grouping paths. Each expert scans integer pair IDs ascending and writes all selected pairs once into existing offsets. Router tie decisions, grouped expert dot chains and original pick-order combine are untouched. Scalar host items consume original pair IDs and need no grouping.",
+      "dependencies": [],
+      "remaining_work": [
+        "Compare full neural MoE forward against existing atomic scatter; O(experts*pairs) comparisons may lose.",
+        "No full MoE training/backward recipe or complete route is claimed by this forward subarm; map absent coverage as pending."
+      ],
+      "quality_risks": [
+        "Empty experts, equal scores, repeated picks and complete pair coverage require future evidence.",
+        "Never use capacity truncation, token dropping or a changed fan-in fold to manufacture a speedup."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [],
+      "arithmetic_version": "existing arithmetic graph; scheduling/storage candidate only",
+      "checkpoint_contract": "No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified."
+    },
+    {
+      "id": "NI54",
+      "title": "Adafactor tiled and versioned factored statistics",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "sequence/adafactor.mojo",
+        "sequence/adafactor_candidates.mojo",
+        "sequence/exec_device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_AF_COL_CHUNK_FOLD"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "V",
+      "implementation_scope": "New column-moment arm has consecutive 64-row fma leaves and ascending +0-seeded leaf merge. GPU block lanes compute leaves in 32-leaf scheduling slabs; host op_af_col spells the same graph. sqrt then square, mean divisor, lerp, epsilon, clipping and step semantics retain their placement.",
+      "dependencies": [],
+      "remaining_work": [
+        "Map a full neural Adafactor training recipe; an optimizer-only microbenchmark cannot qualify it.",
+        "Same-order row/column tiling and mean/RMS-tree variants remain separate pending subarms.",
+        "Run complete multi-step state/parameter identity and quality across all columns only when authorized."
+      ],
+      "quality_risks": [
+        "Column statistics rounding changes and may change convergence.",
+        "Rectangular shapes, tiny/partial leaves, zeros and relative-step state remain unqualified."
+      ],
+      "validation": "NOT RUN per owner: no compilation, verification, execution or timing",
+      "variants": [],
+      "arithmetic_version": "ni54-experimental-canonical-fold-20261006",
+      "checkpoint_contract": "Experimental V fold requires identical source/define configuration on host and every GPU for the whole training trajectory. No migration or mixed-version checkpoint admission is introduced. Frozen build/define provenance and candidate graph must accompany later checkpoint/trajectory evidence; numeric-mode IDENTICAL alone is not the version identifier."
+    }
+  ],
+  "resumed_source_work": "NI38 S alternative, NI47 decode-capacity reuse, NI48 native owned tape integration, NI49 serial-owner repair candidate added without compilation or verification. Original NI38 V affine graph and NI49 historical quality failure remain incomplete.",
+  "variant_schema": "Common variants list: each selectable subarm records explicit status, candidate/baseline defines/env, numerical contract and arithmetic version; pending broader ideas remain blocked variants."
+}

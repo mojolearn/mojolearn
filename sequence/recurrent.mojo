@@ -79,7 +79,16 @@ comptime NN43_WGRAD_FIXED128 = (
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]()
 )
-comptime WGRAD_MIN_BLOCK = 512
+
+# NI51 V subarm: a smaller minimum leaf trades more independent gradient
+# work for partial storage. Above that minimum the existing sqrt(K) growth
+# bounds partial count; no dataset or benchmark dimension selects this graph.
+# The generic executor makes host and all GPU columns share the new bits.
+# Default OFF; multi-step recurrent quality and identity are unmeasured.
+comptime SEQ_WGRAD_LEAF256 = SEQ_WGRAD_BLOCKED and is_defined[
+    "MOJOLEARN_IDN_SEQ_WGRAD_LEAF256"
+]()
+comptime WGRAD_MIN_BLOCK = 256 if SEQ_WGRAD_LEAF256 else 512
 #: partial floats one launch pair may hold (rows of cells are chunked to
 #: fit; chunking moves no bit, every cell's blocks are the same)
 comptime WGRAD_IDN_SCRATCH = 1 << 22

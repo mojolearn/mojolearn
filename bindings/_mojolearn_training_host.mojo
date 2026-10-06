@@ -821,6 +821,29 @@ def neural_rng_binding(
 # ===========================================================================
 
 
+from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2, IDN_LOSS_TOKEN_TREE_V2, IDN_ATTENTION_V2
+from gemm.contract import CONTRACT_K_LEAF_MIN
+
+
+def training_experiment_profile_binding() -> PythonObject:
+    """Checkpoint identity for optional NI34/35/08 numerical contracts."""
+    var profile = String("baseline")
+    if IDN_ATTENTION_V2:
+        profile += "+attention-online-tile32-v2"
+    if IDN_CHUNKED_LM_HEAD_V2:
+        profile += "+head-serial-logit-chunked-v2"
+    if IDN_LOSS_TOKEN_TREE_V2:
+        profile += "+ce-token-tree256-v2"
+    if CONTRACT_K_LEAF_MIN != 128:
+        profile += "+gemm-leaf" + String(CONTRACT_K_LEAF_MIN)
+    return PythonObject(profile)
+
+
+def training_chunked_lm_head_enabled_binding() -> PythonObject:
+    """NI34 profile selector shared by native-host and GPU Samba wrappers."""
+    return PythonObject(IDN_CHUNKED_LM_HEAD_V2)
+
+
 def chunked_lm_head_v2_loss_binding(
     addresses: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -910,6 +933,8 @@ def PyInit__mojolearn_training_host() abi("C") -> PythonObject:
         module.def_function[neural_rng_binding]("neural_rng")
         module.def_function[chunked_lm_head_v2_loss_binding]("chunked_lm_head_v2_loss")
         module.def_function[chunked_lm_head_v2_train_binding]("chunked_lm_head_v2_train")
+        module.def_function[training_chunked_lm_head_enabled_binding]("training_chunked_lm_head_enabled")
+        module.def_function[training_experiment_profile_binding]("training_experiment_profile")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_training_host: ", error))

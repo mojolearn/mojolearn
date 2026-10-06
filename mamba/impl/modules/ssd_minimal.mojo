@@ -1204,7 +1204,29 @@ def nn36_m2_yoff_shared_exp_kernel(
     y_out.unsafe_store(cell, ftz(ftz(ydiag.unsafe_load(cell)) + yo))
 
 
-def m2_yoff_y_kernel(
+# NI39: cache exp(dacs) once per logical (batch, head, chunk, position),
+# shared across the 64 independent output channels. The exact portable exp
+# expression is unchanged; the host's uncached expression is the S counterpart.
+# Default OFF. Allocation and the lifetime drain are part of whole-op A/B;
+# no speed, identity, quality or full-workload claim has been measured.
+comptime IDN_M2_YOFF_EXP_CACHE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_M2_YOFF_EXP_CACHE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not SSD_ANY_SABOTAGE
+)
+
+
+def m2_yoff_exp_cache_kernel(
+    cached: MutPointer[Float32, MutAnyOrigin],
+    dacs: MutPointer[Float32, MutAnyOrigin], cells_in: Int32,
+):
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell < Int(cells_in):
+        cached.unsafe_store(cell, ftz(identical_exp(ftz(dacs.unsafe_load(cell)))))
+
+
+def m2_yoff_y_kernel[CACHED_EXP: Bool = False](
     yoff: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
     y_out: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
     ydiag: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
@@ -1256,11 +1278,16 @@ def m2_yoff_y_kernel(
             )
         )
     acc = ftz(acc)
-    var sc = ftz(
-        identical_exp(
-            ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + i))
+    var sc: Float32
+    comptime if CACHED_EXP:
+        # In this specialization dacs holds exp(dacs), not the log prefix.
+        sc = ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + i))
+    else:
+        sc = ftz(
+            identical_exp(
+                ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + i))
+            )
         )
-    )
     var yo = ftz(identical_mul(acc, sc))
     yoff.unsafe_store(cell, yo)
     y_out.unsafe_store(cell, ftz(ftz(ydiag.unsafe_load(cell)) + yo))
@@ -1496,8 +1523,33 @@ def ssd_forward(
             grid_dim=(b * t_work * nh, 1, 1),
             block_dim=(M2_HEADDIM, 1, 1),
         )
+    elif IDN_M2_YOFF_EXP_CACHE:
+        var cache_index = len(retained)
+        var cache_cells = b * nh * nc * qv
+        retained.append(ctx.enqueue_create_buffer[DType.float32](cache_cells))
+        ctx.enqueue_function[m2_yoff_exp_cache_kernel](
+            retained[cache_index].unsafe_ptr(), dacs.unsafe_ptr(), Int32(cache_cells),
+            grid_dim=(_grid(cache_cells), 1, 1), block_dim=(MAMBA2_TPB, 1, 1),
+        )
+        ctx.enqueue_function[m2_yoff_y_kernel[True]](
+            yoff.unsafe_ptr(),
+            y_out.unsafe_ptr(),
+            ydiag.unsafe_ptr(),
+            xbc_work.unsafe_ptr(),
+            pass_states.unsafe_ptr(),
+            retained[cache_index].unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(di),
+            Int32(cd),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(_grid(b * t_work * nh * M2_HEADDIM), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
     else:
-        ctx.enqueue_function[m2_yoff_y_kernel](
+        ctx.enqueue_function[m2_yoff_y_kernel[False]](
             yoff.unsafe_ptr(),
             y_out.unsafe_ptr(),
             ydiag.unsafe_ptr(),

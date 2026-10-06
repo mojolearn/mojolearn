@@ -1,0 +1,1906 @@
+{
+  "schema": "mojolearn.neural-identical-lane/1",
+  "lane": "gemm_cnn",
+  "branch": "ideas/neural-identical-20261006-v2",
+  "base_commit": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
+  "source_only": true,
+  "validation": "NOT RUN: owner forbids compilation, execution, tests, lint, syntax checking, verification and measurements",
+  "promotion": "NONE; new switches default OFF; no speed or identity claim",
+  "experiments": [
+    {
+      "id": "NI01",
+      "title": "Neural GEMM scratch lifetime",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "gemm/checks/gemm_identical.mojo",
+        "gemm/experiments/bounded_workspace.mojo",
+        "training/neural_gemm_workspace.mojo",
+        "training/dev_tensors.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI01_TRAINING_WORKSPACE=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "Training lane owns context-keyed bounded workspace in train_linear_forward_dev; GEMM lane adds optional geometric capacity growth and budget-on-capacity handling. Existing CNN device_gemm already retains scratch and is not counted as newly implemented.",
+      "variants": [
+        {
+          "name": "geometric_capacity",
+          "candidate_defines": [
+            "MOJOLEARN_NI01_TRAINING_WORKSPACE=1",
+            "MOJOLEARN_NI01_GEMM_GEOMETRIC_WORKSPACE=1"
+          ],
+          "baseline_defines": [
+            "MOJOLEARN_NI01_TRAINING_WORKSPACE=1"
+          ],
+          "status": "wired_candidate_unverified",
+          "candidate_env": {},
+          "baseline_env": {},
+          "numerical_contract": "S",
+          "required_bindings": [
+            "_mojolearn_training",
+            "_mojolearn_training_host"
+          ],
+          "build_targets": [
+            {
+              "binding": "_mojolearn_training",
+              "gpu_script": "bindings/build_training.sh",
+              "host_binding": "_mojolearn_training_host",
+              "host_script": "bindings/build_training_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            }
+          ]
+        }
+      ],
+      "remaining_work": [
+        "Backward/Samba and other independent neural callers remain on their incumbent lifetime paths",
+        "Record full estimator/corpus mappings, cold and repeated-operation boundaries, and failure/lifetime coverage",
+        "Compile/identity/quality/full NVIDIA+AMD A/B remain pending; Apple and host identity pending"
+      ],
+      "quality_risks": [
+        "Outstanding consumers during growth or last tensor release",
+        "Context ownership, failed operations and changing shapes",
+        "Retained capacity versus peak-memory budget"
+      ],
+      "required_bindings": [
+        "_mojolearn_training",
+        "_mojolearn_training_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_training",
+          "gpu_script": "bindings/build_training.sh",
+          "host_binding": "_mojolearn_training_host",
+          "host_script": "bindings/build_training_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ]
+    },
+    {
+      "id": "NI02",
+      "title": "Bounded streaming of GEMM partial planes",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "gemm/checks/gemm_identical.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI02_GEMM_STREAM_PARTIALS=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "Shipped GEMM dispatcher uses sixteen exact leaf planes plus twelve carry planes when all leaf planes would exceed that live storage. Window fold resumes the canonical stack using leaf-count occupancy; only the final window drains. Exact FMA leaf function is reused. CNN device_gemm now consults the same reach predicate before its forced TN/Apple plans, so eligible public convolution/linear gradients reach streaming with correctly sized scratch.",
+      "remaining_work": [
+        "Tiled operand staging for streamed leaves is not implemented; initial arm uses exact scalar leaf bodies",
+        "Explicit diagnostic forced-plan calls outside CNN remain separate from shipped dispatch; trial-hook builds retain incumbent scratch sizing. Map all affected neural public callers before future full timing.",
+        "Measure launch growth, scratch traffic and whole neural workloads including ragged window tails",
+        "Compile, all-column identity, quality and timing pending"
+      ],
+      "quality_risks": [
+        "Carry occupancy and stale scratch reads across windows",
+        "Small-output launch cost and scalar-leaf regressions",
+        "Workspace/caller lifetime and alternate-plan interactions"
+      ],
+      "required_bindings": [
+        "_mojolearn_training",
+        "_mojolearn_training_host",
+        "_mojolearn_transformer",
+        "_mojolearn_transformer_host",
+        "_mojolearn_mamba",
+        "_mojolearn_mamba_host",
+        "_mojolearn_byte_lm",
+        "_mojolearn_byte_lm_host",
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host",
+        "_mojolearn_linalg",
+        "_mojolearn_linalg_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_training",
+          "gpu_script": "bindings/build_training.sh",
+          "host_binding": "_mojolearn_training_host",
+          "host_script": "bindings/build_training_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_transformer",
+          "gpu_script": "bindings/build_transformer.sh",
+          "host_binding": "_mojolearn_transformer_host",
+          "host_script": "bindings/build_transformer_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_mamba",
+          "gpu_script": "bindings/build_mamba.sh",
+          "host_binding": "_mojolearn_mamba_host",
+          "host_script": "bindings/build_mamba_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_byte_lm",
+          "gpu_script": "bindings/build_byte_lm.sh",
+          "host_binding": "_mojolearn_byte_lm_host",
+          "host_script": "bindings/build_byte_lm_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_linalg",
+          "gpu_script": "bindings/build_linalg.sh",
+          "host_binding": "_mojolearn_linalg_host",
+          "host_script": "bindings/build_linalg_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI03",
+      "title": "GEMM launch plans from resource costs",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "gemm/checks/gemm_identical.mojo",
+        "checks/kernel_matrix_gemm.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "Reuse existing default-OFF body-tile-aware group scheduling (I01), not a newly invented hardware query. Existing independent group-slack variants remain available.",
+      "variants": [
+        {
+          "name": "slack_two",
+          "candidate_defines": [
+            "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1"
+          ],
+          "status": "existing_candidate_unverified",
+          "baseline_defines": [],
+          "candidate_env": {},
+          "baseline_env": {},
+          "numerical_contract": "S",
+          "required_bindings": [
+            "_mojolearn_training",
+            "_mojolearn_training_host",
+            "_mojolearn_transformer",
+            "_mojolearn_transformer_host",
+            "_mojolearn_mamba",
+            "_mojolearn_mamba_host",
+            "_mojolearn_byte_lm",
+            "_mojolearn_byte_lm_host",
+            "_mojolearn_x_cnn",
+            "_mojolearn_x_cnn_host",
+            "_mojolearn_linalg",
+            "_mojolearn_linalg_host"
+          ],
+          "build_targets": [
+            {
+              "binding": "_mojolearn_training",
+              "gpu_script": "bindings/build_training.sh",
+              "host_binding": "_mojolearn_training_host",
+              "host_script": "bindings/build_training_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_transformer",
+              "gpu_script": "bindings/build_transformer.sh",
+              "host_binding": "_mojolearn_transformer_host",
+              "host_script": "bindings/build_transformer_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_mamba",
+              "gpu_script": "bindings/build_mamba.sh",
+              "host_binding": "_mojolearn_mamba_host",
+              "host_script": "bindings/build_mamba_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_byte_lm",
+              "gpu_script": "bindings/build_byte_lm.sh",
+              "host_binding": "_mojolearn_byte_lm_host",
+              "host_script": "bindings/build_byte_lm_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_x_cnn",
+              "gpu_script": "bindings/build_x_cnn.sh",
+              "host_binding": "_mojolearn_x_cnn_host",
+              "host_script": "bindings/build_x_cnn_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_linalg",
+              "gpu_script": "bindings/build_linalg.sh",
+              "host_binding": "_mojolearn_linalg_host",
+              "host_script": "bindings/build_linalg_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            }
+          ]
+        },
+        {
+          "name": "slack_eight",
+          "candidate_defines": [
+            "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8=1"
+          ],
+          "status": "existing_candidate_unverified",
+          "baseline_defines": [],
+          "candidate_env": {},
+          "baseline_env": {},
+          "numerical_contract": "S",
+          "required_bindings": [
+            "_mojolearn_training",
+            "_mojolearn_training_host",
+            "_mojolearn_transformer",
+            "_mojolearn_transformer_host",
+            "_mojolearn_mamba",
+            "_mojolearn_mamba_host",
+            "_mojolearn_byte_lm",
+            "_mojolearn_byte_lm_host",
+            "_mojolearn_x_cnn",
+            "_mojolearn_x_cnn_host",
+            "_mojolearn_linalg",
+            "_mojolearn_linalg_host"
+          ],
+          "build_targets": [
+            {
+              "binding": "_mojolearn_training",
+              "gpu_script": "bindings/build_training.sh",
+              "host_binding": "_mojolearn_training_host",
+              "host_script": "bindings/build_training_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_transformer",
+              "gpu_script": "bindings/build_transformer.sh",
+              "host_binding": "_mojolearn_transformer_host",
+              "host_script": "bindings/build_transformer_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_mamba",
+              "gpu_script": "bindings/build_mamba.sh",
+              "host_binding": "_mojolearn_mamba_host",
+              "host_script": "bindings/build_mamba_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_byte_lm",
+              "gpu_script": "bindings/build_byte_lm.sh",
+              "host_binding": "_mojolearn_byte_lm_host",
+              "host_script": "bindings/build_byte_lm_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_x_cnn",
+              "gpu_script": "bindings/build_x_cnn.sh",
+              "host_binding": "_mojolearn_x_cnn_host",
+              "host_script": "bindings/build_x_cnn_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_linalg",
+              "gpu_script": "bindings/build_linalg.sh",
+              "host_binding": "_mojolearn_linalg_host",
+              "host_script": "bindings/build_linalg_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            }
+          ]
+        }
+      ],
+      "remaining_work": [
+        "Complete audit of older shape gates, including the AMD short-contract output-size rule; removal requires old-rule B, neighboring shapes and a non-board full model",
+        "Do not fabricate device resource counts or implement unsupported resource queries",
+        "Reuse accepted existing evidence when applicable; this changed source has no new qualification",
+        "Whole-workload combinations and all-column identity pending"
+      ],
+      "quality_risks": [
+        "Resource assumptions from historical hardware profiles may not fit another GPU",
+        "Excess partial storage or underfilled launch plans",
+        "Shared GEMM changes can reach non-neural callers; task evaluates neural workloads only"
+      ],
+      "required_bindings": [
+        "_mojolearn_training",
+        "_mojolearn_training_host",
+        "_mojolearn_transformer",
+        "_mojolearn_transformer_host",
+        "_mojolearn_mamba",
+        "_mojolearn_mamba_host",
+        "_mojolearn_byte_lm",
+        "_mojolearn_byte_lm_host",
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host",
+        "_mojolearn_linalg",
+        "_mojolearn_linalg_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_training",
+          "gpu_script": "bindings/build_training.sh",
+          "host_binding": "_mojolearn_training_host",
+          "host_script": "bindings/build_training_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_transformer",
+          "gpu_script": "bindings/build_transformer.sh",
+          "host_binding": "_mojolearn_transformer_host",
+          "host_script": "bindings/build_transformer_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_mamba",
+          "gpu_script": "bindings/build_mamba.sh",
+          "host_binding": "_mojolearn_mamba_host",
+          "host_script": "bindings/build_mamba_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_byte_lm",
+          "gpu_script": "bindings/build_byte_lm.sh",
+          "host_binding": "_mojolearn_byte_lm_host",
+          "host_script": "bindings/build_byte_lm_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_linalg",
+          "gpu_script": "bindings/build_linalg.sh",
+          "host_binding": "_mojolearn_linalg_host",
+          "host_script": "bindings/build_linalg_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ]
+    },
+    {
+      "id": "NI04",
+      "title": "Smaller exact AMD matrix tiles",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "gemm/checks/gemm_identical.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_GEMM_MFMA16_OFF=1"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "Existing MFMA16 implementation and its explicit scalar rollback arm. A is the incumbent MFMA16 path, not a new default or newly written candidate. It uses the already implemented K=1 exact instruction seam and resource-based wave-count selection; NVIDIA participates without changing its arithmetic.",
+      "remaining_work": [
+        "Retain historical compile/identity evidence without rerunning merely for timing",
+        "Full neural caller mapping and AMD+NVIDIA end-to-end A/B pending",
+        "Additional tile/page geometries beyond the existing body remain design work"
+      ],
+      "quality_risks": [
+        "Admission/repair and subnormal handling",
+        "Tail masks and split-leaf workspace",
+        "Registers/shared-memory cost; do not substitute an undocumented multi-K instruction"
+      ],
+      "required_bindings": [
+        "_mojolearn_training",
+        "_mojolearn_training_host",
+        "_mojolearn_transformer",
+        "_mojolearn_transformer_host",
+        "_mojolearn_mamba",
+        "_mojolearn_mamba_host",
+        "_mojolearn_byte_lm",
+        "_mojolearn_byte_lm_host",
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host",
+        "_mojolearn_linalg",
+        "_mojolearn_linalg_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_training",
+          "gpu_script": "bindings/build_training.sh",
+          "host_binding": "_mojolearn_training_host",
+          "host_script": "bindings/build_training_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_transformer",
+          "gpu_script": "bindings/build_transformer.sh",
+          "host_binding": "_mojolearn_transformer_host",
+          "host_script": "bindings/build_transformer_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_mamba",
+          "gpu_script": "bindings/build_mamba.sh",
+          "host_binding": "_mojolearn_mamba_host",
+          "host_script": "bindings/build_mamba_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_byte_lm",
+          "gpu_script": "bindings/build_byte_lm.sh",
+          "host_binding": "_mojolearn_byte_lm_host",
+          "host_script": "bindings/build_byte_lm_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_linalg",
+          "gpu_script": "bindings/build_linalg.sh",
+          "host_binding": "_mojolearn_linalg_host",
+          "host_script": "bindings/build_linalg_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI05",
+      "title": "NVIDIA register tiles without partial workspace",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "gemm/checks/gemm_identical.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "Reuse the existing default-OFF compact live register tile arm; this work adds its missing ALL_OFF guard. Its explicit no-group kpack body retains canonical leaves/folds. Incumbent NVIDIA stepped kpack is recorded as existing behavior, not newly implemented.",
+      "remaining_work": [
+        "Map all NN/NT/TN public neural consumers and explicitly identify any unsupported transpose form",
+        "Record register/spill and resource behavior without accepting component-only speed",
+        "Full workload A/B on both vendors and Apple/host identity pending"
+      ],
+      "quality_risks": [
+        "Register spill and fewer blocks",
+        "Target page support",
+        "Combination with NI02 can give streaming dispatch priority over compact tiles"
+      ],
+      "required_bindings": [
+        "_mojolearn_training",
+        "_mojolearn_training_host",
+        "_mojolearn_transformer",
+        "_mojolearn_transformer_host",
+        "_mojolearn_mamba",
+        "_mojolearn_mamba_host",
+        "_mojolearn_byte_lm",
+        "_mojolearn_byte_lm_host",
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host",
+        "_mojolearn_linalg",
+        "_mojolearn_linalg_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_training",
+          "gpu_script": "bindings/build_training.sh",
+          "host_binding": "_mojolearn_training_host",
+          "host_script": "bindings/build_training_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_transformer",
+          "gpu_script": "bindings/build_transformer.sh",
+          "host_binding": "_mojolearn_transformer_host",
+          "host_script": "bindings/build_transformer_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_mamba",
+          "gpu_script": "bindings/build_mamba.sh",
+          "host_binding": "_mojolearn_mamba_host",
+          "host_script": "bindings/build_mamba_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_byte_lm",
+          "gpu_script": "bindings/build_byte_lm.sh",
+          "host_binding": "_mojolearn_byte_lm_host",
+          "host_script": "bindings/build_byte_lm_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_linalg",
+          "gpu_script": "bindings/build_linalg.sh",
+          "host_binding": "_mojolearn_linalg_host",
+          "host_script": "bindings/build_linalg_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI06",
+      "title": "GEMM operand staging and page depth",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "gemm/checks/gemm_identical.mojo",
+        "checks/kernel_matrix_gemm.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI06_GEMM_ONE_PAGE=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "New IDENTICAL/ALL_OFF guarded alias to the existing one-page kpack staging implementation. Baseline uses supported resource-derived page count. No duplicated kernel or claim that existing input-FTZ staging was newly implemented.",
+      "remaining_work": [
+        "Some baseline resource profiles already select one page and therefore have no active A/B difference",
+        "Broader coalesced/stride-aware staging ideas beyond existing kpack paths remain pending",
+        "Full caller coverage, combined tile/page arms, all-column identity and timings pending"
+      ],
+      "quality_risks": [
+        "Staging barriers and page reuse",
+        "Subnormal admission and exact recompute",
+        "Candidate can reduce latency hiding despite lower shared memory"
+      ],
+      "required_bindings": [
+        "_mojolearn_training",
+        "_mojolearn_training_host",
+        "_mojolearn_transformer",
+        "_mojolearn_transformer_host",
+        "_mojolearn_mamba",
+        "_mojolearn_mamba_host",
+        "_mojolearn_byte_lm",
+        "_mojolearn_byte_lm_host",
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host",
+        "_mojolearn_linalg",
+        "_mojolearn_linalg_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_training",
+          "gpu_script": "bindings/build_training.sh",
+          "host_binding": "_mojolearn_training_host",
+          "host_script": "bindings/build_training_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_transformer",
+          "gpu_script": "bindings/build_transformer.sh",
+          "host_binding": "_mojolearn_transformer_host",
+          "host_script": "bindings/build_transformer_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_mamba",
+          "gpu_script": "bindings/build_mamba.sh",
+          "host_binding": "_mojolearn_mamba_host",
+          "host_script": "bindings/build_mamba_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_byte_lm",
+          "gpu_script": "bindings/build_byte_lm.sh",
+          "host_binding": "_mojolearn_byte_lm_host",
+          "host_script": "bindings/build_byte_lm_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_linalg",
+          "gpu_script": "bindings/build_linalg.sh",
+          "host_binding": "_mojolearn_linalg_host",
+          "host_script": "bindings/build_linalg_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI07",
+      "title": "Batched independent neural projections",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "gemm/experiments/neural_tiled.mojo",
+        "gemm/experiments/grouped_jobs.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI07_GROUPED_PROJECTIONS=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "New 16x16 canonical tiled Q/K/V triplet accepts separate output/weight buffers and unequal Q versus KV widths, with no packing. Transformer llama_attention_forward selects it for ordinary non-int15 FP32 projections; bias/norm and traces retain their existing order. Int15/sabotage and alternate Apple AFN routes retain reference dispatch. This reaches ordinary transformer prefill/decode and training callers.",
+      "source_entry": "neural_projection_triplet(ctx,q,k_out,v_out,x,wq,wk,wv,rows,q_width,kv_width,reduction)",
+      "remaining_work": [
+        "Gate/up and independent backward projection batching remain optional future subarms",
+        "Measure whole public transformer/LM forward and training against the incumbent tiled/matrix GEMM route",
+        "All compilation, parity, quality and full-workload measurements pending"
+      ],
+      "quality_risks": [
+        "Owning projection outputs/inputs must remain separate and live",
+        "Unequal job grids and masked block tails",
+        "Scalar exact FMA tiles may lose to incumbent matrix routes; historical grouped losses remain relevant"
+      ],
+      "required_bindings": [
+        "_mojolearn_transformer",
+        "_mojolearn_transformer_host",
+        "_mojolearn_byte_lm",
+        "_mojolearn_byte_lm_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_transformer",
+          "gpu_script": "bindings/build_transformer.sh",
+          "host_binding": "_mojolearn_transformer_host",
+          "host_script": "bindings/build_transformer_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_byte_lm",
+          "gpu_script": "bindings/build_byte_lm.sh",
+          "host_binding": "_mojolearn_byte_lm_host",
+          "host_script": "bindings/build_byte_lm_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI08",
+      "title": "Versioned GEMM leaf lengths and balanced folds",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "gemm/contract.mojo",
+        "gemm/host/gemm_oracle.mojo",
+        "gemm/host/identical_gemm.mojo",
+        "gemm/checks/gemm_identical.mojo",
+        "bindings/_mojolearn_linalg.mojo",
+        "bindings/_mojolearn_linalg_host.mojo",
+        "python/mojolearn/_linalg_impl.py",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI08_GEMM_LEAF_256=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {
+        "MOJOLEARN_EXPERIMENT_GEMM_PROFILE": "mojolearn.identical.gemm.fp32.ni08-leaf256"
+      },
+      "baseline_env": {
+        "MOJOLEARN_EXPERIMENT_GEMM_PROFILE": "mojolearn.identical.gemm.fp32.v1"
+      },
+      "numerical_contract": "V",
+      "dependencies": [],
+      "implemented_scope": "New shared leaf256 profile with the existing canonical balanced tree, cap, FTZ and FMA seams. Host and device import one profile constant; both selected leaf profiles respect ALL_OFF, and mutually selected leaf64/leaf256 are refused. Root added exact numerical profile name/version reporting to both linalg bindings, explicit known-profile opt-in in Python API shell, and suppression of v1 certification fields for experimental profiles.",
+      "variants": [
+        {
+          "name": "existing_leaf64",
+          "candidate_defines": [
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64=1"
+          ],
+          "candidate_env": {
+            "MOJOLEARN_EXPERIMENT_GEMM_PROFILE": "mojolearn.identical.gemm.fp32.i04-leaf64"
+          },
+          "baseline_env": {
+            "MOJOLEARN_EXPERIMENT_GEMM_PROFILE": "mojolearn.identical.gemm.fp32.v1"
+          },
+          "note": "Existing I04 component losses on AMD and NVIDIA retained; not re-decided or promoted here",
+          "status": "existing_candidate_unverified",
+          "baseline_defines": [],
+          "numerical_contract": "V",
+          "required_bindings": [
+            "_mojolearn_training",
+            "_mojolearn_training_host",
+            "_mojolearn_transformer",
+            "_mojolearn_transformer_host",
+            "_mojolearn_mamba",
+            "_mojolearn_mamba_host",
+            "_mojolearn_byte_lm",
+            "_mojolearn_byte_lm_host",
+            "_mojolearn_x_cnn",
+            "_mojolearn_x_cnn_host",
+            "_mojolearn_linalg",
+            "_mojolearn_linalg_host",
+            "_mojolearn_neural_host"
+          ],
+          "build_targets": [
+            {
+              "binding": "_mojolearn_training",
+              "gpu_script": "bindings/build_training.sh",
+              "host_binding": "_mojolearn_training_host",
+              "host_script": "bindings/build_training_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_transformer",
+              "gpu_script": "bindings/build_transformer.sh",
+              "host_binding": "_mojolearn_transformer_host",
+              "host_script": "bindings/build_transformer_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_mamba",
+              "gpu_script": "bindings/build_mamba.sh",
+              "host_binding": "_mojolearn_mamba_host",
+              "host_script": "bindings/build_mamba_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_byte_lm",
+              "gpu_script": "bindings/build_byte_lm.sh",
+              "host_binding": "_mojolearn_byte_lm_host",
+              "host_script": "bindings/build_byte_lm_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_x_cnn",
+              "gpu_script": "bindings/build_x_cnn.sh",
+              "host_binding": "_mojolearn_x_cnn_host",
+              "host_script": "bindings/build_x_cnn_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_linalg",
+              "gpu_script": "bindings/build_linalg.sh",
+              "host_binding": "_mojolearn_linalg_host",
+              "host_script": "bindings/build_linalg_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            },
+            {
+              "binding": "_mojolearn_neural_host",
+              "host_script": "bindings/build_neural_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            }
+          ],
+          "remaining_work": [
+            "Reuse retained historical I04 component outcomes; no unchanged decided experiment is resubmitted.",
+            "Full caller/version/quality qualifications remain pending."
+          ]
+        }
+      ],
+      "remaining_work": [
+        "Training lane owns ByteConfig checkpoint profile suffix; other external checkpoint formats must record the numerical profile before mixed-binary use",
+        "Audit every transposed/layout/repair consumer and frozen binary provenance",
+        "Set training-quality and multi-step state acceptance gates before observing results",
+        "All-column within-version bits and full neural workloads pending; cross-version exact equality not required"
+      ],
+      "quality_risks": [
+        "Longer leaf chains, cancellation and overflow",
+        "Changed gradients/trajectory even with identical vendor results",
+        "Shared GEMM profile also changes other direct consumers; never mix profiles in one numerical version"
+      ],
+      "required_bindings": [
+        "_mojolearn_training",
+        "_mojolearn_training_host",
+        "_mojolearn_transformer",
+        "_mojolearn_transformer_host",
+        "_mojolearn_mamba",
+        "_mojolearn_mamba_host",
+        "_mojolearn_byte_lm",
+        "_mojolearn_byte_lm_host",
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host",
+        "_mojolearn_linalg",
+        "_mojolearn_linalg_host",
+        "_mojolearn_neural_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_training",
+          "gpu_script": "bindings/build_training.sh",
+          "host_binding": "_mojolearn_training_host",
+          "host_script": "bindings/build_training_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_transformer",
+          "gpu_script": "bindings/build_transformer.sh",
+          "host_binding": "_mojolearn_transformer_host",
+          "host_script": "bindings/build_transformer_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_mamba",
+          "gpu_script": "bindings/build_mamba.sh",
+          "host_binding": "_mojolearn_mamba_host",
+          "host_script": "bindings/build_mamba_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_byte_lm",
+          "gpu_script": "bindings/build_byte_lm.sh",
+          "host_binding": "_mojolearn_byte_lm_host",
+          "host_script": "bindings/build_byte_lm_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_linalg",
+          "gpu_script": "bindings/build_linalg.sh",
+          "host_binding": "_mojolearn_linalg_host",
+          "host_script": "bindings/build_linalg_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        },
+        {
+          "binding": "_mojolearn_neural_host",
+          "host_script": "bindings/build_neural_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "checkpoint_contract": "GPU and host CNN bindings export the same x_cnn_numerical_profile descriptor, including GEMM/NI17/NI57 and incumbent fold versions. _Layer stores numerical_profile_ metadata and refuses mismatched later bindings, including a binding without provenance for an already recorded model. Legacy unrecorded models and external formats still need explicit migration/provenance policy; no cross-version bits guarantee is claimed."
+    },
+    {
+      "id": "NI09",
+      "title": "Epilogues adjacent to canonical GEMM",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "gemm/experiments/neural_tiled.mojo",
+        "gemm/experiments/rounded_epilogue.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/ops.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI09_TILED_BIAS=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "New canonical tiled GEMM writes the post-reduction bias result directly using linear_bias_val, shared with the incumbent GPU pass and host element function. x_cnn.linear_forward_m wires this into standalone neural linear calls and CNN classifier heads. Overlapping destination/input buffers keep the incumbent intermediate-product fallback. The older scalar I05 adapter is retained as historical source, not reused unchanged as this new candidate. GCN/GraphSAGE linear layers share this native binding and are also affected callers.",
+      "source_entry": "neural_bias_gemm[linear_bias_val](ctx,out,a,b,bias,m,n,k,op)",
+      "remaining_work": [
+        "Residual/activation combinations outside NI16 remain separate optional subarms",
+        "Retain historical scalar I05 component losses and compare the new tile against incumbent public GEMM dispatch",
+        "Compilation, all-column identity, quality and full CNN/linear/graph-neural model A/B pending"
+      ],
+      "quality_risks": [
+        "Bias follows the fully rounded GEMM root, never an initial FMA seed",
+        "FTZ, signed zero and canonical NaN semantics",
+        "Alias fallback, register occupancy and loss of matrix-instruction throughput"
+      ],
+      "required_bindings": [
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI10",
+      "title": "Retain convolution columns for backward",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI10_BUDGETED_CNN_TAPE=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NI10_RECOMPUTE_CNN_TAPE=1"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "Both bindings expose a compiled tape-allocation policy. CNNClassifier retains columns/preactivations across forward/backward up to a 64-MiB total model tape budget in A, and passes zero handles to the existing native recompute path in B. Untoggled builds keep their existing unbounded retention. Python does only buffer-size/handle allocation planning.",
+      "remaining_work": [
+        "Other direct conv callers and multiple simultaneous user tapes remain outside this classifier owner policy",
+        "Measure full CNN fit, peak memory and repeated calls including last minibatches",
+        "No compile, identity, quality or timing evidence yet"
+      ],
+      "quality_risks": [
+        "Nine-entry epoch descriptors and zero-handle recompute lifetime",
+        "Aliasing/mutation between forward/backward",
+        "Whole-network byte-budget allocation order"
+      ],
+      "required_bindings": [
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI11",
+      "title": "Direct exact convolution for bounded reductions",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI11_DIRECT_CONV_TAPS64=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "Existing direct exact kernel now has an opt-in 64-tap register budget, retaining its 8-KiB staged-weight budget. Both 32/64 tap bounds fit the smallest supported selected canonical leaf. Default and existing direct-route controls are preserved.",
+      "remaining_work": [
+        "Complete CNN fit and direct public calls with padding, stride, dilation, groups and neighboring reduction lengths",
+        "Confirm actual route reach for direct-route controls and NI12 combinations",
+        "Compilation, vendor/host identity, quality and timing pending"
+      ],
+      "quality_risks": [
+        "Increased register use or spills",
+        "Tail/memory ownership of saved columns",
+        "Do not confuse Apple FAST direct convolution with this exact path"
+      ],
+      "required_bindings": [
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI12",
+      "title": "Implicit convolution with canonical tiles",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI12_IMPLICIT_CONV=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "8x16 output tiles stage 16 exact taps using the shared im2col_val address/FTZ seam, canonical leaves and canonical balanced stack. Inference omits columns and product intermediate allocations; training still materializes columns when dW/tape needs them. Host keeps the same canonical im2col+GEMM arithmetic graph.",
+      "remaining_work": [
+        "Input-gradient and weight-gradient implicit GEMM arms are not implemented",
+        "Measure full CNN training/inference; direct scalar exact FMA may lose against admitted matrix routes",
+        "Padding-zero products, group wrappers, odd leaves, tile tails and backward state identity pending",
+        "No compilation, verification or timing run"
+      ],
+      "quality_risks": [
+        "Barrier participation of masked output cells",
+        "Zero padding versus skipped products",
+        "NI12 takes forward precedence over NI11; interactions must state active paths"
+      ],
+      "required_bindings": [
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI13",
+      "title": "Cache convolution weight layouts by generation",
+      "status": "rejected_source",
+      "implementation_paths": [
+        "x_cnn/neural_weight_cache.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "source_disposition": "rejected_for_incumbent_no_repack; helper parked for a separately justified packed-layout consumer",
+      "implemented_scope": "Source-level rejection of the proposed incumbent repack-cache optimization: _conv_relu_on_device passes the existing OC-by-K dw buffer directly to OP_NT (or direct/implicit convolution), and linear_forward_m likewise uses resident original weights. There is no per-call weight repacking operation for this idea to remove. Adding a transpose/cache would introduce preparation and generation state and is a different layout experiment, not the claimed cache removal. A real standalone byte-preserving generation cache helper remains parked and unintegrated; this is not a measured performance rejection.",
+      "source_entry": "NeuralWeightGenerationCache.prepare(ctx,source,owner,generation,channels,taps); consumer reads buffer as KxOC with OP_NN",
+      "remaining_work": [
+        "No public integration is warranted for the incumbent repack-removal premise",
+        "If a future packed-layout consumer is separately justified, it needs an owning mutation-generation contract, byte budget, context release and comparison against current no-repack OP_NT including cold preparation",
+        "Parked helper has no compile, identity, quality or timing qualification"
+      ],
+      "quality_risks": [
+        "Caller-supplied stale generation",
+        "Stream/context lifetime and asynchronous source reads",
+        "Packing can add cost when the original layout is already efficient"
+      ],
+      "required_bindings": [],
+      "build_targets": [],
+      "variants": []
+    },
+    {
+      "id": "NI14",
+      "title": "Convolution backward gather tiling",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "x_cnn/neural_col2im.mojo",
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI14_TILED_COL2IM=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "Public convolution backward now selects bounded shared tap pages: 32 output pixels share cooperative reads of up to 64 source positions by eight adjacent taps, a 2-KiB page. Each output consumes kh/kw in exactly its incumbent order with unchanged FTZ and CP_REV. Row-crossing strips or dilation/stride footprints exceeding the page use the bounded-address reference spelling. Each gradient has one destination; the candidate coalesces loads rather than inventing repeated-value reuse.",
+      "variants": [
+        {
+          "name": "address_bounds_only",
+          "candidate_defines": [
+            "MOJOLEARN_NI14_BOUNDED_COL2IM=1"
+          ],
+          "baseline_defines": [],
+          "status": "wired_candidate_unverified",
+          "candidate_env": {},
+          "baseline_env": {},
+          "numerical_contract": "S",
+          "required_bindings": [
+            "_mojolearn_x_cnn",
+            "_mojolearn_x_cnn_host"
+          ],
+          "build_targets": [
+            {
+              "binding": "_mojolearn_x_cnn",
+              "gpu_script": "bindings/build_x_cnn.sh",
+              "host_binding": "_mojolearn_x_cnn_host",
+              "host_script": "bindings/build_x_cnn_host.sh",
+              "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+              "numeric_mode": "identical",
+              "gpu_columns": [
+                "nvidia",
+                "amd",
+                "apple"
+              ],
+              "host_column": "cpu",
+              "qualification": "NOT_RUN_OWNER_REQUEST"
+            }
+          ],
+          "remaining_work": [
+            "Bounded address arithmetic is wired into public backward. Compilation, identity, quality and full workload timing are pending."
+          ]
+        }
+      ],
+      "remaining_work": [
+        "Full overlapping-window/grouped/dilated CNN fits and non-board neighbors",
+        "Measure extra halo reads and barriers against reduced memory transactions on both vendors",
+        "Compilation, all-column identity, quality and measurements pending"
+      ],
+      "quality_risks": [
+        "Empty pages, dilation congruence, row tails and CP_REV",
+        "Extra halo reads/barriers may exceed the coalescing savings",
+        "No floating-point scatter atomics or reordered partial sums"
+      ],
+      "required_bindings": [
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ]
+    },
+    {
+      "id": "NI15",
+      "title": "Dedicated canonical bias and parameter folds",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI15_BIAS_NO_ONES=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "Bias-gradient exact leaves materialize +1 and keep the rtf FMA step, removing ones-vector loads, allocation growth and fills. The existing canonical fold kernel is reused for convolution/block/linear backward on all GPUs; host remains canonical GEMM against ones. GCN/GraphSAGE linear backward shares these binding calls and belongs in full-workload coverage.",
+      "remaining_work": [
+        "Other parameter-reduction consumers beyond existing bias_grad_gemm callsites remain untouched",
+        "Full CNN/linear model training including cancellation, signed zeros and tail batches",
+        "No new compile, identity, quality or timing evidence"
+      ],
+      "quality_risks": [
+        "FMA-by-one must not be silently replaced by a different sum seam",
+        "Leaf profile interaction and signed zero",
+        "Apple's previous plan-selection timing may beat dedicated two-stage folds"
+      ],
+      "required_bindings": [
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI16",
+      "title": "Fuse convolution activation and residual passes",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI16_CONV_RELU_FUSED=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "No-pool Conv+ReLU blocks preserve preactivation while fusing ReLU into direct/implicit convolution or the GEMM layout/bias epilogue. Backward fuses ReLU VJP with NCHW-to-GEMM-row conversion. Pool blocks retain their existing fused path.",
+      "remaining_work": [
+        "Residual-branch fusion and general multi-consumer graphs are not implemented",
+        "Full CNN training with save/recompute tape variants and NI11/NI12 interactions",
+        "Compile, all-column identity, quality and A/B measurements pending"
+      ],
+      "quality_risks": [
+        "Saved preactivation versus output ownership",
+        "NaN/ReLU tie/FTZ semantics",
+        "Residual aliases and branch fanout remain outside current wiring"
+      ],
+      "required_bindings": [
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    },
+    {
+      "id": "NI17",
+      "title": "CNN pooling and normalization canonical reductions",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI17_BALANCED_NORM=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "V",
+      "dependencies": [],
+      "implemented_scope": "Shared host/GPU normalization leaf schedule halves the existing square-root-sized logical chains, then uses a balanced odd-tail-carry fold for BN block partials. Adaptive average pooling shares the changed leaf-size schedule; its existing final fold remains. No max-pool comparator/tie change. The shared numerical profile is exported by host/GPU bindings and retained/compared by the Python API shell as model metadata, without tensor computation.",
+      "remaining_work": [
+        "Parallel exact max-pool selection subarm is not implemented",
+        "External model/checkpoint formats that discard numerical_profile_ metadata need an explicit version field before cross-version resume; old unrecorded models are not retrospectively certified.",
+        "Map every shared bn_fold_block consumer; require multi-step running-stat/gradient and held-out CNN quality",
+        "All-column within-version identity, compilation and full workload A/B pending"
+      ],
+      "quality_risks": [
+        "Changed cancellation and zero signs in new numerical graph",
+        "Running-statistics and backward trajectory drift",
+        "Interaction with other normalization numerical versions"
+      ],
+      "required_bindings": [
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": [],
+      "checkpoint_contract": "GPU and host CNN bindings export the same x_cnn_numerical_profile descriptor, including GEMM/NI17/NI57 and incumbent fold versions. _Layer stores numerical_profile_ metadata and refuses mismatched later bindings, including a binding without provenance for an already recorded model. Legacy unrecorded models and external formats still need explicit migration/provenance policy; no cross-version bits guarantee is claimed."
+    },
+    {
+      "id": "NI18",
+      "title": "CNN device epoch preparation",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI18_FUSED_EPOCH_GATHER=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "implemented_scope": "Native paired epoch gather fuses the existing Feistel/cycle-walk permutation with byte-exact copies of images and labels, one block per selected row. It removes the intermediate row-index allocation and three-pass preparation. Existing host-produced Python epoch paths are not reintroduced.",
+      "remaining_work": [
+        "Whole-epoch retained batch/order caching is a separate unimplemented subarm",
+        "Full dataset multi-epoch fit, final batch, resume epoch key and shuffle-off coverage",
+        "Compilation, host/vendor identity, quality and whole-operation timing pending"
+      ],
+      "quality_risks": [
+        "Long cycle-walk rows and block occupancy",
+        "Epoch position/key and row/label alignment",
+        "Source/destination lifetime and zero-width second buffer"
+      ],
+      "required_bindings": [
+        "_mojolearn_x_cnn",
+        "_mojolearn_x_cnn_host"
+      ],
+      "build_targets": [
+        {
+          "binding": "_mojolearn_x_cnn",
+          "gpu_script": "bindings/build_x_cnn.sh",
+          "host_binding": "_mojolearn_x_cnn_host",
+          "host_script": "bindings/build_x_cnn_host.sh",
+          "define_transport": "MOJOLEARN_MOJO_BUILD_FLAGS",
+          "numeric_mode": "identical",
+          "gpu_columns": [
+            "nvidia",
+            "amd",
+            "apple"
+          ],
+          "host_column": "cpu",
+          "qualification": "NOT_RUN_OWNER_REQUEST"
+        }
+      ],
+      "variants": []
+    }
+  ],
+  "build_metadata_policy": "Source-declared integration targets only, not a complete workload qualification. Both arms use frozen copies and MOJOLEARN_MOJO_BUILD_FLAGS for their explicit -D definitions. Builders may contain their own gates; none are invoked by this task."
+}

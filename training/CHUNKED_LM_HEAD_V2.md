@@ -111,3 +111,28 @@ evidence at B=1, L=64, DM=64, V=8192 retained 16,389 rather than 1,323,009
 head-path cells. Chunk GEMM cut scalar V2 from 232--242 ms to 122--157 ms,
 while V1 remained faster. See
 `bench/evidence/2026-09-20_byte_lm_chunked_head_v2.md`.
+
+## NI34 source-only model integration, 2026-10-06
+
+`MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2=1` is a default-OFF IDENTICAL selector,
+suppressed by `MOJOLEARN_IDN_ALL_OFF`. It supplies the default for ByteConfig's
+existing option, including both native binding constructors. ByteTrainer's
+existing GEMM-logit GPU forward/backward now has a native Mojo counterpart in
+`training/chunked_lm_head_host.mojo`, reached by `byte_host_loss` and
+`byte_host_gradient`. Canonical GEMM cells and vocabulary/gradient fold order
+are independent of the temporary vocabulary chunk width. The pooled Byte head
+is outside this integration.
+
+Samba loss-and-gradient calls use the existing standalone serial-logit V2 head
+only for no-ignore means whose divisor equals the local row count. Ignored
+rows and custom/microbatch divisors retain the existing full native head. These
+are two explicitly different head graphs: Byte uses canonical GEMM logits;
+Samba's standalone profile uses its existing serial feature dot. Each graph
+requires within-version host/NVIDIA/AMD/Apple identity, not equality to the
+other graph. Full-logits inference remains the existing API.
+
+Byte checkpoint profiles distinguish this head and non128 GEMM leaves. Samba
+checkpoints carry native `training_experiment_profile` metadata (chunked head,
+CE token-total tree, GEMM leaf), and mismatches are refused. Missing older
+metadata means baseline. Source only: no compilation, execution, verification,
+quality assessment or timing has been performed for these edits.

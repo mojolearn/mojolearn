@@ -15,6 +15,7 @@ from training.byte_lm import (
     _require_finite, _require_device_finite,
 )
 from training.byte_lm_config import ByteConfig
+from training.neural_identical_experiments import IDN_LM_PARAM_VIEWS, IDN_TRAIN_NO_DECODE_CACHE
 from training.byte_lm_parallel import _ordered_add_kernel
 from training.checks.train_loop import _zeros, _copy_into, download_f32
 from transformer.impl.llama.modeling_llama import (
@@ -56,11 +57,27 @@ struct ByteOwnedLayer(Movable):
         self.input = _zeros(ctx, shape.batch*shape.length*shape.d_model)
         self.cotangent = _zeros(ctx, shape.batch*shape.length*shape.d_model)
         self.gradient = _zeros(ctx, self.offsets[9])
+        comptime if IDN_LM_PARAM_VIEWS:
+            # NI27: this layer owns an immutable gradient arena handle for
+            # its lifetime; every backward writer overwrites its full span.
+            # Accumulation targets self.total, which remains a separate owner.
+            ref o = self.offsets
+            self.backward.dw_norm1 = self.gradient.create_sub_buffer[DType.float32](o[0], o[1]-o[0])
+            self.backward.dw_q = self.gradient.create_sub_buffer[DType.float32](o[1], o[2]-o[1])
+            self.backward.dw_k = self.gradient.create_sub_buffer[DType.float32](o[2], o[3]-o[2])
+            self.backward.dw_v = self.gradient.create_sub_buffer[DType.float32](o[3], o[4]-o[3])
+            self.backward.dw_o = self.gradient.create_sub_buffer[DType.float32](o[4], o[5]-o[4])
+            self.backward.dw_norm2 = self.gradient.create_sub_buffer[DType.float32](o[5], o[6]-o[5])
+            self.backward.dw_gate = self.gradient.create_sub_buffer[DType.float32](o[6], o[7]-o[6])
+            self.backward.dw_up = self.gradient.create_sub_buffer[DType.float32](o[7], o[8]-o[7])
+            self.backward.dw_down = self.gradient.create_sub_buffer[DType.float32](o[8], o[9]-o[8])
         self.total = _zeros(ctx, self.offsets[9])
         self.scan = DeviceScanScratch(ctx)
         ctx.synchronize()
 
     def pack(mut self, ctx: DeviceContext) raises:
+        comptime if IDN_LM_PARAM_VIEWS:
+            return  # NI27: the gradient writers already wrote the arena.
         var o = self.offsets.copy()
         _copy_into(ctx, self.gradient, self.backward.dw_norm1, o[0], 0, o[1]-o[0])
         _copy_into(ctx, self.gradient, self.backward.dw_q, o[1], 0, o[2]-o[1])
@@ -161,7 +178,8 @@ struct ByteLayerPool(Movable):
                 llama_decoder_layer_forward(self.contexts[owner], layer.forward,
                     self.caches[owner], self.ropes[owner], layer.weights, layer.input,
                     self.config.batch, self.config.length, 0, trace,
-                    String("byte.block")+String(i)+".forward")
+                    String("byte.block")+String(i)+".forward",
+                    retain_decode_cache=not IDN_TRAIN_NO_DECODE_CACHE)
                 self.contexts[owner].synchronize()
                 if i < len(self.layers):
                     layer.forward.residual2.enqueue_copy_to(self.layers[i].input)

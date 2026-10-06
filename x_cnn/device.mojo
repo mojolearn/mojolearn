@@ -21,6 +21,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.rtf_seam import rtf_mul_add
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats, NEURAL_GEMM_EXPERIMENT_ENABLED
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
+from gemm.checks.gemm_identical import identical_gemm_streaming_applies
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
     PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, apple_mma_applies_one_leaf, PLAN_APPLE_MMA_SPLIT, PLAN_APPLE_MMA_SPLIT_BIG,
@@ -31,6 +32,8 @@ from gemm.checks.gemm_identical import (
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_AMD, COLUMN_NVIDIA
 from gemm.contract import OP_NN, OP_NT, OP_TN
+from gemm.experiments.neural_tiled_v2 import NI09_TILED_BIAS, neural_bias_gemm
+from x_cnn.neural_col2im import NI14_TILED_COL2IM, neural_col2im_tiled
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
@@ -40,14 +43,21 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from x_cnn.afn_direct import AFN_CNN_DIRECT, afn_conv_direct_applies, afn_conv_direct_launch
 from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell, nn14_wgrad_at, nn14_input_grad_at
 from x_cnn.ops import NN45_CONV_RELU, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
+from x_cnn.neural_aux_contract import (
+    NI55_GRAPH_FEATURE4, NI58_SAGE_FEATURE4, NI59_DROPOUT_CHANNEL,
+    NI60_DROPOUT_APPLY4, NEURAL_AUX_FEATURE_TILE,
+)
+from x_cnn.neural_aux_ops import (
+    spmm_feature4_at, sage_max_feature4_at, dropout_apply4_at, dropout_channel_kernel,
+)
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
     CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW,
-    im2col_at, im2col_taps_at, conv_out_at, dout_rows_at, col2im_at, fill_one_at,
+    im2col_at, im2col_val, im2col_taps_at, conv_out_at, dout_rows_at, col2im_at, col2im_bounded_at, fill_one_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at, relu_maxpool_fwd_at, pool_relu_rows_bwd_at,
     conv_out_val, pool_relu_row_val, bn_mean_row, BN_MEAN, BN_VAR, BN_INVSTD, BN_SUMG, BN_SUMGX,
-    relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
+    relu_fwd_at, relu_bwd_at, relu_val, conv_relu_out_at, relu_rows_bwd_at, add_at, bias_rows_at, linear_bias_val, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
     BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
@@ -60,11 +70,21 @@ from x_cnn.ops import (
 from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
 # lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
 from x_cnn.ops import (
-    IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_rows_prm,
+    IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_row_val, epoch_rows_prm,
     AH_ROW, adam_hyper_at,
 )
 
 comptime TPB = 256
+# Neural 2026-10-06 source-only experiment controls. Every new control is
+# default OFF and compiled only for IDENTICAL; ALL_OFF restores reference.
+# No compilation, identity, quality, or performance qualification was run.
+comptime _NI_CNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime NI11_DIRECT_TAPS64 = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI11_DIRECT_CONV_TAPS64"]()
+comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI12_IMPLICIT_CONV"]()
+comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI14_BOUNDED_COL2IM"]()
+comptime NI15_BIAS_NO_ONES = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"]()
+comptime NI16_CONV_RELU_FUSED = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI16_CONV_RELU_FUSED"]()
+comptime NI18_FUSED_EPOCH_GATHER = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"]()
 #: lane/cnn-apple2: the FAST tier on Apple measures its GEMM plans (the
 #: simdgroup matrix plans among them). `-D MOJOLEARN_XCNN_NO_FAST_TUNE` is
 #: the before arm (round 1's FAST: the 4090 split plans and the dispatcher).
@@ -260,6 +280,19 @@ def _im2col(
         launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
 
 
+def _col2im(
+    ctx: DeviceContext, mut dcols: DeviceBuffer[DType.float32],
+    mut gx: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], nx: Int,
+) raises:
+    comptime if NI14_TILED_COL2IM:
+        neural_col2im_tiled(ctx, dcols, gx, dp, nx)
+        return
+    comptime if NI14_BOUNDED_COL2IM:
+        launch[col2im_bounded_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+    else:
+        launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+
+
 # lane/cnn-apple2: THE DIRECT FIRST-LAYER CONVOLUTION. Where k = C*KH*KW is
 # ONE leaf of at most DC_MAXK words (P == 1; the first block's 27), each
 # output cell of y2 = cols . W^T is the contract's serial chain: acc from
@@ -286,12 +319,12 @@ comptime DIRECT_CONV = (
     TARGET_COLUMN == COLUMN_APPLE
     or (DIRECT_CONV_NVAMD and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD))
 ) and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]() and not NEURAL_GEMM_EXPERIMENT_ENABLED
-comptime DC_MAXK = 32
+comptime DC_MAXK = 64 if NI11_DIRECT_TAPS64 else 32
 comptime DC_MAXW = 2048  # 8 KB of threadgroup memory: four blocks fit a core
 comptime DC_TPB = 256
 
 
-def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_in: Int32, save_cols: Int32):
+def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_in: Int32, save_cols: Int32, relu_out: FP, fuse_relu: Int32):
     var wsh = stack_allocation[DC_MAXW, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
     var C = _gp(p, CP_C); var H = _gp(p, CP_H); var W = _gp(p, CP_W)
@@ -334,7 +367,83 @@ def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_
         comptime for qq in range(DC_MAXK):
             if qq < ckk:
                 acc = rtf_mul_add(a[qq], wsh[wb + qq], acc)
-        yconv.unsafe_store((n * OC + oc) * S + rem, conv_out_val(ftz(acc), bias, oc, p))
+        var out_index = (n * OC + oc) * S + rem
+        var value = conv_out_val(ftz(acc), bias, oc, p)
+        yconv.unsafe_store(out_index, value)
+        if fuse_relu != 0:
+            relu_out.unsafe_store(out_index, relu_val(ftz(value)))
+
+
+# NI12: 8 rows x 16 channels, with 16 input positions per staging page.
+# The shared footprint is (8+16)*16*4 = 1536 bytes. Fixed small operand
+# pages leave room for the exact software FMA seam on every GPU. Logical
+# leaves and balanced folds come exclusively from contract_partition(k).
+comptime NI12_TM = 8
+comptime NI12_TN = 16
+comptime NI12_KS = 16
+comptime NI12_THREADS = NI12_TM * NI12_TN
+
+
+def implicit_conv_kernel(
+    x: FP, w: FP, bias: FP, yconv: FP, p: IP, rows_in: Int32,
+    leaf_in: Int32, count_in: Int32, relu_out: FP, fuse_relu: Int32,
+):
+    """Canonical convolution with implicit columns, exact operands/steps.
+
+    All threads reach each barrier, including masked output cells. Padded
+    image taps are +0.0 products, whereas physical tile padding is never
+    reduced. The host retains im2col+its canonical GEMM, the same graph.
+    """
+    var atile = stack_allocation[NI12_TM * NI12_KS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var btile = stack_allocation[NI12_KS * NI12_TN, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var local_row = tid // NI12_TN
+    var local_col = tid - local_row * NI12_TN
+    var row0 = Int(block_idx.x) * NI12_TM
+    var col0 = Int(block_idx.y) * NI12_TN
+    var row = row0 + local_row; var oc = col0 + local_col
+    var OC = _gp(p, CP_OC)
+    var ckk = _gp(p, CP_C) * _gp(p, CP_KH) * _gp(p, CP_KW)
+    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+    var occ = 0
+    for logical_leaf in range(Int(count_in)):
+        var lo = logical_leaf * Int(leaf_in)
+        var hi = min(lo + Int(leaf_in), ckk)
+        var acc = Float32(0)
+        var page = lo
+        while page < hi:
+            var ai = tid
+            while ai < NI12_TM * NI12_KS:
+                var ar = row0 + ai // NI12_KS
+                var ak = page + ai % NI12_KS
+                var av = Float32(0)
+                if ar < Int(rows_in) and ak < hi:
+                    av = im2col_val(ar * ckk + ak, x, p)
+                atile[ai] = av
+                ai += NI12_THREADS
+            var bi = tid
+            while bi < NI12_KS * NI12_TN:
+                var bk = page + bi // NI12_TN
+                var bc = col0 + bi % NI12_TN
+                var bv = Float32(0)
+                if bc < OC and bk < hi:
+                    bv = ftz(w.unsafe_load(bc * ckk + bk))
+                btile[bi] = bv
+                bi += NI12_THREADS
+            barrier()
+            for kk in range(min(NI12_KS, hi - page)):
+                acc = rtf_mul_add(atile[local_row * NI12_KS + kk], btile[kk * NI12_TN + local_col], acc)
+            barrier()
+            page += NI12_KS
+        _ = _fold_push(stack, occ, ftz(acc))
+    if row < Int(rows_in) and oc < OC:
+        var S = _gp(p, CP_OH) * _gp(p, CP_OW)
+        var n = row // S; var rem = row - n * S
+        var out_index = (n * OC + oc) * S + rem
+        var value = conv_out_val(ftz(_fold_drain(stack, occ)), bias, oc, p)
+        yconv.unsafe_store(out_index, value)
+        if fuse_relu != 0:
+            relu_out.unsafe_store(out_index, relu_val(ftz(value)))
 
 
 @always_inline
@@ -427,10 +536,18 @@ def device_gemm(
     Asynchronous: the entry's own synchronize ends it."""
     # Neural experiment arms own every contraction, including small TN and
     # direct-convolution bypasses. Host selects the same arithmetic profile.
-    comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
+    if NEURAL_GEMM_EXPERIMENT_ENABLED:
         var wp = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
         identical_gemm_into[False](ctx, c, a, b, wp, m, n, k, op)
         _ = wp^
+    elif identical_gemm_streaming_applies(m, n, k):
+        # NI02 must precede the CNN-only forced split/TN and Apple plan
+        # paths. Those plans bypass shipped dispatch and can require more
+        # planes than the bounded streaming workspace. A uses one public
+        # dispatcher here; B retains the original explicit-plan choices.
+        var streamed_ws = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
+        identical_gemm_into[False](ctx, c, a, b, streamed_ws, m, n, k, op)
+        _ = streamed_ws^
         return
     # DEVIATION 5718: the shipped dispatcher (`identical_gemm_into`, the plan
     # `choose_gemm_plan` picks) on a cached workspace, instead of
@@ -659,6 +776,26 @@ def bias_fold_kernel(part: FP, gb: FP, m_oc: Int32, p_count: Int32):
     gb.unsafe_store(oc, ftz(_fold_drain(stack, occ)))
 
 
+def bias_leaf_no_ones_kernel(g: FP, part: FP, m_oc: Int32, k_rows: Int32, leaf: Int32, p_count: Int32):
+    """NI15: the exact G^T*1 leaf without loading a ones operand.
+
+    Keep the explicit rtf FMA by +1 (not a freely contracted or reordered
+    add), the leaf FTZ and the existing canonical fold. Host GEMM remains
+    the reference spelling of the same arithmetic on every column.
+    """
+    var OC = Int(m_oc)
+    var t = Int(block_idx.x) * BIAS_TPB + Int(thread_idx.x)
+    if t >= OC * Int(p_count):
+        return
+    var l = t // OC; var oc = t - l * OC
+    var lo = l * Int(leaf)
+    var hi = min(lo + Int(leaf), Int(k_rows))
+    var acc = Float32(0)
+    for row in range(lo, hi):
+        acc = rtf_mul_add(ftz(g.unsafe_load(row * OC + oc)), Float32(1), acc)
+    part.unsafe_store(t, ftz(acc))
+
+
 def bias_grad_gemm(
     ctx: DeviceContext, mut gb: DeviceBuffer[DType.float32], mut g: DeviceBuffer[DType.float32],
     mut ones: DeviceBuffer[DType.float32], OC: Int, rows: Int,
@@ -668,16 +805,22 @@ def bias_grad_gemm(
     comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
         device_gemm(ctx, gb, g, ones, OC, 1, rows, OP_TN)
         return
-    comptime if XCNN_BIAS_FOLD:
+    comptime if XCNN_BIAS_FOLD or NI15_BIAS_NO_ONES:
         if rows > 0 and OC > 0:
             var lp = contract_partition(rows)
             var leaf = lp[0]
             var P = lp[1]
             var part = ws(ctx, BIAS_WS_SLOT, OC * P)
-            ctx.enqueue_function[bias_leaf_kernel](
-                fp(g), fp(ones), fp(part), Int32(OC), Int32(rows), Int32(leaf), Int32(P),
-                grid_dim=((OC * P + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
-            )
+            comptime if NI15_BIAS_NO_ONES:
+                ctx.enqueue_function[bias_leaf_no_ones_kernel](
+                    fp(g), fp(part), Int32(OC), Int32(rows), Int32(leaf), Int32(P),
+                    grid_dim=((OC * P + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[bias_leaf_kernel](
+                    fp(g), fp(ones), fp(part), Int32(OC), Int32(rows), Int32(leaf), Int32(P),
+                    grid_dim=((OC * P + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
+                )
             ctx.enqueue_function[bias_fold_kernel](
                 fp(part), fp(gb), Int32(OC), Int32(P),
                 grid_dim=((OC + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
@@ -692,6 +835,10 @@ def ones_buf(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType
     the resident ones (already 1.0f; filled here, in order, when the vector
     grows); without it they are workspace slot `slot`, which the caller
     fills as it always did."""
+    comptime if NI15_BIAS_NO_ONES:
+        # Only a valid placeholder address is required: the candidate leaf
+        # materializes +1 directly and never reads this allocation.
+        return ws(ctx, slot, 1)
     comptime if ONES_CACHE:
         var need = n if n > 0 else 1
         var b = ws(ctx, ONES_WS_SLOT, need)
@@ -1021,8 +1168,8 @@ def conv2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dbias = m_in(ctx, 2, a[2], OC, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
     var tile_rows = nn14_conv_rows(rows, ckk, OC) if NN14_BOUNDED_IM2COL else rows
-    var cols = ws(ctx, 4, tile_rows * ckk)
-    var y2 = ws(ctx, 5, tile_rows * OC)
+    var cols = ws(ctx, 4, 1 if NI12_IMPLICIT_CONV else tile_rows * ckk)
+    var y2 = ws(ctx, 5, 1 if NI12_IMPLICIT_CONV else tile_rows * OC)
     var dout = m_out(ctx, 6, a[3], rows * OC, isdev(dev, 3))
     comptime if NN14_BOUNDED_IM2COL:
         var row0 = 0
@@ -1078,7 +1225,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
         )
     else:
         launch[dout_rows_at](ctx, fp(ddout), fp(g), fp(g), fp(g), ip(dp), ip(dp), rows * OC)
-    comptime if not ONES_CACHE:
+    comptime if not ONES_CACHE and not NI15_BIAS_NO_ONES:
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
@@ -1091,7 +1238,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
         launch[nn14_input_grad_at](ctx, fp(g), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
     else:
         device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
-        launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+        _col2im(ctx, dcols, gx, dp, nx)
     m_fetch(ctx, gx, a[3], nx, isdev(dev, 3))
     m_fetch(ctx, gw, a[4], OC * ckk, isdev(dev, 4))
     m_fetch(ctx, gb, a[5], OC, isdev(dev, 5))
@@ -1299,10 +1446,18 @@ def linear_forward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rais
     var db = m_in(ctx, 2, a[2], d_out, isdev(dev, 2))
     var prm: List[Int32] = [Int32(n), Int32(d_in), Int32(d_out)]
     var dp = put_prm(ctx, 3, prm)
-    var y = ws(ctx, 4, n * d_out)
+    var y = ws(ctx, 4, 1 if NI09_TILED_BIAS else n * d_out)
     var dout = m_out(ctx, 5, a[3], n * d_out, isdev(dev, 3))
-    device_gemm(ctx, y, dx, dw, n, d_out, d_in, OP_NT)
-    launch[bias_rows_at](ctx, fp(y), fp(db), fp(dout), fp(dout), ip(dp), ip(dp), n * d_out)
+    var fused = False
+    comptime if NI09_TILED_BIAS:
+        fused = neural_bias_gemm[linear_bias_val](ctx, dout, dx, dw, db, n, d_out, d_in, OP_NT)
+    if not fused:
+        comptime if NI09_TILED_BIAS:
+            # Overlapping public buffers keep the incumbent intermediate
+            # product; the fused body must not overwrite unread inputs.
+            y = ws(ctx, 4, n * d_out)
+        device_gemm(ctx, y, dx, dw, n, d_out, d_in, OP_NT)
+        launch[bias_rows_at](ctx, fp(y), fp(db), fp(dout), fp(dout), ip(dp), ip(dp), n * d_out)
     m_fetch(ctx, dout, a[3], n * d_out, isdev(dev, 3))
     ctx.synchronize()
     _ = prm^
@@ -1328,7 +1483,7 @@ def linear_backward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rai
     var dw = m_in(ctx, 1, a[1], d_out * d_in, isdev(dev, 1))
     var dg = m_in(ctx, 2, a[2], n * d_out, isdev(dev, 2))
     var dones = ones_buf(ctx, 3, n)
-    comptime if not ONES_CACHE:
+    comptime if not ONES_CACHE and not NI15_BIAS_NO_ONES:
         dones.enqueue_fill(Float32(1))
     var gx = m_out(ctx, 4, a[3], n * d_in, isdev(dev, 3))
     var gw = m_out(ctx, 5, a[4], d_out * d_in, isdev(dev, 4))
@@ -1794,13 +1949,27 @@ def dropout2d_m(a: List[Int], dev: Int, n: Int, prm: List[Int32], hyper: List[Fl
     var dout = m_out(ctx, 4, a[1], n, isdev(dev, 1))
     # lane idn-loss-norm-folds: one draw per (n, c) channel into a table,
     # then the element pass (x_cnn/ops.mojo DROPOUT2D_CH_MASK); same words
-    var nch = Int(prm[0]) * Int(prm[1]) if DROPOUT2D_CH_MASK else 1
-    var dtab = ws(ctx, 5, nch)
-    comptime if DROPOUT2D_CH_MASK:
-        launch[dropout2d_chan_at](ctx, fp(dtab), fp(dh), fp(dh), fp(dh), ip(dp), ip(dp), nch)
-        launch[dropout2d_apply_at](ctx, fp(dx), fp(mask), fp(dout), fp(dtab), ip(dp), ip(dp), n)
+    var nch = Int(prm[0]) * Int(prm[1]) if (DROPOUT2D_CH_MASK or NI60_DROPOUT_APPLY4) else 1
+    # Preserve the existing buffer handle lifetime through synchronization.
+    # NI59 needs no materialized table; its one-word workspace handle is unused.
+    var dtab = ws(ctx, 5, 1 if NI59_DROPOUT_CHANNEL else nch)
+    comptime if NI59_DROPOUT_CHANNEL:
+        var channels = Int(prm[0]) * Int(prm[1])
+        if channels > 0 and n > 0:
+            ctx.enqueue_function[dropout_channel_kernel](
+                fp(dx), fp(mask), fp(dout), fp(dh), ip(dp),
+                grid_dim=(channels, 1, 1), block_dim=(TPB, 1, 1),
+            )
     else:
-        launch[dropout2d_at](ctx, fp(dx), fp(mask), fp(dout), fp(dh), ip(dp), ip(dp), n)
+        comptime if DROPOUT2D_CH_MASK or NI60_DROPOUT_APPLY4:
+            launch[dropout2d_chan_at](ctx, fp(dtab), fp(dh), fp(dh), fp(dh), ip(dp), ip(dp), nch)
+            comptime if NI60_DROPOUT_APPLY4:
+                var tiles = (Int(prm[2]) + NEURAL_AUX_FEATURE_TILE - 1) // NEURAL_AUX_FEATURE_TILE
+                launch[dropout_apply4_at](ctx, fp(dx), fp(mask), fp(dout), fp(dtab), ip(dp), ip(dp), nch * tiles)
+            else:
+                launch[dropout2d_apply_at](ctx, fp(dx), fp(mask), fp(dout), fp(dtab), ip(dp), ip(dp), n)
+        else:
+            launch[dropout2d_at](ctx, fp(dx), fp(mask), fp(dout), fp(dh), ip(dp), ip(dp), n)
     m_fetch(ctx, dout, a[1], n, isdev(dev, 1))
     m_fetch(ctx, mask, a[2], n, isdev(dev, 2))
     ctx.synchronize()
@@ -1897,6 +2066,9 @@ def spmm_m(a: List[Int], dev: Int, nvals: Int, ncsr: Int, prm: List[Int32]) rais
         if total > 0:
             var feature_tiles = (Int(prm[1]) + NN48_FEATURES - 1) // NN48_FEATURES
             ctx.enqueue_function[nn48_spmm_tiled_kernel](fp(dv), fp(dh), fp(dout), ip(dq), ip(dp), grid_dim=(Int(prm[0]) * feature_tiles, 1, 1), block_dim=(NN48_FEATURES, 1, 1))
+    elif NI55_GRAPH_FEATURE4:
+        var tiles = (Int(prm[1]) + NEURAL_AUX_FEATURE_TILE - 1) // NEURAL_AUX_FEATURE_TILE
+        launch[spmm_feature4_at](ctx, fp(dv), fp(dh), fp(dout), fp(dout), ip(dq), ip(dp), Int(prm[0]) * tiles)
     else:
         launch[spmm_at](ctx, fp(dv), fp(dh), fp(dout), fp(dout), ip(dq), ip(dp), total)
     m_fetch(ctx, dout, a[3], total, isdev(dev, 3))
@@ -2050,6 +2222,9 @@ def graph_op_device(a: List[Float32], b: List[Float32], aux: List[Float32], csr:
     var n = Int(prm[0])
     var F = Int(prm[1])
     if kind == 0:
+        comptime if NI58_SAGE_FEATURE4:
+            var tiles = (F + NEURAL_AUX_FEATURE_TILE - 1) // NEURAL_AUX_FEATURE_TILE
+            return graph4_device[sage_max_feature4_at](a, b, aux, csr, prm, n * tiles, n * F)
         return graph4_device[sage_max_fwd_at](a, b, aux, csr, prm, n * F, n * F)
     if kind == 1:
         return graph4_device[sage_max_bwd_at](a, b, aux, csr, prm, n * F, n * F)
@@ -2211,7 +2386,11 @@ def graph_op_m(a: List[Int], dev: Int, prm: List[Int32], kind: Int) raises:
     var dp = put_prm(ctx, 4, prm)
     var dout = m_out(ctx, 5, a[3], nf, isdev(dev, 3))
     if kind == 0:
-        launch[sage_max_fwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), nf)
+        comptime if NI58_SAGE_FEATURE4:
+            var tiles = (F + NEURAL_AUX_FEATURE_TILE - 1) // NEURAL_AUX_FEATURE_TILE
+            launch[sage_max_feature4_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), n * tiles)
+        else:
+            launch[sage_max_fwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), nf)
     elif kind == 1:
         launch[sage_max_bwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), nf)
     elif kind == 2:
@@ -2420,6 +2599,32 @@ def epoch_rows_download(dst: IP, n: Int, pos: Int, count: Int, shuffle: Bool, ke
     _ = ctx^
 
 
+def _ni18_epoch_gather_kernel(src: FP, dst: FP, src2: FP, dst2: FP, p: IP):
+    """One block per sampled row: compute its key once, copy both buffers.
+
+    Resource schedule only: threads stride over row bytes. The permutation
+    is the same shared integer function as the host and reference device
+    paths, and all tensors are copied as Int32 words (including NaN bits).
+    """
+    var row_index = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var selected = stack_allocation[1, Int32, address_space=AddressSpace.SHARED]()
+    if tid == 0:
+        selected[0] = epoch_row_val(row_index, p)
+    barrier()
+    var chosen = Int(selected[0])
+    var row = Int(p.unsafe_load(EP_LEN))
+    var row2 = Int(p.unsafe_load(EP_LEN + 1))
+    var i = tid
+    while i < row:
+        dst.bitcast[Int32]().unsafe_store(row_index * row + i, src.bitcast[Int32]().unsafe_load(chosen * row + i))
+        i += TPB
+    i = tid
+    while i < row2:
+        dst2.bitcast[Int32]().unsafe_store(row_index * row2 + i, src2.bitcast[Int32]().unsafe_load(chosen * row2 + i))
+        i += TPB
+
+
 def res_gather_pair_perm(
     dst_addr: Int, src_addr: Int, row: Int, dst2_addr: Int, src2_addr: Int, row2: Int, n: Int, pos: Int,
     m: Int, shuffle: Bool, key: UInt64,
@@ -2435,6 +2640,17 @@ def res_gather_pair_perm(
     prm.append(Int32(row2))
     var dp = put_prm(ctx, 1, prm)
     var pp = ip(dp)
+    comptime if NI18_FUSED_EPOCH_GATHER:
+        ctx.enqueue_function[_ni18_epoch_gather_kernel](
+            FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
+            FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr), pp,
+            grid_dim=(m, 1, 1), block_dim=(TPB, 1, 1),
+        )
+        ctx.synchronize()
+        _ = prm^
+        _ = dp^
+        _ = ctx^
+        return
     var di = ws_i(ctx, 0, m)
     launch[epoch_rows_at](
         ctx, FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr),
@@ -2596,10 +2812,26 @@ def _conv_relu_on_device(
             ctx.enqueue_function[nn14_conv_slice_kernel](fp(y2), fp(dbias), fp(yconv), ip(dp), Int32(row0), Int32(take * OC), grid_dim=((take * OC + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1))
             row0 += take
         return False
+    var relu_out = FP(unsafe_from_address=relu_addr) if relu_addr != 0 else fp(yconv)
+    var fuse_relu = Int32(1 if relu_addr != 0 else 0)
+    comptime if NI12_IMPLICIT_CONV:
+        if rows > 0 and OC > 0:
+            if need_cols:
+                # Saved training tapes/dW still need the exact columns.
+                # Inference omits this allocation and launch entirely.
+                _im2col(ctx, dx, cols, dp, rows, ckk, C)
+            var lp = contract_partition(ckk)
+            ctx.enqueue_function[implicit_conv_kernel](
+                fp(dx), fp(dw), fp(dbias), fp(yconv), ip(dp), Int32(rows),
+                Int32(lp[0]), Int32(lp[1]), relu_out, fuse_relu,
+                grid_dim=((rows + NI12_TM - 1) // NI12_TM, (OC + NI12_TN - 1) // NI12_TN, 1),
+                block_dim=(NI12_THREADS, 1, 1),
+            )
+            return relu_addr != 0
     comptime if DIRECT_CONV:
         if ckk <= DC_MAXK and OC * ckk <= DC_MAXW and rows > 0:
             ctx.enqueue_function[direct_conv_kernel](
-                fp(dx), fp(dw), fp(dbias), fp(cols), fp(yconv), ip(dp), Int32(rows), Int32(1 if need_cols else 0),
+                fp(dx), fp(dw), fp(dbias), fp(cols), fp(yconv), ip(dp), Int32(rows), Int32(1 if need_cols else 0), relu_out, fuse_relu,
                 grid_dim=((rows + DC_TPB - 1) // DC_TPB, 1, 1), block_dim=(DC_TPB, 1, 1),
             )
             return False
@@ -2613,7 +2845,7 @@ def _conv_relu_on_device(
             return False
     _im2col(ctx, dx, cols, dp, rows, ckk, C)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
-    comptime if NN45_CONV_RELU:
+    comptime if NN45_CONV_RELU or NI16_CONV_RELU_FUSED:
         if relu_addr != 0:
             launch[nn45_conv_out_relu_at](ctx, fp(y2), fp(dbias), fp(yconv), FP(unsafe_from_address=relu_addr), ip(dp), ip(dp), rows * OC)
             return True
@@ -2657,8 +2889,8 @@ def conv_block_forward_into[resident: Bool = False](
     var dp = put_prm(ctx, 3, cprm)
     var saved = resident and save_y != 0 and (NN14_BOUNDED_IM2COL or save_cols != 0)
     var tile_rows = nn14_conv_rows(rows, ckk, OC) if NN14_BOUNDED_IM2COL else rows
-    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved and not NN14_BOUNDED_IM2COL else ws(ctx, 4, tile_rows * ckk)
-    var y2 = ws(ctx, 5, tile_rows * OC)
+    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved and not NN14_BOUNDED_IM2COL else ws(ctx, 4, 1 if NI12_IMPLICIT_CONV else tile_rows * ckk)
+    var y2 = ws(ctx, 5, 1 if NI12_IMPLICIT_CONV else tile_rows * OC)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 6, ny)
     comptime if AFN_CNN_DIRECT:
         # lane afn-mlp: without a pool the tiled launch's epilogue writes the
@@ -2684,7 +2916,7 @@ def conv_block_forward_into[resident: Bool = False](
     # NN45 needs the output address before layout; the direct path still
     # reports False and receives its usual separate ReLU below.
     var pout = outb[resident](ctx, 7, dst, no)
-    var relu_addr = Int(fp(pout)) if NN45_CONV_RELU and not pool else 0
+    var relu_addr = Int(fp(pout)) if (NN45_CONV_RELU or NI16_CONV_RELU_FUSED) and not pool else 0
     var fused_relu = _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C, saved, relu_addr)
     # the block's output: the pool's, or the ReLU's when there is no pool
     if pool:
@@ -2736,7 +2968,7 @@ def conv_block_backward_into[resident: Bool = False](
     var saved = resident and save_y != 0 and (NN14_BOUNDED_IM2COL or save_cols != 0)
     var tile_rows = nn14_conv_rows(rows, ckk, OC) if NN14_BOUNDED_IM2COL else rows
     var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved and not NN14_BOUNDED_IM2COL else ws(ctx, 7, tile_rows * ckk)
-    var y2 = ws(ctx, 8, tile_rows * OC)
+    var y2 = ws(ctx, 8, 1 if NI12_IMPLICIT_CONV else tile_rows * OC)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 9, ny)
     var gy = ws(ctx, 11, ny)
     if not saved:
@@ -2764,12 +2996,15 @@ def conv_block_backward_into[resident: Bool = False](
         _ = di^
         _ = dpb^
     else:
-        launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
-        launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
+        comptime if NI16_CONV_RELU_FUSED:
+            launch[relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(dp), ip(dp), ny)
+        else:
+            launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
+            launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
     var ones = ones_buf(ctx, 13, rows)
     var gw = outb[resident](ctx, 14, gw_out, OC * ckk)
     var gb = outb[resident](ctx, 15, gb_out, OC)
-    comptime if not ONES_CACHE:
+    comptime if not ONES_CACHE and not NI15_BIAS_NO_ONES:
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
     comptime if NN14_BOUNDED_IM2COL:
@@ -2784,7 +3019,7 @@ def conv_block_backward_into[resident: Bool = False](
             launch[nn14_input_grad_at](ctx, fp(grow), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
         else:
             device_gemm(ctx, dcols, grow, dw, rows, ckk, OC, OP_NN)
-            launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+            _col2im(ctx, dcols, gx, dp, nx)
         fetch[resident](ctx, gx, gx_out, nx)
         _ = dcols^
         _ = gx^

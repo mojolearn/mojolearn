@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host-only shape and registry for the configured decoder language model."""
+from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2, IDN_CHUNKED_LM_HEAD_V2, IDN_ATTENTION_V2
+from gemm.contract import CONTRACT_K_LEAF_MIN
 
 from training.neural_arithmetic_profile import neural_arithmetic_suffix
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -50,7 +52,7 @@ struct ByteConfig(Copyable, Movable):
                  d_model: Int = 32, n_heads: Int = 4, n_kv: Int = 2,
                  head_dim: Int = 8, intermediate: Int = 64,
                  n_layers: Int = 2, vocab_size: Int = 256,
-                 chunked_lm_head_v2: Bool = False):
+                 chunked_lm_head_v2: Bool = IDN_CHUNKED_LM_HEAD_V2):
         self.batch = batch
         self.length = length
         self.d_model = d_model
@@ -141,10 +143,17 @@ struct ByteConfig(Copyable, Movable):
 
     def profile(self) raises -> String:
         self.validate()
+        # NI35 owns a different numerical loss profile. The chunked head
+        # already has its independent V2 loss graph and does not call CE L12.
+        var loss_version = String("-ce-token-tree256-v2") if IDN_LOSS_TOKEN_TREE_V2 and not self.chunked_lm_head_v2 else String("")
+        # NI08/I04 are new GEMM graphs on every column. Keep checkpoint
+        # identity distinct from leaf128 even when architecture is unchanged.
+        var attention_version = String("-attention-online-tile32-v2") if IDN_ATTENTION_V2 else String("")
+        var gemm_version = String("") if CONTRACT_K_LEAF_MIN == 128 else String("-gemm-leaf") + String(CONTRACT_K_LEAF_MIN)
         if (not self.chunked_lm_head_v2 and self.batch == 2 and self.length == 32 and self.d_model == 32
             and self.n_heads == 4 and self.n_kv == 2 and self.head_dim == 8
             and self.intermediate == 64 and self.n_layers == 2 and self.vocab_size == 256):
-            return String(BYTE_DEFAULT_PROFILE) + neural_arithmetic_suffix()
+            return String(BYTE_DEFAULT_PROFILE) + neural_arithmetic_suffix() + loss_version + gemm_version + attention_version
         var suffix = String("-v256-blocks2.fp32.v2")
         if self.n_layers != 2 or self.vocab_size != 256:
             suffix = String("-v") + String(self.vocab_size) + "-blocks" + String(self.n_layers) + ".fp32.v3"
@@ -153,4 +162,4 @@ struct ByteConfig(Copyable, Movable):
             + "-l" + String(self.length) + "-d" + String(self.d_model)
             + "-h" + String(self.n_heads) + "-kv" + String(self.n_kv)
             + "-hd" + String(self.head_dim) + "-ff" + String(self.intermediate)
-            + suffix + head + neural_arithmetic_suffix())
+            + suffix + head + neural_arithmetic_suffix() + loss_version + gemm_version + attention_version)

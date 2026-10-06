@@ -63,6 +63,17 @@ def afn_selective_scan_chunked[
     abort("mamba host: device-only optimization afn_selective_scan_chunked is disabled")
 
 
+def identical_selective_scan_window[DSTATE: Int](
+    ctx: DeviceContext,
+    mut out: DeviceBuffer[DType.float32], mut y: DeviceBuffer[DType.float32],
+    mut h: DeviceBuffer[DType.float32], mut u: DeviceBuffer[DType.float32],
+    mut delta: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
+    mut bmat: DeviceBuffer[DType.float32], mut cmat: DeviceBuffer[DType.float32],
+    mut dskip: DeviceBuffer[DType.float32], batch: Int, length: Int, dim: Int,
+) raises:
+    abort("mamba host: device-only optimization identical_selective_scan_window is disabled")
+
+
 def afn_m1_conv_token(
     ctx: DeviceContext,
     mut conv_out: DeviceBuffer[DType.float32],

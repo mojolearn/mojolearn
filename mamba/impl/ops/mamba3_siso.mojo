@@ -2319,9 +2319,20 @@ def m3_siso_forward(
     m3_phase_tick(ctx, phase_tick, String("m3_qk_s_kernel"))
     # Keep tiny and unpriced columns on their existing launch. The group
     # threshold supplies ample tile work; it is not an intermediate-size tune.
+    # NI42 independent default-OFF A/B: use the existing same-chain tile on
+    # every GPU whose hardware page/block limits admit it. One logical tile is
+    # sufficient; partial tiles use the existing masks, no board dimension rule.
+    # Baseline retains historical routing. Host keeps the same scalar chains.
+    # Compilation, cross-vendor identity and whole-model quality/timing NOT RUN.
     var use_yintra_tile = False
     comptime if column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
-        comptime if is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]():
+        comptime if (
+            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+            and is_defined["MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE"]()
+            and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        ):
+            use_yintra_tile = True
+        elif is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]():
             use_yintra_tile = True
         elif TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_MAMBA3_LEGACY_YINTRA"]():
             use_yintra_tile = b * nc * nh >= 128

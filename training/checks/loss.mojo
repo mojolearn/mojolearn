@@ -95,6 +95,11 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
+from training.neural_identical_experiments import IDN_CE_GRAD_FUSED, IDN_LOSS_TOKEN_TREE_V2
+from training.loss_reduction_v2 import (
+    LOSS_TOKEN_TREE_V2_LEAF, loss_token_tree_v2_leaf_count,
+    loss_token_tree_v2_leaf, loss_token_tree_v2_add,
+)
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -1154,6 +1159,82 @@ def ce_dlogits_kernel(
 # ===========================================================================
 
 
+def ce_token_tree_v2_leaves_kernel(
+    partials: MutPointer[Float32, MutAnyOrigin],
+    values: MutPointer[Float32, MutAnyOrigin], count_in: Int32,
+):
+    """NI35: independent fixed logical leaf owners; geometry only schedules."""
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var count = Int(count_in)
+    var begin = leaf * LOSS_TOKEN_TREE_V2_LEAF
+    if begin >= count:
+        return
+    var end = min(begin + LOSS_TOKEN_TREE_V2_LEAF, count)
+    partials.unsafe_store(leaf, loss_token_tree_v2_leaf(values, begin, end))
+
+
+def ce_token_tree_v2_level_kernel(
+    output: MutPointer[Float32, MutAnyOrigin],
+    previous: MutPointer[Float32, MutAnyOrigin], count_in: Int32,
+):
+    var parent = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var left = parent * 2
+    var count = Int(count_in)
+    if left >= count:
+        return
+    var value = previous.unsafe_load(left)
+    if left + 1 < count:
+        value = loss_token_tree_v2_add(value, previous.unsafe_load(left + 1))
+    # Odd tails are carried bit-for-bit, never added to a padding zero.
+    output.unsafe_store(parent, value)
+
+
+def ce_token_tree_v2_into(
+    ctx: DeviceContext, mut total: DeviceBuffer[DType.float32],
+    mut row: DeviceBuffer[DType.float32], mut ws: DeviceBuffer[DType.float32],
+    count: Int,
+) raises:
+    """NI35 L12 on caller-owned scratch, enqueued on one ordered context.
+
+    Two nonoverlapping leaf-sized slices alternate across levels. The final
+    parent writes directly to total, so no scratch owner dies before a fold.
+    """
+    var leaves = loss_token_tree_v2_leaf_count(count)
+    if leaves == 1:
+        step_count_launch()
+        ctx.enqueue_function[ce_token_tree_v2_leaves_kernel](
+            total.unsafe_ptr(), row.unsafe_ptr(), Int32(count),
+            grid_dim=(1, 1, 1), block_dim=(CE_TPB, 1, 1),
+        )
+        return
+    step_count_launch()
+    ctx.enqueue_function[ce_token_tree_v2_leaves_kernel](
+        ws.unsafe_ptr(), row.unsafe_ptr(), Int32(count),
+        grid_dim=(_grid_for(leaves), 1, 1), block_dim=(CE_TPB, 1, 1),
+    )
+    var active = leaves
+    var input_offset = 0
+    var output_offset = leaves
+    while active > 1:
+        var parents = (active + 1) // 2
+        step_count_launch()
+        if parents == 1:
+            ctx.enqueue_function[ce_token_tree_v2_level_kernel](
+                total.unsafe_ptr(), ws.unsafe_ptr() + input_offset, Int32(active),
+                grid_dim=(1, 1, 1), block_dim=(CE_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[ce_token_tree_v2_level_kernel](
+                ws.unsafe_ptr() + output_offset, ws.unsafe_ptr() + input_offset,
+                Int32(active), grid_dim=(_grid_for(parents), 1, 1),
+                block_dim=(CE_TPB, 1, 1),
+            )
+        active = parents
+        var old_input = input_offset
+        input_offset = output_offset
+        output_offset = old_input
+
+
 def ce_serial_fold_kernel(
     out_buf: MutPointer[Float32, MutAnyOrigin],
     values: MutPointer[Float32, MutAnyOrigin],
@@ -1258,6 +1339,9 @@ def identical_ce_workspace_max_floats(
             w = wb
     comptime if NN54_LOSS_PROFILE:
         w = max(w, 2 * nn_reduce_scratch_floats[128](n_rows))
+    comptime if IDN_LOSS_TOKEN_TREE_V2:
+        # Two ping-pong slices of the logical leaf count; no board cap.
+        w = max(w, 2 * loss_token_tree_v2_leaf_count(n_rows))
     if w < 1:
         return 1
     return w
@@ -1638,6 +1722,10 @@ def identical_ce_forward_into(
         )
     elif NN54_LOSS_PROFILE:
         nn_reduce_pointer_into[128, False](ctx, total.unsafe_ptr(), row.unsafe_ptr(), ws.unsafe_ptr(), n_rows)
+    elif IDN_LOSS_TOKEN_TREE_V2:
+        # NI35 intentionally versions only the token-total graph. Vocabulary
+        # softmax, label smoothing, count/divisor and logits VJP remain pinned.
+        ce_token_tree_v2_into(ctx, total, row, ws, n_rows)
     else:
         identical_gemm_into(ctx, total, ones, row, ws, 1, 1, n_rows, OP_NN)
 
@@ -1705,7 +1793,7 @@ def identical_ce_backward_into(
     comptime if SAB_GRAD_DIVISOR_IS_N:
         divisor = Float32(n_rows)
 
-    comptime if NN52_CE_WEIGHT_GRAD:
+    comptime if (NN52_CE_WEIGHT_GRAD or IDN_CE_GRAD_FUSED) and not ANY_LOSS_SABOTAGE:
         step_count_launch()
         ctx.enqueue_function[ce_weights_dlogits_kernel](
             weights.unsafe_ptr(), dlogits.unsafe_ptr(), expo.unsafe_ptr(),

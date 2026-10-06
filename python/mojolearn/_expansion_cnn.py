@@ -79,8 +79,21 @@ class _Layer:
 
     def _binding(self):
         mode = self.numeric_mode or _backend.default_mode()
+        binding = _backend.binding(_BINDING, mode)
+        if mode == "identical":
+            # API-shell metadata only. The Mojo binding names the arithmetic
+            # version shared by host and all GPUs; preserve it on the model
+            # so normal state persistence cannot silently switch versions.
+            report = getattr(binding, "x_cnn_numerical_profile", None)
+            previous = self.__dict__.get("numerical_profile_")
+            current = str(report()) if report is not None else None
+            if previous is not None and previous != current:
+                raise ValueError("mojolearn: CNN numerical profile differs from this model's recorded "
+                                 "profile; use a matching binding or a fresh model for the new version")
+            if current is not None:
+                self.numerical_profile_ = current
         self.numeric_mode_ = mode
-        return _backend.binding(_BINDING, mode)
+        return binding
 
 
 def _mixed(b):
@@ -1304,7 +1317,19 @@ class CNNClassifier(_Layer):
         a["idx"] = [R.new(p[3]) for p in plans]  # glue: allocates one buffer per conv block
         a["gout"] = [R.new(p[3]) for p in plans] if (train or _LEGACY_STEP) else []  # glue: allocates one buffer per conv block
         bounded = bool(getattr(R.b, "x_cnn_bounded_im2col", lambda: False)())
-        a["saved"] = [[R.new(1 if bounded else p[4]), R.new(p[5])] if save else [] for p in plans]  # glue: allocates one buffer per conv block
+        # NI10: allocation planning only. The binding reports its compiled
+        # A/B policy; Python never computes activations or tensor values.
+        # Keep two zero handles for recomputed blocks so the native epoch
+        # descriptor still has its required nine entries.
+        tape_budget = (int(R.b.x_cnn_neural_tape_budget_bytes())
+                       if hasattr(R.b, "x_cnn_neural_tape_budget_bytes") else -1)
+        a["saved"] = []
+        for p in plans:  # glue: allocates optional buffers per conv block
+            tape_bytes = 4 * ((1 if bounded else p[4]) + p[5])
+            keep = save and (tape_budget < 0 or tape_bytes <= tape_budget)
+            a["saved"].append([R.new(1 if bounded else p[4]), R.new(p[5])] if keep else ([0, 0] if save else []))
+            if keep and tape_budget >= 0:
+                tape_budget -= tape_bytes
         if not plans:  # the head's input gradient, never read, kept apart from glog
             a["ghead"] = R.new(n * self._flat)
         return a

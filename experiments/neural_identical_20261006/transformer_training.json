@@ -1,0 +1,635 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-06",
+  "branch": "ideas/neural-identical-20261006-v2",
+  "base_commit": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
+  "source_only": true,
+  "validation_status": "NOT RUN: user prohibited compilation and verification",
+  "new_defaults_enabled": false,
+  "experiments": [
+    {
+      "id": "NI19",
+      "title": "Reuse attention query key and value tiles",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {
+        "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+      },
+      "baseline_env": {
+        "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+      },
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Hold attention arm/schedule constant in both arms; prior source comments describe confounded controls and a narrower losing component result.",
+        "Expand/admit unimplemented layouts through general resource reasoning; existing helper is restricted to its compiled head-width tile and paired GQA layout. Full TR/LM/Samba coverage remains pending.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "GQA head mapping, causal masks, tails and shared-memory capacity."
+      ],
+      "notes": "Reuses real _try_launch_shared_heads caller and existing IDENTICAL/ALL_OFF guard. No new enablement. Selects paired head reuse only where existing admission succeeds; no evidence that every workload enters it.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI20",
+      "title": "Versioned online attention softmax",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "transformer/impl/llama/attention_v2_model_contract.mojo",
+        "transformer/impl/llama/attention_v2_model_device.mojo",
+        "transformer/impl/llama/attention_v2_model_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "transformer/checks/transformer_oracle.mojo",
+        "transformer/checks/transformer_backward_oracle.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/byte_lm_host.mojo",
+        "training/byte_lm_config.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo",
+        "transformer/ATTENTION_V2_CONTRACT.md"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_ATTENTION_V2=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "V",
+      "dependencies": [],
+      "remaining_work": [
+        "Later authorized qualification must cover complete Transformer, ByteTrainer/ByteLayerPool and Samba operations, including forward, dQ/dK/dV, all parameter gradients, traces, retained tapes and checkpoints; no helper-only timing is sufficient.",
+        "Existing fixed15, nonzero softcap and nonempty planted diagnostic calls keep their original profile; V1 backward sabotage combinations are refused before V2 writes. These are explicit instrumentation/semantic exclusions, not dimension-based routes.",
+        "Full causal and sliding-window prefill/decode, GQA, ragged logical tails, arbitrary legal depth, nonfinite refusals and simultaneous tape lifetimes remain unverified.",
+        "Hold NI08, NI34/35 and attention-storage controls fixed for isolated A/B; then evaluate meaningful complete configurations. GPU V2 dispatch does not select V1 fused/eager/environment subarms.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Online maximum rescaling changes bits and diagnostic stage interpretation; the explicit V2 graph must agree across all columns and preserve training quality.",
+        "The shared native source spells scalar Float32 rounded multiply/add/FMA/exp/div operations, but toolchain lowering and actual vendor results are unverified.",
+        "A serial row owner removes score-matrix traffic but can be slower than V1 cooperative kernels; no measured speedup is claimed.",
+        "All downstream gradients and absolute causal/window origins are retained in source; stage ownership, native host adapters and trace materialization require later execution evidence."
+      ],
+      "notes": "Real default-OFF IDENTICAL/ALL_OFF path: eager_attention_forward selects attention_v2_model_forward, tags owning stages attn_v2 and records V2 diagnostics on demand. llama_decoder_layer_backward_device consumes the saved tag and launches complete V2 prepare/dQ/dK+dV, retaining downstream KV slice/RoPE/projection/norm/residual derivatives. A shared GPU-free arithmetic module defines token-major Q/output and packed KV addressing, fixed logical tile32 rescaling, ascending score/key folds and GQA head-then-query dK/dV folds. Native transformer forward/backward oracles call that same arithmetic; both optimized Byte host block_fast and threaded block_par do too, preserving the worker allocation and each chunk absolute query origin. Ordinary traces materialize complete matching forward/backward stages without changing online context. Transformer/Byte/Samba model callers, including saved native tapes, reach the branch. Byte profile and Samba native experiment_profile name V2; Transformer bindings export transformer_attention_profile. Existing standalone attention_v2 primitive remains the historical independent-layout reference, not evidence that these new adapters compile or agree. No numerical switch is enabled by default.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction",
+      "numerical_profile": "attention-online-tile32.fp32.v2"
+    },
+    {
+      "id": "NI21",
+      "title": "Attention save versus recompute by memory budget",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_ATTN_V1_PACKED_ESTASH=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Choose an explicit owned memory-budget/session policy; present controls compare fixed retention profiles, not adaptive budget selection.",
+        "Capture actual retained cells and dispatch word; exercise complete backward/train steps and simultaneous live tapes.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Peak memory, stale generations and retention cost; choosing an arm by environment without admission can produce same-route controls."
+      ],
+      "notes": "Existing packed causal exponent retention versus existing no-stash recomputation. Added ALL_OFF suppression to these explicit profiles; ordinary defaults unchanged. The model callers already consume retained backward state. Both selectors must be mutually exclusive.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI22",
+      "title": "Sparse causal tile scheduling",
+      "status": "rejected_source",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [
+        "NI19",
+        "NI21"
+      ],
+      "remaining_work": [
+        "Closed for the catalog hypothesis: no redundant skip arm was added. Reopen only after identifying actual computed masked work in a specific reachable route, while retaining complete backward and trace coverage.",
+        "NOT RUN: source rejection is not a measured performance result, compile claim or vendor identity result."
+      ],
+      "quality_risks": [
+        "Mask sentinel versus truly absent contributions, signed zero, empty rows and missing backward contributions."
+      ],
+      "notes": "Rejected the stated masked-work-removal premise on source grounds. Existing fused query blocks compute kb_lo/kb_hi from the first/last visible _row_range, iterate only that key-tile span, and guard per-row score/value dots by row visibility; backward tile consumers also use the same visible intervals. Relevant source: _row_range near 2165, fused query bounds near 2744/2937/3162, guarded per-row score/value operations near 2787/2825/2979/3033, and backward bounds/mask checks near 4631/4678. NI21 already covers packed retained visible cells. A different descriptor scheduler would be a new hypothesis, not implementation of an identified missing skip. No speed conclusion or numerical shortcut.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI23",
+      "title": "Fuse RoPE and attention layout transforms",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_ROPE_CACHE=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Backward and decode fusion variants remain unimplemented; this arm covers full prefill with an empty non-window cache.",
+        "Account for all saved K stages, including partial rotary width and trace output.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Rotary partner indexing, GQA heads, raw V copy versus FTZ, table positions and packed-cache address calculations."
+      ],
+      "notes": "Actual llama_attention_forward caller selects rotary_k_prefill_cache_kernel, which preserves token-major k_rope while directly writing head-major K/V attention stages. Q retains its current layout. Selection is by cache semantics, never a benchmark dimension; sabotage paths retain baseline. New arm default OFF, IDENTICAL and ALL_OFF guarded.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI24",
+      "title": "Training prefill without unused KV cache writes",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_layer_pool.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [
+        "NI23"
+      ],
+      "remaining_work": [
+        "Remove unused persistent cache allocations through an owned no-decode session type; this revision removes copy traffic only.",
+        "Samba tape/session integration remains pending.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Public decode must never observe uninitialized retained cache; backward must continue reading per-layer attention stages."
+      ],
+      "notes": "ByteTrainer and ByteLayerPool pass retain_decode_cache=False only under the new opt-in. llama_attention_forward requires empty full-prefill cache, leaves kv.s at zero and skips persistent K/V copies. Attention stages and trace remain populated; ordinary public calls retain their cache. New arm default OFF, IDENTICAL and ALL_OFF guarded.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI25",
+      "title": "Canonical parallel RMSNorm and LayerNorm",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/samba_ops.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_RMS_ROW_BLOCK=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "The V-contract parallel-statistics tree, LayerNorm, offset-RMSNorm and backward-statistics versions are still design work.",
+        "Full model paths that fuse residual+norm already bypass llama_rms_norm; measure reached coverage and combinations explicitly.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Shared-scalar visibility and original FTZ/multiply order; extra output parallelism may lose at narrow widths."
+      ],
+      "notes": "Implemented the catalog explicitly permitted S sub-arm, not the V statistics proposal: lane zero runs the original serial ascending sumsq and rstd; block lanes scale independent outputs. Actual llama_rms_norm entry (also used by Samba) selects it with no shape threshold. Host arithmetic needs no change for intended S semantics. New arm default OFF, IDENTICAL and ALL_OFF guarded.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction",
+      "catalog_contract": "V primary; implemented S output-parallel sub-arm"
+    },
+    {
+      "id": "NI26",
+      "title": "Fuse training SwiGLU and its saved outputs",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_TRAIN_SWIGLU=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Measure training as a whole with original paired VJP; the existing backward already fuses gated-SiLU on GPU columns.",
+        "Biased preactivation-fused and non-SiLU options continue using existing paths.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Saving exact SiLU quotient rather than multiply-by-sigmoid, trace/tape ownership, extreme activations and output aliases."
+      ],
+      "notes": "New swiglu_training_fused_kernel is wired in llama_mlp_forward and writes BOTH silu_out and gated; the original inference-only fusion is not used to claim training coverage. Original backward fusion is reused unchanged. New arm default OFF, IDENTICAL and ALL_OFF guarded.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI27",
+      "title": "Parameter and gradient arena views",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_layer_pool.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_LM_PARAM_VIEWS=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Extend parameter-view ownership to pooled multi-device model chunks and compatible Samba sessions.",
+        "Initial constructors still allocate/copy some soon-rebound tensors; eliminate only after ownership lifecycle is explicit.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Parameter/shadow swaps, rollback, all gradient writers filling complete slices, gradient exports, and accumulation buffers remaining distinct."
+      ],
+      "notes": "ByteTrainer block parameters and gradients reuse supported create_sub_buffer views; views rebind each use after optimizer swaps. Embedding/head parameter view eligibility includes this opt-in. ByteOwnedLayer gradients bind to its owned flat arena and pack skips copies. Apple preexisting embedding/head view default is preserved. New arm default OFF, IDENTICAL and ALL_OFF guarded.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI28",
+      "title": "Consolidate status collection transactionally",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "training/opt_gate.mojo",
+        "training/checks/optimizer.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_OPT_GATE_SCAN_OFF=1"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [
+        "NI29"
+      ],
+      "remaining_work": [
+        "Broader whole-step loss/gradient/variance collection with shadow-state rollback and canonical error priority remains pending.",
+        "Keep clipping and failure-priority waits that are part of the existing contract.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Invalid state must not partially commit; status reduction must preserve first tensor/index and refusal message."
+      ],
+      "notes": "Reuse existing real OPT_GATE_SCAN input-admission kernel and gated updates; this default-on historical candidate is not newly promoted. Candidate retains existing behavior; B explicitly restores separate input scans. This is optimizer admission, not a claim of whole-step final collection.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI29",
+      "title": "Fuse optimizer update and state refusal scans",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "training/byte_lm.mojo",
+        "training/checks/optimizer.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_TRAIN_LIVE_STATUS=1",
+        "MOJOLEARN_STEP_GLUE_TRIAL=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_STEP_GLUE_TRIAL=1"
+      ],
+      "candidate_env": {
+        "MOJOLEARN_STEP_GLUE_ARM": "noshadow"
+      },
+      "baseline_env": {
+        "MOJOLEARN_STEP_GLUE_ARM": "noshadow"
+      },
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Use a real full-byte-training out-of-place Adam arm and retain final-status timing; other optimizer consumers need their own integrations.",
+        "Record matching step-glue arm selection in both arms; a non-OOP arm does not enter this candidate.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Rollback after handle swap, nonfinite parameter/moment/variance priority and fault-injection incompatibility."
+      ],
+      "notes": "Reuse adam_update_oop_status_kernel and _byte_glue_update actual caller; added IDENTICAL and ALL_OFF guard around existing live-status opt-in. Existing source comments remain historical component evidence, not evidence for this revision.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI30",
+      "title": "Batched optimizers and canonical global clipping",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "training/opt_gate.mojo",
+        "training/checks/optimizer.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF=1",
+        "MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF=1"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Record individual SGD launch and clip batching A/Bs plus combined whole-training arm; require actual SGD momentum and enabled clipping workloads.",
+        "New V-contract clipping folds and broader descriptor arenas remain pending.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Tensor ordering, empty tensors, per-tensor momentum initialization, bias correction, nested clipping waits and nonfinite norm."
+      ],
+      "notes": "Existing flat one-launch SGD and identical_clip_grad_norm_batched retain same update/norm arithmetic, already wired in identical_optimizer_step and ALL_OFF guarded. Historical defaults untouched; candidate is their current combined route, B explicitly disables both. No new switch pretending to implement a different norm tree.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI31",
+      "title": "Stable segmented embedding gradients",
+      "status": "existing_candidate_unverified",
+      "implementation_paths": [
+        "embedding/checks/embedding_sort.mojo",
+        "embedding/checks/embedding_identical.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_EMB_RADIX_SORT_OFF=1"
+      ],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Ensure PLAN_SORT is actually reached on saved full workloads without introducing board-specific dispatch.",
+        "Measure complete LM/Samba training, including dense zeroing and dense optimizer semantics; V segment-tree proposal remains pending.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Stable original-position order for duplicates, padding/untouched rows and dense Adam state."
+      ],
+      "notes": "Reuse existing stable LSD radix sort versus bitonic sort and touched-row scheduling; original occurrence-order floating fold unchanged. Existing default-on behavior and ALL_OFF guard retained, no new promotion. Smaller scan-plan workloads can be same-route controls.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI32",
+      "title": "Reuse token validation and resident batches",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "training/byte_lm.mojo",
+        "embedding/checks/embedding_identical.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_LM_OWNED_TOKENS=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Resident immutable epoch batches, CE-target admission reuse and Samba integration remain pending.",
+        "Input upload and first token scan remain inside the measured boundary.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Mutable input handles, generation mismatch, target shift and reuse of admission after a buffer mutation."
+      ],
+      "notes": "Within an owned synchronous byte step, byte_require_tokens_device admits the just-uploaded ids/targets before gather. Forward/backward use existing prerefused embedding entries with no intervening ID writer. Public entrypoint validation is preserved. No new freely asserted trust flag or Python tensor work. New arm default OFF, IDENTICAL and ALL_OFF guarded.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI33",
+      "title": "Fused loss intermediates and logits gradient",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "training/checks/loss.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_CE_GRAD_FUSED=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Broader forward CE fusion and additional saved-transcendental reuse remain separate work.",
+        "Measure all actual identical_ce_backward_into neural consumers and alias/unaliased outputs.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Same-cell aliases, ignored positive-zero rows, smoothing targets and exact mean divisor."
+      ],
+      "notes": "Actual identical_ce_backward_into selects ce_weights_dlogits_kernel. It writes weights and gradient with the same L14 divide, L15 subtraction and L16 divide; no change to max/denominator/loss folds. Sabotage builds retain old staged path. New arm default OFF, IDENTICAL and ALL_OFF guarded.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction"
+    },
+    {
+      "id": "NI34",
+      "title": "Chunked LM head with canonical vocabulary fold",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "training/chunked_lm_head_v2.mojo",
+        "training/chunked_lm_head_host.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/byte_lm_host_backward.mojo",
+        "training/byte_lm_config.mojo",
+        "training/checks/chunked_lm_head_oracle.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo",
+        "python/mojolearn/_samba_impl.py",
+        "training/CHUNKED_LM_HEAD_V2.md"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "V",
+      "dependencies": [],
+      "remaining_work": [
+        "Pooled ByteLayerPool head still uses its existing full-logits route; it is not covered by this caller integration.",
+        "Samba ignores/custom num_items and microbatch objectives whose divisor differs from local row count retain the full head. Any extension must preserve exact objective and gradient scaling natively.",
+        "Prepare separate recipes for Byte GEMM-logit V2 and Samba standalone serial-logit V2; these are explicitly distinct numerical graphs and are not asserted to match each other across estimator families.",
+        "Full-logits inference remains the ordinary API. Exercise tied head/embedding merge, vocabulary tails, return shapes, checkpoint mismatch refusal and memory ownership when verification is authorized.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Vocabulary tails, row loss fold, canonical serial dHidden/dWeight folds, full-logits returns and peak memory.",
+        "Byte host chunked logits must match canonical GEMM profile; Samba standalone serial-logit head is a separate existing profile. Within each route all vendor columns must agree.",
+        "Samba conditional objective admission and changed reported loss rounding require full-quality and checkpoint coverage; no evidence collected."
+      ],
+      "notes": "The new default-OFF IDENTICAL/ALL_OFF compile selector is the default argument for ByteConfig.chunked_lm_head_v2, reaching both existing native Byte binding config constructors and the GPU ByteTrainer caller. Added native Mojo GEMM-logit chunked host forward and backward and wired byte_host_loss/byte_host_gradient. It mirrors GPU vocabulary/gradient fold order without materializing rows*vocab logits. Host storage chunks use 256 and GPU 1024, but canonical GEMM cells and ascending vocabulary folds do not depend on storage chunk size. Samba loss_and_grads selects existing standalone chunked APIs only for no-ignore local-row mean; host standalone oracle and GPU standalone kernel share their serial-logit V2 contract, with full native head fallback for custom objectives. Requested inference logits unchanged. Byte profile already names head V2 and now names GEMM leaf; Samba stores/refuses native experiment_profile metadata. Existing explicit ByteConfig option remains supported; ordinary build still defaults false.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction",
+      "variants": [
+        {
+          "name": "existing-explicit-byte-config",
+          "candidate_settings": {
+            "ByteConfig.chunked_lm_head_v2": true
+          },
+          "baseline_settings": {
+            "ByteConfig.chunked_lm_head_v2": false
+          },
+          "notes": "Existing direct native config alternative; primary A/B uses the guarded compile selector."
+        }
+      ]
+    },
+    {
+      "id": "NI35",
+      "title": "Versioned loss and gradient reduction trees",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "training/loss_reduction_v2.mojo",
+        "training/checks/loss.mojo",
+        "training/checks/loss_oracle.mojo",
+        "training/loss_host_rows.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/loss_contract.mojo",
+        "training/byte_lm_config.mojo",
+        "training/IDENTICAL_LOSS_CONTRACT.md",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo",
+        "python/mojolearn/_samba_impl.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "V",
+      "dependencies": [],
+      "remaining_work": [
+        "Parameter-gradient and residual-fan-in numerical trees remain design work; this delivered sub-arm changes token loss total only.",
+        "Byte and Samba metadata now distinguish the CE tree. Propagate CE_NUMERICAL_PROFILE through any remaining shared-loss consumer/artifact metadata before promotion; identify every such caller in saved recipes.",
+        "Hold all GEMM numerical switches (including NI08) fixed for isolated A/B, then evaluate relevant combinations. The independent chunked-head V2 path does not enter this candidate.",
+        "Later authorized identity cases must cover odd leaf counts/tails, SUM/MEAN/custom num_items, ignored rows, alias/unaliased storage and unchanged logits gradients.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Changed reported-loss rounding may affect early-stopping or external decisions; the mathematical objective and gradient formula are retained.",
+        "Scratch sizing, ping-pong lifetime, odd-tail carry, FTZ and metadata profile separation remain unverified.",
+        "No speed or quality result is claimed; extra tree launches can regress some workloads."
+      ],
+      "notes": "Concrete V sub-arm reaches actual identical_ce_forward_into L12: consecutive fixed 256-row serial leaves, balanced left/right merges, odd child carried unchanged; caller-owned two-slice scratch alternates levels and final parent writes total. Native Mojo ce_forward_oracle, ce_host_rows and ce_causal_mean_loss_fast select the same graph. Shared add/FTZ helpers define rounding. Vocabulary reductions, smoothing, ignored-row stores, L13 divisor and dlogits remain unchanged. REDUCTION_NONE and the separate chunked-head path are outside this fold. CE_NUMERICAL_PROFILE exposes the version and ByteConfig.profile appends a distinct loss suffix, preserving existing profile checks on byte checkpoints. Default OFF, IDENTICAL-only, ALL_OFF guarded. No relation to benchmark dimensions or Python tensor arithmetic. Samba state_dict/load_state_dict additionally stores/refuses training_experiment_profile from the native binding, including attention V2, CE token tree, chunked-head selection and non128 GEMM leaf.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction",
+      "numerical_profile": "mojolearn.identical.loss.ce.token-tree256.fp32.v2"
+    },
+    {
+      "id": "NI36",
+      "title": "Live range based activation retention",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_identical_experiments.mojo",
+        "training/dev_tensors.mojo",
+        "training/byte_lm_layer_pool.mojo",
+        "training/byte_lm.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_mamba.mojo",
+        "python/mojolearn/_transformer_impl.py",
+        "python/mojolearn/_mamba_impl.py",
+        "python/mojolearn/_samba_impl.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_SAMBA_FORWARD_TAPE=1"
+      ],
+      "baseline_defines": [],
+      "candidate_env": {},
+      "baseline_env": {},
+      "numerical_contract": "S",
+      "dependencies": [],
+      "remaining_work": [
+        "Later authorized checks must cover single-use/closed/busy refusal, changing source arrays after forward, multiple tapes and failed forward/backward cleanup, exact saved-stage backward outputs and full Samba gradients.",
+        "Owned Transformer and Mamba3 snapshots avoid mutable generation reuse; general shared parameter arenas, other Mamba versions, decode/carried-state tapes and adaptive byte-budget retention remain separate scope.",
+        "Native host retains the same arithmetic through ordinary recompute fallback; it does not gain tape acceleration. Unsupported Transformer options/int15 retain the original path and its existing training refusals.",
+        "Full retention may increase peak memory; this tape deliberately owns required state until one backward/close rather than applying an eviction that invalidates it.",
+        "NOT RUN: no compilation, tests, syntax/lint checks, imports, execution, identity verification, quality checks or timing; user explicitly prohibited verification.",
+        "Before any promotion: record complete full-workload recipes; freeze source; establish host/NVIDIA/AMD/Apple identity within the candidate version and unchanged quality; evaluate end-to-end NVIDIA+AMD A/B and relevant interactions."
+      ],
+      "quality_risks": [
+        "Outstanding buffer users, queue ordering, exceptions during enqueue/download, concurrent tapes, owner release and source-parameter mutation.",
+        "Retained native forward stages must correspond exactly to the one consumed backward; every gradient and refused option remains required.",
+        "Extra snapshot/tape memory and allocations may outweigh removed forward recomputation; no performance claim."
+      ],
+      "notes": "Primary A/B now reaches Samba loss_and_grads: _forward obtains per-layer native handles; backward consumes each once and closes it, with outer finally cleanup of remaining handles. TransformerForwardTape owns a fresh private TransformerSession, copied input/weights and full forward stages; _transformer_run_session retain_tape preserves backward state, and saved backward invokes llama_decoder_layer_backward_device directly. The sequence lane implements analogous Mamba3ForwardTape with mamba3_prefill_backward_on. Both native owners reject busy/repeated consumption; Python only allocates buffers/dispatches handles. Capability absence on host falls back to ordinary S-equivalent recomputation, including lazy-host ImportError-safe probes. New default-OFF IDENTICAL/ALL_OFF selector. Independent earlier scratch-sharing sub-arm remains available: train_linear_backward_dev allocates max(dA-scratch,dW-scratch), runs serial GEMMs via views, and waits before release. Existing ByteTrainer per-layer stages already retain forward outputs. NI48 shares this concrete Samba handoff.",
+      "validation_status": "NOT RUN: source-only by explicit user instruction",
+      "variants": [
+        {
+          "name": "linear-backward-scratch-sharing",
+          "candidate_defines": [
+            "MOJOLEARN_IDN_TRAIN_BACKWARD_SCRATCH=1"
+          ],
+          "baseline_defines": [],
+          "numerical_contract": "S",
+          "notes": "Independent smaller arm; does not enable the primary saved-forward tape experiment."
+        }
+      ]
+    }
+  ],
+  "cross_lane_changes": [
+    {
+      "id": "NI01",
+      "status": "wired_candidate_unverified",
+      "implementation_paths": [
+        "training/neural_gemm_workspace.mojo",
+        "training/dev_tensors.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NI01_TRAINING_WORKSPACE=1"
+      ],
+      "baseline_defines": [],
+      "notes": "Real synchronous train_linear_forward_dev caller of existing BoundedGemmWorkspace; context-keyed scratch-only cache with a 16 MiB retention budget, oversized temporary fallback and close when the device tensor pool becomes empty. No backward workspace caching or Samba tape integration."
+    }
+  ]
+}

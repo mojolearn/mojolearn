@@ -23,7 +23,8 @@ SCHEDULE only:
     `i`. No task starts a parallel region: the denominators are folded between
     the two row passes, on the calling thread;
   - the cross-row fold, the total, is `ce_fold` over the row losses, the
-    oracle's own call;
+    oracle's own call (or the shared NI35 token-total V2 tree when explicitly
+    selected in both the host and device build);
   - the stage lists the oracle appends (`shift`, `expo`, `weights`, ...) are not
     materialized except `expo`, which the backward reads; `shift[base + y]` is
     recomputed by the statement that produced it;

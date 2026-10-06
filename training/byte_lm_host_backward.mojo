@@ -86,6 +86,7 @@ from training.checks.loss_oracle import ce_backward_oracle, ce_forward_oracle
 from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
 from training.checks.optimizer_oracle import optimizer_step_oracle
 from training.loss_host_rows import ce_host_rows
+from training.chunked_lm_head_host import chunked_lm_head_gemm_host_train
 from training.optimizer_host_rows import adam_host_rows
 from transformer.checks.transformer_fixture import ScorePlant, TransformerWeights
 from transformer.checks.transformer_oracle import (

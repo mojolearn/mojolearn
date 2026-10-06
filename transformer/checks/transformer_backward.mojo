@@ -2784,6 +2784,9 @@ def bwd_attention_grads(
 
 
 
+from transformer.impl.llama.attention_v2_model_device import attention_v2_model_backward
+
+
 def bwd_attention_eager_stages(
     ctx: DeviceContext,
     mut bst: LlamaBackwardStages,
@@ -3262,6 +3265,9 @@ def llama_decoder_layer_backward_device(
     invariance of the ACTIVATION gradients is a property of the SHAPE of
     these kernels. The WEIGHT gradients are the opposite and the gate says
     so."""
+    comptime if BWD_ANY_SABOTAGE:
+        if fwd.attn_v2:
+            raise Error("attention V2: V1 backward sabotage is outside this numerical profile")
     var dims = fwd.dims.copy()
     dims.validate()
     var dm = dims.d_model
@@ -3633,7 +3639,7 @@ def llama_decoder_layer_backward_device(
     timing_tick(ctx, ton, tk, "bwd.before_attention")
     bst.attn_repaired = 0
     bst.attn_backward_status = -1
-    comptime if NN20_BALANCED_SUMMARY_TREE:
+    if NN20_BALANCED_SUMMARY_TREE:
         if fwd.attn_forward_status != 20:
             raise Error("NN20 backward requires summary-profile forward state")
         var record_attention = materialize or trace.enabled
@@ -3650,6 +3656,30 @@ def llama_decoder_layer_backward_device(
             _rec(ctx,trace,prefix,19,bst.d_attn_masked,cells)
             _rec(ctx,trace,prefix,20,bst.d_attn_scores,cells)
             _rec(ctx,trace,prefix,21,bst.d_qk_cell,cells)
+    elif fwd.attn_v2:
+        if materialize or trace.enabled:
+            ensure_backward_attention_capacity(ctx, bst, l, s)
+            attention_v2_model_backward[True](
+                ctx, fwd.q_rope, fwd.k_cache, fwd.v_cache, bst.d_attn_ctx,
+                fwd.amax, fwd.denom, bst.attn_zdot, bst.d_q_rope,
+                bst.d_k_cache, bst.d_v_cache, bst.d_attn_weights,
+                bst.d_attn_masked, bst.d_attn_scores, bst.d_qk_cell,
+                b, l, nh, nkv, s, hd, pos0 - key_lo, window, scale,
+            )
+        else:
+            attention_v2_model_backward[False](
+                ctx, fwd.q_rope, fwd.k_cache, fwd.v_cache, bst.d_attn_ctx,
+                fwd.amax, fwd.denom, bst.attn_zdot, bst.d_q_rope,
+                bst.d_k_cache, bst.d_v_cache, bst.d_attn_weights,
+                bst.d_attn_masked, bst.d_attn_scores, bst.d_qk_cell,
+                b, l, nh, nkv, s, hd, pos0 - key_lo, window, scale,
+            )
+        bst.attn_backward_status = FUSED_RAN
+        _rec(ctx, trace, prefix, 17, bst.d_attn_weights, b * nh * l * s)
+        _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
+        _rec(ctx, trace, prefix, 19, bst.d_attn_masked, b * nh * l * s)
+        _rec(ctx, trace, prefix, 20, bst.d_attn_scores, b * nh * l * s)
+        _rec(ctx, trace, prefix, 21, bst.d_qk_cell, b * nh * l * s)
     else:
         var choice = attention_path_choice(PLANT_AT_NONE)
         if choice == ATTN_PATH_AUTO and fwd.attn_prefer_eager:

@@ -118,6 +118,15 @@ def transformer_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
+from training.neural_identical_experiments import IDN_ATTENTION_V2
+from transformer.impl.llama.attention_v2_model_contract import ATTENTION_MODEL_V2_PROFILE
+
+
+def transformer_attention_profile_binding() -> PythonObject:
+    """Exact attention graph for this native binary's ordinary fp32 model path."""
+    return PythonObject(String(ATTENTION_MODEL_V2_PROFILE) if IDN_ATTENTION_V2 else String("attention-eager.fp32.v1"))
+
+
 def transformer_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
@@ -570,6 +579,7 @@ def PyInit__mojolearn_transformer_host() abi("C") -> PythonObject:
         module.def_function[transformer_host_sabotage_binding]("transformer_host_sabotage")
         module.def_function[transformer_vendor_binding]("transformer_vendor")
         module.def_function[transformer_numeric_mode_binding]("transformer_numeric_mode")
+        module.def_function[transformer_attention_profile_binding]("transformer_attention_profile")
         module.def_function[transformer_forward_binding]("transformer_forward")
         module.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
         module.def_function[transformer_decode_step_binding]("transformer_decode_step")

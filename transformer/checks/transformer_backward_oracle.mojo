@@ -1303,6 +1303,9 @@ def _bwd_attention_chains(
         host_parallelize(_kv_rows, ktasks)
 
 
+from transformer.impl.llama.attention_v2_model_host import attention_v2_host_backward
+
+
 def transformer_block_backward_oracle(
     w: TransformerWeights,
     fwd: TransformerStages,
@@ -1611,7 +1614,7 @@ def transformer_block_backward_oracle(
     # materialized expansion (contract DEVIATION 813). At `n_rep == 1` a
     # broken head-to-kv map is INVISIBLE, so the gates must carry both.
     # =====================================================================
-    comptime if NN20_BALANCED_SUMMARY_TREE:
+    if NN20_BALANCED_SUMMARY_TREE:
         # Build outputs outside st so immutable input borrows never overlap
         # mutable stage-field borrows in the host oracle.
         var nz = List[Float32]()
@@ -1633,6 +1636,20 @@ def transformer_block_backward_oracle(
         st.d_attn_masked = nm^
         st.d_attn_scores = ns^
         st.d_qk_cell = nc^
+    elif fwd.attn_v2:
+        var av2 = attention_v2_host_backward(
+            fwd.q_rope_out, fwd.kv_k_cache, fwd.kv_v_cache, st.d_attn_ctx,
+            b, l, nh, nkv, s, hd, own0, window, attention_scale(hd),
+        )
+        st.d_attn_weights = av2.dw.copy()
+        st.attn_zdot = av2.zdot.copy()
+        st.d_attn_masked = av2.dmasked.copy()
+        st.d_attn_scores = av2.dscores.copy()
+        st.d_qk_cell = av2.dqk.copy()
+        st.d_q_rope = av2.dq.copy()
+        st.d_k_cache = av2.dk.copy()
+        st.d_v_cache = av2.dv.copy()
+        host_tick(hton, htk, "bwd.attention_v2")
     else:
         for bb in range(b):
             for h in range(nh):
