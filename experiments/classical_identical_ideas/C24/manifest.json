@@ -1,0 +1,429 @@
+{
+  "schema": 1,
+  "id": "C24",
+  "title": "Versioned TSQR merge tree and panel sizes",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "x_decomp/tsqr_core.mojo",
+    "x_decomp/tsqr_host.mojo",
+    "x_decomp/tsqr_device.mojo",
+    "x_decomp/qr_sliced.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_CLASSICAL_C24_PANEL8"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "R/Q words across vendors, reconstruction/backward error, orthogonality, rank and downstream prediction quality.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C24",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C24",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C24",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C24",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C24",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/linear_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/linear_controls.mojo"
+  ],
+  "default_configuration": "panel8",
+  "configurations": {
+    "panel8": {
+      "name": "panel8",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C24_PANEL8"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C24"
+      ],
+      "source_gaps": [
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+      ],
+      "scope": "Eight-column TSQR panels; fixed shared host/device profile",
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:ols",
+        "classical:pca",
+        "more:tsvd",
+        "expanded:lstsq",
+        "expanded:qr",
+        "expanded:svd",
+        "expanded:randomized-svd"
+      ]
+    },
+    "rows2048": {
+      "name": "rows2048",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C24_ROWS2048"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C24"
+      ],
+      "source_gaps": [
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+      ],
+      "scope": "2048-row TSQR leaf panels, all shapes",
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:ols",
+        "classical:pca",
+        "more:tsvd",
+        "expanded:lstsq",
+        "expanded:qr",
+        "expanded:svd",
+        "expanded:randomized-svd"
+      ]
+    },
+    "tree4": {
+      "name": "tree4",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C24_TREE4"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C24"
+      ],
+      "source_gaps": [
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+      ],
+      "scope": "Four-way TSQR and sliced-QR merge tree; ascending factor children and reverse Q application",
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:ols",
+        "classical:pca",
+        "more:tsvd",
+        "expanded:lstsq",
+        "expanded:qr",
+        "expanded:svd",
+        "expanded:randomized-svd"
+      ]
+    },
+    "combo_panel8_rows2048": {
+      "name": "combo_panel8_rows2048",
+      "selectable": true,
+      "candidate_ids": [
+        "C24"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C24_PANEL8",
+        "MOJOLEARN_CLASSICAL_C24_ROWS2048"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+      ],
+      "required_workload_keys": [
+        "classical:ols",
+        "classical:pca",
+        "more:tsvd",
+        "expanded:lstsq",
+        "expanded:qr",
+        "expanded:svd",
+        "expanded:randomized-svd"
+      ],
+      "component_arms": [
+        {
+          "id": "C24",
+          "configuration": "panel8"
+        },
+        {
+          "id": "C24",
+          "configuration": "rows2048"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_panel8_tree4": {
+      "name": "combo_panel8_tree4",
+      "selectable": true,
+      "candidate_ids": [
+        "C24"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C24_PANEL8",
+        "MOJOLEARN_CLASSICAL_C24_TREE4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+      ],
+      "required_workload_keys": [
+        "classical:ols",
+        "classical:pca",
+        "more:tsvd",
+        "expanded:lstsq",
+        "expanded:qr",
+        "expanded:svd",
+        "expanded:randomized-svd"
+      ],
+      "component_arms": [
+        {
+          "id": "C24",
+          "configuration": "panel8"
+        },
+        {
+          "id": "C24",
+          "configuration": "tree4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_rows2048_tree4": {
+      "name": "combo_rows2048_tree4",
+      "selectable": true,
+      "candidate_ids": [
+        "C24"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C24_ROWS2048",
+        "MOJOLEARN_CLASSICAL_C24_TREE4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+      ],
+      "required_workload_keys": [
+        "classical:ols",
+        "classical:pca",
+        "more:tsvd",
+        "expanded:lstsq",
+        "expanded:qr",
+        "expanded:svd",
+        "expanded:randomized-svd"
+      ],
+      "component_arms": [
+        {
+          "id": "C24",
+          "configuration": "rows2048"
+        },
+        {
+          "id": "C24",
+          "configuration": "tree4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_panel8_rows2048_tree4": {
+      "name": "combo_panel8_rows2048_tree4",
+      "selectable": true,
+      "candidate_ids": [
+        "C24"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C24_PANEL8",
+        "MOJOLEARN_CLASSICAL_C24_ROWS2048",
+        "MOJOLEARN_CLASSICAL_C24_TREE4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+      ],
+      "required_workload_keys": [
+        "classical:ols",
+        "classical:pca",
+        "more:tsvd",
+        "expanded:lstsq",
+        "expanded:qr",
+        "expanded:svd",
+        "expanded:randomized-svd"
+      ],
+      "component_arms": [
+        {
+          "id": "C24",
+          "configuration": "panel8"
+        },
+        {
+          "id": "C24",
+          "configuration": "rows2048"
+        },
+        {
+          "id": "C24",
+          "configuration": "tree4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combined": {
+      "name": "combined",
+      "selectable": true,
+      "candidate_ids": [
+        "C24"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C24_PANEL8",
+        "MOJOLEARN_CLASSICAL_C24_ROWS2048",
+        "MOJOLEARN_CLASSICAL_C24_TREE4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+      ],
+      "required_workload_keys": [
+        "classical:ols",
+        "classical:pca",
+        "more:tsvd",
+        "expanded:lstsq",
+        "expanded:qr",
+        "expanded:svd",
+        "expanded:randomized-svd"
+      ],
+      "component_arms": [
+        {
+          "id": "C24",
+          "configuration": "panel8"
+        },
+        {
+          "id": "C24",
+          "configuration": "rows2048"
+        },
+        {
+          "id": "C24",
+          "configuration": "tree4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "Global TSQR uses must remain classical callers; no neural application is introduced.",
+    "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+  ],
+  "catalog_estimators": [
+    "OLS",
+    "PCA/SVD",
+    "least squares",
+    "QR consumers"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "classical:ols",
+    "classical:pca",
+    "more:tsvd",
+    "expanded:lstsq",
+    "expanded:qr",
+    "expanded:svd",
+    "expanded:randomized-svd"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

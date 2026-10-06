@@ -3118,3 +3118,109 @@ def stratified_fold_rows(enc, counts, alloc, k, rng, numeric_mode=None):
     code = prog.scratch(n)
     prog.stage("strat_codes", n, ENC, ORD, OFF, PB, CUM, k, code)
     return _fold_rows_run(prog, n, k, code, _NONE, numeric_mode)
+
+
+
+def regression_report(y_true, y_pred, *, sample_weight=None,
+                      multioutput="uniform_average", force_finite=True,
+                      numeric_mode="identical"):
+    """One IDENTICAL report of MSE, MAE and R² using expansion metric contracts.
+
+    C09 A shares target/prediction loads; B retains independent term stages.
+    All three requested outputs, validation and synchronization are included.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    if numeric_mode != "identical":
+        raise ValueError("regression_report requires numeric_mode='identical'")
+    r = _Reg(y_true, y_pred, sample_weight, multioutput, "regression_report")
+    r.program()
+    squared = r.term("sq")
+    absolute = r.term("abs")
+    squared_sums = r.sums(squared)
+    mse = r.average(r.fin(squared_sums))
+    mae = r.average(r.fin(r.sums(absolute)))
+    y_mean = r.fin(r.sums(r.Y), f32=True)[1]
+    denominator = _centered(r, r.Y, y_mean, mean=False)
+    r2 = _assemble(r, r.fin(squared_sums, 0), denominator, force_finite)
+    _execute(r.prog, numeric_mode)
+    def result(offset):
+        if r.mo == "raw_values":
+            return Array._owned(r.prog.words(offset, 2*r.D, "d"), (r.D,), "<f8", "C")
+        return float(r.prog.words(offset, 2, "d")[0])
+    if r.n < 2:
+        _undefined_warning("R^2 score is not well-defined with less than two samples.")
+        r2_value = float("nan")
+    else:
+        r2_value = result(r2)
+    return {"mean_squared_error": result(mse), "mean_absolute_error": result(mae), "r2_score": r2_value}
+
+
+
+def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
+                   include_curves=False, numeric_mode="identical"):
+    """Binary ROC AUC/AP and optional ROC/PR curves in one native program.
+
+    C10 A reuses a stable score order and canonical prefixes. B executes
+    both incumbent curve producers. Weighted ties keep their row order.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    if numeric_mode != "identical":
+        raise ValueError("ranking_report requires numeric_mode='identical'")
+    from ._metrics_impl import _label_map
+    true, kind, classes = _targets(y_true, "ranking_report")
+    if len(classes) > 2:
+        raise ValueError("ranking_report currently requires binary targets")
+    pos = _pos_label(pos_label, kind, classes, "ranking_report")
+    n = len(true)
+    if n <= 0:
+        raise ValueError("mojolearn metrics: an empty curve has no thresholds")
+    scores = _scores(y_score, n, "ranking_report", ndim=1)
+    weights = _weights(sample_weight, n, "ranking_report")
+    flags = _label_map(true, lambda v: int(v == pos))
+    prog = _Prog()
+    S, POS, W = prog.put(scores), _put_flags(prog, flags), _put_weights(prog, weights)
+    curves = []
+    for _ in range(2):  # glue: two fixed requested reports, never rows
+        order, fps, tps, thr = (prog.scratch(n) for _ in range(4))
+        count = prog.scratch(1)
+        curves.append((fps, tps, thr, count))
+        prog.stage("bin_curve", 1, S, 1, POS, W, n, order, fps, tps, thr, count, _NONE, 0, 0, 0)
+    scalar_outputs = []
+    curve_outputs = []
+    curve_totals = []
+    for fold, (fps, tps, thr, count) in enumerate(curves):  # glue: fixed AUC/AP reports
+        folded = prog.alloc(_CF_OUT)
+        curve_totals.append(prog.want(folded+2, 2))
+        result, status = prog.want(prog.alloc(2), 2), prog.want(prog.alloc(1), 1)
+        prog.stage("curve_fold", 1, n, fps, tps, count, folded, fold, 0, 0, _CF_CHUNK)
+        prog.stage("rank_epi", 1, _RANK_CURVE_SCORE, folded, 1, fold, result, status, _NONE, 0, 0)
+        scalar_outputs.append((result, status))
+        if include_curves:
+            lengths = prog.want(prog.alloc(6), 6)
+            output = prog.alloc(6*(n+1))
+            for channel in range(3):  # glue: three native curve output arrays
+                prog.want(output+2*channel*(n+1), 2*(n+1), count=lengths, mult=2)
+            prog.stage("curve_out", 1, _CO_ROC if fold == 0 else _CO_PR, n,
+                       fps, tps, thr, count, 0, output, lengths)
+            curve_outputs.append((output, lengths))
+    _execute(prog, numeric_mode)
+    auc_out, auc_flag = scalar_outputs[0]
+    ap_out, ap_flag = scalar_outputs[1]
+    if prog.ints(auc_flag, 1)[0] == 1:
+        _undefined_warning("Only one class is present in y_true. ROC AUC score is not defined in that case.")
+    if prog.ints(ap_flag, 1)[0] == 2:
+        raise ZeroDivisionError("float division by zero")
+    if prog.floats(curve_totals[1]+1, 1)[0] == 0:
+        warnings.warn("No positive class found in y_true, recall is set to one for all thresholds.",
+                      UserWarning, stacklevel=2)
+    result = {"roc_auc": float(prog.words(auc_out, 2, "d")[0]),
+              "average_precision": float(prog.words(ap_out, 2, "d")[0])}
+    for kind, (output, lengths) in enumerate(curve_outputs):  # glue: wraps two fixed native results
+        length = prog.ints(lengths, 1)[0]
+        arrays = []
+        for channel in range(3):  # glue: output shape/ownership only
+            size = length-1 if kind == 1 and channel == 2 else length
+            arrays.append(Array._owned(prog.words(output+2*channel*(n+1), 2*size, "d"),
+                                       (size,), "<f8", "C"))
+        result["roc_curve" if kind == 0 else "precision_recall_curve"] = tuple(arrays)
+    return result

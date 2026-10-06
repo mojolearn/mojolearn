@@ -12,6 +12,8 @@ runs x_decomp/nmf_dev.mojo, the same statements on resident matrices.
 
 A zero first error (`err0`) made Python's convergence ratio raise
 ZeroDivisionError; the drivers return NMF_ZERO_ERR0 and the caller raises it."""
+from experiments.classical_identical_ideas.linear_controls import C26_PRODUCTS, C26_UPDATE_FUSED
+from x_decomp.cells import OP_CLASSICAL_MU_IS
 from std.math import sqrt
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -99,11 +101,23 @@ def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
     var it = 0
     var eps = mat_const(NMF_F32_EPS, 1, 1)
     var one = mat_const(1.0, 1, 1)
+    var frozen_num = Mat(0, 0)
+    var frozen_gram = Mat(0, 0)
+    comptime if C26_PRODUCTS:
+        if not a.update_h and beta == 2.0:
+            frozen_num = k.mm(M, H, False, True)
+            frozen_gram = k.mm(H, H, False, True)
     for i in range(1, a.max_iter + 1):
         it = i
         if beta == 2.0:
-            var num = k.mm(M, H, False, True)
-            var den = k.mm(W, k.mm(H, H, False, True), False, False)
+            var num: Mat
+            var den: Mat
+            if C26_PRODUCTS and not a.update_h:
+                num = frozen_num.copy()
+                den = k.mm(W, frozen_gram, False, False)
+            else:
+                num = k.mm(M, H, False, True)
+                den = k.mm(W, k.mm(H, H, False, True), False, False)
             if a.l1w > 0:
                 den = k.ew1(OP_ADDS, den, a.l1w)
             if a.l2w > 0:
@@ -130,11 +144,14 @@ def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
                 den = k.ew1(OP_ADDS, den, a.l1w)
             if a.l2w > 0:
                 den = k.ew2s(OP_AXPY, den, W, a.l2w)
-            den = k.ew3(OP_SELECT, k.ew1(OP_ABS, den, 0.0), den, eps, 0.0)
-            var delta = k.ew2(OP_DIV, num, den)
-            if beta == 0.0:
-                delta = k.ew1(OP_SQRT, delta, 0.0)
-            W = k.ew2(OP_MUL, W, delta)
+            comptime if C26_UPDATE_FUSED:
+                W = k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, W, num, den, NMF_F32_EPS)
+            else:
+                den = k.ew3(OP_SELECT, k.ew1(OP_ABS, den, 0.0), den, eps, 0.0)
+                var delta = k.ew2(OP_DIV, num, den)
+                if beta == 0.0:
+                    delta = k.ew1(OP_SQRT, delta, 0.0)
+                W = k.ew2(OP_MUL, W, delta)
             if a.update_h:
                 R = _mu_ratio(k, M, W, H, beta, P)
                 num = k.mm(W, R, True, False)
@@ -148,11 +165,14 @@ def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
                     den = k.ew1(OP_ADDS, den, a.l1h)
                 if a.l2h > 0:
                     den = k.ew2s(OP_AXPY, den, H, a.l2h)
-                den = k.ew3(OP_SELECT, k.ew1(OP_ABS, den, 0.0), den, eps, 0.0)
-                delta = k.ew2(OP_DIV, num, den)
-                if beta == 0.0:
-                    delta = k.ew1(OP_SQRT, delta, 0.0)
-                H = k.ew2(OP_MUL, H, delta)
+                comptime if C26_UPDATE_FUSED:
+                    H = k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, H, num, den, NMF_F32_EPS)
+                else:
+                    den = k.ew3(OP_SELECT, k.ew1(OP_ABS, den, 0.0), den, eps, 0.0)
+                    var delta = k.ew2(OP_DIV, num, den)
+                    if beta == 0.0:
+                        delta = k.ew1(OP_SQRT, delta, 0.0)
+                    H = k.ew2(OP_MUL, H, delta)
         if a.tol > 0 and i % 10 == 0:
             var err = nmf_err(k, M, W, H, beta)
             if err0 == 0.0:
@@ -194,9 +214,24 @@ def nmf_cd[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
     var v_init = 0.0
     var have_init = False
     var it = 0
+    var fixed_gram = Mat(0, 0)
+    var fixed_cross = Mat(0, 0)
+    comptime if C26_PRODUCTS:
+        if not a.update_h:
+            fixed_gram = k.mm(Ht, Ht, True, False)
+            fixed_cross = k.mm(M, Ht, False, False)
+            if a.l2w != 0.0:
+                fixed_gram = k.ew2s(OP_AXPY, fixed_gram, mat_eye(Ht.c), a.l2w)
+            if a.l1w != 0.0:
+                fixed_cross = k.ew1(OP_ADDS, fixed_cross, -a.l1w)
     for i in range(1, a.max_iter + 1):
         it = i
-        var viol = _cd_side(k, M, W, Ht, a.l1w, a.l2w, _perm(k, W.c, a, draws), False)
+        var perm = _perm(k, W.c, a, draws)
+        var viol = 0.0
+        if C26_PRODUCTS and not a.update_h:
+            viol = k.cd_rows(W, fixed_gram, fixed_cross, perm)
+        else:
+            viol = _cd_side(k, M, W, Ht, a.l1w, a.l2w, perm, False)
         if a.update_h:
             viol += _cd_side(k, M, Ht, W, a.l1h, a.l2h, _perm(k, W.c, a, draws), True)
         if not have_init:

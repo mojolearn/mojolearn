@@ -97,6 +97,7 @@ keeps resident at once (the spin waits need that).
 """
 
 from std.atomic import Atomic, Ordering
+from experiments.classical_identical_ideas.linear_controls import C21_EXTREMA
 from std.gpu import block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from std.math import inf, max
@@ -194,28 +195,52 @@ def _tree_dual[
         s_xv[tid] = xv
         s_xk[tid] = xk
     barrier()
-    var step = N // 2
-    while step > 0:
-        if tid < step:
-            var ov = s_nv[tid + step]
-            var ok = s_nk[tid + step]
-            if _arg_better[False](ov, ok, s_nv[tid], s_nk[tid]):
-                s_nv[tid] = ov
-                s_nk[tid] = ok
-                s_np[tid] = s_np[tid + step]
-                s_npay[tid] = s_npay[tid + step]
-            var mv = s_xv[tid + step]
-            var mk = s_xk[tid + step]
-            comptime if SAB_FMAX_HWMAX:
-                s_xv[tid] = max(s_xv[tid], mv)
-            elif SAB_FMAX_HWMAX_SWAP:
-                s_xv[tid] = max(mv, s_xv[tid])
-            else:
-                if _fmax_better(mv, mk, s_xv[tid], s_xk[tid]):
-                    s_xv[tid] = mv
-                    s_xk[tid] = mk
-        barrier()
-        step //= 2
+    # C21 four-way tuple tree fuses two extrema and halves barrier rounds.
+    # Value/key total orders are unchanged, including signed-zero ties.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    comptime if C21_EXTREMA:
+        var live = N
+        while live > 1:
+            var arity = 4 if live >= 4 else 2
+            var stride = live // arity
+            if tid < stride:
+                for child in range(1, arity):
+                    var other = tid + child * stride
+                    var ov = s_nv[other]
+                    var ok = s_nk[other]
+                    if _arg_better[False](ov, ok, s_nv[tid], s_nk[tid]):
+                        s_nv[tid] = ov
+                        s_nk[tid] = ok
+                        s_np[tid] = s_np[other]
+                        s_npay[tid] = s_npay[other]
+                    if _fmax_better(s_xv[other], s_xk[other], s_xv[tid], s_xk[tid]):
+                        s_xv[tid] = s_xv[other]
+                        s_xk[tid] = s_xk[other]
+            barrier()
+            live = stride
+    else:
+        var step = N // 2
+        while step > 0:
+            if tid < step:
+                var ov = s_nv[tid + step]
+                var ok = s_nk[tid + step]
+                if _arg_better[False](ov, ok, s_nv[tid], s_nk[tid]):
+                    s_nv[tid] = ov
+                    s_nk[tid] = ok
+                    s_np[tid] = s_np[tid + step]
+                    s_npay[tid] = s_npay[tid + step]
+                var mv = s_xv[tid + step]
+                var mk = s_xk[tid + step]
+                comptime if SAB_FMAX_HWMAX:
+                    s_xv[tid] = max(s_xv[tid], mv)
+                elif SAB_FMAX_HWMAX_SWAP:
+                    s_xv[tid] = max(mv, s_xv[tid])
+                else:
+                    if _fmax_better(mv, mk, s_xv[tid], s_xk[tid]):
+                        s_xv[tid] = mv
+                        s_xk[tid] = mk
+            barrier()
+            step //= 2
     var r = (s_nv[0], s_nk[0], s_np[0], s_npay[0], s_xv[0], s_xk[0])
     barrier()
     return r

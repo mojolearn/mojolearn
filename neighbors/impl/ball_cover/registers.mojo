@@ -1,3 +1,4 @@
+from experiments.classical_identical_ideas.graph_controls import C32_COUNT_FUSION, C32_EMIT_FUSION
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The eps-neighborhood query kernels of the random ball cover.
@@ -121,7 +122,7 @@ as unimplemented with that reason.
 """
 
 from std.bit import count_trailing_zeros, pop_count
-from std.gpu import block_idx, thread_idx
+from std.gpu import block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import lane_id, shuffle_idx, vote
 from std.gpu.primitives.warp import sum as warp_sum
 from checks.numerics import PIN_CROSS_VENDOR  # DEVIATION 551
@@ -691,6 +692,27 @@ def block_rbc_kernel_eps_max_k_copy(
 # ---------------------------------------------------------------------------
 
 
+def _c32_radius_stream[EMIT: Bool](
+    data: MutPointer[Float32,MutAnyOrigin], query: MutPointer[Float32,MutAnyOrigin],
+    ids: MutPointer[Int32,MutAnyOrigin], offsets: MutPointer[Int32,MutAnyOrigin],
+    counts: MutPointer[Int32,MutAnyOrigin], output: MutPointer[Int32,MutAnyOrigin],
+    nq: Int32, nr: Int32, d: Int32, radius: Float32, metric: Int32, metric_arg: Float32,
+):
+    var q=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if q>=Int(nq):
+        return
+    var count=0
+    var threshold=rbc_cmp_bound(Int(metric),radius)
+    for col in range(Int(nr)):
+        var distance=rbc_cmp_dist(query,q*Int(d),data,col*Int(d),Int(d),Int(metric),metric_arg)
+        if distance<=threshold:
+            comptime if EMIT:
+                output[Int(offsets[q])+count]=ids[col]
+            count+=1
+    comptime if not EMIT:
+        counts[q]=Int32(count)
+
+
 def rbc_eps_pass_count(
     ctx: DeviceContext,
     mut x_reordered: DeviceBuffer[DType.float32],
@@ -726,6 +748,9 @@ def rbc_eps_pass_count(
                 ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists,
                 r_radius, vd, adj_ia, n_queries, n_cols, n_landmarks, eps, False,
             )
+    comptime if C32_COUNT_FUSION:
+        ctx.enqueue_function[_c32_radius_stream[False]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),adj_ia.unsafe_ptr(),vd.unsafe_ptr(),adj_ia.unsafe_ptr(),Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
+        fast_done=True
     if not fast_done:
       ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](
         x_reordered.unsafe_ptr(),
@@ -796,6 +821,9 @@ def rbc_eps_pass_fill(
                 r_radius, adj_ia, adj_ja, n_queries, n_cols, n_landmarks, eps,
                 True,
             )
+    comptime if C32_EMIT_FUSION:
+        ctx.enqueue_function[_c32_radius_stream[True]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),adj_ia.unsafe_ptr(),adj_ia.unsafe_ptr(),adj_ja.unsafe_ptr(),Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
+        fast_done=True
     if not fast_done:
       ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](
         x_reordered.unsafe_ptr(),

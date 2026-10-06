@@ -960,7 +960,7 @@ def _supervised_out(lane, np, est, Xq):
     return {"pred": np.asarray(_host(est.predict(Xq)), dtype=np.float64).reshape(-1)}
 
 
-def _build_ours(lane, D, rec, S):
+def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=None):
     np = _np()
     import mojolearn as ml
     d = D["X"].shape[1] if "X" in D else (D["index"].shape[1] if "index" in D else None)
@@ -999,6 +999,13 @@ def _build_ours(lane, D, rec, S):
             make = lambda: ml.AgglomerativeClustering(n_clusters=N_CLUSTERS, metric="euclidean",  # noqa: E731
                                                       connectivity="pairwise", linkage="single",
                                                       compute_full_tree="auto", distance_threshold=None)
+            # C42's separate saved-dataset variant exercises the public
+            # x_cluster route (per-merge distances or another supported linkage).
+            # Both arms receive the same explicit settings. The existing board
+            # single-linkage recipe remains its original hierarchy operation.
+            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+            if classical_variant is not None:
+                make = lambda: ml.AgglomerativeClustering(**classical_variant)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
         out = lambda: {"labels": np.asarray(S["est"].labels_, dtype=np.int64).reshape(-1)}  # noqa: E731
     elif lane in ("knn-clf", "knn-reg"):
@@ -1011,7 +1018,9 @@ def _build_ours(lane, D, rec, S):
         def call():
             est = make()
             est.fit(X, yfit)
-            S["pred"] = est.predict(D["Xq"])
+            S["est"] = est
+            if not separate_inference:
+                S["pred"] = est.predict(D["Xq"])
         out = lambda: {"pred": np.asarray(S["pred"], dtype=np.float64).reshape(-1)}  # noqa: E731
     elif lane in ("nystroem", "rbf-sampler"):
         g = gamma_of(D)
@@ -1056,8 +1065,10 @@ def _build_ours(lane, D, rec, S):
         def call():
             est = make()
             est.fit(D["index"])
-            _dist, ind = est.search(D["queries"])
-            S["ind"] = ind
+            S["est"] = est
+            if not separate_inference:
+                _dist, ind = est.search(D["queries"])
+                S["ind"] = ind
         out = lambda: {"ind": np.asarray(S["ind"], dtype=np.int64)}  # noqa: E731
     else:
         g, ls = (gamma_of(D), length_scale_of(D))

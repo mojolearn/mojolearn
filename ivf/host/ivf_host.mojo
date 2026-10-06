@@ -1,3 +1,5 @@
+from core.classical_distance import direct_squared_distance
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
@@ -165,6 +167,8 @@ def host_pinned_distance(
 ) -> Float32:
     """`pinned_distance_tile_kernel` at `is_sqrt = 0`, one cell (module
     docstring). `descending` is the sabotage arm's walk and nothing else."""
+    comptime if C30_DIRECT_DISTANCE:
+        return direct_squared_distance((q.unsafe_ptr()+qi*d).unsafe_origin_cast[MutAnyOrigin](),(y.unsafe_ptr()+yi*d).unsafe_origin_cast[MutAnyOrigin](),d)
     var acc = Float32(0.0)
     if descending:
         var f = d - 1

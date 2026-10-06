@@ -14,8 +14,9 @@ core count or the data), so the host and the device run the same stages.
 A stage the planner cannot size (a group_sum whose OFF no earlier
 group_sort wrote) runs its sequential unit unchanged.
 """
+from experiments.classical_identical_ideas.shared_controls import C05_PHASE_SCRATCH, C09_REG_BUNDLE, C10_RANK_REUSE, C12_SPARSE_COUNTS
 from x_metrics.common import IP, STAGE_INTS, PARAMS, LEAF
-from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM
+from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM, KEY_GROUP
 from x_metrics.cls_epi import OP_CLS_EPI
 from x_metrics.curve_out import (
     OP_CURVE_OUT, OP_CO_KEEP, OP_CO_EMIT, OP_CO_DET, CO_DET, OP_AUC_XY, OP_AX_CHUNK, OP_AX_FINAL, AX_REC,
@@ -190,6 +191,48 @@ def _a(r: IP, k: Int) -> Int:
     return Int(r.unsafe_load(2 + k))
 
 
+def _separate(a: Int, an: Int, b: Int, bn: Int) -> Bool:
+    # Native program metadata only. Missing optional regions are disjoint.
+    return a < 0 or b < 0 or an <= 0 or bn <= 0 or a + an <= b or b + bn <= a
+
+
+def _reg_pair_safe(r: IP, following: IP, total: Int) -> Bool:
+    var y = _a(r, 0)
+    var pred = _a(r, 1)
+    var pn = _a(r, 3) if _a(r, 6) == 1 else total
+    var a = _a(r, 2)
+    var b = _a(following, 2)
+    return (a >= 0 and b >= 0 and _separate(a, total, b, total)
+            and _separate(a, total, y, total) and _separate(a, total, pred, pn)
+            and _separate(b, total, y, total) and _separate(b, total, pred, pn))
+
+
+def _curve_pair_safe(r: IP, following: IP, n: Int, total: Int) -> Bool:
+    # Reuse only independent arenas. Aliased producer programs retain B.
+    # KEEP has extra write regions; it is left to the ordinary planner.
+    if _a(r, 11) != 0 or _a(following, 11) != 0 or _a(r, 1) < total:
+        return False
+    var N = n * total
+    var score_n = (n - 1) * _a(r, 1) + total
+    for stage in range(2):
+        var a = r if stage == 0 else following
+        for k in range(5, 10):
+            var at = _a(a, k)
+            var count = total if k == 9 else N
+            if at < 0 or not _separate(at, count, _a(r, 0), score_n):
+                return False
+            if not _separate(at, count, _a(r, 2), N) or not _separate(at, count, _a(r, 3), n):
+                return False
+            for other_stage in range(stage, 2):
+                var b = r if other_stage == 0 else following
+                for j in range(5, 10):
+                    if other_stage == stage and j <= k:
+                        continue
+                    if not _separate(at, count, _a(b, j), total if j == 9 else N):
+                        return False
+    return True
+
+
 def _plan_keep(mut pl: Plan, r: IP, n: Int, total: Int):
     """bin_curve params 10 and 11 (lane metrics-apple): with KEEP (10) and
     the flag (11) == 1, the collinear-drop flags of every slot follow the
@@ -295,7 +338,18 @@ def _plan_cont_stats(mut pl: Plan, r: IP, total: Int) raises:
 
 def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
     var pl = Plan(arena_len)
+    var peak = arena_len
+    var skip = -1
     for s in range(stages):
+        # C05: every expansion finishes into caller arena before the next
+        # source stage. Retain one bounded, invocation-owned workspace and
+        # reuse its offsets after that boundary; no cross-call stale state.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        comptime if C05_PHASE_SCRATCH:
+            peak = max(peak, pl.size)
+            pl.size = arena_len
+        if s == skip:
+            continue
         var r = q + s * STAGE_INTS
         var op = Int(r.unsafe_load(0))
         var total = Int(r.unsafe_load(1))
@@ -304,6 +358,19 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
         if total <= 0:
             pl.copy_stage(q, s)
             continue
+        comptime if C09_REG_BUNDLE:
+            if op == 3 and s+1 < stages:
+                var following = q + (s+1)*STAGE_INTS
+                # Only fuse adjacent independent SQ/ABS stages with the same
+                # inputs, broadcast and output geometry. B keeps both maps.
+                if (Int(following[0]) == 3 and Int(following[1]) == total
+                    and _a(r, 4) == 0 and _a(following, 4) == 1
+                    and _a(r, 0) == _a(following, 0) and _a(r, 1) == _a(following, 1)
+                    and _a(r, 3) == _a(following, 3) and _a(r, 6) == _a(following, 6)
+                    and _reg_pair_safe(r, following, total)):
+                    pl.emit(82, total, [_a(r,0), _a(r,1), _a(r,2), _a(following,2), _a(r,3), _a(r,6)])
+                    skip = s+1
+                    continue
         if op == OP_GROUP_SORT:
             var K = _a(r, 0)
             var n = _a(r, 1)
@@ -316,6 +383,17 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
                 cap = 1
             if C > cap:
                 C = cap
+            comptime if C12_SPARSE_COUNTS:
+                # Occupancy can never exceed n. Prefer row storage when
+                # full class/chunk tables cost more than sorting n keys.
+                # No measured-shape threshold; dense OFF output still paid.
+                if n > 1 and 6*n < m*C+m and pl.fits(6*n):
+                    var B = pl.sort(KEY_GROUP, n, 1, K, m, 0)
+                    pl.emit(OP_SORT_EMIT, n, [B, n, ORD])
+                    pl.emit(83, m+1, [K, n, m, ORD, OFF])
+                    pl.off_at.append(OFF)
+                    pl.off_n.append(n)
+                    continue
             if n <= 0 or m <= 0 or C < 1 or not pl.fits(m * C + m):
                 pl.copy_stage(q, s)
                 continue
@@ -400,6 +478,21 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             pl.emit(OP_CURVE_FILL, C * total, [n, G, N, S, C, CURVE_CHUNK, _a(r, 3)])
             pl.emit(OP_CURVE_EMIT, N, [n, G, N, _a(r, 6), _a(r, 7), _a(r, 8), _a(r, 9)])
             _plan_keep(pl, r, n, total)
+            comptime if C10_RANK_REUSE:
+                if s+1 < stages:
+                    var next_curve = q+(s+1)*STAGE_INTS
+                    var same = Int(next_curve[0]) == OP_BIN_CURVE and Int(next_curve[1]) == total
+                    for k in range(5):
+                        same = same and _a(r,k) == _a(next_curve,k)
+                    if same and _curve_pair_safe(r, next_curve, n, total):
+                        # Sources were not touched between these adjacent
+                        # producers. Reuse tie blocks and weighted prefixes;
+                        # each consumer still receives its own output layout.
+                        pl.emit(84, N, [n, _a(r,6), _a(r,7), _a(r,8), _a(r,9),
+                                      _a(next_curve,6), _a(next_curve,7), _a(next_curve,8), _a(next_curve,9),
+                                      _a(r,5), _a(next_curve,5), G])
+                        _plan_keep(pl, next_curve, n, total)
+                        skip = s+1
         elif op == OP_PERMUTE:
             var n = _a(r, 0)
             if n <= 1 or not pl.fits(6 * n):
@@ -463,4 +556,6 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             pl.emit(OP_AX_FINAL, 1, [S, C, _a(r, 3)])
         else:
             pl.copy_stage(q, s)
+    comptime if C05_PHASE_SCRATCH:
+        pl.size = max(peak, pl.size)
     return pl^

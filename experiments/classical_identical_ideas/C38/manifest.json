@@ -1,0 +1,262 @@
+{
+  "schema": 1,
+  "id": "C38",
+  "title": "KMeans++ nearest-distance reuse",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "cluster/impl/detail/kmeans.mojo",
+    "x_cluster/common.mojo",
+    "x_cluster/device_ops.mojo",
+    "x_cluster/host/host_ops.mojo",
+    "x_cluster/ops.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_C38_REUSE_NEAREST"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Exact chosen seed centers and full fit quality; duplicates and exhausted nonzero distance mass.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C38",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C38",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C38",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C38",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C38",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/graph_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/graph_controls.mojo"
+  ],
+  "default_configuration": "reuse_nearest",
+  "configurations": {
+    "reuse_nearest": {
+      "name": "reuse_nearest",
+      "candidate_defines": [
+        "MOJOLEARN_C38_REUSE_NEAREST"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C38"
+      ],
+      "source_gaps": [
+        "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach."
+      ],
+      "scope": [
+        "KMeans initialization",
+        "MiniBatchKMeans initialization",
+        "BisectingKMeans",
+        "IVFFlat training"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:kmeans",
+        "more:ivf",
+        "expanded:bisecting-kmeans"
+      ]
+    },
+    "device_potential": {
+      "name": "device_potential",
+      "candidate_defines": [
+        "MOJOLEARN_C38_DEVICE_POTENTIAL"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C38"
+      ],
+      "source_gaps": [
+        "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach."
+      ],
+      "scope": [
+        "KMeans initialization",
+        "MiniBatchKMeans initialization",
+        "BisectingKMeans",
+        "IVFFlat training"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:kmeans",
+        "more:ivf",
+        "expanded:bisecting-kmeans"
+      ]
+    },
+    "reuse_nearest_device_potential": {
+      "name": "reuse_nearest_device_potential",
+      "candidate_defines": [
+        "MOJOLEARN_C38_REUSE_NEAREST",
+        "MOJOLEARN_C38_DEVICE_POTENTIAL"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C38"
+      ],
+      "source_gaps": [
+        "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach."
+      ],
+      "scope": [
+        "KMeans initialization",
+        "MiniBatchKMeans initialization",
+        "BisectingKMeans",
+        "IVFFlat training"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:kmeans",
+        "more:ivf",
+        "expanded:bisecting-kmeans"
+      ]
+    },
+    "combined": {
+      "name": "combined",
+      "selectable": true,
+      "candidate_ids": [
+        "C38"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C38_REUSE_NEAREST",
+        "MOJOLEARN_C38_DEVICE_POTENTIAL"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach."
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "more:ivf",
+        "expanded:bisecting-kmeans"
+      ],
+      "component_arms": [
+        {
+          "id": "C38",
+          "configuration": "reuse_nearest"
+        },
+        {
+          "id": "C38",
+          "configuration": "device_potential"
+        },
+        {
+          "id": "C38",
+          "configuration": "reuse_nearest_device_potential"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach."
+  ],
+  "catalog_estimators": [
+    "KMeans initialization",
+    "IVF index training",
+    "BisectingKMeans"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "classical:kmeans",
+    "more:ivf",
+    "expanded:bisecting-kmeans"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

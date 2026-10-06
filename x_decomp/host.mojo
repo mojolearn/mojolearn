@@ -11,6 +11,7 @@ writes outputs no other task writes; the O(n^3) cells (gemm, sqdist), the
 QR slices and the shortest-path rows have the host spellings of
 x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
+from x_decomp.classical_cells import contrast_pair, centered_gram_cell
 from x_decomp.rr_solve import host_eigh_rr_sorted
 from x_decomp.eigh_scale import host_es_scale_ptr, host_es_unscale_ptr
 from x_decomp.rr_svd import host_rr_svd
@@ -259,6 +260,24 @@ struct HostExec(Exec):
             _ = scratch^
         _ = work^
         return r^
+
+    @staticmethod
+    def classical_centered_gram(x: F32Ptr, means: F32Ptr, out: F32Ptr, n: Int, d: Int) raises:
+        def row(i: Int) {imm x, imm means, imm out, imm n, imm d}:
+            for j in range(i, d):
+                var v = centered_gram_cell(x, means, n, d, i, j)
+                out.unsafe_store(i * d + j, v)
+                out.unsafe_store(j * d + i, v)
+        xd_parallel(row, d)
+
+    @staticmethod
+    def classical_contrast(y: F32Ptr, gx: F32Ptr, gp: F32Ptr, count: Int, fun: Int, alpha: Float32) raises:
+        def chunk(t: Int) {imm y, imm gx, imm gp, imm count, imm fun, imm alpha}:
+            for i in range(t * EW_CHUNK, min(count, (t + 1) * EW_CHUNK)):
+                var pair = contrast_pair(y.unsafe_load(i), fun, alpha)
+                gx.unsafe_store(i, pair[0])
+                gp.unsafe_store(i, pair[1])
+        xd_parallel(chunk, (count + EW_CHUNK - 1) // EW_CHUNK)
 
     @staticmethod
     def ew(

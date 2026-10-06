@@ -2,10 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The op table: op id -> unit. python/mojolearn/_expansion_prep.py `_OPS` carries
 the same ids; the binding refuses an id outside the table."""
-from x_prep.common import FP, IP
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_GROUPED_OUTPUT, C04_LOAD_CENTER
+from x_prep.common import FP, IP, p
 from x_prep.prims import (
     sort_cols_unit, col_stats_unit, quantile_unit, affine_unit, scale_params_unit,
-    unique_cols_unit, mode_cols_unit, lookup_unit, count_neg_unit, onehot_unit,
+    centered_matmul_unit, unique_inverse_unit, unique_cols_unit, mode_cols_unit, lookup_unit, count_neg_unit, onehot_unit,
     i2f_unit, f2i_unit, binarize_unit, matmul_unit, row_softmax_unit, row_argmax_unit,
     class_stats_unit, center_rows_unit, where_neg_unit, mark_missing_unit, fill_unit,
     label_binarize_unit, scatter_ones_unit, gather_cols_unit, var_ptp_unit,
@@ -75,7 +76,7 @@ comptime IDN_INT_OPS = IDN_LABEL or IDN_NB_ONEPASS or IDN_NB_CSR_DENSE
 #: 166-171 (IDN_SELECT_BLOCKED, x_prep/select_blocked.mojo), IDENTICAL only, every vendor and the
 #: host column; ops 172-176 (IDN_PT_BLOCKED, x_prep/pt_blocked.mojo) likewise.
 comptime IDN_FAM_OPS = IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED
-comptime N_OPS = 177 if IDN_FAM_OPS else (165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142)))
+comptime N_OPS = 179 if C04_LOAD_CENTER else 178 if C08_DICTIONARY else (177 if IDN_FAM_OPS else (165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))))
 #: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist only under
 #: CAT_CLS2_PACK (FAST + Apple default, -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF off)
 
@@ -101,7 +102,15 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
     comptime if OP == 8:
         count_neg_unit(t, f, q)
     comptime if OP == 9:
-        onehot_unit(t, f, q)
+        comptime if C08_GROUPED_OUTPUT:
+            # Four independent encoded cells share a task; every emitted
+            # cell remains owned by the same logical row/feature.
+            for u in range(4):
+                var logical = 4*t+u
+                if logical < p(q, 1)*p(q, 2):
+                    onehot_unit(logical, f, q)
+        else:
+            onehot_unit(t, f, q)
     comptime if OP == 10:
         i2f_unit(t, f, q)
     comptime if OP == 11:
@@ -444,3 +453,9 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
             ptb_fin_unit(t, f, q)
         comptime if OP == 176:
             ptb_step_unit(t, f, q)
+
+    comptime if OP == 177:
+        unique_inverse_unit(t, f, q)
+
+    comptime if OP == 178:
+        centered_matmul_unit(t, f, q)

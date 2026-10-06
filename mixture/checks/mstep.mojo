@@ -99,6 +99,7 @@ preference.
 ==========================================================================
 """
 
+from experiments.classical_identical_ideas.stats_controls import C53_CENTER4
 from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
@@ -609,13 +610,17 @@ def means_divide_kernel(
 # Evidence: experiments/performance_ideas/measurements/20261006/index.json.
 comptime GMM_CENTER_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GMM_CENTER_PAIR"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime GMM_CENTER_PAIR_MAX_CELLS = 1 << 20  # four Float32 planes <=16 MiB
+# C53 uses four component planes under the SAME 16 MiB live-byte budget.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime GMM_CENTER_GROUP = 4 if C53_CENTER4 else 2
+comptime GMM_CENTER_CELLS = (16 * 1024 * 1024) // (2 * GMM_CENTER_GROUP * 4)
 
 @always_inline
 def _center_scale_values(x: Float32,mean: Float32,r: Float32) -> Tuple[Float32,Float32]:
     var diff=ftz(ftz(x)-ftz(mean))
     return (diff,ftz(identical_mul(ftz(r),diff)))
 
-def center_pair_kernel(x: MutPointer[Float32,MutAnyOrigin],means: MutPointer[Float32,MutAnyOrigin],resp: MutPointer[Float32,MutAnyOrigin],diff: MutPointer[Float32,MutAnyOrigin],scaled: MutPointer[Float32,MutAnyOrigin],n_in: Int32,d_in: Int32,first_in: Int32,total_in: Int32,count_in: Int32):
+def center_pair_kernel[GROUP: Int = GMM_CENTER_GROUP](x: MutPointer[Float32,MutAnyOrigin],means: MutPointer[Float32,MutAnyOrigin],resp: MutPointer[Float32,MutAnyOrigin],diff: MutPointer[Float32,MutAnyOrigin],scaled: MutPointer[Float32,MutAnyOrigin],n_in: Int32,d_in: Int32,first_in: Int32,total_in: Int32,count_in: Int32):
     var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     var d=Int(d_in)
     var cells=Int(n_in)*d
@@ -624,7 +629,7 @@ def center_pair_kernel(x: MutPointer[Float32,MutAnyOrigin],means: MutPointer[Flo
     var xvalue=x[cell]
     var row=cell//d
     var feature=cell%d
-    comptime for local in range(2):
+    comptime for local in range(GROUP):
         if local<Int(count_in):
             var component=Int(first_in)+local
             var values=_center_scale_values(xvalue,means[component*d+feature],resp[row*Int(total_in)+component])
@@ -2081,11 +2086,11 @@ def gmm_m_step(
             ncomp_loop = 0
     var pair_buffers=List[DeviceBuffer[DType.float32]]()
     var paired=False
-    comptime if GMM_CENTER_PAIR:
-        paired=sabotage==0 and not fast_gram and ncomp_loop>0 and n>0 and d>0 and n<=GMM_CENTER_PAIR_MAX_CELLS//d
+    comptime if GMM_CENTER_PAIR or C53_CENTER4:
+        paired=sabotage==0 and not fast_gram and ncomp_loop>0 and n>0 and d>0 and n<=GMM_CENTER_CELLS//d
         if paired:
-            pair_buffers.append(ctx.enqueue_create_buffer[DType.float32](2*n*d))
-            pair_buffers.append(ctx.enqueue_create_buffer[DType.float32](2*n*d))
+            pair_buffers.append(ctx.enqueue_create_buffer[DType.float32](GMM_CENTER_GROUP*n*d))
+            pair_buffers.append(ctx.enqueue_create_buffer[DType.float32](GMM_CENTER_GROUP*n*d))
     for kc in range(ncomp_loop):
         if fast_gram:
             ctx.enqueue_function[center_sqrt_scale_kernel](
@@ -2114,10 +2119,10 @@ def gmm_m_step(
             )
             continue
         if paired:
-            if kc%2==0:
+            if kc%GMM_CENTER_GROUP==0:
                 var pair_diff_ptr=pair_buffers[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
                 var pair_scaled_ptr=pair_buffers[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-                ctx.enqueue_function[center_pair_kernel](x.unsafe_ptr(),means.unsafe_ptr(),resp.unsafe_ptr(),pair_diff_ptr,pair_scaled_ptr,Int32(n),Int32(d),Int32(kc),Int32(ncomp),Int32(min(2,ncomp_loop-kc)),grid_dim=(grid_nd,1,1),block_dim=(elem_tpb,1,1))
+                ctx.enqueue_function[center_pair_kernel[GMM_CENTER_GROUP]](x.unsafe_ptr(),means.unsafe_ptr(),resp.unsafe_ptr(),pair_diff_ptr,pair_scaled_ptr,Int32(n),Int32(d),Int32(kc),Int32(ncomp),Int32(min(GMM_CENTER_GROUP,ncomp_loop-kc)),grid_dim=(grid_nd,1,1),block_dim=(elem_tpb,1,1))
         elif sabotage == GMM_SAB_COV_PRESCALE:
             ctx.enqueue_function[sabotage_center_scale_kernel](
                 x.unsafe_ptr(),
@@ -2152,8 +2157,8 @@ def gmm_m_step(
         # OP_TN, k-axis = n: THE LARGEST SUMMATION ORDER IN THE LANE, and it
         # is the gemm profile's rather than one this file invents.
         if paired:
-            var centered=pair_buffers[0].create_sub_buffer[DType.float32]((kc%2)*n*d,n*d)
-            var weighted=pair_buffers[1].create_sub_buffer[DType.float32]((kc%2)*n*d,n*d)
+            var centered=pair_buffers[0].create_sub_buffer[DType.float32]((kc%GMM_CENTER_GROUP)*n*d,n*d)
+            var weighted=pair_buffers[1].create_sub_buffer[DType.float32]((kc%GMM_CENTER_GROUP)*n*d,n*d)
             identical_gemm_into(ctx,raw,weighted,centered,gws,d,d,n,OP_TN)
             _ = centered^; _ = weighted^
         else:

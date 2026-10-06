@@ -1,0 +1,2893 @@
+{
+  "schema": 1,
+  "branch": "ideas/classical-identical-20261006",
+  "commit": "See final handoff; this ledger travels with that commit",
+  "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "source_only": true,
+  "compilation": "not_run_by_request",
+  "tests": "not_run_by_request",
+  "verification": "not_run_by_request",
+  "measurements": "not_run_by_request",
+  "entries": [
+    {
+      "id": "C01",
+      "title": "Versioned fixed-leaf reduction profiles",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C01/manifest.json",
+      "production_paths": [
+        "x_metrics/common.mojo",
+        "core/classical_stats.mojo",
+        "core/xtdz_coalesced.mojo",
+        "decomposition/host/pca_oracle.mojo"
+      ],
+      "production_callers": [
+        "x_metrics.common.PairSum",
+        "x_metrics.plan.plan_program",
+        "core.xtdz_coalesced.column_mean_launch",
+        "decomposition.host.pca_oracle.host_column_mean_launch"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "leaf64",
+        "leaf128"
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report"
+      ],
+      "catalog_estimators": [
+        "Classical column statistics",
+        "GLM objectives",
+        "covariance",
+        "regression metrics"
+      ],
+      "remaining_source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C02",
+      "title": "Fuse independent column statistics with shared input loads",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C02/manifest.json",
+      "production_paths": [
+        "preprocessing/standard.mojo",
+        "glm/impl/center_device.mojo",
+        "glm/estimator.mojo",
+        "bindings/_mojolearn_estimators.mojo",
+        "bindings/_mojolearn_estimators_host.mojo",
+        "python/mojolearn/linear_model.py",
+        "x_decomp/device.mojo"
+      ],
+      "production_callers": [
+        "preprocessing.standard.standard_fit_dev -> standard_chunks_kernel[False]",
+        "python.mojolearn.linear_model._classical_xy_means -> lm_col_sums_pair bindings",
+        "glm.estimator.ols_fit_resident_host / ridge_fit_resident_host -> col_sums_pair_buf",
+        "x_decomp.device centered OLS entry -> col_sums_pair_buf"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "paired_stats",
+        "linear_pair"
+      ],
+      "required_workload_keys": [
+        "expanded:standard-scaler",
+        "classical:ols",
+        "more:ridge",
+        "expanded:gaussian-nb",
+        "classical:pca"
+      ],
+      "catalog_estimators": [
+        "StandardScaler",
+        "GaussianNB",
+        "PCA preparation",
+        "GLM centering"
+      ],
+      "remaining_source_gaps": [
+        "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+        "Weighted linear means keep incumbent scaling and sums. GPU schedules both exact streams together; host uses its incumbent exact sums under the same new binding."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C03",
+      "title": "Fuse finite checks and extrema production",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C03/manifest.json",
+      "production_paths": [
+        "preprocessing/minmax.mojo",
+        "preprocessing/estimator.mojo"
+      ],
+      "production_callers": [
+        "preprocessing.estimator.minmax_fit_direct -> _minmax_fit_direct_cls2 -> minmax_fit_flagged_dev"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "finite_extrema"
+      ],
+      "required_workload_keys": [
+        "expanded:minmax-scaler",
+        "expanded:maxabs-scaler"
+      ],
+      "catalog_estimators": [
+        "MinMaxScaler",
+        "MaxAbsScaler",
+        "classical estimator input preparation"
+      ],
+      "remaining_source_gaps": [
+        "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+        "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C04",
+      "title": "Apply centering and scaling at the consumer load",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C04/manifest.json",
+      "production_paths": [
+        "core/classical_centered.mojo",
+        "decomposition/impl/linalg/detail/pca.mojo",
+        "decomposition/host/pca_oracle.mojo",
+        "x_prep/prims.mojo",
+        "x_prep/units.mojo",
+        "bindings/_mojolearn_x_prep.mojo",
+        "bindings/_mojolearn_x_prep_host.mojo",
+        "python/mojolearn/_expansion_prep.py",
+        "experiments/classical_identical_ideas/metric_workloads.py"
+      ],
+      "production_callers": [
+        "decomposition.impl.linalg.detail.pca.compute_covariance",
+        "decomposition.host.pca_oracle.host_pca_fit",
+        "python.mojolearn._expansion_prep.LinearDiscriminantAnalysis.transform -> centered_matmul op178"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "load_center"
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "classical:ols",
+        "more:ridge",
+        "expanded:gaussian-nb",
+        "expanded:lda-clf@lda_outputs"
+      ],
+      "catalog_estimators": [
+        "PCA",
+        "OLS",
+        "Ridge",
+        "GaussianNB",
+        "normalized classical distances"
+      ],
+      "remaining_source_gaps": [
+        "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+        "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C05",
+      "title": "Retain bounded classical scratch across phases",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C05/manifest.json",
+      "production_paths": [
+        "x_metrics/plan.mojo",
+        "x_metrics/device.mojo",
+        "x_metrics/host/program.mojo",
+        "glm/estimator.mojo",
+        "glm/impl/linalg/detail/lstsq.mojo"
+      ],
+      "production_callers": [
+        "x_metrics.plan.plan_program -> run_program_device_ptr/run_program_host_ptr",
+        "glm.estimator.ols_fit_host",
+        "glm.estimator.ols_fit_resident_host",
+        "glm.estimator.ols_fit_weighted_host"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "phase_scratch",
+        "ols_phase"
+      ],
+      "required_workload_keys": [
+        "expanded:sgd-reg@regression_report",
+        "expanded:sgd-clf@ranking_report",
+        "classical:ols"
+      ],
+      "catalog_estimators": [
+        "Iterative classical estimators",
+        "repeated predict/transform"
+      ],
+      "remaining_source_gaps": [
+        "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+        "Default TSQR does not allocate these Gram/inverse buffers; do not claim its reach. No cross-call cache."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C06",
+      "title": "Batch row norms without changing feature folds",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C06/manifest.json",
+      "production_paths": [
+        "core/row_norms.mojo",
+        "neighbors/impl/detail/knn_brute_force.mojo",
+        "kde/impl/distance/distance.mojo"
+      ],
+      "production_callers": [
+        "core.row_norms.enqueue_row_norms",
+        "neighbors.impl.detail.knn_brute_force.compute_norms/compute_norms_for_metric",
+        "kde.impl.distance.distance",
+        "cluster.impl.detail.min_cluster_distance_compute",
+        "cluster.impl.detail.kmeans row norms (graph agent)",
+        "neighbors.impl.detail.knn_brute_force ordinary/cosine norms (graph agent)",
+        "cluster.impl.detail.min_cluster_distance_compute centroid norms (graph agent)",
+        "hdbscan.impl.cluster.detail.sparse_mr_mst norms (graph agent)",
+        "kde.impl.distance.distance ordinary/cosine norms (root)"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "rows2",
+        "rows4"
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer"
+      ],
+      "catalog_estimators": [
+        "KMeans",
+        "KNN",
+        "KDE",
+        "kernel matrices",
+        "Normalizer"
+      ],
+      "remaining_source_gaps": [
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C07",
+      "title": "Stable radix layout for classical preparation",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C07/manifest.json",
+      "production_paths": [
+        "x_prep/dradix.mojo",
+        "x_prep/device.mojo"
+      ],
+      "production_callers": [
+        "x_prep.device.run_program_device_ptr -> radix_sort_cols_device"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "digit4",
+        "digit6",
+        "keys1024",
+        "keys4096"
+      ],
+      "required_workload_keys": [
+        "expanded:quantile-transformer",
+        "expanded:kbins",
+        "expanded:onehot",
+        "expanded:ordinal",
+        "expanded:target-encoder",
+        "expanded:label-encoder",
+        "expanded:isotonic"
+      ],
+      "catalog_estimators": [
+        "QuantileTransformer",
+        "KBinsDiscretizer",
+        "categorical encoders",
+        "isotonic regression"
+      ],
+      "remaining_source_gaps": [
+        "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C08",
+      "title": "Reuse category dictionaries and inverse maps",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C08/manifest.json",
+      "production_paths": [
+        "python/mojolearn/_expansion_prep.py",
+        "x_prep/prims.mojo",
+        "x_prep/units.mojo",
+        "bindings/_mojolearn_x_prep.mojo",
+        "bindings/_mojolearn_x_prep_host.mojo",
+        "experiments/classical_identical_ideas/metric_workloads.py",
+        "x_prep/device.mojo",
+        "x_prep/host/program.mojo"
+      ],
+      "production_callers": [
+        "OrdinalEncoder.fit_transform -> fit -> _fit_categories_with_codes -> x_prep unique_inverse_unit -> _transform_encoded",
+        "OneHotEncoder.fit_transform -> _fit_categories_with_codes -> native count_neg/grouping/onehot",
+        "_fit_infrequent consumes fit-owned inverse for Ordinal/OneHot",
+        "TargetEncoder._run consumes one canonical unsupervised dictionary/inverse before fold statistics",
+        "x_prep.units.run_unit[9] -> onehot_unit; device and host scheduled totals reduced by four"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "dictionary_inverse",
+        "grouped_output"
+      ],
+      "required_workload_keys": [
+        "expanded:onehot@onehot_fit_transform",
+        "expanded:ordinal@ordinal_fit_transform",
+        "expanded:target-encoder",
+        "expanded:label-encoder",
+        "expanded:categorical-nb"
+      ],
+      "catalog_estimators": [
+        "OneHotEncoder",
+        "OrdinalEncoder",
+        "TargetEncoder",
+        "LabelEncoder",
+        "Naive Bayes preparation"
+      ],
+      "remaining_source_gaps": [
+        "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+        "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+        "Dictionary reuse is independent of grouped emission; only one-hot emission integrated."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C09",
+      "title": "Fused regression and weighted metric reports",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C09/manifest.json",
+      "production_paths": [
+        "python/mojolearn/_expansion_metrics.py",
+        "python/mojolearn/_metrics_impl.py",
+        "x_metrics/regression.mojo",
+        "x_metrics/plan.mojo",
+        "x_metrics/units.mojo",
+        "experiments/classical_identical_ideas/metric_workloads.py"
+      ],
+      "production_callers": [
+        "mojolearn.metrics.regression_report -> native adjacent reg_term stages -> x_metrics.plan op82 -> reg_pair_unit"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "regression_bundle"
+      ],
+      "required_workload_keys": [
+        "expanded:sgd-reg@regression_report"
+      ],
+      "catalog_estimators": [
+        "MSE",
+        "MAE",
+        "R\u00b2",
+        "regression scoring",
+        "sample-weighted metrics"
+      ],
+      "remaining_source_gaps": [
+        "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C10",
+      "title": "Reuse stable score sorting for ranking metrics",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C10/manifest.json",
+      "production_paths": [
+        "python/mojolearn/_expansion_metrics.py",
+        "python/mojolearn/_metrics_impl.py",
+        "x_metrics/ranking.mojo",
+        "x_metrics/plan.mojo",
+        "x_metrics/units.mojo",
+        "experiments/classical_identical_ideas/metric_workloads.py"
+      ],
+      "production_callers": [
+        "mojolearn.metrics.ranking_report -> adjacent bin_curve -> planner curve_copy_unit and rank_epi/curve_out tails"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "ranking_bundle"
+      ],
+      "required_workload_keys": [
+        "expanded:sgd-clf@ranking_report"
+      ],
+      "catalog_estimators": [
+        "ROC AUC",
+        "average precision",
+        "precision-recall and ROC curves"
+      ],
+      "remaining_source_gaps": [
+        "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C11",
+      "title": "Generate resampling indices at their consumer",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C11/manifest.json",
+      "production_paths": [
+        "resample/gather_fast.mojo",
+        "resample/estimator.mojo",
+        "python/mojolearn/resample.py"
+      ],
+      "production_callers": [
+        "mojolearn.resample.resample -> _gpu_gather -> binding resample_gather_gpu -> classical_draw_gather_kernel"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "draw_gather"
+      ],
+      "required_workload_keys": [
+        "expanded:resample",
+        "expanded:bootstrap",
+        "expanded:permutation-test",
+        "expanded:cross-val-score"
+      ],
+      "catalog_estimators": [
+        "Bootstrap",
+        "permutation tests",
+        "forest bootstrap",
+        "cross-validation row gathers"
+      ],
+      "remaining_source_gaps": [
+        "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C12",
+      "title": "Sparse exact classification counts before dense output",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C12/manifest.json",
+      "production_paths": [
+        "x_metrics/plan.mojo",
+        "x_metrics/par.mojo",
+        "x_metrics/group.mojo",
+        "x_metrics/units.mojo",
+        "experiments/classical_identical_ideas/metric_workloads.py"
+      ],
+      "production_callers": [
+        "x_metrics.plan OP_GROUP_SORT -> stable KEY_GROUP sort -> sparse_group_offsets_unit -> existing cm/cls tails",
+        "metric_workloads.classical_classification_report -> public cohen_kappa_score -> _confusion -> group_sort"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "sparse_counts"
+      ],
+      "required_workload_keys": [
+        "expanded:sgd-clf@classification_report",
+        "expanded:gaussian-nb",
+        "expanded:categorical-nb"
+      ],
+      "catalog_estimators": [
+        "Confusion matrix",
+        "precision/recall/F-score",
+        "class-count preparation"
+      ],
+      "remaining_source_gaps": [
+        "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+        "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C13",
+      "title": "Shared sufficient statistics across CV folds",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C13/manifest.json",
+      "production_paths": [
+        "x_linear/classical_fold_stats.mojo",
+        "x_linear/cd.mojo",
+        "x_linear/cd_grid.mojo",
+        "bindings/_mojolearn_x_linear_host.mojo",
+        "x_linear/ridgecv.mojo",
+        "x_linear/device.mojo",
+        "x_linear/logcv.mojo",
+        "x_linear/logcv_grid.mojo"
+      ],
+      "production_callers": [
+        "enetcv_fit",
+        "enetcv_fit_grid",
+        "LassoCV.fit",
+        "ElasticNetCV.fit",
+        "ridge_kfold_fit",
+        "_ridge_kfold_grid",
+        "logcv_fit",
+        "logcv_fit_grid",
+        "logistic_objective host/team/grid"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "fold_stats",
+        "logcv_weights"
+      ],
+      "required_workload_keys": [
+        "expanded:ridge-cv",
+        "expanded:lasso-cv",
+        "expanded:enet-cv",
+        "expanded:logreg-cv",
+        "expanded:logreg-cv@weighted_cv"
+      ],
+      "catalog_estimators": [
+        "RidgeCV",
+        "LassoCV",
+        "ElasticNetCV",
+        "LogisticRegressionCV preparation"
+      ],
+      "remaining_source_gaps": [
+        "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+        "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+        "C13 is a numerical profile and its quality/selected model results remain unverified."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C14",
+      "title": "Reuse one factorization for multiple right-hand sides",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C14/manifest.json",
+      "production_paths": [
+        "x_decomp/cells.mojo",
+        "x_decomp/device.mojo",
+        "x_linear/ops.mojo",
+        "x_linear/ridge.mojo",
+        "x_linear/ridge_grid.mojo"
+      ],
+      "production_callers": [
+        "trs_tri_cols",
+        "launch_trs_tri",
+        "x_decomp repeated LU/triangular solve callers",
+        "_ridge_solve_best",
+        "t_ridge_solve_best",
+        "python/mojolearn/_expansion_linear.py::_ridge_run",
+        "RidgeClassifier.fit",
+        "RidgeCV refit"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "group_rhs"
+      ],
+      "required_workload_keys": [
+        "classical:ols",
+        "more:ridge",
+        "more:gpr",
+        "expanded:pls",
+        "expanded:lstsq",
+        "expanded:lu-solve",
+        "expanded:ridge-clf",
+        "expanded:ridge-cv"
+      ],
+      "catalog_estimators": [
+        "OLS",
+        "Ridge",
+        "multioutput regression",
+        "Gaussian processes",
+        "repeated linear solves"
+      ],
+      "remaining_source_gaps": [
+        "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+        "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+        "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C15",
+      "title": "Solve against factors instead of forming inverses",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C15/manifest.json",
+      "production_paths": [
+        "x_linear/bayes.mojo",
+        "x_linear/bayes_grid.mojo"
+      ],
+      "production_callers": [
+        "_ard_coef",
+        "_t_ard_coef",
+        "ARDRegression.fit"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "factor_solve"
+      ],
+      "required_workload_keys": [
+        "expanded:bayesian-ridge",
+        "expanded:ard",
+        "more:ridge",
+        "expanded:min-cov-det",
+        "expanded:elliptic-envelope"
+      ],
+      "catalog_estimators": [
+        "BayesianRidge",
+        "ARD",
+        "Ridge",
+        "covariance consumers with solve-only needs"
+      ],
+      "remaining_source_gaps": [
+        "No new BayesianRidge inverse-elision arm where production already solves factors.",
+        "Gaussian-process inverse-materialization callers need independent integration by owning family."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C16",
+      "title": "Fuse GLM response, residual and objective production",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C16/manifest.json",
+      "production_paths": [
+        "x_linear/glm.mojo",
+        "x_linear/device.mojo"
+      ],
+      "production_callers": [
+        "_unit_all",
+        "_objective_host",
+        "glm_obj_map_kernel",
+        "_glm_grid_objective",
+        "glm_fit",
+        "_glm_fit_grid"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "glm_fused"
+      ],
+      "required_workload_keys": [
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:poisson",
+        "expanded:gamma",
+        "expanded:tweedie"
+      ],
+      "catalog_estimators": [
+        "LogisticRegression",
+        "PoissonRegressor",
+        "GammaRegressor",
+        "TweedieRegressor",
+        "LinearSVC/SVR"
+      ],
+      "remaining_source_gaps": [
+        "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+        "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C17",
+      "title": "Batch independent OVR and line-search tasks",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C17/manifest.json",
+      "production_paths": [
+        "x_linear/device.mojo",
+        "glm/impl/qn/qn_linesearch.mojo"
+      ],
+      "production_callers": [
+        "sgd_mb_chunk_ovr_kernel",
+        "_sgd_mb_grid OVR driver",
+        "ls_backtrack_exact_trials"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "ovr_waves",
+        "line_search_pairs"
+      ],
+      "required_workload_keys": [
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:logreg-cv"
+      ],
+      "catalog_estimators": [
+        "Multiclass linear models",
+        "independent optimizer trials"
+      ],
+      "remaining_source_gaps": [
+        "OVR arm changes scheduling waves, not full model-state allocation.",
+        "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+        "Do not claim unchanged old I12 OVR/exact-trial experiments as new."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C18",
+      "title": "Coordinate-descent residual tile reuse",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C18/manifest.json",
+      "production_paths": [
+        "x_linear/cd.mojo",
+        "x_linear/cd_grid.mojo",
+        "solver/impl/cd.mojo"
+      ],
+      "production_callers": [
+        "enet_gram_cd",
+        "t_enet_gram_cd",
+        "enetcv_fit",
+        "enetcv_fit_grid",
+        "cd_fused_step_kernel",
+        "cd_idn_gram_sweep_kernel"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "next_residual",
+        "tile64",
+        "gram_prefetch"
+      ],
+      "required_workload_keys": [
+        "more:lasso",
+        "more:elasticnet",
+        "expanded:lasso-cv",
+        "expanded:enet-cv",
+        "expanded:sparse-coder"
+      ],
+      "catalog_estimators": [
+        "Lasso",
+        "ElasticNet",
+        "linear sparse coding"
+      ],
+      "remaining_source_gaps": [
+        "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+        "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C19",
+      "title": "Persistent ordered online linear updates",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C19/manifest.json",
+      "production_paths": [
+        "x_linear/device.mojo"
+      ],
+      "production_callers": [
+        "_sgd_ps_grid",
+        "SGD_PS_CHUNK ordered chunk launch"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "ordered_128",
+        "ordered_32"
+      ],
+      "required_workload_keys": [
+        "expanded:sgd-clf",
+        "expanded:sgd-reg",
+        "expanded:perceptron",
+        "expanded:pa-clf",
+        "expanded:pa-reg",
+        "expanded:sgd-ocsvm"
+      ],
+      "catalog_estimators": [
+        "SGDClassifier/Regressor",
+        "Perceptron",
+        "PassiveAggressive",
+        "SGDOneClassSVM"
+      ],
+      "remaining_source_gaps": [
+        "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+        "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C20",
+      "title": "Bounded SVM kernel-row cache and shared pair loads",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C20/manifest.json",
+      "production_paths": [
+        "svm/impl/classical_kernel_cells.mojo",
+        "svm/impl/classical_kernel_device.mojo",
+        "svm/impl/kernelcache.mojo"
+      ],
+      "production_callers": [
+        "KernelCache.get_square_tile_without_caching",
+        "KernelCache.init_full_tile_batching"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "row_cache",
+        "pair_load"
+      ],
+      "required_workload_keys": [
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm"
+      ],
+      "catalog_estimators": [
+        "SVC",
+        "SVR",
+        "OneClassSVM"
+      ],
+      "remaining_source_gaps": [
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C21",
+      "title": "Fuse canonical SMO extrema selection",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C21/manifest.json",
+      "production_paths": [
+        "svm/impl/smoblocksolve.mojo"
+      ],
+      "production_callers": [
+        "_tree_dual",
+        "SMO block solve"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "extrema_tree4"
+      ],
+      "required_workload_keys": [
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm"
+      ],
+      "catalog_estimators": [
+        "SVC",
+        "SVR",
+        "OneClassSVM"
+      ],
+      "remaining_source_gaps": [
+        "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+        "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C22",
+      "title": "Produce symmetric Gram/kernel triangles once",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C22/manifest.json",
+      "production_paths": [
+        "svm/impl/classical_kernel_cells.mojo",
+        "svm/impl/classical_kernel_device.mojo",
+        "svm/impl/distance/kernel_matrices.mojo"
+      ],
+      "production_callers": [
+        "kernel_op same-buffer square dispatch",
+        "KernelRidge km_kernel_matrix",
+        "SVC/SVR working-set square tile"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "symmetric_triangle"
+      ],
+      "required_workload_keys": [
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm"
+      ],
+      "catalog_estimators": [
+        "KernelRidge",
+        "KernelPCA",
+        "SVC training",
+        "covariance and classical Gram users"
+      ],
+      "remaining_source_gaps": [
+        "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+        "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+        "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+        "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C23",
+      "title": "Stream centered covariance for PCA and discriminants",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C23/manifest.json",
+      "production_paths": [
+        "x_decomp/classical_cells.mojo",
+        "x_decomp/classical_device.mojo",
+        "x_decomp/exec_trait.mojo",
+        "x_decomp/host.mojo",
+        "x_decomp/device.mojo",
+        "x_decomp/kit.mojo",
+        "x_decomp/kit_device.mojo",
+        "decomposition/impl/linalg/detail/pca.mojo",
+        "decomposition/host/pca_oracle.mojo",
+        "x_decomp/mcd.mojo"
+      ],
+      "production_callers": [
+        "centered_gram_cell",
+        "Exec.classical_centered_gram",
+        "Kit.classical_centered_gram",
+        "DKit.classical_centered_gram",
+        "PCA.compute_covariance/host_pca_fit",
+        "MCD.emp_cov/emp_cov_at (root integration)"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "centered_panels"
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "expanded:incremental-pca",
+        "expanded:min-cov-det",
+        "expanded:elliptic-envelope",
+        "expanded:lda-clf",
+        "expanded:qda"
+      ],
+      "catalog_estimators": [
+        "PCA",
+        "IncrementalPCA",
+        "covariance estimators",
+        "LDA/QDA"
+      ],
+      "remaining_source_gaps": [
+        "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+        "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+        "IncrementalPCA centered incremental covariance caller remains unfinished source work."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C24",
+      "title": "Versioned TSQR merge tree and panel sizes",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C24/manifest.json",
+      "production_paths": [
+        "x_decomp/tsqr_core.mojo",
+        "x_decomp/tsqr_host.mojo",
+        "x_decomp/tsqr_device.mojo",
+        "x_decomp/qr_sliced.mojo"
+      ],
+      "production_callers": [
+        "ts_factor_host/ts_apply_host",
+        "ts_factor_device/ts_apply_device",
+        "qs_tree/qs_pair_tree",
+        "linalg QR/SVD/lstsq and OLS factor callers"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "panel8",
+        "rows2048",
+        "tree4"
+      ],
+      "required_workload_keys": [
+        "classical:ols",
+        "classical:pca",
+        "more:tsvd",
+        "expanded:lstsq",
+        "expanded:qr",
+        "expanded:svd",
+        "expanded:randomized-svd"
+      ],
+      "catalog_estimators": [
+        "OLS",
+        "PCA/SVD",
+        "least squares",
+        "QR consumers"
+      ],
+      "remaining_source_gaps": [
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C25",
+      "title": "Reuse randomized projection and decomposition panels",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C25/manifest.json",
+      "production_paths": [
+        "kernel_methods/rbf_fused.mojo",
+        "kernel_methods/estimator.mojo"
+      ],
+      "production_callers": [
+        "classical_projection_kernel",
+        "_rbf_idn_fused_launch",
+        "RBFSampler.transform public binding"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "projection_reuse"
+      ],
+      "required_workload_keys": [
+        "more:tsvd",
+        "expanded:randomized-svd",
+        "expanded:gaussian-rp",
+        "expanded:sparse-rp",
+        "more:nystroem",
+        "more:rbf-sampler"
+      ],
+      "catalog_estimators": [
+        "TruncatedSVD",
+        "randomized SVD",
+        "random projection",
+        "Nystroem/RBFSampler"
+      ],
+      "remaining_source_gaps": [
+        "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+        "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+        "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C26",
+      "title": "Reuse NMF sufficient products within each accepted step",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C26/manifest.json",
+      "production_paths": [
+        "x_decomp/cells.mojo",
+        "x_decomp/nmf.mojo",
+        "x_decomp/nmf_dev.mojo"
+      ],
+      "production_callers": [
+        "mu_fit/mu_fit_dev",
+        "cd_fit/cd_fit_dev",
+        "NMF.fit and transform bindings"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "fixed_products",
+        "update_fused"
+      ],
+      "required_workload_keys": [
+        "expanded:nmf",
+        "expanded:dict-learning",
+        "expanded:mb-dict-learning"
+      ],
+      "catalog_estimators": [
+        "NMF",
+        "nonnegative dictionary learning"
+      ],
+      "remaining_source_gaps": [
+        "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+        "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+        "Nonnegative dictionary-learning callers not changed."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C27",
+      "title": "Batch independent ICA and factor-analysis component work",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C27/manifest.json",
+      "production_paths": [
+        "x_decomp/classical_cells.mojo",
+        "x_decomp/classical_device.mojo",
+        "x_decomp/exec_trait.mojo",
+        "x_decomp/host.mojo",
+        "x_decomp/device.mojo",
+        "x_decomp/kit.mojo",
+        "x_decomp/kit_device.mojo",
+        "x_decomp/ica.mojo",
+        "x_decomp/ica_dev.mojo",
+        "x_decomp/cells.mojo",
+        "x_decomp/fa_em.mojo",
+        "x_decomp/fa_em_dev.mojo",
+        "x_decomp/pls.mojo",
+        "x_decomp/pls_dev.mojo"
+      ],
+      "production_callers": [
+        "contrast_pair",
+        "Exec.classical_contrast",
+        "ica_g/ica_g_dev",
+        "FastICA.fit parallel and deflation paths",
+        "fa_em",
+        "fa_em_dev",
+        "power",
+        "power_dev"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "components",
+        "factor_components",
+        "normalize_components"
+      ],
+      "required_workload_keys": [
+        "expanded:fastica",
+        "expanded:factor-analysis",
+        "expanded:cca",
+        "expanded:pls",
+        "expanded:pls-canonical"
+      ],
+      "catalog_estimators": [
+        "FastICA",
+        "FactorAnalysis",
+        "CCA",
+        "PLS"
+      ],
+      "remaining_source_gaps": [
+        "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+        "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C28",
+      "title": "Bucket independent sparse-coding and ALS solves",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C28/manifest.json",
+      "production_paths": [
+        "x_decomp/device.mojo",
+        "x_decomp/als_dev.mojo",
+        "x_decomp/kit_device.mojo",
+        "x_decomp/dictl.mojo",
+        "x_decomp/dictl_dev.mojo"
+      ],
+      "production_callers": [
+        "als_bucket_keys_kernel",
+        "launch_als_rows",
+        "als_block_kernel",
+        "ImplicitALS.fit exact row solver use_cg=False",
+        "launch_classical_code_rows",
+        "DevExec.lasso_rows/lars_rows/omp_rows",
+        "DKit._code_rows",
+        "SparseCoder transform",
+        "DictionaryLearning sparse_encode"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/linear_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/linear_implementation.json"
+      ],
+      "arms": [
+        "bucket_solves"
+      ],
+      "required_workload_keys": [
+        "expanded:sparse-coder",
+        "expanded:dict-learning",
+        "expanded:mb-dict-learning",
+        "expanded:als"
+      ],
+      "catalog_estimators": [
+        "SparseCoder",
+        "DictionaryLearning",
+        "ImplicitALS"
+      ],
+      "remaining_source_gaps": [
+        "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+        "Descriptor scans and radix scratch belong to whole-operation cost.",
+        "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C29",
+      "title": "Streaming exact distance-to-top-k",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C29/manifest.json",
+      "production_paths": [
+        "neighbors/impl/detail/knn_brute_force.mojo",
+        "neighbors/impl/detail/classical_stream_topk.mojo",
+        "neighbors/estimator.mojo",
+        "core/knn_host_predict.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "stream_topk",
+        "stream_topk_tile_128"
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle"
+      ],
+      "catalog_estimators": [
+        "NearestNeighbors",
+        "KNNClassifier/Regressor",
+        "LOF",
+        "exact graph construction"
+      ],
+      "remaining_source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C30",
+      "title": "Versioned direct-difference distance arithmetic",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C30/manifest.json",
+      "production_paths": [
+        "core/classical_distance.mojo",
+        "core/knn_host_predict.mojo",
+        "neighbors/impl/detail/knn_brute_force.mojo",
+        "cluster/impl/detail/classical_assignment.mojo",
+        "cluster/host/kmeans_oracle.mojo",
+        "neighbors/impl/ball_cover/common.mojo",
+        "dbscan/impl/neighbors/epsilon_neighborhood.mojo",
+        "dbscan/host/dbscan_oracle.mojo",
+        "cluster/impl/detail/kmeans_transform.mojo",
+        "cluster/checks/plus_plus.mojo",
+        "cluster/impl/detail/kmeans.mojo",
+        "ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo",
+        "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo",
+        "ivf/host/ivf_host.mojo",
+        "hierarchy/checks/linkage_oracle.mojo",
+        "hdbscan/host/hdbscan_host_oracle.mojo",
+        "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "direct_distance",
+        "direct_distance_rows_4"
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "classical:kmeans",
+        "classical:kde",
+        "classical:dbscan",
+        "classical:hdbscan",
+        "more:agglomerative",
+        "more:ivf",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:radius-neighbors"
+      ],
+      "catalog_estimators": [
+        "KNN",
+        "KMeans",
+        "KDE",
+        "RBF kernels",
+        "radius graphs"
+      ],
+      "remaining_source_gaps": [
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C31",
+      "title": "Bucket ragged CSR canonicalization by work",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C31/manifest.json",
+      "production_paths": [
+        "neighbors/checks/ball_cover_canonical_order.mojo",
+        "neighbors/impl/ball_cover/registers.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "device_buckets"
+      ],
+      "required_workload_keys": [
+        "expanded:radius-neighbors",
+        "classical:dbscan",
+        "classical:hdbscan"
+      ],
+      "catalog_estimators": [
+        "RadiusNeighbors",
+        "DBSCAN",
+        "HDBSCAN graph preparation"
+      ],
+      "remaining_source_gaps": [
+        "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C32",
+      "title": "Fuse exact radius threshold and compact emission",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C32/manifest.json",
+      "production_paths": [
+        "neighbors/impl/ball_cover/registers.mojo",
+        "neighbors/estimator.mojo",
+        "dbscan/impl/runner.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "count_fusion",
+        "emit_fusion",
+        "count_fusion_emit_fusion"
+      ],
+      "required_workload_keys": [
+        "expanded:radius-neighbors",
+        "classical:dbscan"
+      ],
+      "catalog_estimators": [
+        "RadiusNeighbors",
+        "DBSCAN",
+        "graph building"
+      ],
+      "remaining_source_gaps": [
+        "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C33",
+      "title": "Freeze first graph convergence state on device",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C33/manifest.json",
+      "production_paths": [
+        "x_neighbors/iter_device.mojo",
+        "dbscan/impl/sparse/detail/csr.mojo",
+        "dbscan/impl/label/merge_labels.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "frozen_chunks",
+        "frozen_chunks_chunk_4"
+      ],
+      "required_workload_keys": [
+        "classical:dbscan",
+        "expanded:connected-components",
+        "expanded:label-propagation",
+        "expanded:label-spreading"
+      ],
+      "catalog_estimators": [
+        "DBSCAN",
+        "connected components",
+        "label propagation/spreading"
+      ],
+      "remaining_source_gaps": [
+        "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C34",
+      "title": "Canonical parallel MST edge selection",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C34/manifest.json",
+      "production_paths": [
+        "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "hierarchy/impl/sparse/solver/mst_solver.mojo",
+        "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "parallel_edges"
+      ],
+      "required_workload_keys": [
+        "classical:hdbscan",
+        "more:agglomerative"
+      ],
+      "catalog_estimators": [
+        "HDBSCAN",
+        "single-linkage clustering"
+      ],
+      "remaining_source_gaps": [
+        "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C35",
+      "title": "IVF long-list chunking and short-list packing",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C35/manifest.json",
+      "production_paths": [
+        "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo",
+        "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+        "ivf/resident.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "packed_lists",
+        "packed_lists_rows_128"
+      ],
+      "required_workload_keys": [
+        "more:ivf"
+      ],
+      "catalog_estimators": [
+        "IVFFlat search"
+      ],
+      "remaining_source_gaps": [
+        "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C36",
+      "title": "Reuse KMeans centroid tiles through assignment",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C36/manifest.json",
+      "production_paths": [
+        "cluster/impl/detail/classical_assignment.mojo",
+        "cluster/impl/detail/min_cluster_distance_compute.mojo",
+        "x_cluster/device_ops.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "centroid_tiles",
+        "centroid_tiles_rows_4"
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "catalog_estimators": [
+        "KMeans",
+        "MiniBatchKMeans",
+        "BisectingKMeans",
+        "IVF training"
+      ],
+      "remaining_source_gaps": [
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C37",
+      "title": "Versioned fixed-row centroid accumulation",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C37/manifest.json",
+      "production_paths": [
+        "core/classical_centroid.mojo",
+        "cluster/impl/detail/classical_centroid.mojo",
+        "cluster/impl/detail/kmeans.mojo",
+        "cluster/host/kmeans_oracle.mojo",
+        "x_cluster/minibatch_cells.mojo",
+        "x_cluster/minibatch.mojo",
+        "x_cluster/device_ops.mojo",
+        "x_cluster/host/host_ops.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "row_panels",
+        "row_panels_panel_128"
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "catalog_estimators": [
+        "KMeans",
+        "MiniBatchKMeans",
+        "BisectingKMeans",
+        "IVF training"
+      ],
+      "remaining_source_gaps": [
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C38",
+      "title": "KMeans++ nearest-distance reuse",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C38/manifest.json",
+      "production_paths": [
+        "cluster/impl/detail/kmeans.mojo",
+        "x_cluster/common.mojo",
+        "x_cluster/device_ops.mojo",
+        "x_cluster/host/host_ops.mojo",
+        "x_cluster/ops.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "reuse_nearest",
+        "device_potential",
+        "reuse_nearest_device_potential"
+      ],
+      "required_workload_keys": [
+        "classical:kmeans",
+        "more:ivf",
+        "expanded:bisecting-kmeans"
+      ],
+      "catalog_estimators": [
+        "KMeans initialization",
+        "IVF index training",
+        "BisectingKMeans"
+      ],
+      "remaining_source_gaps": [
+        "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C39",
+      "title": "Retain mini-batch and bisecting clustering state",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C39/manifest.json",
+      "production_paths": [
+        "x_cluster/minibatch.mojo",
+        "x_cluster/bisect.mojo",
+        "x_cluster/ops.mojo",
+        "x_cluster/device_ops.mojo",
+        "x_cluster/host/host_ops.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "retain_state"
+      ],
+      "required_workload_keys": [
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans"
+      ],
+      "catalog_estimators": [
+        "MiniBatchKMeans",
+        "BisectingKMeans"
+      ],
+      "remaining_source_gaps": [
+        "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C40",
+      "title": "Share MeanShift distance tiles across seed updates",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C40/manifest.json",
+      "production_paths": [
+        "x_cluster/meanshift_idn.mojo",
+        "x_cluster/device_ops.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "seed_tiles",
+        "active_seeds",
+        "seed_tiles_active_seeds"
+      ],
+      "required_workload_keys": [
+        "expanded:meanshift"
+      ],
+      "catalog_estimators": [
+        "MeanShift"
+      ],
+      "remaining_source_gaps": [
+        "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C41",
+      "title": "OPTICS fused canonical reachability minima",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C41/manifest.json",
+      "production_paths": [
+        "x_cluster/device_post.mojo",
+        "x_cluster/device_ops.mojo",
+        "x_cluster/optics.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "fused_minima"
+      ],
+      "required_workload_keys": [
+        "expanded:optics"
+      ],
+      "catalog_estimators": [
+        "OPTICS"
+      ],
+      "remaining_source_gaps": [
+        "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C42",
+      "title": "Compact active agglomerative distance work",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C42/manifest.json",
+      "production_paths": [
+        "x_cluster/device_ops.mojo",
+        "x_cluster/agglo.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "active_triangle"
+      ],
+      "required_workload_keys": [
+        "more:agglomerative@active_linkage"
+      ],
+      "catalog_estimators": [
+        "AgglomerativeClustering",
+        "linkage methods"
+      ],
+      "remaining_source_gaps": [
+        "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C43",
+      "title": "Resident normalized graph operators",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C43/manifest.json",
+      "production_paths": [
+        "spectral/impl/sparse/linalg/detail/laplacian.mojo",
+        "spectral/impl/sparse/solver/detail/lanczos.mojo",
+        "x_neighbors/graph_par.mojo",
+        "x_neighbors/lp_knn.mojo",
+        "x_neighbors/iter_device.mojo",
+        "x_neighbors/iter_host.mojo",
+        "python/mojolearn/_expansion_neighbors.py",
+        "x_neighbors/classical_graph.mojo",
+        "bindings/_mojolearn_x_neighbors.mojo",
+        "bindings/_mojolearn_x_neighbors_host.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "resident_normalization"
+      ],
+      "required_workload_keys": [
+        "more:spectral-embedding",
+        "more:spectral",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:pagerank",
+        "expanded:isomap",
+        "expanded:lle"
+      ],
+      "catalog_estimators": [
+        "SpectralEmbedding/Clustering",
+        "LabelPropagation",
+        "PageRank",
+        "Isomap/LLE graph preparation"
+      ],
+      "remaining_source_gaps": [
+        "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C44",
+      "title": "Seeded UMAP graph and sampling-state reuse",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C44/manifest.json",
+      "production_paths": [
+        "umap/optimizer_identical_device.mojo",
+        "umap/sparse_optimizer.mojo",
+        "umap/optimizer.mojo"
+      ],
+      "production_callers": [],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/graph_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/graph_implementation.json"
+      ],
+      "arms": [
+        "sampling_descriptors"
+      ],
+      "required_workload_keys": [
+        "more:umap"
+      ],
+      "catalog_estimators": [
+        "UMAP",
+        "manifold graph preparation"
+      ],
+      "remaining_source_gaps": [
+        "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C45",
+      "title": "Fuse tree split statistics and candidate scoring",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "external_tree_lane",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C45/manifest.json",
+      "production_paths": [],
+      "production_callers": [],
+      "controls_paths": [],
+      "source_ledgers": [],
+      "arms": [],
+      "required_workload_keys": [],
+      "catalog_estimators": [
+        "GBDT symmetric/depthwise/lossguide",
+        "RandomForest",
+        "ExtraTrees"
+      ],
+      "remaining_source_gaps": [],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": "TREES IDENTICAL"
+    },
+    {
+      "id": "C46",
+      "title": "Exact histogram sibling subtraction",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "external_tree_lane",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C46/manifest.json",
+      "production_paths": [],
+      "production_callers": [],
+      "controls_paths": [],
+      "source_ledgers": [],
+      "arms": [],
+      "required_workload_keys": [],
+      "catalog_estimators": [
+        "RandomForest",
+        "ExtraTrees",
+        "bounded exact tree histograms"
+      ],
+      "remaining_source_gaps": [],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": "TREES IDENTICAL"
+    },
+    {
+      "id": "C47",
+      "title": "Tree frontier tasks by live work and histogram bytes",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "external_tree_lane",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C47/manifest.json",
+      "production_paths": [],
+      "production_callers": [],
+      "controls_paths": [],
+      "source_ledgers": [],
+      "arms": [],
+      "required_workload_keys": [],
+      "catalog_estimators": [
+        "GBDT",
+        "RandomForest",
+        "ExtraTrees",
+        "IsolationForest"
+      ],
+      "remaining_source_gaps": [],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": "TREES IDENTICAL"
+    },
+    {
+      "id": "C48",
+      "title": "Stable tree partition fused with child bookkeeping",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "external_tree_lane",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C48/manifest.json",
+      "production_paths": [],
+      "production_callers": [],
+      "controls_paths": [],
+      "source_ledgers": [],
+      "arms": [],
+      "required_workload_keys": [],
+      "catalog_estimators": [
+        "GBDT",
+        "RandomForest",
+        "ExtraTrees",
+        "IsolationForest"
+      ],
+      "remaining_source_gaps": [],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": "TREES IDENTICAL"
+    },
+    {
+      "id": "C49",
+      "title": "Batch independent forest construction with logical RNG IDs",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "external_tree_lane",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C49/manifest.json",
+      "production_paths": [],
+      "production_callers": [],
+      "controls_paths": [],
+      "source_ledgers": [],
+      "arms": [],
+      "required_workload_keys": [],
+      "catalog_estimators": [
+        "RandomForest",
+        "ExtraTrees",
+        "IsolationForest"
+      ],
+      "remaining_source_gaps": [],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": "TREES IDENTICAL"
+    },
+    {
+      "id": "C50",
+      "title": "Packed forest inference and fixed tree-output reduction",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "external_tree_lane",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C50/manifest.json",
+      "production_paths": [],
+      "production_callers": [],
+      "controls_paths": [],
+      "source_ledgers": [],
+      "arms": [],
+      "required_workload_keys": [],
+      "catalog_estimators": [
+        "GBDT",
+        "RandomForest",
+        "ExtraTrees",
+        "IsolationForest"
+      ],
+      "remaining_source_gaps": [],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": "TREES IDENTICAL"
+    },
+    {
+      "id": "C51",
+      "title": "TreeSHAP shared path metadata and bounded batching",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "external_tree_lane",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C51/manifest.json",
+      "production_paths": [],
+      "production_callers": [],
+      "controls_paths": [],
+      "source_ledgers": [],
+      "arms": [],
+      "required_workload_keys": [],
+      "catalog_estimators": [
+        "TreeSHAP",
+        "forest feature contributions"
+      ],
+      "remaining_source_gaps": [],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": "TREES IDENTICAL"
+    },
+    {
+      "id": "C52",
+      "title": "Versioned stable pair-combine KDE reduction",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C52/manifest.json",
+      "production_paths": [
+        "kde/pair_lse.mojo",
+        "kde/impl/neighbors/kernel_density.mojo",
+        "kde/host/kde_oracle.mojo"
+      ],
+      "production_callers": [
+        "KernelDensity.score_samples",
+        "logsumexp_kernel",
+        "kde_chunk_lse_reduce_kernel",
+        "kde_chunk_lse_reduce_rowmax_kernel",
+        "oracle_logsumexp_row",
+        "_kde_lse_row_chunked"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/stats_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/stats_implementation.json"
+      ],
+      "arms": [
+        "pair128",
+        "pair512"
+      ],
+      "required_workload_keys": [
+        "classical:kde"
+      ],
+      "catalog_estimators": [
+        "KernelDensity score_samples and scoring"
+      ],
+      "remaining_source_gaps": [
+        "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+        "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C53",
+      "title": "GMM reusable centered tiles and fused sufficient statistics",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C53/manifest.json",
+      "production_paths": [
+        "mixture/checks/mstep.mojo",
+        "x_cluster/device_ops.mojo"
+      ],
+      "production_callers": [
+        "GaussianMixture.fit -> M-step center_pair_kernel[4]",
+        "BayesianGaussianMixture.fit -> DeviceOps._moments_gemm"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/stats_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/stats_implementation.json"
+      ],
+      "arms": [
+        "center4",
+        "bgmm_center4"
+      ],
+      "required_workload_keys": [
+        "more:gmm",
+        "expanded:bayesian-gmm"
+      ],
+      "catalog_estimators": [
+        "GaussianMixture",
+        "BayesianGaussianMixture"
+      ],
+      "remaining_source_gaps": [
+        "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+        "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C54",
+      "title": "GP factor and batched prediction reuse",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C54/manifest.json",
+      "production_paths": [
+        "gaussian_process/checks/kernels.mojo",
+        "x_neighbors/iter_device.mojo"
+      ],
+      "production_callers": [
+        "GaussianProcessRegressor fit/predict",
+        "GaussianProcessClassifier fit/predict",
+        "GP likelihood optimizer -> gp_kernel_matrix -> gp_rbf_kernel/gp_matern_kernel",
+        "SVGP.predict -> op_svgp_predict -> _launch_scaled_rbf(prediction=True) -> _c54_svgp_predict_kernel"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/stats_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/stats_implementation.json"
+      ],
+      "arms": [
+        "kernel_tiles4"
+      ],
+      "required_workload_keys": [
+        "more:gpr",
+        "more:gpc",
+        "expanded:svgp"
+      ],
+      "catalog_estimators": [
+        "GaussianProcessRegressor",
+        "GaussianProcessClassifier",
+        "sparse variational GP"
+      ],
+      "remaining_source_gaps": [
+        "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+        "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C55",
+      "title": "Naive Bayes class-statistic pass fusion",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C55/manifest.json",
+      "production_paths": [
+        "x_prep/prims.mojo",
+        "x_prep/host/program.mojo",
+        "python/mojolearn/_expansion_prep.py",
+        "bindings/_mojolearn_x_prep.mojo",
+        "bindings/_mojolearn_x_prep_host.mojo"
+      ],
+      "production_callers": [
+        "GaussianNB/discrete NB _class_stats -> class_stats/class_stats_w -> class_stats_group_unit; host _groups bypass ensures candidate unit"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json"
+      ],
+      "arms": [
+        "class_group"
+      ],
+      "required_workload_keys": [
+        "expanded:gaussian-nb",
+        "expanded:multinomial-nb",
+        "expanded:bernoulli-nb",
+        "expanded:complement-nb",
+        "expanded:categorical-nb"
+      ],
+      "catalog_estimators": [
+        "GaussianNB",
+        "MultinomialNB",
+        "BernoulliNB",
+        "ComplementNB",
+        "CategoricalNB"
+      ],
+      "remaining_source_gaps": [
+        "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+        "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C56",
+      "title": "Discriminant class solves and prediction fusion",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C56/manifest.json",
+      "production_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo",
+        "bindings/_mojolearn_x_prep.mojo",
+        "bindings/_mojolearn_x_prep_host.mojo",
+        "python/mojolearn/_expansion_prep.py",
+        "experiments/classical_identical_ideas/metric_workloads.py",
+        "naive_bayes/da.mojo"
+      ],
+      "production_callers": [
+        "LinearDiscriminantAnalysis.decision_function binary branch -> one native matmul -> same coefficient-difference answer",
+        "QuadraticDiscriminantAnalysis.decision_function/predict_proba -> x_prep qda_dec_unit"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/shared_controls.mojo",
+        "experiments/classical_identical_ideas/stats_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/shared_implementation.json",
+        "experiments/classical_identical_ideas/stats_implementation.json"
+      ],
+      "arms": [
+        "lda_input",
+        "qda_project4"
+      ],
+      "required_workload_keys": [
+        "expanded:lda-clf@lda_outputs",
+        "expanded:qda"
+      ],
+      "catalog_estimators": [
+        "LinearDiscriminantAnalysis",
+        "QuadraticDiscriminantAnalysis"
+      ],
+      "remaining_source_gaps": [
+        "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter.",
+        "Class factorization/solve batching is not implemented; existing per-class rank thresholds remain intact.",
+        "LDA input-reuse subarm is owned by shared_implementation.json and consolidated into this ID by the source index."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C57",
+      "title": "Robust covariance candidate state reuse",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C57/manifest.json",
+      "production_paths": [
+        "x_decomp/mcd.mojo",
+        "x_decomp/kit_device.mojo"
+      ],
+      "production_callers": [
+        "MinCovDet.fit",
+        "EllipticEnvelope.fit",
+        "Mcd.c_step/DMcd.c_step -> emp_cov_at"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/stats_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/stats_implementation.json"
+      ],
+      "arms": [
+        "candidate_mean"
+      ],
+      "required_workload_keys": [
+        "expanded:min-cov-det",
+        "expanded:elliptic-envelope"
+      ],
+      "catalog_estimators": [
+        "MinCovDet",
+        "EllipticEnvelope",
+        "covariance estimators"
+      ],
+      "remaining_source_gaps": [
+        "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+        "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C58",
+      "title": "Batch independent classical forecast candidates",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C58/manifest.json",
+      "production_paths": [
+        "holtwinters/impl/internal/hw_estimate.mojo",
+        "holtwinters/impl/internal/hw_estimate_launch.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/fit_team_py.mojo",
+        "sequence/ets_team_py.mojo"
+      ],
+      "production_callers": [
+        "ExponentialSmoothing.fit estimated -> holtwinters_estimate_gpu",
+        "Theta family -> theta_py -> DeviceExec.launch[OP_THETA] -> seq_kernel",
+        "ETS/GARCH scalar fallback -> seq_kernel",
+        "GARCH, ETS(A,A|Ad,N), Prophet fit -> _group -> owned team launch loop"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/stats_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/stats_implementation.json"
+      ],
+      "arms": [
+        "hw_scale_once",
+        "hw_series4",
+        "forecast_series4",
+        "team64"
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "catalog_estimators": [
+        "ETS",
+        "Holt-Winters",
+        "Theta",
+        "GARCH",
+        "independent forecast series"
+      ],
+      "remaining_source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C59",
+      "title": "ARIMA device-resident order and likelihood trials",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C59/manifest.json",
+      "production_paths": [
+        "arima/impl/fast_eval_ws.mojo",
+        "arima/impl/batched_kalman.mojo"
+      ],
+      "production_callers": [
+        "ARIMA/SARIMA likelihood-gradient fit -> FastEvalWS -> loglike_prepared -> fast_kalman_into -> batched_kalman_loop_kernel",
+        "AutoARIMA candidate ARIMA fits"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/stats_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/stats_implementation.json"
+      ],
+      "arms": [
+        "immutable_observations"
+      ],
+      "required_workload_keys": [
+        "more:arima",
+        "expanded:autoarima"
+      ],
+      "catalog_estimators": [
+        "ARIMA",
+        "AutoARIMA",
+        "SARIMA"
+      ],
+      "remaining_source_gaps": [
+        "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+        "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+        "Parent arena/CSS constructors retain their original allocation and input indexing."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    },
+    {
+      "id": "C60",
+      "title": "Reuse classical stationarity preparation and lag work",
+      "mode": "identical",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "source_integration": "production_source_draft",
+      "runtime_reach": "NOT DEMONSTRATED",
+      "manifest": "experiments/classical_identical_ideas/C60/manifest.json",
+      "production_paths": [
+        "tsa/impl/timeSeries/stationarity.mojo",
+        "tsa/impl/select_d_fast.mojo"
+      ],
+      "production_callers": [
+        "kpss_test -> kpss_one_wait -> s2B_accumulation_kernel",
+        "AutoARIMA/select_d -> select_d_fast",
+        "classical_second_diff_reuse"
+      ],
+      "controls_paths": [
+        "experiments/classical_identical_ideas/stats_controls.mojo"
+      ],
+      "source_ledgers": [
+        "experiments/classical_identical_ideas/stats_implementation.json"
+      ],
+      "arms": [
+        "lag4",
+        "diff_reuse"
+      ],
+      "required_workload_keys": [
+        "expanded:autoarima"
+      ],
+      "catalog_estimators": [
+        "ADF",
+        "KPSS",
+        "AutoARIMA differencing selection",
+        "autocorrelation features"
+      ],
+      "remaining_source_gaps": [
+        "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+        "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+        "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+        "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+      ],
+      "prerequisites": [
+        "Full dataset recipe facts pending",
+        "No compilation/runtime/identity/quality/performance evidence exists for this source"
+      ],
+      "external_owner": null
+    }
+  ]
+}

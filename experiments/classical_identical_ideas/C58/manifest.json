@@ -1,0 +1,961 @@
+{
+  "schema": 1,
+  "id": "C58",
+  "title": "Batch independent classical forecast candidates",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "holtwinters/impl/internal/hw_estimate.mojo",
+    "holtwinters/impl/internal/hw_estimate_launch.mojo",
+    "sequence/exec_device.mojo",
+    "sequence/fit_team_py.mojo",
+    "sequence/ets_team_py.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_C58_SHARED_PREP"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Likelihood/SSE, selected parameters, fitted states, forecasts and forecast errors; short and ragged seasonal series.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C58",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C58",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C58",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C58",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C58",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/stats_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/stats_controls.mojo"
+  ],
+  "default_configuration": "hw_scale_once",
+  "configurations": {
+    "hw_scale_once": {
+      "name": "hw_scale_once",
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "scope": [],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ]
+    },
+    "hw_series4": {
+      "name": "hw_series4",
+      "candidate_defines": [
+        "MOJOLEARN_C58_SERIES4"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "scope": [],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ]
+    },
+    "forecast_series4": {
+      "name": "forecast_series4",
+      "candidate_defines": [
+        "MOJOLEARN_C58_FORECAST4"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "scope": [],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ]
+    },
+    "team64": {
+      "name": "team64",
+      "candidate_defines": [
+        "MOJOLEARN_C58_TEAM64"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "scope": [],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ]
+    },
+    "combo_hw_scale_once_hw_series4": {
+      "name": "combo_hw_scale_once_hw_series4",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C58_SERIES4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_scale_once"
+        },
+        {
+          "id": "C58",
+          "configuration": "hw_series4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_hw_scale_once_forecast_series4": {
+      "name": "combo_hw_scale_once_forecast_series4",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C58_FORECAST4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_scale_once"
+        },
+        {
+          "id": "C58",
+          "configuration": "forecast_series4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_hw_series4_forecast_series4": {
+      "name": "combo_hw_series4_forecast_series4",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SERIES4",
+        "MOJOLEARN_C58_FORECAST4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "forecast_series4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_hw_scale_once_hw_series4_forecast_series4": {
+      "name": "combo_hw_scale_once_hw_series4_forecast_series4",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C58_SERIES4",
+        "MOJOLEARN_C58_FORECAST4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_scale_once"
+        },
+        {
+          "id": "C58",
+          "configuration": "hw_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "forecast_series4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_hw_scale_once_team64": {
+      "name": "combo_hw_scale_once_team64",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C58_TEAM64"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_scale_once"
+        },
+        {
+          "id": "C58",
+          "configuration": "team64"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_hw_series4_team64": {
+      "name": "combo_hw_series4_team64",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SERIES4",
+        "MOJOLEARN_C58_TEAM64"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "team64"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_hw_scale_once_hw_series4_team64": {
+      "name": "combo_hw_scale_once_hw_series4_team64",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C58_SERIES4",
+        "MOJOLEARN_C58_TEAM64"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_scale_once"
+        },
+        {
+          "id": "C58",
+          "configuration": "hw_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "team64"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_forecast_series4_team64": {
+      "name": "combo_forecast_series4_team64",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_FORECAST4",
+        "MOJOLEARN_C58_TEAM64"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "forecast_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "team64"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_hw_scale_once_forecast_series4_team64": {
+      "name": "combo_hw_scale_once_forecast_series4_team64",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C58_FORECAST4",
+        "MOJOLEARN_C58_TEAM64"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_scale_once"
+        },
+        {
+          "id": "C58",
+          "configuration": "forecast_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "team64"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_hw_series4_forecast_series4_team64": {
+      "name": "combo_hw_series4_forecast_series4_team64",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SERIES4",
+        "MOJOLEARN_C58_FORECAST4",
+        "MOJOLEARN_C58_TEAM64"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "forecast_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "team64"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combo_hw_scale_once_hw_series4_forecast_series4_team64": {
+      "name": "combo_hw_scale_once_hw_series4_forecast_series4_team64",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C58_SERIES4",
+        "MOJOLEARN_C58_FORECAST4",
+        "MOJOLEARN_C58_TEAM64"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_scale_once"
+        },
+        {
+          "id": "C58",
+          "configuration": "hw_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "forecast_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "team64"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combined": {
+      "name": "combined",
+      "selectable": true,
+      "candidate_ids": [
+        "C58"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C58_SERIES4",
+        "MOJOLEARN_C58_FORECAST4",
+        "MOJOLEARN_C58_TEAM64"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_scale_once"
+        },
+        {
+          "id": "C58",
+          "configuration": "hw_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "forecast_series4"
+        },
+        {
+          "id": "C58",
+          "configuration": "team64"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_forecast_complete": {
+      "name": "interaction_forecast_complete",
+      "selectable": true,
+      "candidate_ids": [
+        "C58",
+        "C59",
+        "C60"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C58_SERIES4",
+        "MOJOLEARN_C58_FORECAST4",
+        "MOJOLEARN_C58_TEAM64",
+        "MOJOLEARN_C59_TRIAL_STATE",
+        "MOJOLEARN_C60_LAG4",
+        "MOJOLEARN_C60_DIFF_REUSE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+        "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+        "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+        "Parent arena/CSS constructors retain their original allocation and input indexing.",
+        "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+        "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+        "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+        "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet",
+        "more:arima",
+        "expanded:autoarima"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "combined"
+        },
+        {
+          "id": "C59",
+          "configuration": "immutable_observations"
+        },
+        {
+          "id": "C60",
+          "configuration": "combined"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c58_c59": {
+      "name": "interaction_c58_c59",
+      "selectable": true,
+      "candidate_ids": [
+        "C58",
+        "C59"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C59_TRIAL_STATE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+        "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+        "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+        "Parent arena/CSS constructors retain their original allocation and input indexing."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet",
+        "more:arima",
+        "expanded:autoarima"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_scale_once"
+        },
+        {
+          "id": "C59",
+          "configuration": "immutable_observations"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c58_c60": {
+      "name": "interaction_c58_c60",
+      "selectable": true,
+      "candidate_ids": [
+        "C58",
+        "C60"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C60_LAG4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+        "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+        "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+        "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+        "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+      ],
+      "required_workload_keys": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet",
+        "expanded:autoarima"
+      ],
+      "component_arms": [
+        {
+          "id": "C58",
+          "configuration": "hw_scale_once"
+        },
+        {
+          "id": "C60",
+          "configuration": "lag4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+    "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+    "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+  ],
+  "catalog_estimators": [
+    "ETS",
+    "Holt-Winters",
+    "Theta",
+    "GARCH",
+    "independent forecast series"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "more:ets",
+    "expanded:theta",
+    "expanded:optimized-theta",
+    "expanded:dynamic-theta",
+    "expanded:dynamic-optimized-theta",
+    "expanded:auto-theta",
+    "expanded:damped-ets",
+    "expanded:garch",
+    "expanded:prophet"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

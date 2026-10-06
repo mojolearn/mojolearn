@@ -263,6 +263,9 @@ trait ClusterOps(Movable):
         use (the host ignores them)."""
         ...
 
+    def copy_from(mut self, src: Int, off: Int, n: Int, dst: Int) raises:
+        ...
+
     def copy_at(mut self, src: Int, n: Int, dst: Int, off: Int) raises:
         """dst[off + t] = src[t], t < n (float slots)."""
         ...
@@ -466,6 +469,9 @@ trait ClusterOps(Movable):
     def kpp_search(mut self, closest: Int, w: Int, m: Int, vs: List[Float64], ids: Int) raises:
         """ids[t] = `post_bodies.kpp_search_cell` of vs[t] over the running
         table of closest (times w when w >= 0)."""
+        ...
+
+    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, out: Int) raises:
         ...
 
     def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:

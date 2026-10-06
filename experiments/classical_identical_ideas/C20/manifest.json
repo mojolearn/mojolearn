@@ -1,0 +1,399 @@
+{
+  "schema": 1,
+  "id": "C20",
+  "title": "Bounded SVM kernel-row cache and shared pair loads",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "svm/impl/classical_kernel_cells.mojo",
+    "svm/impl/classical_kernel_device.mojo",
+    "svm/impl/kernelcache.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_CLASSICAL_C20_ROW_CACHE"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Support vectors, dual coefficients, decision values, probabilities and iteration count; repeated rows and near ties.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C20",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C20",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C20",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C20",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C20",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/linear_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/linear_controls.mojo"
+  ],
+  "default_configuration": "row_cache",
+  "configurations": {
+    "row_cache": {
+      "name": "row_cache",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C20_ROW_CACHE"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C20"
+      ],
+      "source_gaps": [
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach."
+      ],
+      "scope": "Per-fit direct-map cache bounded by 16 MiB and working-set width; deterministic row-ID eviction",
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm"
+      ]
+    },
+    "pair_load": {
+      "name": "pair_load",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C20"
+      ],
+      "source_gaps": [
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach."
+      ],
+      "scope": "Gather each working-set row and its norm together",
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm"
+      ]
+    },
+    "combo_row_cache_pair_load": {
+      "name": "combo_row_cache_pair_load",
+      "selectable": true,
+      "candidate_ids": [
+        "C20"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C20_ROW_CACHE",
+        "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach."
+      ],
+      "required_workload_keys": [
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm"
+      ],
+      "component_arms": [
+        {
+          "id": "C20",
+          "configuration": "row_cache"
+        },
+        {
+          "id": "C20",
+          "configuration": "pair_load"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "combined": {
+      "name": "combined",
+      "selectable": true,
+      "candidate_ids": [
+        "C20"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C20_ROW_CACHE",
+        "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach."
+      ],
+      "required_workload_keys": [
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm"
+      ],
+      "component_arms": [
+        {
+          "id": "C20",
+          "configuration": "row_cache"
+        },
+        {
+          "id": "C20",
+          "configuration": "pair_load"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_svm_complete": {
+      "name": "interaction_svm_complete",
+      "selectable": true,
+      "candidate_ids": [
+        "C20",
+        "C21",
+        "C22"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C20_ROW_CACHE",
+        "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD",
+        "MOJOLEARN_CLASSICAL_C21_EXTREMA",
+        "MOJOLEARN_CLASSICAL_C22_TRIANGLE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+        "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+        "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+        "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+        "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+        "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+        "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op."
+      ],
+      "required_workload_keys": [
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm",
+        "more:kernel-ridge",
+        "expanded:kernel-pca"
+      ],
+      "component_arms": [
+        {
+          "id": "C20",
+          "configuration": "combined"
+        },
+        {
+          "id": "C21",
+          "configuration": "extrema_tree4"
+        },
+        {
+          "id": "C22",
+          "configuration": "symmetric_triangle"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c20_c21": {
+      "name": "interaction_c20_c21",
+      "selectable": true,
+      "candidate_ids": [
+        "C20",
+        "C21"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C20_ROW_CACHE",
+        "MOJOLEARN_CLASSICAL_C21_EXTREMA"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+        "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+        "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified."
+      ],
+      "required_workload_keys": [
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm"
+      ],
+      "component_arms": [
+        {
+          "id": "C20",
+          "configuration": "row_cache"
+        },
+        {
+          "id": "C21",
+          "configuration": "extrema_tree4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c20_c22": {
+      "name": "interaction_c20_c22",
+      "selectable": true,
+      "candidate_ids": [
+        "C20",
+        "C22"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C20_ROW_CACHE",
+        "MOJOLEARN_CLASSICAL_C22_TRIANGLE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+        "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+        "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+        "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+        "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op."
+      ],
+      "required_workload_keys": [
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm",
+        "more:kernel-ridge",
+        "expanded:kernel-pca"
+      ],
+      "component_arms": [
+        {
+          "id": "C20",
+          "configuration": "row_cache"
+        },
+        {
+          "id": "C22",
+          "configuration": "symmetric_triangle"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+    "Unsupported precomputed kernel routes preserve incumbent handling.",
+    "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+    "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach."
+  ],
+  "catalog_estimators": [
+    "SVC",
+    "SVR",
+    "OneClassSVM"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "classical:svc",
+    "more:svr",
+    "expanded:ocsvm"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

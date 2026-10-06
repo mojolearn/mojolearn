@@ -1,3 +1,4 @@
+from experiments.classical_identical_ideas.graph_controls import C31_DEVICE_BUCKETS
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 551. The ball cover's CSR, in one canonical intra-row order.
@@ -235,6 +236,27 @@ def _rbc_bucket_copy(ia: MutPointer[Int32, MutAnyOrigin], rows: MutPointer[Int32
         p += RBC_CANON_TPB
 
 
+def _rbc_bucket_all_levels(ia: MutPointer[Int32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin], src: MutPointer[Int32, MutAnyOrigin], scratch: MutPointer[Int32, MutAnyOrigin]):
+    # C31 no degree/status readback. A block owns a complete row, so every
+    # level can synchronize locally and final storage always remains src.
+    from max.gpu.sync import barrier
+    var row = Int(rows[Int(block_idx.x)])
+    var levels = _degree_bucket(Int(ia[row + 1] - ia[row]))
+    var width = 1
+    for level in range(levels):
+        if level % 2 == 0:
+            _rbc_merge_row(row, ia, src, scratch, Int32(width))
+        else:
+            _rbc_merge_row(row, ia, scratch, src, Int32(width))
+        barrier()
+        width *= 2
+    if levels % 2 != 0:
+        var p = Int(ia[row]) + Int(thread_idx.x)
+        while p < Int(ia[row + 1]):
+            src[p] = scratch[p]
+            p += RBC_CANON_TPB
+
+
 def rbc_canonicalize_degree_buckets(ctx: DeviceContext, mut ia: DeviceBuffer[DType.int32], mut ja: DeviceBuffer[DType.int32], rows_count: Int, nnz: Int) raises:
     """Compact degree tasks; nnz scratch + one row descriptor per row.
     Atomic task order cannot affect output: tasks own disjoint CSR rows and
@@ -253,6 +275,11 @@ def rbc_canonicalize_degree_buckets(ctx: DeviceContext, mut ia: DeviceBuffer[DTy
     ctx.enqueue_function[_rbc_bucket_count](ia.unsafe_ptr(), Int32(rows_count), counts.unsafe_ptr(), grid_dim=(blocks,1,1), block_dim=(RBC_CANON_TPB,1,1))
     ctx.enqueue_function[_rbc_bucket_offsets](counts.unsafe_ptr(), offsets.unsafe_ptr(), grid_dim=(1,1,1), block_dim=(1,1,1))
     ctx.enqueue_function[_rbc_bucket_scatter](ia.unsafe_ptr(), Int32(rows_count), counts.unsafe_ptr(), offsets.unsafe_ptr(), tasks.unsafe_ptr(), grid_dim=(blocks,1,1), block_dim=(RBC_CANON_TPB,1,1))
+    comptime if C31_DEVICE_BUCKETS:
+        ctx.enqueue_function[_rbc_bucket_all_levels](ia.unsafe_ptr(), tasks.unsafe_ptr(), ja.unsafe_ptr(), scratch.unsafe_ptr(), grid_dim=(rows_count,1,1), block_dim=(RBC_CANON_TPB,1,1))
+        ctx.synchronize()
+        _ = counts^; _ = offsets^; _ = tasks^; _ = scratch^
+        return
     var ho = ctx.enqueue_create_host_buffer[DType.int32](33)
     ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=offsets)
     ctx.synchronize()
@@ -307,7 +334,7 @@ def rbc_canonicalize_row_order(
     # no default promotion from these representative component measurements.
     # Evidence: experiments/performance_ideas/measurements/20261006/index.json,
     # I13 same-source/same-machine pairs, exact binary hashes and raw receipts.
-    comptime if is_defined["MOJOLEARN_RBC_CANON_DEGREE_BUCKETS"]():
+    comptime if C31_DEVICE_BUCKETS or is_defined["MOJOLEARN_RBC_CANON_DEGREE_BUCKETS"]():
         rbc_canonicalize_degree_buckets(ctx, adj_ia, adj_ja, n_queries, nnz)
         return
 

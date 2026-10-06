@@ -1,3 +1,4 @@
+from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS, C33_CHUNK
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Weakly connected components by label propagation.
@@ -99,7 +100,7 @@ comptime MAX_LABEL = Int32(2147483647)
 #: cell is the pass that found nothing to do). `merge_labels` takes the same
 #: form on the same buffer.
 #: `-D MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1` restores one drain per pass.
-comptime IDN_DBSCAN_CC_GATED = (
+comptime IDN_DBSCAN_CC_GATED = C33_FROZEN_CHUNKS or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
         # I14 measured gated+shortcut chunk16 versus ungated below; default retained.
@@ -119,7 +120,7 @@ comptime IDN_DBSCAN_CC_GATED = (
 # One same-process warmup/score; graph convergence component only, no full
 # DBSCAN/HDBSCAN or arbitrary-topology speed claim; accepted identity reused.
 # Evidence: overnight-ab-20261006/{amd,nvidia} normalized I14 receipts.
-comptime IDN_DBSCAN_CC_CHUNK = (
+comptime IDN_DBSCAN_CC_CHUNK = C33_CHUNK if C33_FROZEN_CHUNKS else (
     # NEVER RUN — PENDING MEASUREMENT
     4 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK4"]()
     else (

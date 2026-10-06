@@ -1,0 +1,1791 @@
+{
+  "schema": 1,
+  "baseline": "35b2d4976",
+  "policy": {
+    "scope": "Classical ML only, including classical preprocessing, metrics, model selection, matrix factorizations, graph/manifold estimators and classical forecasting. Excludes neural models, neural optimizers, transformers, Mamba, CNNs, language models and Apple FAST tuning.",
+    "identity": "Within EACH arm/version, NVIDIA, AMD, Apple and the host must produce bitwise-identical promised outputs/state. A and B may have different bits. Matching B's old bits is not a quality gate for a versioned profile. Each arm must independently satisfy task quality; compare every admitted model attribute, convergence/selection decision, error and seed contract.",
+    "default": "All new candidates default OFF; no promotion, merge to main, build, test, static verification, benchmark, remote job or board-result mutation in this request.",
+    "performance": "A future default decision requires full-dataset end-to-end A/B on both NVIDIA and AMD for every affected estimator and relevant interaction, combined faster with neither materially slower; Apple/host establish identity and Apple times do not vote. One excluded warmup and one scored sample, serial cells per GPU, separate vendor boxes. Reuse accepted matching build/identity evidence.",
+    "workload": "Resolve dataset version/hash/split, actual dimensions, settings, numeric profile, flags and timed boundaries before any future timing. Audit intrinsic lane caps; --rows full is not proof. Missing mappings remain pending. Fit/preparation/synchronization/consumed outputs are included; cold, repeated use and inference are separate.",
+    "routing": "No exact benchmark dimensions, names, seeds or adjacent-to-board thresholds. Explain every route using hardware/work/bytes and cover neighboring shapes and one non-board dataset. For removing a targeted incumbent rule, A is the general rule and B explicitly retains the old rule.",
+    "implementation": "Mojo performs all runtime data processing. Python here is metadata/orchestration only. Use supported Mojo facilities; record upstream asks and park unsupported functionality. No compiler-output edits, unsupported build modes or speculative backend shims.",
+    "resources": "Any future CPU race gets all allocated cores (actual Linux cgroup allocation; Apple unrestricted), arms serially, preserving algorithm semantics and documented nested pools. Record worker effective pools.",
+    "evidence": "Retain winners, losers, neutral/inconclusive cells, refusals and pending cells with source/binary/harness/hardware provenance. Use board tools only when real measurements exist. No opponent ratio from own-only A/B. A source draft is not a compile pass, identity proof, quality pass, speed win or complete full-workload harness."
+  },
+  "workload_recipe_sources": {
+    "classical": "tools/classical_two_datasets.py: LANES, BLOCK_OF, preparation and lane row constants",
+    "more": "tools/bench_board_more.py: LANES, LANE_CONFIG, preparation and workload constants",
+    "expanded": "tools/bench_board_algos.py: LANES, _add calls, sub/block definitions, settings and timed spans (classical lanes only)",
+    "trees": "tools/bench_board.py: TREE_LANES, TREE_TASK_DATASETS, plan_races; bench/speed/forest_speed_arm.py",
+    "neighbors": "tools/knn_datasets.py: index/query blocks and preparation"
+  },
+  "interactions": [
+    "C01 \u00d7 C02/C09/C13/C23/C37/C52: arithmetic profile plus pass fusion; test each alone before combined.",
+    "C03/C04/C05/C08 \u00d7 all affected estimators: input preparation, scratch retention and data ownership; include cold/repeated fit.",
+    "C06/C29/C30/C32/C36: norms, direct/expanded distances, selection and threshold fusion; ensure metric route reach.",
+    "C07/C08/C10/C12/C31: shared sort/scan storage and canonical key contracts; avoid unbounded combined scratch.",
+    "C13/C14/C15/C18/C23/C24: CV statistics, factorization and solve profile; selected model can change only with preserved quality.",
+    "C16/C17/C19: objective fusion, independent trials and persistent updates; never speculate dependent SGD samples.",
+    "C20/C21/C22: SVM cache, extrema and symmetric kernels; check complete trajectory and memory together.",
+    "C29/C31/C32/C33/C34/C43/C44: graph membership/order, convergence, hierarchy and manifold quality.",
+    "C36/C37/C38/C39: KMeans assignment, centroid fold, initialization and state retention; full-fit acceptance.",
+    "C45/C46/C47/C48/C49/C50/C51: complete tree construction/prediction/explanation configurations.",
+    "C02/C04/C14/C23/C53/C54/C55/C56/C57: covariance/factor consumers and their uncertainty/quality outputs.",
+    "C58/C59/C60: shared forecasting preparation, candidate batching and order selection."
+  ],
+  "experiments": [
+    {
+      "id": "C01",
+      "lane": "shared",
+      "title": "Versioned fixed-leaf reduction profiles",
+      "estimators": [
+        "Classical column statistics",
+        "GLM objectives",
+        "covariance",
+        "regression metrics"
+      ],
+      "source_anchors": [
+        "core/pinned_reduce.mojo",
+        "core/column_stats.mojo",
+        "core/device_fold.mojo"
+      ],
+      "arm_a": "A new classical-only logical leaf size and adjacent-pair merge, independent of physical block and warp size. Separate leaf sizes into separate arms.",
+      "arm_b": "The incumbent caller's specified serial/halving reduction.",
+      "arithmetic_contract": "New version: fix leaf membership, per-leaf addition/FMA order, FTZ, odd-tail carry and signed zero; use one scalar helper in host and device. GPU geometry may schedule but never redefine leaves.",
+      "quality_gate": "Objective, residual and downstream task metrics must not degrade; inspect cancellation, overflow, subnormals, constant and ragged columns.",
+      "rejection_conditions": "Reject register spills, larger scratch, poor error growth or any incomplete host/caller migration; no global neural-mode change.",
+      "relationship_to_existing": "I04 proposes a GEMM fold revision; this is a classical scalar-statistic profile, separately gated.",
+      "priority": "P1",
+      "kind": "profile",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C02",
+      "lane": "shared",
+      "title": "Fuse independent column statistics with shared input loads",
+      "estimators": [
+        "StandardScaler",
+        "GaussianNB",
+        "PCA preparation",
+        "GLM centering"
+      ],
+      "source_anchors": [
+        "core/column_stats.mojo",
+        "preprocessing/standard.mojo",
+        "glm/impl/center_device.mojo"
+      ],
+      "arm_a": "Calculate independent sums/counts or centered second moments in a single tiled read, maintaining separate accumulators and the incumbent order for each output.",
+      "arm_b": "Separate passes over identical input for each statistic.",
+      "arithmetic_contract": "Keep two-pass centered variance where required; merging passes is not permission to replace it with E[x\u00b2]-E[x]\u00b2.",
+      "quality_gate": "Every fitted mean, variance, scale, count and downstream output; zero-variance, weighted and missing-data semantics.",
+      "rejection_conditions": "Reject increased spills or occupancy loss, duplicated reads on tails, and any changed missing-value denominator.",
+      "relationship_to_existing": "I24 leaves broader preprocessing pass fusion open.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C03",
+      "lane": "shared",
+      "title": "Fuse finite checks and extrema production",
+      "estimators": [
+        "MinMaxScaler",
+        "MaxAbsScaler",
+        "classical estimator input preparation"
+      ],
+      "source_anchors": [
+        "core/input_device.mojo",
+        "preprocessing/minmax.mojo",
+        "x_prep/prims.mojo"
+      ],
+      "arm_a": "Produce validity status and required extrema from one input walk, with canonical first-error indexing.",
+      "arm_b": "Separate validity and extrema scans.",
+      "arithmetic_contract": "Exact status/min/max selections use an explicit total order and original public NaN/Inf refusal rules; publication still waits for validation.",
+      "quality_gate": "Same refusal type/index, fitted extrema, signed zeros, empty-input and all-missing behavior.",
+      "rejection_conditions": "Reject early mutation before a deferred error or any policy that silently drops nonfinite rows.",
+      "relationship_to_existing": "Extension of I24.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C04",
+      "lane": "shared",
+      "title": "Apply centering and scaling at the consumer load",
+      "estimators": [
+        "PCA",
+        "OLS",
+        "Ridge",
+        "GaussianNB",
+        "normalized classical distances"
+      ],
+      "source_anchors": [
+        "glm/impl/center_device.mojo",
+        "core/row_norms.mojo",
+        "preprocessing/standard.mojo"
+      ],
+      "arm_a": "Pass immutable mean/scale buffers to a Mojo consumer and reproduce subtract/divide operations at load, avoiding an intermediate matrix.",
+      "arm_b": "Materialize centered/scaled input and then read it in the consumer.",
+      "arithmetic_contract": "Keep the stored-intermediate rounding and FTZ seams explicit even when no matrix is stored; do not contract subtraction and multiplication into an FMA.",
+      "quality_gate": "Fitted state, predictions, residuals and input ownership; readonly, strided and repeated callers.",
+      "rejection_conditions": "Reject recomputation when multiple consumers make materialization cheaper; report cold and repeated use separately.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C05",
+      "lane": "shared",
+      "title": "Retain bounded classical scratch across phases",
+      "estimators": [
+        "Iterative classical estimators",
+        "repeated predict/transform"
+      ],
+      "source_anchors": [
+        "core/scratch_pool.mojo",
+        "core/device_pool.mojo",
+        "core/device_liveness.mojo"
+      ],
+      "arm_a": "Reuse explicitly owned scratch sized from live bytes for sequential stages; separate retained fit scratch from optional repeated-call caches.",
+      "arm_b": "Allocate and release each temporary at each phase/call.",
+      "arithmetic_contract": "Scheduling only: initialize every consumed cell and preserve device/context ownership, asynchronous lifetime, error release and concurrent estimator isolation.",
+      "quality_gate": "Same outputs, failures and repeated-fit state; cover growing/shrinking shapes and context changes.",
+      "rejection_conditions": "Reject unbounded retention, stale-data dependence or a cold-use regression hidden by hot timings.",
+      "relationship_to_existing": "I02 covers GEMM scratch; extend only to classical caller-owned buffers.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C06",
+      "lane": "shared",
+      "title": "Batch row norms without changing feature folds",
+      "estimators": [
+        "KMeans",
+        "KNN",
+        "KDE",
+        "kernel matrices",
+        "Normalizer"
+      ],
+      "source_anchors": [
+        "core/row_norms.mojo",
+        "core/cosine_rows.mojo",
+        "core/expand_distances.mojo"
+      ],
+      "arm_a": "Assign multiple independent rows to one block or tile, reusing dispatch and coalesced loads with each row's logical lanes unchanged.",
+      "arm_b": "One incumbent row task per block.",
+      "arithmetic_contract": "Feature order, squared terms, pinned fold and portable square root remain fixed; schedule choices follow bytes and available parallelism, not benchmark dimensions.",
+      "quality_gate": "Norm and final distance words, underflow, overflow, signed zero, tails and downstream task quality.",
+      "rejection_conditions": "Reject reduced parallelism, shared-memory expansion or accidental use of physical warp width.",
+      "relationship_to_existing": "New extension",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C07",
+      "lane": "shared",
+      "title": "Stable radix layout for classical preparation",
+      "estimators": [
+        "QuantileTransformer",
+        "KBinsDiscretizer",
+        "categorical encoders",
+        "isotonic regression"
+      ],
+      "source_anchors": [
+        "core/stable_radix_sort.mojo",
+        "core/stable_radix_digits.mojo",
+        "core/segmented_sort.mojo",
+        "x_prep/dsort.mojo"
+      ],
+      "arm_a": "Independently vary digit width, keys per task, and ragged-segment bucket scheduling under a scratch/shared-memory cost model.",
+      "arm_b": "Incumbent stable radix schedule with identical key encoding.",
+      "arithmetic_contract": "Stable secondary row index, NaN policy, signed-zero ordering and per-segment boundaries are preserved; no approximate quantiles.",
+      "quality_gate": "Exact permutations, category IDs, quantile cutpoints and public transforms; duplicates and highly skewed segments.",
+      "rejection_conditions": "Reject descriptors or histogram clears costing more than passes saved; do not rerun a previously decided identical configuration.",
+      "relationship_to_existing": "Reuse I19 infrastructure and distinguish new geometries from existing digit-width arms.",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C08",
+      "lane": "shared",
+      "title": "Reuse category dictionaries and inverse maps",
+      "estimators": [
+        "OneHotEncoder",
+        "OrdinalEncoder",
+        "TargetEncoder",
+        "LabelEncoder",
+        "Naive Bayes preparation"
+      ],
+      "source_anchors": [
+        "core/label_encode_device.mojo",
+        "core/label_rows_device.mojo",
+        "x_prep/cat_cls2.mojo"
+      ],
+      "arm_a": "Build a canonical dictionary and inverse map once per fit, then share them among counts and encodings; evaluate independent grouped output emission.",
+      "arm_b": "Repeated dictionary/sort/inverse work for each consumer.",
+      "arithmetic_contract": "No dictionary reordering; unknown/missing-category behavior and supervised fold isolation remain unchanged.",
+      "quality_gate": "Vocabulary, inverse map, output shape/layout and target-encoding leakage guards; unseen labels and repeated fits.",
+      "rejection_conditions": "Reject cache keys based only on pointer address or shape; no reuse across mutated data without an explicit immutable owner.",
+      "relationship_to_existing": "I19 supplies dictionary primitives; this card concerns caller lifetime and reuse.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C09",
+      "lane": "shared",
+      "title": "Fused regression and weighted metric reports",
+      "estimators": [
+        "MSE",
+        "MAE",
+        "R\u00b2",
+        "regression scoring",
+        "sample-weighted metrics"
+      ],
+      "source_anchors": [
+        "x_metrics/reg_epi.mojo",
+        "x_metrics/group.mojo",
+        "metrics/estimator.mojo"
+      ],
+      "arm_a": "Share prediction/target loads while maintaining one pinned accumulator stream per metric; finish a requested metric bundle with one status/readback boundary.",
+      "arm_b": "Separate public metric calls or separate native passes.",
+      "arithmetic_contract": "No reassociation between metrics; denominator, multioutput policy, force-finite and zero-weight rules are part of the contract.",
+      "quality_gate": "All requested values and warning/error states; degenerate targets and large weight range.",
+      "rejection_conditions": "Reject extra unrequested work or an API that times a smaller output set than the control.",
+      "relationship_to_existing": "I24 combines classification reports; extend to regression.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C10",
+      "lane": "shared",
+      "title": "Reuse stable score sorting for ranking metrics",
+      "estimators": [
+        "ROC AUC",
+        "average precision",
+        "precision-recall and ROC curves"
+      ],
+      "source_anchors": [
+        "x_metrics/ranking.mojo",
+        "core/segmented_sort.mojo"
+      ],
+      "arm_a": "Compute a single stable score order and tie boundaries, then emit all requested rank metrics from shared canonical prefix counts.",
+      "arm_b": "Each metric sorts and scans independently.",
+      "arithmetic_contract": "Tie blocks, positive-label encoding, weights and threshold endpoint conventions remain exact; weighted prefixes keep a fixed arithmetic tree.",
+      "quality_gate": "Curves and scalar values for all ties, missing classes, weights and multiclass averaging.",
+      "rejection_conditions": "Reject retained sorted state without input ownership or assumptions that tied scores can be permuted arbitrarily for weighted sums.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C11",
+      "lane": "shared",
+      "title": "Generate resampling indices at their consumer",
+      "estimators": [
+        "Bootstrap",
+        "permutation tests",
+        "forest bootstrap",
+        "cross-validation row gathers"
+      ],
+      "source_anchors": [
+        "resample/estimator.mojo",
+        "resample/device_post.mojo",
+        "core/shuffle_iterator.mojo",
+        "core/philox.mojo"
+      ],
+      "arm_a": "Regenerate deterministic counter-indexed draws directly in gather/statistic tasks or retain one compact permutation for multiple consumers.",
+      "arm_b": "Materialize full index arrays and reread them for each operation.",
+      "arithmetic_contract": "Seed, draw number, replicate, rejection sampling and ordering must produce the same sequence; stateful RNG cannot be replaced without a separately versioned contract.",
+      "quality_gate": "Index sequence, multiplicities, confidence intervals and hypothesis-test statistic/p-value; no data-dependent RNG draw consumption.",
+      "rejection_conditions": "Reject repeated RNG cost exceeding memory savings or altered dependence between replicates.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C12",
+      "lane": "shared",
+      "title": "Sparse exact classification counts before dense output",
+      "estimators": [
+        "Confusion matrix",
+        "precision/recall/F-score",
+        "class-count preparation"
+      ],
+      "source_anchors": [
+        "x_metrics/cm_epi.mojo",
+        "core/label_encode_device.mojo",
+        "naive_bayes/nb.mojo"
+      ],
+      "arm_a": "Accumulate exact integer occupied label-pair counts in canonical sorted segments, then materialize the requested dense or sparse report once.",
+      "arm_b": "Clear and update a full class-by-class scratch table for each report.",
+      "arithmetic_contract": "Unweighted integer counts only in the first arm; weighted FP counts need a separate fixed-fold profile. Public class ordering and empty cells are unchanged.",
+      "quality_gate": "All confusion and averaging outputs, absent classes, high class counts, integer overflow/refusal and warning cells.",
+      "rejection_conditions": "Reject sort overhead for dense occupancy; route only from documented storage/work estimates and preserve public output allocation cost.",
+      "relationship_to_existing": "Build on I24 exact report APIs; this is occupied-key accumulation.",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C13",
+      "lane": "linear",
+      "title": "Shared sufficient statistics across CV folds",
+      "estimators": [
+        "RidgeCV",
+        "LassoCV",
+        "ElasticNetCV",
+        "LogisticRegressionCV preparation"
+      ],
+      "source_anchors": [
+        "x_linear/cd.mojo",
+        "x_linear/cd_grid.mojo",
+        "x_linear/device_ops.mojo"
+      ],
+      "arm_a": "Compute disjoint fold statistics once and combine the retained folds in a specified order for each training set; keep solver selection and fold IDs.",
+      "arm_b": "Rescan every training fold independently.",
+      "arithmetic_contract": "New version for all columns: per-fold means and centered Gram construction must have a complete host/device fold contract. Never assume total-minus-heldout has old bits.",
+      "quality_gate": "Validation losses, selected alpha/C/l1 ratio, coefficients, convergence and ill-conditioned residuals; include leakage checks.",
+      "rejection_conditions": "Reject cancellation, workspace inflation or fewer optimization iterations masquerading as a scheduling gain.",
+      "relationship_to_existing": "Explicit remaining I12 Gram/shared-fold proposal.",
+      "priority": "P1",
+      "kind": "profile",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C14",
+      "lane": "linear",
+      "title": "Reuse one factorization for multiple right-hand sides",
+      "estimators": [
+        "OLS",
+        "Ridge",
+        "multioutput regression",
+        "Gaussian processes",
+        "repeated linear solves"
+      ],
+      "source_anchors": [
+        "core/householder_qr.mojo",
+        "glm/impl/ridge_multi.mojo",
+        "cholesky"
+      ],
+      "arm_a": "Factor once and apply the same canonical factor to grouped target/RHS columns with bounded workspace.",
+      "arm_b": "Refactor or repeatedly reload identical factors for each RHS.",
+      "arithmetic_contract": "Same factor, pivot/rank decisions and solve folds; caches belong to immutable fitted state and include regularization/preprocessing settings.",
+      "quality_gate": "Residuals, coefficients, rank, predictions and stale-factor invalidation; singular and nearly singular cases.",
+      "rejection_conditions": "Reject memory growth or latency losses for a single RHS.",
+      "relationship_to_existing": "Reuse I22 factor-state work; extend actual multioutput callers without claiming new initial implementation.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C15",
+      "lane": "linear",
+      "title": "Solve against factors instead of forming inverses",
+      "estimators": [
+        "BayesianRidge",
+        "ARD",
+        "Ridge",
+        "covariance consumers with solve-only needs"
+      ],
+      "source_anchors": [
+        "x_linear",
+        "glm/impl/ridge.mojo",
+        "cholesky",
+        "x_decomp"
+      ],
+      "arm_a": "Replace inverse-then-product with canonical triangular solves where the public operation does not need a dense inverse; retain separately requested uncertainty outputs.",
+      "arm_b": "Materialize and multiply by an explicit inverse.",
+      "arithmetic_contract": "New numerical profile across host and all devices, fixed solve ordering and pivot policy; do not replace required inverse-derived diagnostics with approximations.",
+      "quality_gate": "Prediction, posterior variance/evidence, condition sensitivity and residuals at least as good as control.",
+      "rejection_conditions": "Reject loss of required fitted attributes or worse uncertainty calibration.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "profile",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C16",
+      "lane": "linear",
+      "title": "Fuse GLM response, residual and objective production",
+      "estimators": [
+        "LogisticRegression",
+        "PoissonRegressor",
+        "GammaRegressor",
+        "TweedieRegressor",
+        "LinearSVC/SVR"
+      ],
+      "source_anchors": [
+        "glm/impl/qn/glm_base.mojo",
+        "glm/impl/qn/glm_logistic.mojo",
+        "glm/impl/qn/glm_softmax.mojo",
+        "x_linear"
+      ],
+      "arm_a": "Reuse each linear response and portable nonlinear evaluation to produce residuals and loss leaves in one pass; preserve separate canonical objective fold.",
+      "arm_b": "Separate response, nonlinear link, residual and objective kernels.",
+      "arithmetic_contract": "Same stable link branches, FMA boundaries, regularization and trial-vector association; line search sees exactly the intended candidate state.",
+      "quality_gate": "Objective/gradient, first accepted step, convergence iterations, coefficients, probabilities and deviance.",
+      "rejection_conditions": "Reject changed branch behavior at extreme logits or stale objective/gradient reuse.",
+      "relationship_to_existing": "Extends I12 beyond accepted-iterate scheduling.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C17",
+      "lane": "linear",
+      "title": "Batch independent OVR and line-search tasks",
+      "estimators": [
+        "Multiclass linear models",
+        "independent optimizer trials"
+      ],
+      "source_anchors": [
+        "glm/impl/qn/qn_linesearch.mojo",
+        "x_linear/sgd.mojo",
+        "x_linear/device_ops.mojo"
+      ],
+      "arm_a": "Schedule independent classes or explicitly materialized trial vectors together; independently attribute OVR and bounded speculative line search.",
+      "arm_b": "Sequential dispatch of the same classes/trials.",
+      "arithmetic_contract": "Preserve first accepted trial, logical evaluation counts, class order and each model's iteration dependencies.",
+      "quality_gate": "All fitted states, probabilities, accepted steps, refusals and convergence; count physical speculative work separately.",
+      "rejection_conditions": "Reject extra evaluations or expanded live state erasing the launch savings.",
+      "relationship_to_existing": "Reuse I12 existing OVR and bounded4trial code; new work is full-caller selection/combination mapping.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C18",
+      "lane": "linear",
+      "title": "Coordinate-descent residual tile reuse",
+      "estimators": [
+        "Lasso",
+        "ElasticNet",
+        "linear sparse coding"
+      ],
+      "source_anchors": [
+        "solver",
+        "x_linear/cd.mojo",
+        "x_linear/cd_grid.mojo"
+      ],
+      "arm_a": "Keep one bounded feature/residual tile resident through adjacent ordered coordinate updates, or fuse residual write with its next ordered consumer.",
+      "arm_b": "Separate residual update and next-coordinate scans.",
+      "arithmetic_contract": "Coordinate updates remain sequential in the declared order; simultaneous Jacobi updates are a different algorithm and excluded.",
+      "quality_gate": "Duality gaps, stopping iteration, sparsity pattern, coefficients and predictions; correlated columns.",
+      "rejection_conditions": "Reject changed residual rounding or silently weakened convergence tolerance.",
+      "relationship_to_existing": "I12 independent-coordinate infrastructure is reusable; this card targets memory passes.",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C19",
+      "lane": "linear",
+      "title": "Persistent ordered online linear updates",
+      "estimators": [
+        "SGDClassifier/Regressor",
+        "Perceptron",
+        "PassiveAggressive",
+        "SGDOneClassSVM"
+      ],
+      "source_anchors": [
+        "x_linear/sgd.mojo",
+        "x_linear/device_ops.mojo",
+        "core/shuffle_iterator.mojo"
+      ],
+      "arm_a": "Run bounded consecutive samples in one device task with resident coefficients; reuse existing step-fusion where available and extend equivalent online solvers.",
+      "arm_b": "One launch/dispatch boundary per logical update.",
+      "arithmetic_contract": "No mini-batch averaging: retain exact sample permutation, learning-rate time index, clipping, penalties and sequential updates.",
+      "quality_gate": "Coefficients, intercept, epochs, loss, averaging state and seeded repeatability.",
+      "rejection_conditions": "Reject device watchdog pressure, lost parallelism or changed sample semantics.",
+      "relationship_to_existing": "I12 supplies SGD fusion; do not duplicate its decided controls.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C20",
+      "lane": "linear",
+      "title": "Bounded SVM kernel-row cache and shared pair loads",
+      "estimators": [
+        "SVC",
+        "SVR",
+        "OneClassSVM"
+      ],
+      "source_anchors": [
+        "svm/impl/kernelcache.mojo",
+        "svm/impl/distance/kernel_matrices.mojo",
+        "svm/impl/smosolver.mojo"
+      ],
+      "arm_a": "Reuse canonical kernel rows across working-set updates with deterministic eviction, and fuse independent loads of selected row pairs.",
+      "arm_b": "Recompute/reload kernel rows under incumbent cache organization.",
+      "arithmetic_contract": "Cache only computed values; working-set selection, row precision, gamma, exp, error updates and stopping remain identical.",
+      "quality_gate": "Support vectors, dual coefficients, decision values, probabilities and iteration count; repeated rows and near ties.",
+      "rejection_conditions": "Reject cache memory dominating fit or a hardware-specific eviction policy affecting arithmetic rather than storage.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C21",
+      "lane": "linear",
+      "title": "Fuse canonical SMO extrema selection",
+      "estimators": [
+        "SVC",
+        "SVR",
+        "OneClassSVM"
+      ],
+      "source_anchors": [
+        "svm/impl/workingset.mojo",
+        "svm/impl/ws_util.mojo",
+        "svm/impl/grid_fold.mojo"
+      ],
+      "arm_a": "Compute multiple independent KKT extrema from one scan and reduce explicit value/index tuples together.",
+      "arm_b": "Separate scans/reductions for each working-set statistic.",
+      "arithmetic_contract": "Exact total order with stable index ties, NaN refusals and eligibility masks; no heuristic working-set change.",
+      "quality_gate": "Selected indices, KKT violations, full SMO trajectory and final model.",
+      "rejection_conditions": "Reject altered ties or register pressure exceeding memory savings.",
+      "relationship_to_existing": "New extension",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C22",
+      "lane": "linear",
+      "title": "Produce symmetric Gram/kernel triangles once",
+      "estimators": [
+        "KernelRidge",
+        "KernelPCA",
+        "SVC training",
+        "covariance and classical Gram users"
+      ],
+      "source_anchors": [
+        "kernel_methods/impl/distance/kernel_matrices.mojo",
+        "core/gram_splitk.mojo",
+        "svm/impl/distance/kernel_matrices.mojo"
+      ],
+      "arm_a": "Evaluate one canonical orientation of each symmetric pair, then mirror once or let a triangular consumer read it.",
+      "arm_b": "Compute both matrix halves independently.",
+      "arithmetic_contract": "If current orientations differ in floating evaluation order, establish a versioned canonical orientation across all columns; keep diagonal and signed-zero semantics explicit.",
+      "quality_gate": "Full matrix and downstream model state, symmetry, PSD/residual diagnostics and quality.",
+      "rejection_conditions": "Reject triangular indexing overhead or assuming all configured kernels are symmetric.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "profile",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C23",
+      "lane": "linear",
+      "title": "Stream centered covariance for PCA and discriminants",
+      "estimators": [
+        "PCA",
+        "IncrementalPCA",
+        "covariance estimators",
+        "LDA/QDA"
+      ],
+      "source_anchors": [
+        "decomposition/impl",
+        "core/column_stats.mojo",
+        "naive_bayes/da.mojo",
+        "x_decomp"
+      ],
+      "arm_a": "Accumulate explicitly centered fixed row panels and merge their covariance blocks in one versioned tree, avoiding a centered full matrix.",
+      "arm_b": "Materialize centered data then call the incumbent covariance contraction.",
+      "arithmetic_contract": "One panel partition and merge order on host/NVIDIA/AMD/Apple; preserve centering before products rather than unstable raw-moment subtraction.",
+      "quality_gate": "Explained variance, orthogonality, reconstruction, rank, discriminant accuracy and conditioning.",
+      "rejection_conditions": "Reject altered statistical normalization, inaccurate tail handling or quality loss.",
+      "relationship_to_existing": "Related to I22 blocked linalg, but a separate covariance numerical profile.",
+      "priority": "P1",
+      "kind": "profile",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C24",
+      "lane": "linear",
+      "title": "Versioned TSQR merge tree and panel sizes",
+      "estimators": [
+        "OLS",
+        "PCA/SVD",
+        "least squares",
+        "QR consumers"
+      ],
+      "source_anchors": [
+        "core/householder_qr.mojo",
+        "x_decomp/qr_sliced.mojo",
+        "glm/impl/linalg/detail/lstsq.mojo"
+      ],
+      "arm_a": "Compare binary and fixed higher-arity logical QR merge trees and panel widths as independent arithmetic profiles, with immutable column sign conventions.",
+      "arm_b": "Current TSQR logical tree and panel profile.",
+      "arithmetic_contract": "All columns must implement the identical reflector formation/application, pivot/rank and sign rules; vendor scheduling may differ only below this tree.",
+      "quality_gate": "R/Q words across vendors, reconstruction/backward error, orthogonality, rank and downstream prediction quality.",
+      "rejection_conditions": "Reject higher workspace, increased error or reliance on unsupported compiler features; no revival of quarantined block-Jacobi code.",
+      "relationship_to_existing": "Explicit unimplemented profile extension of I22.",
+      "priority": "P2",
+      "kind": "profile",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C25",
+      "lane": "linear",
+      "title": "Reuse randomized projection and decomposition panels",
+      "estimators": [
+        "TruncatedSVD",
+        "randomized SVD",
+        "random projection",
+        "Nystroem/RBFSampler"
+      ],
+      "source_anchors": [
+        "x_decomp",
+        "decomposition/impl",
+        "kernel_methods/impl/random/rng_device.mojo"
+      ],
+      "arm_a": "Reuse immutable projection/basis tiles across outputs and fuse adjacent pointwise transforms without changing iteration count or rank.",
+      "arm_b": "Reload or rematerialize the same projection/basis intermediates.",
+      "arithmetic_contract": "RNG coordinate mapping, oversampling, power iterations, sign canonicalization and reduction order remain fixed.",
+      "quality_gate": "Transform words, reconstruction/subspace quality, downstream scores and seeded model state.",
+      "rejection_conditions": "Reject dropping power iterations or reducing embedding dimension to obtain the speed gain.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C26",
+      "lane": "linear",
+      "title": "Reuse NMF sufficient products within each accepted step",
+      "estimators": [
+        "NMF",
+        "nonnegative dictionary learning"
+      ],
+      "source_anchors": [
+        "x_decomp/device.mojo",
+        "x_decomp"
+      ],
+      "arm_a": "Cache W\u1d40W/W\u1d40X or HH\u1d40/XH\u1d40 only while the corresponding factor is unchanged, fuse elementwise update/clamp passes with explicit rounding.",
+      "arm_b": "Recompute products or materialize each update intermediate independently.",
+      "arithmetic_contract": "Same alternating update dependency, normalization, epsilon and zero-lock behavior; never reuse across a factor mutation.",
+      "quality_gate": "Reconstruction error, objective trajectory, iterations and nonnegative fitted factors.",
+      "rejection_conditions": "Reject stale products or a changed epsilon/tolerance/rank.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C27",
+      "lane": "linear",
+      "title": "Batch independent ICA and factor-analysis component work",
+      "estimators": [
+        "FastICA",
+        "FactorAnalysis",
+        "CCA",
+        "PLS"
+      ],
+      "source_anchors": [
+        "x_decomp/device.mojo",
+        "x_decomp"
+      ],
+      "arm_a": "Share centered input tiles across independent component score/nonlinearity calculations; batch independent solves and defer only redundant drains.",
+      "arm_b": "Separate scans and temporary matrices for each component.",
+      "arithmetic_contract": "Preserve deflation dependencies, orthogonalization order and sign/tie conventions; only truly independent work can execute concurrently.",
+      "quality_gate": "Convergence, reconstruction, component subspace, likelihood/correlation and predictions.",
+      "rejection_conditions": "Reject altered deflation or an aggregate quality metric hiding a failed component.",
+      "relationship_to_existing": "New extension",
+      "priority": "P2",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C28",
+      "lane": "linear",
+      "title": "Bucket independent sparse-coding and ALS solves",
+      "estimators": [
+        "SparseCoder",
+        "DictionaryLearning",
+        "ImplicitALS"
+      ],
+      "source_anchors": [
+        "x_decomp/als_dev.mojo",
+        "x_decomp/device.mojo",
+        "x_decomp"
+      ],
+      "arm_a": "Group independent row/item solves by nonzero count or active-set workspace and reuse a shared dictionary/Gram tile.",
+      "arm_b": "One uniform task shape and repeated dictionary loads for all rows.",
+      "arithmetic_contract": "Stable row/nonzero order, identical regularization and canonical solves; scheduling changes cannot alter active-set ties or the ALS half-step barrier.",
+      "quality_gate": "Objective, support, recommendation ranking and full factor state; empty and extremely long rows.",
+      "rejection_conditions": "Reject sorting/descriptor cost, peak scratch or silently approximated solves.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C29",
+      "lane": "graph",
+      "title": "Streaming exact distance-to-top-k",
+      "estimators": [
+        "NearestNeighbors",
+        "KNNClassifier/Regressor",
+        "LOF",
+        "exact graph construction"
+      ],
+      "source_anchors": [
+        "neighbors/impl/detail/knn_brute_force.mojo",
+        "neighbors/impl/detail/fused_l2_knn.mojo"
+      ],
+      "arm_a": "Fuse distance tiles with local exact top-k and a bounded canonical merge, avoiding a full query-by-reference distance matrix.",
+      "arm_b": "Materialize distances then select.",
+      "arithmetic_contract": "Exact (distance,index) total order, same metric arithmetic and self-neighbor policy. Approximate pruning is excluded unless independently certified with exact fallback.",
+      "quality_gate": "Every neighbor/index/distance and downstream predictions or LOF score; large k, ties, duplicates and tails.",
+      "rejection_conditions": "Reject merge overhead, oversized local lists or unproven exclusion bounds.",
+      "relationship_to_existing": "Reuse I15/A06 selection machinery; split new full-caller tile/merge arms from prior experiments.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C30",
+      "lane": "graph",
+      "title": "Versioned direct-difference distance arithmetic",
+      "estimators": [
+        "KNN",
+        "KMeans",
+        "KDE",
+        "RBF kernels",
+        "radius graphs"
+      ],
+      "source_anchors": [
+        "core/expand_distances.mojo",
+        "core/row_norms.mojo",
+        "neighbors/impl/detail/fused_l2_knn.mojo"
+      ],
+      "arm_a": "Use fixed-fold sum((x-y)\u00b2) in bounded tiles, independently compare register lane counts with one logical arithmetic profile.",
+      "arm_b": "Expanded ||x||\u00b2+||y||\u00b2-2x\u00b7y with the incumbent clamp.",
+      "arithmetic_contract": "This deliberately changes version bits: subtraction, square/FMA, FTZ, fold and distance clamp must be identical in every column; metric semantics remain exact Euclidean.",
+      "quality_gate": "Neighbor membership, cancellation-sensitive distances, clustering quality, densities and model metrics; nearly equal large vectors.",
+      "rejection_conditions": "Reject degraded task quality, overflow behavior or replacing a configured metric.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "profile",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C31",
+      "lane": "graph",
+      "title": "Bucket ragged CSR canonicalization by work",
+      "estimators": [
+        "RadiusNeighbors",
+        "DBSCAN",
+        "HDBSCAN graph preparation"
+      ],
+      "source_anchors": [
+        "neighbors",
+        "dbscan",
+        "core/segmented_sort.mojo"
+      ],
+      "arm_a": "Compact row tasks by required merge levels/degree and schedule stable merges only for active runs.",
+      "arm_b": "Uniform merge levels driven by the longest row.",
+      "arithmetic_contract": "Sort only; preserve membership, multiplicity, CSR offsets and stable neighbor index order.",
+      "quality_gate": "Complete canonical CSR words and final cluster states; singleton, empty, huge and skewed rows.",
+      "rejection_conditions": "Reject max-degree readback or descriptors erasing the gain.",
+      "relationship_to_existing": "Follow-up to I13 stable canonical merge, not its initial implementation.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C32",
+      "lane": "graph",
+      "title": "Fuse exact radius threshold and compact emission",
+      "estimators": [
+        "RadiusNeighbors",
+        "DBSCAN",
+        "graph building"
+      ],
+      "source_anchors": [
+        "neighbors",
+        "dbscan",
+        "experiments/performance_ideas/N08/fused_threshold.mojo"
+      ],
+      "arm_a": "Distance evaluation writes threshold flags/counts directly, then emits canonical accepted edges using bounded scans; attribute count-only and emit fusion separately.",
+      "arm_b": "Write full distance tiles, then threshold and compact.",
+      "arithmetic_contract": "Same inclusive/exclusive threshold rule and portable distance arithmetic; emit sorted indices or retain canonicalization.",
+      "quality_gate": "Exact edge sets, offsets, distances and boundary-equal cases plus DBSCAN output.",
+      "rejection_conditions": "Reject duplicate distance evaluation costing more than traffic saved or a moved epsilon boundary.",
+      "relationship_to_existing": "Reuse N08; extend vendor-neutral caller integration.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C33",
+      "lane": "graph",
+      "title": "Freeze first graph convergence state on device",
+      "estimators": [
+        "DBSCAN",
+        "connected components",
+        "label propagation/spreading"
+      ],
+      "source_anchors": [
+        "dbscan",
+        "core/device_fold.mojo",
+        "x_neighbors"
+      ],
+      "arm_a": "Queue a bounded chunk of iterations under a device live mask, preserving the first converged state and performing one status readback.",
+      "arm_b": "Host polls after every iteration.",
+      "arithmetic_contract": "Frozen inactive state, first stopping iteration and canonical label assignment; later speculative rounds cannot modify converged buffers.",
+      "quality_gate": "Labels, graph probabilities, stopping counts, long chains, disconnected and nearly converged graphs.",
+      "rejection_conditions": "Reject excessive masked work or observing only the last round of a chunk.",
+      "relationship_to_existing": "Reuse I14 convergence machinery; include full graph callers and interactions.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C34",
+      "lane": "graph",
+      "title": "Canonical parallel MST edge selection",
+      "estimators": [
+        "HDBSCAN",
+        "single-linkage clustering"
+      ],
+      "source_anchors": [
+        "hdbscan/impl/detail/reachability.mojo",
+        "hdbscan/impl/detail/tree_device.mojo",
+        "hierarchy"
+      ],
+      "arm_a": "Reduce candidate edges in parallel with a total (weight,min_endpoint,max_endpoint) key and deterministically emit chosen edges/components.",
+      "arm_b": "Incumbent repeated edge scans or serial canonical selection.",
+      "arithmetic_contract": "Mutual-reachability arithmetic and tie policy fixed; if tie contract changes, all model/host columns must move in one new version.",
+      "quality_gate": "MST, condensation, cluster labels/probabilities, stability, prediction and outlier outputs.",
+      "rejection_conditions": "Reject floating atomic ordering, disconnected-graph mishandling or claiming identical labels alone proves equivalent hierarchy.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C35",
+      "lane": "graph",
+      "title": "IVF long-list chunking and short-list packing",
+      "estimators": [
+        "IVFFlat search"
+      ],
+      "source_anchors": [
+        "ivf/resident.mojo",
+        "ivf"
+      ],
+      "arm_a": "Split long selected lists into independent chunks and pack small ones, merging exact top-k results in canonical order.",
+      "arm_b": "One fixed task per query/list.",
+      "arithmetic_contract": "Centroids, nprobe, list membership, distances, ties and index training unchanged; no reduced recall allowance.",
+      "quality_gate": "Full search IDs/distances and declared recall, giant/empty lists and batch tails.",
+      "rejection_conditions": "Reject task setup or merge cost and do not change nprobe to obtain speed.",
+      "relationship_to_existing": "Extend I16 scheduling with recorded scope; no duplication of already supplied staging arms.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C36",
+      "lane": "graph",
+      "title": "Reuse KMeans centroid tiles through assignment",
+      "estimators": [
+        "KMeans",
+        "MiniBatchKMeans",
+        "BisectingKMeans",
+        "IVF training"
+      ],
+      "source_anchors": [
+        "cluster/impl/detail/kmeans.mojo",
+        "cluster/impl/detail/min_cluster_distance_compute.mojo"
+      ],
+      "arm_a": "Share centroid/norm tiles across multiple independent row assignments and fuse nearest-centroid selection with distances.",
+      "arm_b": "Separate distance production and assignment selection with repeated centroid reads.",
+      "arithmetic_contract": "Keep canonical centroid index ties, incumbent feature folds, inertia and empty-cluster handling.",
+      "quality_gate": "Labels, centers, inertia, iterations and initialization trajectories across multiple seeds.",
+      "rejection_conditions": "Reject register pressure or different center assignment at near ties.",
+      "relationship_to_existing": "New extension",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C37",
+      "lane": "graph",
+      "title": "Versioned fixed-row centroid accumulation",
+      "estimators": [
+        "KMeans",
+        "MiniBatchKMeans",
+        "BisectingKMeans",
+        "IVF training"
+      ],
+      "source_anchors": [
+        "cluster/impl/detail/kmeans.mojo",
+        "cluster/impl/detail/kmeans_common.mojo"
+      ],
+      "arm_a": "Accumulate row panels with fixed logical membership and a canonical merge; separate cluster-feature task geometry from the arithmetic partition.",
+      "arm_b": "Current centroid sum accumulation profile.",
+      "arithmetic_contract": "New profile only if logical row partition changes; host and all GPUs share partition, sample-weight multiplication and normalization order.",
+      "quality_gate": "Centers, inertia and task quality with imbalanced/empty clusters, large weight ranges and cancellation.",
+      "rejection_conditions": "Reject atomic floating sums, hardware-dependent leaves or a single-vendor win with material loss on the other.",
+      "relationship_to_existing": "A08 tested a geometry candidate; reuse evidence only when source/profile actually match.",
+      "priority": "P1",
+      "kind": "profile",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C38",
+      "lane": "graph",
+      "title": "KMeans++ nearest-distance reuse",
+      "estimators": [
+        "KMeans initialization",
+        "IVF index training",
+        "BisectingKMeans"
+      ],
+      "source_anchors": [
+        "cluster/impl/detail/kmeans.mojo"
+      ],
+      "arm_a": "Update the minimum-distance vector only against newly added centers and reuse candidate potential partials with bounded device status handling.",
+      "arm_b": "Recompute distances against all chosen centers or drain each independent trial separately.",
+      "arithmetic_contract": "Same random draws, candidate order, potential fold, first minimum tie and selected centers.",
+      "quality_gate": "Exact chosen seed centers and full fit quality; duplicates and exhausted nonzero distance mass.",
+      "rejection_conditions": "Reject stale minimum vectors, altered random draw counts or speculative trials changing selection.",
+      "relationship_to_existing": "Existing incremental init/PSI switches need selective recipe coverage; do not reinvent them.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C39",
+      "lane": "graph",
+      "title": "Retain mini-batch and bisecting clustering state",
+      "estimators": [
+        "MiniBatchKMeans",
+        "BisectingKMeans"
+      ],
+      "source_anchors": [
+        "x_cluster/minibatch.mojo",
+        "x_cluster/minibatch_cells.mojo",
+        "x_cluster/bisect_fast.mojo"
+      ],
+      "arm_a": "Retain counts, center state, subset row IDs and statistics across ordered batches/splits in IDENTICAL Mojo paths.",
+      "arm_b": "Repeated transfers, reconstruction or independent temporary allocation per batch/split.",
+      "arithmetic_contract": "Seed stream, batch membership/order, center reassignment, split priority and stopping remain fixed; FAST code is a reference for storage only.",
+      "quality_gate": "Centers, labels, counts and batch/iteration histories; skewed and empty partitions.",
+      "rejection_conditions": "Reject importing FAST arithmetic, state leakage or hidden batch-size changes.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C40",
+      "lane": "graph",
+      "title": "Share MeanShift distance tiles across seed updates",
+      "estimators": [
+        "MeanShift"
+      ],
+      "source_anchors": [
+        "x_cluster/meanshift.mojo",
+        "x_cluster/meanshift_idn.mojo"
+      ],
+      "arm_a": "Batch independent live seeds with bounded distance tiles and ordered in-band sums; compact inactive seeds without changing their logical IDs.",
+      "arm_b": "Per-seed scans with uniform work for completed seeds.",
+      "arithmetic_contract": "Bandwidth, inclusive boundary, update fold, stopping and final mode suppression/ties unchanged.",
+      "quality_gate": "Centers, cluster assignment and convergence histories on uneven seed densities.",
+      "rejection_conditions": "Reject changing bin seeding or bandwidth estimation sample counts.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C41",
+      "lane": "graph",
+      "title": "OPTICS fused canonical reachability minima",
+      "estimators": [
+        "OPTICS"
+      ],
+      "source_anchors": [
+        "x_cluster/optics.mojo",
+        "x_cluster/optics_xi_device.mojo",
+        "x_cluster/device_ops.mojo"
+      ],
+      "arm_a": "Fuse eligibility/reachability updates and compact minimum selection; reuse computed neighbor rows where immutable.",
+      "arm_b": "Separate full scans and redundant neighbor calculations per expansion.",
+      "arithmetic_contract": "Expansion order, predecessor ties, core distances and Xi extraction must remain canonical; no approximate queue ordering.",
+      "quality_gate": "Ordering, reachability, predecessor and extracted hierarchy/labels.",
+      "rejection_conditions": "Reject task overhead or a change to the first equal-reachability row.",
+      "relationship_to_existing": "New extension",
+      "priority": "P2",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C42",
+      "lane": "graph",
+      "title": "Compact active agglomerative distance work",
+      "estimators": [
+        "AgglomerativeClustering",
+        "linkage methods"
+      ],
+      "source_anchors": [
+        "x_cluster/agglo.mojo",
+        "x_cluster/device_tree.mojo",
+        "hierarchy"
+      ],
+      "arm_a": "Store one canonical triangle and maintain deterministic active-cluster task lists while updating only affected distance rows.",
+      "arm_b": "Scan/update full square workspaces including inactive entries.",
+      "arithmetic_contract": "Preserve linkage recurrence arithmetic, merge ties, cluster numbering and connectivity constraints.",
+      "quality_gate": "Children, distances, cut labels and full dendrogram on equal-distance and disconnected cases.",
+      "rejection_conditions": "Reject compaction costs or use of a nearest-neighbor-chain algorithm without proving the required tie contract.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C43",
+      "lane": "graph",
+      "title": "Resident normalized graph operators",
+      "estimators": [
+        "SpectralEmbedding/Clustering",
+        "LabelPropagation",
+        "PageRank",
+        "Isomap/LLE graph preparation"
+      ],
+      "source_anchors": [
+        "spectral",
+        "x_cluster/spectral_assign.mojo",
+        "umap",
+        "x_neighbors"
+      ],
+      "arm_a": "Reuse CSR degree/normalization buffers and fuse pointwise scaling into fixed-fold sparse matvec consumers.",
+      "arm_b": "Materialize normalized matrices and repeat host/device preparation or separate scaling passes.",
+      "arithmetic_contract": "Per-row neighbor order and reduction tree fixed; eigenvector sign/order, solver stopping and graph topology unchanged.",
+      "quality_gate": "Residuals, embeddings/subspace quality, graph outputs and downstream labels; isolated and high-degree rows.",
+      "rejection_conditions": "Reject changed eigen-solver tolerance or graph sparsification as a supposed scheduling optimization.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C44",
+      "lane": "graph",
+      "title": "Seeded UMAP graph and sampling-state reuse",
+      "estimators": [
+        "UMAP",
+        "manifold graph preparation"
+      ],
+      "source_anchors": [
+        "umap",
+        "core/philox.mojo",
+        "core/segmented_sort.mojo"
+      ],
+      "arm_a": "Cache immutable canonical fuzzy-graph metadata and generate independent edge-sampling descriptors on device, reusing them across ordered optimization steps.",
+      "arm_b": "Repeated metadata construction or transfer for the same graph/epoch.",
+      "arithmetic_contract": "Preserve RNG draw mapping, edge order, negative samples and dependent coordinate update order; parallel conflicting SGD updates are excluded.",
+      "quality_gate": "Seeded embedding words, trustworthiness/neighbor preservation, graph and epoch state.",
+      "rejection_conditions": "Reject dropping epochs, samples or edges, or using unseeded execution to get parallelism.",
+      "relationship_to_existing": "New extension",
+      "priority": "P2",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C45",
+      "lane": "trees_stats",
+      "title": "Fuse tree split statistics and candidate scoring",
+      "estimators": [
+        "GBDT symmetric/depthwise/lossguide",
+        "RandomForest",
+        "ExtraTrees"
+      ],
+      "source_anchors": [
+        "gbdt",
+        "ensemble/decisiontree/batched_levelalgo/split.mojo",
+        "extratrees"
+      ],
+      "arm_a": "Consume ordered histogram prefixes directly in score/tie selection without writing all intermediate prefix/score arrays.",
+      "arm_b": "Separate prefix, gain and best-split kernels.",
+      "arithmetic_contract": "Same candidate set, prefix arithmetic, regularization, missing direction, score rounding and feature/threshold tie order.",
+      "quality_gate": "Split sequence, leaf values, predictions and task quality, including categorical/missing inputs.",
+      "rejection_conditions": "Reject register pressure, altered tie selection or fewer candidate thresholds.",
+      "relationship_to_existing": "Builds on I17 frontier scheduling; different pass-fusion hypothesis.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C46",
+      "lane": "trees_stats",
+      "title": "Exact histogram sibling subtraction",
+      "estimators": [
+        "RandomForest",
+        "ExtraTrees",
+        "bounded exact tree histograms"
+      ],
+      "source_anchors": [
+        "ensemble/decisiontree/batched_levelalgo/exact_histogram_subtract.mojo",
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "arm_a": "Compute the smaller child and recover the sibling from retained parent exact integer/limb counts under proven range bounds.",
+      "arm_b": "Build both child histograms independently.",
+      "arithmetic_contract": "Only exact bounded accumulators qualify; floating gradient sums require a distinct coordinated numerical profile and are not enabled by this card.",
+      "quality_gate": "Histogram cells, split/leaf/model identity, overflow/refusal and sampled-feature semantics.",
+      "rejection_conditions": "Reject unbounded parent retention or subtracting mismatched feature/row populations.",
+      "relationship_to_existing": "Reuse I18 implementation; extend applicability only with explicit accumulator proofs.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C47",
+      "lane": "trees_stats",
+      "title": "Tree frontier tasks by live work and histogram bytes",
+      "estimators": [
+        "GBDT",
+        "RandomForest",
+        "ExtraTrees",
+        "IsolationForest"
+      ],
+      "source_anchors": [
+        "gbdt",
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "extratrees",
+        "isolation_forest"
+      ],
+      "arm_a": "Bucket independent node-feature tasks by rows and bounded histogram footprint, compacting inactive nodes and retaining stable logical node IDs.",
+      "arm_b": "Uniform task geometry across a skewed frontier.",
+      "arithmetic_contract": "Scheduling cannot alter row membership, feature RNG mapping, split order or arithmetic partitions.",
+      "quality_gate": "Tree structures and predictions for deep/skewed and broad trees, peak memory and task counts.",
+      "rejection_conditions": "Reject descriptor overhead, uncontrolled frontiers or thresholds fitted to board dimensions.",
+      "relationship_to_existing": "Extends I17/A07/N07; attribute new geometry independently of existing candidates.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C48",
+      "lane": "trees_stats",
+      "title": "Stable tree partition fused with child bookkeeping",
+      "estimators": [
+        "GBDT",
+        "RandomForest",
+        "ExtraTrees",
+        "IsolationForest"
+      ],
+      "source_anchors": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "extratrees",
+        "gbdt"
+      ],
+      "arm_a": "Use one stable flag/scan/scatter to produce child row indices, counts and offsets; avoid separate metadata and redundant row scans.",
+      "arm_b": "Independent partition and child-statistic bookkeeping passes.",
+      "arithmetic_contract": "Stable original row order within each child, exact offsets, missing direction and overflow handling.",
+      "quality_gate": "Child row lists, sampled weights, all descendant splits and public model words.",
+      "rejection_conditions": "Reject unstable atomics or consuming partially published offsets.",
+      "relationship_to_existing": "New extension",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C49",
+      "lane": "trees_stats",
+      "title": "Batch independent forest construction with logical RNG IDs",
+      "estimators": [
+        "RandomForest",
+        "ExtraTrees",
+        "IsolationForest"
+      ],
+      "source_anchors": [
+        "ensemble/randomforest.mojo",
+        "extratrees/estimator.mojo",
+        "isolation_forest"
+      ],
+      "arm_a": "Share immutable training tiles among bounded independent tree tasks; key random draws by existing tree/node/draw identities.",
+      "arm_b": "Build one tree at a time with repeated input staging.",
+      "arithmetic_contract": "Keep bootstrap, feature sampling, random thresholds and forest output tree order fixed; no worker-completion-order RNG.",
+      "quality_gate": "Per-tree structures, OOB state, predictions and anomaly scores across seeds.",
+      "rejection_conditions": "Reject memory multiplied by forest width or an implicit reduction-order change in forest averaging.",
+      "relationship_to_existing": "I18 multi-tree frontier was still open; distinguish construction from inference batching.",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C50",
+      "lane": "trees_stats",
+      "title": "Packed forest inference and fixed tree-output reduction",
+      "estimators": [
+        "GBDT",
+        "RandomForest",
+        "ExtraTrees",
+        "IsolationForest"
+      ],
+      "source_anchors": [
+        "core/forest_inference.mojo",
+        "core/forest_inference_model.mojo",
+        "core/gbdt_host_predict.mojo"
+      ],
+      "arm_a": "Compare structure-of-arrays node storage and bounded row/tree tiles, retaining a fixed logical per-row tree accumulation order.",
+      "arm_b": "Incumbent model layout and per-tree traversal schedule.",
+      "arithmetic_contract": "No threshold quantization or leaf compression changing values; preserve missing/categorical branches, class order and averaging arithmetic.",
+      "quality_gate": "Decision paths, leaf IDs, scores/probabilities and predict outputs; unbalanced depths and repeated/cold use.",
+      "rejection_conditions": "Reject model repacking cost hiding in untimed setup or altered reductions across tree batches.",
+      "relationship_to_existing": "New extension",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C51",
+      "lane": "trees_stats",
+      "title": "TreeSHAP shared path metadata and bounded batching",
+      "estimators": [
+        "TreeSHAP",
+        "forest feature contributions"
+      ],
+      "source_anchors": [
+        "xtrees/shap_device.mojo",
+        "xtrees/shap_tab.mojo",
+        "xtrees/shap_host.mojo"
+      ],
+      "arm_a": "Reuse immutable path/cover metadata and batch independent row/tree explanations while reducing contributions in canonical tree order.",
+      "arm_b": "Reconstruct path metadata and issue per-row/tree work separately.",
+      "arithmetic_contract": "Exact SHAP semantics, repeated-feature path unwinding, zero covers and bias contribution retained; no approximate SHAP substitution.",
+      "quality_gate": "All contribution words across vendors, additivity residual, interactions if supported and zero-cover behavior.",
+      "rejection_conditions": "Reject exponential scratch growth or change to feature attribution semantics.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C52",
+      "lane": "trees_stats",
+      "title": "Versioned stable pair-combine KDE reduction",
+      "estimators": [
+        "KernelDensity score_samples and scoring"
+      ],
+      "source_anchors": [
+        "kde",
+        "experiments/performance_ideas/I20"
+      ],
+      "arm_a": "Represent each fixed reference tile by (maximum,scaled_sum) and combine pairs with portable exp/log in a declared tree, sharing distance/kernel work.",
+      "arm_b": "Incumbent chunked log-sum-exp fold and temporary layout.",
+      "arithmetic_contract": "New host/device profile includes -Inf/empty tiles, zero contributions, rescaling order and tail carry; same metric, kernel and bandwidth.",
+      "quality_gate": "Log-density accuracy, held-out likelihood, extreme bandwidths and all supported kernels/metrics; no quality regression.",
+      "rejection_conditions": "Reject extra exponentials, overflow or silently dropping small nonzero contributions.",
+      "relationship_to_existing": "I20 schedule work exists; this is its separate arithmetic-profile proposal.",
+      "priority": "P1",
+      "kind": "profile",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C53",
+      "lane": "trees_stats",
+      "title": "GMM reusable centered tiles and fused sufficient statistics",
+      "estimators": [
+        "GaussianMixture",
+        "BayesianGaussianMixture"
+      ],
+      "source_anchors": [
+        "mixture",
+        "x_cluster/bgmm_device.mojo",
+        "x_cluster/bgmm_kernels.mojo"
+      ],
+      "arm_a": "Share centered tiles/responsibility reads across independent component statistics with bounded batching; separate each fusion from component stacking.",
+      "arm_b": "Reread/recenter inputs for each statistic/component.",
+      "arithmetic_contract": "Keep responsibility normalization, covariance fold, regularization, empty-component policy and first convergence state; changed statistic fold requires its own version profile.",
+      "quality_gate": "Likelihood, iterations, weights/means/covariances/precisions and predictions; all covariance types and near singularities.",
+      "rejection_conditions": "Reject recreating the documented AMD E-step stacking loss or cheaper iterations that increase full-fit time.",
+      "relationship_to_existing": "Reuse I21 centered-load/fusion work and retained loser evidence.",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C54",
+      "lane": "trees_stats",
+      "title": "GP factor and batched prediction reuse",
+      "estimators": [
+        "GaussianProcessRegressor",
+        "GaussianProcessClassifier",
+        "sparse variational GP"
+      ],
+      "source_anchors": [
+        "gaussian_process/gpr_resident.mojo",
+        "gaussian_process/gpc_resident_k.mojo",
+        "gaussian_process/gp_optim.mojo"
+      ],
+      "arm_a": "Retain fitted kernel/factor state for grouped mean/variance RHS tasks and reuse shared kernel tiles across independent class/hyperparameter evaluations.",
+      "arm_b": "Rebuild/reupload factors or compute mean and variance kernel tiles separately.",
+      "arithmetic_contract": "Hyperparameters, exact/variational model choice, jitter/pivot policy and optimizer trial selection unchanged; caches invalidate on theta or training-data changes.",
+      "quality_gate": "Predictive means/variances, log marginal likelihood, gradients, probabilities and calibration.",
+      "rejection_conditions": "Reject replacing exact GP with sparse approximation or timing only mean when variance is requested.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C55",
+      "lane": "trees_stats",
+      "title": "Naive Bayes class-statistic pass fusion",
+      "estimators": [
+        "GaussianNB",
+        "MultinomialNB",
+        "BernoulliNB",
+        "ComplementNB",
+        "CategoricalNB"
+      ],
+      "source_anchors": [
+        "naive_bayes/nb.mojo",
+        "core/label_rows_device.mojo"
+      ],
+      "arm_a": "Reuse canonical label grouping and input loads across counts/means/centered moments, emitting only required fitted statistics.",
+      "arm_b": "Separate class and feature scans and intermediate arrays.",
+      "arithmetic_contract": "Integer counts exact; weighted floating moments use the same fixed partition or an explicitly versioned common profile. Smoothing and prior semantics unchanged.",
+      "quality_gate": "Counts, means/variance, log probabilities and predictions; absent classes, zero counts and partial_fit where supported.",
+      "rejection_conditions": "Reject raw-moment variance cancellation or double-applying smoothing during reuse.",
+      "relationship_to_existing": "New extension",
+      "priority": "P0",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C56",
+      "lane": "trees_stats",
+      "title": "Discriminant class solves and prediction fusion",
+      "estimators": [
+        "LinearDiscriminantAnalysis",
+        "QuadraticDiscriminantAnalysis"
+      ],
+      "source_anchors": [
+        "naive_bayes/da.mojo",
+        "cholesky",
+        "core/column_stats.mojo"
+      ],
+      "arm_a": "Batch independent class factorizations/solves and share prediction input tiles with fixed per-class quadratic forms.",
+      "arm_b": "Per-class staging, launch and centered intermediate matrices.",
+      "arithmetic_contract": "Same covariance, shrinkage, priors, factor/rank thresholds and quadratic-form fold; class batching changes scheduling only.",
+      "quality_gate": "Fitted factors, decision values, posterior probabilities, accuracy and singular-class refusals.",
+      "rejection_conditions": "Reject changed rank truncation or posterior normalization.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C57",
+      "lane": "trees_stats",
+      "title": "Robust covariance candidate state reuse",
+      "estimators": [
+        "MinCovDet",
+        "EllipticEnvelope",
+        "covariance estimators"
+      ],
+      "source_anchors": [
+        "x_decomp",
+        "x_prep"
+      ],
+      "arm_a": "Reuse immutable row tiles across independent robust-subset candidates and batch candidate covariance/distance work; retain canonical subset selection.",
+      "arm_b": "Repeated full staging/scans for each candidate.",
+      "arithmetic_contract": "Seeded subset membership, C-step update order, support-size settings, determinant ties and reweighting unchanged.",
+      "quality_gate": "Location, covariance, support, distances, anomaly labels and robust objective.",
+      "rejection_conditions": "Reject fewer trials, changed contamination/support fraction or a covariance shortcut that degrades robustness.",
+      "relationship_to_existing": "New extension",
+      "priority": "P2",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C58",
+      "lane": "trees_stats",
+      "title": "Batch independent classical forecast candidates",
+      "estimators": [
+        "ETS",
+        "Holt-Winters",
+        "Theta",
+        "GARCH",
+        "independent forecast series"
+      ],
+      "source_anchors": [
+        "holtwinters/impl/holtwinters.mojo",
+        "tsa",
+        "sequence"
+      ],
+      "arm_a": "Schedule independent series and parameter trials in bounded tasks, sharing immutable observations and retaining scalar recurrence order within a series.",
+      "arm_b": "Per-series/trial dispatch and repeated observation transfers.",
+      "arithmetic_contract": "Only classical forecast callers; no neural sequence code changes. Preserve first selected trial, initialization, recurrence arithmetic and convergence.",
+      "quality_gate": "Likelihood/SSE, selected parameters, fitted states, forecasts and forecast errors; short and ragged seasonal series.",
+      "rejection_conditions": "Reject changed search grid or fewer optimizer trials.",
+      "relationship_to_existing": "Use I23 independent-work infrastructure; do not duplicate existing forecast arms.",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C59",
+      "lane": "trees_stats",
+      "title": "ARIMA device-resident order and likelihood trials",
+      "estimators": [
+        "ARIMA",
+        "AutoARIMA",
+        "SARIMA"
+      ],
+      "source_anchors": [
+        "arima",
+        "tsa/impl/auto_arima.mojo",
+        "tsa/impl/timeSeries/arima_helpers.mojo"
+      ],
+      "arm_a": "Retain differenced observations and independent likelihood trial states, batching supported order/trial evaluations with deterministic acceptance selection.",
+      "arm_b": "Recreate or transfer immutable preparation per trial and poll each independent evaluation.",
+      "arithmetic_contract": "Order search sequence, AIC/BIC ties, likelihood/Kalman arithmetic, stationarity constraints and optimizer stopping unchanged.",
+      "quality_gate": "Chosen orders, coefficients, innovations, likelihood and forecast quality; singular/refused candidates.",
+      "rejection_conditions": "Reject approximate Kalman covariance, skipped orders or unsupported device features.",
+      "relationship_to_existing": "Follow-up to I23 batching; profile-changing affine scans remain separate future work.",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    },
+    {
+      "id": "C60",
+      "lane": "trees_stats",
+      "title": "Reuse classical stationarity preparation and lag work",
+      "estimators": [
+        "ADF",
+        "KPSS",
+        "AutoARIMA differencing selection",
+        "autocorrelation features"
+      ],
+      "source_anchors": [
+        "tsa/impl/stationarity.mojo",
+        "tsa/impl/timeSeries/kpss_fused.mojo",
+        "tsa/impl/select_d_fast.mojo"
+      ],
+      "arm_a": "Share canonical detrending/differencing buffers and lagged product tiles across requested tests/lags, fusing independent scalar report work.",
+      "arm_b": "Recompute each preparation and rescan series per test/lag.",
+      "arithmetic_contract": "Same test definitions, lag selection, trend, null, critical-value interpolation and differencing stopping; FAST code only informs storage scheduling.",
+      "quality_gate": "Statistics, p-values, selected lags/differencing order and downstream forecast quality.",
+      "rejection_conditions": "Reject truncated series, changed lag caps or altered critical-value policy.",
+      "relationship_to_existing": "New extension",
+      "priority": "P1",
+      "kind": "schedule",
+      "mode": "identical",
+      "default_enabled": false,
+      "implementation_status": "planned",
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "measurement": "not_run_by_request"
+    }
+  ]
+}

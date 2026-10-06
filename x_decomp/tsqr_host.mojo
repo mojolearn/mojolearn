@@ -24,6 +24,7 @@ from checks.numerics import ftz, identical_div, identical_sqrt
 from core.host_parallel import host_parallelize
 from x_decomp.cells import F32Ptr
 from x_decomp.tsqr_core import (
+    TS_TREE_ARITY,
     TS_NB,
     TS_P,
     ts_block_hi,
@@ -254,33 +255,34 @@ def ts_apply_block_host(blk: F32Ptr, n: Int, tst: F32Ptr, x: F32Ptr, k: Int, mb:
 
 
 def _combine_level_host(ptl: F32Ptr, ptau: F32Ptr, n: Int, nb: Int, s: Int):
-    var pairs = (nb + 2 * s - 1) // (2 * s)
-
-    def _pair(t: Int) {imm ptl, imm ptau, imm n, imm nb, imm s}:
-        var ia = 2 * s * t
-        var ib = ia + s
-        if ib < nb:
-            ts_combine_host(ptl + ia * n * n, ptl + ib * n * n, ptau + ib * n, n)
-
-    if pairs <= 1:
-        _pair(0)
-    else:
-        host_parallelize(_pair, pairs)
+    var pairs = (nb + TS_TREE_ARITY * s - 1) // (TS_TREE_ARITY * s)
+    # C24 fixed higher-arity node: append children left to right, retaining
+    # each child's reflector in that child's tile exactly as binary B does.
+    for child in range(1, TS_TREE_ARITY):
+        def _pair(t: Int) {imm ptl, imm ptau, imm n, imm nb, imm s, imm child}:
+            var ia = TS_TREE_ARITY * s * t
+            var ib = ia + child * s
+            if ib < nb:
+                ts_combine_host(ptl + ia * n * n, ptl + ib * n * n, ptau + ib * n, n)
+        if pairs <= 1:
+            _pair(0)
+        else:
+            host_parallelize(_pair, pairs)
 
 
 def _capply_level_host(pcb: F32Ptr, ptl: F32Ptr, ptau: F32Ptr, n: Int, k: Int, nb: Int, s: Int):
-    var pairs = (nb + 2 * s - 1) // (2 * s)
-
-    def _pair(t: Int) {imm pcb, imm ptl, imm ptau, imm n, imm k, imm nb, imm s}:
-        var ia = 2 * s * t
-        var ib = ia + s
-        if ib < nb:
-            ts_capply_host(pcb + ia * n * k, pcb + ib * n * k, ptl + ib * n * n, ptau + ib * n, n, k)
-
-    if pairs <= 1:
-        _pair(0)
-    else:
-        host_parallelize(_pair, pairs)
+    var pairs = (nb + TS_TREE_ARITY * s - 1) // (TS_TREE_ARITY * s)
+    for offset in range(1, TS_TREE_ARITY):
+        var child = TS_TREE_ARITY - offset
+        def _pair(t: Int) {imm pcb, imm ptl, imm ptau, imm n, imm k, imm nb, imm s, imm child}:
+            var ia = TS_TREE_ARITY * s * t
+            var ib = ia + child * s
+            if ib < nb:
+                ts_capply_host(pcb + ia * n * k, pcb + ib * n * k, ptl + ib * n * n, ptau + ib * n, n, k)
+        if pairs <= 1:
+            _pair(0)
+        else:
+            host_parallelize(_pair, pairs)
 
 
 def ts_factor_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
@@ -319,7 +321,7 @@ def ts_factor_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, 
     var s = 1
     while s < nb:
         _combine_level_host(ptl, ptau, n, nb, s)
-        s *= 2
+        s *= TS_TREE_ARITY
     memcpy(dest=r, src=ptl, count=n * n)
     if keep:
         st[].m = m
@@ -349,7 +351,7 @@ def ts_apply_host(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
     var s = 1
     while s < nb:
         strides.append(s)
-        s *= 2
+        s *= TS_TREE_ARITY
     for li in range(len(strides)):
         _capply_level_host(pcb, ptl, ptau, n, k, nb, strides[len(strides) - 1 - li])
 

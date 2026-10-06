@@ -1,0 +1,2114 @@
+{
+  "schema": 1,
+  "lane": "linear",
+  "source_only": true,
+  "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "controls_path": "experiments/classical_identical_ideas/linear_controls.mojo",
+  "branch": "ideas/classical-identical-20261006",
+  "commit": "uncommitted source work; no new commit",
+  "candidates": [
+    {
+      "id": "C13",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_linear/classical_fold_stats.mojo",
+        "x_linear/cd.mojo",
+        "x_linear/cd_grid.mojo",
+        "bindings/_mojolearn_x_linear_host.mojo",
+        "x_linear/ridgecv.mojo",
+        "x_linear/device.mojo",
+        "x_linear/logcv.mojo",
+        "x_linear/logcv_grid.mojo"
+      ],
+      "callers": [
+        "enetcv_fit",
+        "enetcv_fit_grid",
+        "LassoCV.fit",
+        "ElasticNetCV.fit",
+        "ridge_kfold_fit",
+        "_ridge_kfold_grid",
+        "logcv_fit",
+        "logcv_fit_grid",
+        "logistic_objective host/team/grid"
+      ],
+      "controls": [
+        {
+          "arm": "fold_stats",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Disjoint explicit fold IDs, centered augmented statistics, ascending retained-fold combine",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "logcv_weights",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Weighted LogisticRegressionCV immutable disjoint-fold training-weight sums combined retained fold IDs ascending for every objective; preserves per-row likelihood and gradient terms",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "LassoCV",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "lasso-cv",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "ElasticNetCV",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "enet-cv",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "RidgeCV",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "ridge-cv",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "LogisticRegressionCV",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "logreg-cv",
+          "source_status": "integrated weighted preparation",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+        "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+        "C13 is a numerical profile and its quality/selected model results remain unverified."
+      ],
+      "interactions": [
+        "C13+C18",
+        "C13+C23",
+        "C13+C14+C15",
+        "C13_FOLD_STATS+C13_LOGCV_WEIGHTS"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [
+        "I12"
+      ],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C13",
+        "experiments/classical_identical_ideas/catalog.json#C13"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C14",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_decomp/cells.mojo",
+        "x_decomp/device.mojo",
+        "x_linear/ops.mojo",
+        "x_linear/ridge.mojo",
+        "x_linear/ridge_grid.mojo"
+      ],
+      "callers": [
+        "trs_tri_cols",
+        "launch_trs_tri",
+        "x_decomp repeated LU/triangular solve callers",
+        "_ridge_solve_best",
+        "t_ridge_solve_best",
+        "python/mojolearn/_expansion_linear.py::_ridge_run",
+        "RidgeClassifier.fit",
+        "RidgeCV refit"
+      ],
+      "controls": [
+        {
+          "arm": "group_rhs",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C14_GROUP_RHS"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Reuse each triangular factor word across a bounded group of four RHS; canonical per-RHS chains",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "lu_solve",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "lu-solve",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "OLS",
+          "recipe_path": "tools/classical_two_datasets.py",
+          "lane": "ols",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "Ridge",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "ridge",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "GaussianProcessRegressor",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "gpr",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "RidgeClassifier",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "ridge-clf",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "RidgeCV",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "ridge-cv",
+          "source_status": "integrated single-target degenerate group",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+        "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+        "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed."
+      ],
+      "interactions": [
+        "C14+C15",
+        "C14+C24"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [
+        "I22"
+      ],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C14",
+        "experiments/classical_identical_ideas/catalog.json#C14"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C15",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_linear/bayes.mojo",
+        "x_linear/bayes_grid.mojo"
+      ],
+      "callers": [
+        "_ard_coef",
+        "_t_ard_coef",
+        "ARDRegression.fit"
+      ],
+      "controls": [
+        {
+          "arm": "factor_solve",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "ARD posterior mean directly solves existing Cholesky factor; covariance retained for required posterior/gamma diagnostics",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "ARDRegression",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "ard",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "BayesianRidge",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "bayesian-ridge",
+          "source_status": "incumbent already factor/eigen solve",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "No new BayesianRidge inverse-elision arm where production already solves factors.",
+        "Gaussian-process inverse-materialization callers need independent integration by owning family."
+      ],
+      "interactions": [
+        "C14+C15"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C15",
+        "experiments/classical_identical_ideas/catalog.json#C15"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C16",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_linear/glm.mojo",
+        "x_linear/device.mojo"
+      ],
+      "callers": [
+        "_unit_all",
+        "_objective_host",
+        "glm_obj_map_kernel",
+        "_glm_grid_objective",
+        "glm_fit",
+        "_glm_fit_grid"
+      ],
+      "controls": [
+        {
+          "arm": "glm_fused",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C16_GLM_FUSED"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Produce accepted/trial response loss, gradient and Hessian together with shared link terms",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "PoissonRegressor",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "poisson",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "GammaRegressor",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "gamma",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "TweedieRegressor",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "tweedie",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "LogisticRegression",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "logreg",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "LinearSVC",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "linearsvc",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "LinearSVR",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "linearsvr",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+        "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm."
+      ],
+      "interactions": [
+        "C16+C17",
+        "C16+C19"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [
+        "I12"
+      ],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C16",
+        "experiments/classical_identical_ideas/catalog.json#C16"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C17",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_linear/device.mojo",
+        "glm/impl/qn/qn_linesearch.mojo"
+      ],
+      "callers": [
+        "sgd_mb_chunk_ovr_kernel",
+        "_sgd_mb_grid OVR driver",
+        "ls_backtrack_exact_trials"
+      ],
+      "controls": [
+        {
+          "arm": "ovr_waves",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C17_OVR"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Groups up to four independent OVR models per ordered wave; preserves incumbent default OVR switch",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "line_search_pairs",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C17_LS_TRIALS"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Evaluate bounded two exact trial descriptors while retaining accepted/trial counts",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "SGDClassifier",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "sgd-clf",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "LogisticRegression",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "logreg",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "LinearSVC",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "linearsvc",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "OVR arm changes scheduling waves, not full model-state allocation.",
+        "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+        "Do not claim unchanged old I12 OVR/exact-trial experiments as new."
+      ],
+      "interactions": [
+        "C16+C17",
+        "C17_OVR+C17_LS_TRIALS",
+        "C17+C19"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [
+        "I12"
+      ],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C17",
+        "experiments/classical_identical_ideas/catalog.json#C17"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C18",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_linear/cd.mojo",
+        "x_linear/cd_grid.mojo",
+        "solver/impl/cd.mojo"
+      ],
+      "callers": [
+        "enet_gram_cd",
+        "t_enet_gram_cd",
+        "enetcv_fit",
+        "enetcv_fit_grid",
+        "cd_fused_step_kernel",
+        "cd_idn_gram_sweep_kernel"
+      ],
+      "controls": [
+        {
+          "arm": "next_residual",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Forward next coordinate residual from preceding residual update under unchanged coordinate order",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "tile64",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C18_TILE64"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Halve main solver residual window to 64 rows under unchanged canonical leaf order",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "gram_prefetch",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Preload next immutable Gram column while residuals remain in registers",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "LassoCV",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "lasso-cv",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "ElasticNetCV",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "enet-cv",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "Lasso",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "lasso",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "ElasticNet",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "elasticnet",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+        "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated."
+      ],
+      "interactions": [
+        "C13+C18",
+        "C18_TILE64+C18_GRAM_PREFETCH",
+        "C18_RESIDUAL_NEXT+C18_GRAM_PREFETCH"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [
+        "I12"
+      ],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C18",
+        "experiments/classical_identical_ideas/catalog.json#C18"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C19",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_linear/device.mojo"
+      ],
+      "callers": [
+        "_sgd_ps_grid",
+        "SGD_PS_CHUNK ordered chunk launch"
+      ],
+      "controls": [
+        {
+          "arm": "ordered_128",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C19_ORDERED_128"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "128 ordered per-sample updates per launch",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "ordered_32",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C19_ORDERED_32"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "32 ordered per-sample updates per launch; wins precedence if both defines set",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "SGDClassifier",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "sgd-clf",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "SGDRegressor",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "sgd-reg",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "Perceptron",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "perceptron",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "PassiveAggressiveClassifier",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "pa-clf",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "PassiveAggressiveRegressor",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "pa-reg",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "SGDOneClassSVM",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "sgd-ocsvm",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+        "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter."
+      ],
+      "interactions": [
+        "C17+C19"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [
+        "I12"
+      ],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C19",
+        "experiments/classical_identical_ideas/catalog.json#C19"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C20",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "svm/impl/classical_kernel_cells.mojo",
+        "svm/impl/classical_kernel_device.mojo",
+        "svm/impl/kernelcache.mojo"
+      ],
+      "callers": [
+        "KernelCache.get_square_tile_without_caching",
+        "KernelCache.init_full_tile_batching"
+      ],
+      "controls": [
+        {
+          "arm": "row_cache",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C20_ROW_CACHE"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Per-fit direct-map cache bounded by 16 MiB and working-set width; deterministic row-ID eviction",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "pair_load",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Gather each working-set row and its norm together",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "SVC",
+          "recipe_path": "tools/classical_two_datasets.py",
+          "lane": "svc",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "SVR",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "svr",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "OneClassSVM",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "ocsvm",
+          "source_status": "pending separate x_neighbors implementation",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach."
+      ],
+      "interactions": [
+        "C20_ROW_CACHE+C20_PAIR_LOAD",
+        "C20+C21",
+        "C20+C22"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C20",
+        "experiments/classical_identical_ideas/catalog.json#C20"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C21",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "svm/impl/smoblocksolve.mojo"
+      ],
+      "callers": [
+        "_tree_dual",
+        "SMO block solve"
+      ],
+      "controls": [
+        {
+          "arm": "extrema_tree4",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C21_EXTREMA"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Four-way canonical (value,row-position,key) extrema tuple tree instead of incumbent binary tree",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "SVC",
+          "recipe_path": "tools/classical_two_datasets.py",
+          "lane": "svc",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "SVR",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "svr",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "OneClassSVM",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "ocsvm",
+          "source_status": "pending separate x_neighbors implementation",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+        "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach."
+      ],
+      "interactions": [
+        "C20+C21",
+        "C21+C22"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C21",
+        "experiments/classical_identical_ideas/catalog.json#C21"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C22",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "svm/impl/classical_kernel_cells.mojo",
+        "svm/impl/classical_kernel_device.mojo",
+        "svm/impl/distance/kernel_matrices.mojo"
+      ],
+      "callers": [
+        "kernel_op same-buffer square dispatch",
+        "KernelRidge km_kernel_matrix",
+        "SVC/SVR working-set square tile"
+      ],
+      "controls": [
+        {
+          "arm": "symmetric_triangle",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C22_TRIANGLE"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Compute upper triangle once with GEMM-v1 dot fold and mirror exact words for same-buffer square supported kernels",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "SVC",
+          "recipe_path": "tools/classical_two_datasets.py",
+          "lane": "svc",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "SVR",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "svr",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "KernelRidge",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "kernel-ridge",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "KernelPCA",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "kernel-pca",
+          "source_status": "pending separate x_neighbors implementation",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+        "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+        "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+        "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op."
+      ],
+      "interactions": [
+        "C20+C22",
+        "C21+C22",
+        "C22+C23"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C22",
+        "experiments/classical_identical_ideas/catalog.json#C22"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C23",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_decomp/classical_cells.mojo",
+        "x_decomp/classical_device.mojo",
+        "x_decomp/exec_trait.mojo",
+        "x_decomp/host.mojo",
+        "x_decomp/device.mojo",
+        "x_decomp/kit.mojo",
+        "x_decomp/kit_device.mojo",
+        "decomposition/impl/linalg/detail/pca.mojo",
+        "decomposition/host/pca_oracle.mojo",
+        "x_decomp/mcd.mojo"
+      ],
+      "callers": [
+        "centered_gram_cell",
+        "Exec.classical_centered_gram",
+        "Kit.classical_centered_gram",
+        "DKit.classical_centered_gram",
+        "PCA.compute_covariance/host_pca_fit",
+        "MCD.emp_cov/emp_cov_at (root integration)"
+      ],
+      "controls": [
+        {
+          "arm": "centered_panels",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "256-row centered FMA leaves, adjacent balanced panel merge, upper triangle mirrored; same cell on host/device",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "PCA",
+          "recipe_path": "tools/classical_two_datasets.py",
+          "lane": "pca",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "MinCovDet",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "min-cov-det",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "QuadraticDiscriminantAnalysis",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "qda",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "LinearDiscriminantAnalysis",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "lda",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "IncrementalPCA",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "incremental-pca",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+        "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+        "IncrementalPCA centered incremental covariance caller remains unfinished source work."
+      ],
+      "interactions": [
+        "C04+C23",
+        "C13+C23",
+        "C22+C23",
+        "C23+C57"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [
+        "I22"
+      ],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C23",
+        "experiments/classical_identical_ideas/catalog.json#C23"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C24",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_decomp/tsqr_core.mojo",
+        "x_decomp/tsqr_host.mojo",
+        "x_decomp/tsqr_device.mojo",
+        "x_decomp/qr_sliced.mojo"
+      ],
+      "callers": [
+        "ts_factor_host/ts_apply_host",
+        "ts_factor_device/ts_apply_device",
+        "qs_tree/qs_pair_tree",
+        "linalg QR/SVD/lstsq and OLS factor callers"
+      ],
+      "controls": [
+        {
+          "arm": "panel8",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C24_PANEL8"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Eight-column TSQR panels; fixed shared host/device profile",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "rows2048",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C24_ROWS2048"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "2048-row TSQR leaf panels, all shapes",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "tree4",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C24_TREE4"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Four-way TSQR and sliced-QR merge tree; ascending factor children and reverse Q application",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "qr",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "qr",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "svd",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "svd",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "lstsq",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "lstsq",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "OLS",
+          "recipe_path": "tools/classical_two_datasets.py",
+          "lane": "ols",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified."
+      ],
+      "interactions": [
+        "C24_PANEL8+C24_ROWS2048",
+        "C24_PANEL8+C24_TREE4",
+        "C24_ROWS2048+C24_TREE4",
+        "C24_PANEL8+C24_ROWS2048+C24_TREE4",
+        "C14+C24"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [
+        "I22"
+      ],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C24",
+        "experiments/classical_identical_ideas/catalog.json#C24"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C25",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "kernel_methods/rbf_fused.mojo",
+        "kernel_methods/estimator.mojo"
+      ],
+      "callers": [
+        "classical_projection_kernel",
+        "_rbf_idn_fused_launch",
+        "RBFSampler.transform public binding"
+      ],
+      "controls": [
+        {
+          "arm": "projection_reuse",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "One weight-column load reused across four input rows; GEMM-v1 leaves/tree on every feature count; fused or trace-compatible projection",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "RBFSampler",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "rbf-sampler",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "Nystroem",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "nystroem",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "TruncatedSVD",
+          "recipe_path": "tools/bench_board_more.py",
+          "lane": "tsvd",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "GaussianRandomProjection",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "gaussian-rp",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "SparseRandomProjection",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "sparse-rp",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+        "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+        "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite."
+      ],
+      "interactions": [
+        "C24+C25"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C25",
+        "experiments/classical_identical_ideas/catalog.json#C25"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C26",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_decomp/cells.mojo",
+        "x_decomp/nmf.mojo",
+        "x_decomp/nmf_dev.mojo"
+      ],
+      "callers": [
+        "mu_fit/mu_fit_dev",
+        "cd_fit/cd_fit_dev",
+        "NMF.fit and transform bindings"
+      ],
+      "controls": [
+        {
+          "arm": "fixed_products",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C26_PRODUCTS"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Reuse fixed H products for transform/immutable-H MU beta2 and CD updates",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "update_fused",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Fuse beta1/beta0 denominator guard/division/(sqrt)/multiply pointwise update",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "NMF",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "nmf",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "DictionaryLearning",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "dict-learning",
+          "source_status": "pending",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+        "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+        "Nonnegative dictionary-learning callers not changed."
+      ],
+      "interactions": [
+        "C26_PRODUCTS+C26_UPDATE_FUSED"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C26",
+        "experiments/classical_identical_ideas/catalog.json#C26"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C27",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_decomp/classical_cells.mojo",
+        "x_decomp/classical_device.mojo",
+        "x_decomp/exec_trait.mojo",
+        "x_decomp/host.mojo",
+        "x_decomp/device.mojo",
+        "x_decomp/kit.mojo",
+        "x_decomp/kit_device.mojo",
+        "x_decomp/ica.mojo",
+        "x_decomp/ica_dev.mojo",
+        "x_decomp/cells.mojo",
+        "x_decomp/fa_em.mojo",
+        "x_decomp/fa_em_dev.mojo",
+        "x_decomp/pls.mojo",
+        "x_decomp/pls_dev.mojo"
+      ],
+      "callers": [
+        "contrast_pair",
+        "Exec.classical_contrast",
+        "ica_g/ica_g_dev",
+        "FastICA.fit parallel and deflation paths",
+        "fa_em",
+        "fa_em_dev",
+        "power",
+        "power_dev"
+      ],
+      "controls": [
+        {
+          "arm": "components",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C27_COMPONENTS"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Share independent ICA score/nonlinearity/derivative values while retaining derivative reduction and deflation order",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "factor_components",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Fused independent factor loading map with preserved add/max/sqrt/multiply seams",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "arm": "normalize_components",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Fused component normalization with preserved sqrt/add/divide seams for CCA/PLS",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "FastICA",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "fastica",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "FactorAnalysis",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "factor-analysis",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "CCA",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "cca",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "PLSRegression",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "pls",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "PLSCanonical",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "pls-canonical",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+        "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted."
+      ],
+      "interactions": [
+        "C23+C27",
+        "C25+C27",
+        "C27_COMPONENTS+C27_FA_COMPONENTS+C27_NORM_VECTOR"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C27",
+        "experiments/classical_identical_ideas/catalog.json#C27"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    },
+    {
+      "id": "C28",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_status": "source-integrated subset; no demonstrated runtime reach",
+      "production_paths": [
+        "x_decomp/device.mojo",
+        "x_decomp/als_dev.mojo",
+        "x_decomp/kit_device.mojo",
+        "x_decomp/dictl.mojo",
+        "x_decomp/dictl_dev.mojo"
+      ],
+      "callers": [
+        "als_bucket_keys_kernel",
+        "launch_als_rows",
+        "als_block_kernel",
+        "ImplicitALS.fit exact row solver use_cg=False",
+        "launch_classical_code_rows",
+        "DevExec.lasso_rows/lars_rows/omp_rows",
+        "DKit._code_rows",
+        "SparseCoder transform",
+        "DictionaryLearning sparse_encode"
+      ],
+      "controls": [
+        {
+          "arm": "bucket_solves",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES"
+          ],
+          "baseline_defines": [],
+          "requires_defines": [],
+          "default_enabled": false,
+          "scope": "Stable radix grouping by ALS nnz or sparse-code active-workspace bit-length; original row IDs and same immutable Gram; exact original row solvers",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "affected_estimators": [
+        {
+          "name": "ImplicitALS",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "als",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "SparseCoder",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "sparse-coder",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "DictionaryLearning",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "dict-learning",
+          "source_status": "integrated",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        },
+        {
+          "name": "MiniBatchDictionaryLearning",
+          "recipe_path": "tools/bench_board_algos.py",
+          "lane": "mb-dict-learning",
+          "source_status": "integrated sparse_encode path",
+          "recipe_status": "pending full-dataset receipt",
+          "pending_facts": [
+            "dataset version/hash",
+            "actual uncapped full-workload dimensions",
+            "saved workload manifest and intrinsic-cap audit",
+            "cold/repeated and fit/inference consumed-output boundary receipt"
+          ]
+        }
+      ],
+      "remaining_gaps": [
+        "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+        "Descriptor scans and radix scratch belong to whole-operation cost.",
+        "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling."
+      ],
+      "interactions": [
+        "C14+C28",
+        "C26+C28"
+      ],
+      "runtime_reach": "UNVERIFIED: no compilation/import/execution performed",
+      "unsupported_prerequisites": [],
+      "harness_requirements": {
+        "numeric_mode": "IDENTICAL",
+        "baseline": "omit every candidate define; preserve incumbent controls/configuration",
+        "boundary": [
+          "preparation and binding uploads",
+          "fit/training including cache/descriptor creation",
+          "required synchronization",
+          "consumed fitted state and outputs"
+        ],
+        "separate": [
+          "fit",
+          "inference/transform",
+          "cold construction and first use",
+          "repeated use"
+        ],
+        "measurements": []
+      },
+      "prior_experiment_refs": [],
+      "prior_work_policy": "Retain incumbent accepted/rejected configuration in B; this source introduces new arms and does not repeat old trials unchanged.",
+      "harness_entries": [
+        "experiments/classical_identical_ideas/linear_implementation.json#C28",
+        "experiments/classical_identical_ideas/catalog.json#C28"
+      ],
+      "harness_status": "root-owned discovery/selection/full-workload adapter integration; source handoff only, not executed"
+    }
+  ],
+  "execution_prohibition_honored": {
+    "compiled": false,
+    "tested": false,
+    "verified": false,
+    "measured": false,
+    "imports_run": false,
+    "builds_or_hooks_run": false,
+    "remote_jobs_run": false
+  },
+  "delivery_notes": [
+    "Source drafts only; every candidate remains default OFF and IDENTICAL-only.",
+    "No new commit made by linear agent; root owns final lane commit/push and full-workload inventory.",
+    "C45-C51 trees remain outside this lane.",
+    "Shared/root owners supplied PCA/MCD C23 and OLS C02 connected helper integration; preserve their edits."
+  ]
+}

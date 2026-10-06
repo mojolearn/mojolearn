@@ -1,0 +1,4140 @@
+{
+  "schema": 1,
+  "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "mode": "identical",
+  "workloads": {
+    "classical:pca": {
+      "key": "classical:pca",
+      "family": "classical",
+      "lane": "pca",
+      "source": "tools/classical_two_datasets.py",
+      "saved_recipe": "tools/classical_two_datasets.py:LANES[pca]",
+      "adapter": null,
+      "candidate_ids": [
+        "C01",
+        "C02",
+        "C04",
+        "C23",
+        "C24"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:tsvd": {
+      "key": "more:tsvd",
+      "family": "more",
+      "lane": "tsvd",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[tsvd]",
+      "adapter": null,
+      "candidate_ids": [
+        "C01",
+        "C24",
+        "C25"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:sgd-reg@regression_report": {
+      "key": "expanded:sgd-reg@regression_report",
+      "family": "expanded",
+      "lane": "sgd-reg",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[sgd-reg] + declared full-row report/fit_transform extension",
+      "adapter": "classical_regression_report",
+      "candidate_ids": [
+        "C01",
+        "C05",
+        "C09"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null,
+      "adapter_path": "experiments/classical_identical_ideas/metric_workloads.py",
+      "pending_reason": "Full dataset/version/hash/settings/cap audit and native route admission unresolved; adapter source is not execution evidence."
+    },
+    "expanded:standard-scaler": {
+      "key": "expanded:standard-scaler",
+      "family": "expanded",
+      "lane": "standard-scaler",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[standard-scaler]",
+      "adapter": null,
+      "candidate_ids": [
+        "C02"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "classical:ols": {
+      "key": "classical:ols",
+      "family": "classical",
+      "lane": "ols",
+      "source": "tools/classical_two_datasets.py",
+      "saved_recipe": "tools/classical_two_datasets.py:LANES[ols]",
+      "adapter": null,
+      "candidate_ids": [
+        "C02",
+        "C04",
+        "C05",
+        "C14",
+        "C24"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:ridge": {
+      "key": "more:ridge",
+      "family": "more",
+      "lane": "ridge",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[ridge]",
+      "adapter": null,
+      "candidate_ids": [
+        "C02",
+        "C04",
+        "C14",
+        "C15"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:gaussian-nb": {
+      "key": "expanded:gaussian-nb",
+      "family": "expanded",
+      "lane": "gaussian-nb",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[gaussian-nb]",
+      "adapter": null,
+      "candidate_ids": [
+        "C02",
+        "C04",
+        "C12",
+        "C55"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:minmax-scaler": {
+      "key": "expanded:minmax-scaler",
+      "family": "expanded",
+      "lane": "minmax-scaler",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[minmax-scaler]",
+      "adapter": null,
+      "candidate_ids": [
+        "C03"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:maxabs-scaler": {
+      "key": "expanded:maxabs-scaler",
+      "family": "expanded",
+      "lane": "maxabs-scaler",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[maxabs-scaler]",
+      "adapter": null,
+      "candidate_ids": [
+        "C03"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:lda-clf@lda_outputs": {
+      "key": "expanded:lda-clf@lda_outputs",
+      "family": "expanded",
+      "lane": "lda-clf",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[lda-clf] + declared full-row report/fit_transform extension",
+      "adapter": "classical_lda_outputs",
+      "candidate_ids": [
+        "C04",
+        "C56"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null,
+      "adapter_path": "experiments/classical_identical_ideas/metric_workloads.py",
+      "pending_reason": "Full dataset/version/hash/settings/cap audit and native route admission unresolved; adapter source is not execution evidence."
+    },
+    "expanded:sgd-clf@ranking_report": {
+      "key": "expanded:sgd-clf@ranking_report",
+      "family": "expanded",
+      "lane": "sgd-clf",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[sgd-clf] + declared full-row report/fit_transform extension",
+      "adapter": "classical_ranking_report",
+      "candidate_ids": [
+        "C05",
+        "C10"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null,
+      "adapter_path": "experiments/classical_identical_ideas/metric_workloads.py",
+      "pending_reason": "Full dataset/version/hash/settings/cap audit and native route admission unresolved; adapter source is not execution evidence."
+    },
+    "classical:kmeans": {
+      "key": "classical:kmeans",
+      "family": "classical",
+      "lane": "kmeans",
+      "source": "tools/classical_two_datasets.py",
+      "saved_recipe": "tools/classical_two_datasets.py:LANES[kmeans]",
+      "adapter": null,
+      "candidate_ids": [
+        "C06",
+        "C30",
+        "C36",
+        "C37",
+        "C38"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "classical:knn": {
+      "key": "classical:knn",
+      "family": "classical",
+      "lane": "knn",
+      "source": "tools/classical_two_datasets.py",
+      "saved_recipe": "tools/classical_two_datasets.py:LANES[knn]",
+      "adapter": null,
+      "candidate_ids": [
+        "C06",
+        "C29",
+        "C30"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "classical:kde": {
+      "key": "classical:kde",
+      "family": "classical",
+      "lane": "kde",
+      "source": "tools/classical_two_datasets.py",
+      "saved_recipe": "tools/classical_two_datasets.py:LANES[kde]",
+      "adapter": null,
+      "candidate_ids": [
+        "C06",
+        "C30",
+        "C52"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "classical:hdbscan": {
+      "key": "classical:hdbscan",
+      "family": "classical",
+      "lane": "hdbscan",
+      "source": "tools/classical_two_datasets.py",
+      "saved_recipe": "tools/classical_two_datasets.py:LANES[hdbscan]",
+      "adapter": null,
+      "candidate_ids": [
+        "C06",
+        "C30",
+        "C31",
+        "C34"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:knn-clf": {
+      "key": "more:knn-clf",
+      "family": "more",
+      "lane": "knn-clf",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[knn-clf]",
+      "adapter": null,
+      "candidate_ids": [
+        "C06",
+        "C29",
+        "C30"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:knn-reg": {
+      "key": "more:knn-reg",
+      "family": "more",
+      "lane": "knn-reg",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[knn-reg]",
+      "adapter": null,
+      "candidate_ids": [
+        "C06",
+        "C29",
+        "C30"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:ivf": {
+      "key": "more:ivf",
+      "family": "more",
+      "lane": "ivf",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[ivf]",
+      "adapter": null,
+      "candidate_ids": [
+        "C06",
+        "C30",
+        "C35",
+        "C36",
+        "C37",
+        "C38"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:normalizer": {
+      "key": "expanded:normalizer",
+      "family": "expanded",
+      "lane": "normalizer",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[normalizer]",
+      "adapter": null,
+      "candidate_ids": [
+        "C06"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:quantile-transformer": {
+      "key": "expanded:quantile-transformer",
+      "family": "expanded",
+      "lane": "quantile-transformer",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[quantile-transformer]",
+      "adapter": null,
+      "candidate_ids": [
+        "C07"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:kbins": {
+      "key": "expanded:kbins",
+      "family": "expanded",
+      "lane": "kbins",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[kbins]",
+      "adapter": null,
+      "candidate_ids": [
+        "C07"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:onehot": {
+      "key": "expanded:onehot",
+      "family": "expanded",
+      "lane": "onehot",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[onehot]",
+      "adapter": null,
+      "candidate_ids": [
+        "C07"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:ordinal": {
+      "key": "expanded:ordinal",
+      "family": "expanded",
+      "lane": "ordinal",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[ordinal]",
+      "adapter": null,
+      "candidate_ids": [
+        "C07"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:target-encoder": {
+      "key": "expanded:target-encoder",
+      "family": "expanded",
+      "lane": "target-encoder",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[target-encoder]",
+      "adapter": null,
+      "candidate_ids": [
+        "C07",
+        "C08"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:label-encoder": {
+      "key": "expanded:label-encoder",
+      "family": "expanded",
+      "lane": "label-encoder",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[label-encoder]",
+      "adapter": null,
+      "candidate_ids": [
+        "C07",
+        "C08"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:isotonic": {
+      "key": "expanded:isotonic",
+      "family": "expanded",
+      "lane": "isotonic",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[isotonic]",
+      "adapter": null,
+      "candidate_ids": [
+        "C07"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:onehot@onehot_fit_transform": {
+      "key": "expanded:onehot@onehot_fit_transform",
+      "family": "expanded",
+      "lane": "onehot",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[onehot] + declared full-row report/fit_transform extension",
+      "adapter": "classical_onehot_fit_transform",
+      "candidate_ids": [
+        "C08"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null,
+      "adapter_path": "experiments/classical_identical_ideas/metric_workloads.py",
+      "pending_reason": "Full dataset/version/hash/settings/cap audit and native route admission unresolved; adapter source is not execution evidence."
+    },
+    "expanded:ordinal@ordinal_fit_transform": {
+      "key": "expanded:ordinal@ordinal_fit_transform",
+      "family": "expanded",
+      "lane": "ordinal",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[ordinal] + declared full-row report/fit_transform extension",
+      "adapter": "classical_ordinal_fit_transform",
+      "candidate_ids": [
+        "C08"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null,
+      "adapter_path": "experiments/classical_identical_ideas/metric_workloads.py",
+      "pending_reason": "Full dataset/version/hash/settings/cap audit and native route admission unresolved; adapter source is not execution evidence."
+    },
+    "expanded:categorical-nb": {
+      "key": "expanded:categorical-nb",
+      "family": "expanded",
+      "lane": "categorical-nb",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[categorical-nb]",
+      "adapter": null,
+      "candidate_ids": [
+        "C08",
+        "C12",
+        "C55"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:resample": {
+      "key": "expanded:resample",
+      "family": "expanded",
+      "lane": "resample",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[resample]",
+      "adapter": null,
+      "candidate_ids": [
+        "C11"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:bootstrap": {
+      "key": "expanded:bootstrap",
+      "family": "expanded",
+      "lane": "bootstrap",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[bootstrap]",
+      "adapter": null,
+      "candidate_ids": [
+        "C11"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:permutation-test": {
+      "key": "expanded:permutation-test",
+      "family": "expanded",
+      "lane": "permutation-test",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[permutation-test]",
+      "adapter": null,
+      "candidate_ids": [
+        "C11"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:cross-val-score": {
+      "key": "expanded:cross-val-score",
+      "family": "expanded",
+      "lane": "cross-val-score",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[cross-val-score]",
+      "adapter": null,
+      "candidate_ids": [
+        "C11"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:sgd-clf@classification_report": {
+      "key": "expanded:sgd-clf@classification_report",
+      "family": "expanded",
+      "lane": "sgd-clf",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[sgd-clf] + declared full-row report/fit_transform extension",
+      "adapter": "classical_classification_report",
+      "candidate_ids": [
+        "C12"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null,
+      "adapter_path": "experiments/classical_identical_ideas/metric_workloads.py",
+      "pending_reason": "Full dataset/version/hash/settings/cap audit and native route admission unresolved; adapter source is not execution evidence."
+    },
+    "expanded:ridge-cv": {
+      "key": "expanded:ridge-cv",
+      "family": "expanded",
+      "lane": "ridge-cv",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[ridge-cv]",
+      "adapter": null,
+      "candidate_ids": [
+        "C13",
+        "C14"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:lasso-cv": {
+      "key": "expanded:lasso-cv",
+      "family": "expanded",
+      "lane": "lasso-cv",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[lasso-cv]",
+      "adapter": null,
+      "candidate_ids": [
+        "C13",
+        "C18"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:enet-cv": {
+      "key": "expanded:enet-cv",
+      "family": "expanded",
+      "lane": "enet-cv",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[enet-cv]",
+      "adapter": null,
+      "candidate_ids": [
+        "C13",
+        "C18"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:logreg-cv": {
+      "key": "expanded:logreg-cv",
+      "family": "expanded",
+      "lane": "logreg-cv",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[logreg-cv]",
+      "adapter": null,
+      "candidate_ids": [
+        "C13",
+        "C17"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:logreg-cv@weighted_cv": {
+      "key": "expanded:logreg-cv@weighted_cv",
+      "family": "expanded",
+      "lane": "logreg-cv",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[logreg-cv] + declared full-row report/fit_transform extension",
+      "adapter": "classical_weighted_cv",
+      "candidate_ids": [
+        "C13"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null,
+      "adapter_path": "experiments/classical_identical_ideas/estimator_workloads.py",
+      "additional_array_files": {},
+      "fit_sample_weight_key": null,
+      "pending_reason": "Full dataset/version/hash/settings/cap audit and native route admission unresolved; adapter source is not execution evidence."
+    },
+    "more:gpr": {
+      "key": "more:gpr",
+      "family": "more",
+      "lane": "gpr",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[gpr]",
+      "adapter": null,
+      "candidate_ids": [
+        "C14",
+        "C54"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:pls": {
+      "key": "expanded:pls",
+      "family": "expanded",
+      "lane": "pls",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[pls]",
+      "adapter": null,
+      "candidate_ids": [
+        "C14",
+        "C27"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:lstsq": {
+      "key": "expanded:lstsq",
+      "family": "expanded",
+      "lane": "lstsq",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[lstsq]",
+      "adapter": null,
+      "candidate_ids": [
+        "C14",
+        "C24"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:lu-solve": {
+      "key": "expanded:lu-solve",
+      "family": "expanded",
+      "lane": "lu-solve",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[lu-solve]",
+      "adapter": null,
+      "candidate_ids": [
+        "C14"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:ridge-clf": {
+      "key": "expanded:ridge-clf",
+      "family": "expanded",
+      "lane": "ridge-clf",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[ridge-clf]",
+      "adapter": null,
+      "candidate_ids": [
+        "C14"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:bayesian-ridge": {
+      "key": "expanded:bayesian-ridge",
+      "family": "expanded",
+      "lane": "bayesian-ridge",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[bayesian-ridge]",
+      "adapter": null,
+      "candidate_ids": [
+        "C15"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:ard": {
+      "key": "expanded:ard",
+      "family": "expanded",
+      "lane": "ard",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[ard]",
+      "adapter": null,
+      "candidate_ids": [
+        "C15"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:min-cov-det": {
+      "key": "expanded:min-cov-det",
+      "family": "expanded",
+      "lane": "min-cov-det",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[min-cov-det]",
+      "adapter": null,
+      "candidate_ids": [
+        "C15",
+        "C23",
+        "C57"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:elliptic-envelope": {
+      "key": "expanded:elliptic-envelope",
+      "family": "expanded",
+      "lane": "elliptic-envelope",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[elliptic-envelope]",
+      "adapter": null,
+      "candidate_ids": [
+        "C15",
+        "C23",
+        "C57"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:logreg": {
+      "key": "more:logreg",
+      "family": "more",
+      "lane": "logreg",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[logreg]",
+      "adapter": null,
+      "candidate_ids": [
+        "C16",
+        "C17"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:linearsvc": {
+      "key": "more:linearsvc",
+      "family": "more",
+      "lane": "linearsvc",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[linearsvc]",
+      "adapter": null,
+      "candidate_ids": [
+        "C16",
+        "C17"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:linearsvr": {
+      "key": "more:linearsvr",
+      "family": "more",
+      "lane": "linearsvr",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[linearsvr]",
+      "adapter": null,
+      "candidate_ids": [
+        "C16",
+        "C17"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:poisson": {
+      "key": "expanded:poisson",
+      "family": "expanded",
+      "lane": "poisson",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[poisson]",
+      "adapter": null,
+      "candidate_ids": [
+        "C16"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:gamma": {
+      "key": "expanded:gamma",
+      "family": "expanded",
+      "lane": "gamma",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[gamma]",
+      "adapter": null,
+      "candidate_ids": [
+        "C16"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:tweedie": {
+      "key": "expanded:tweedie",
+      "family": "expanded",
+      "lane": "tweedie",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[tweedie]",
+      "adapter": null,
+      "candidate_ids": [
+        "C16"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:lasso": {
+      "key": "more:lasso",
+      "family": "more",
+      "lane": "lasso",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[lasso]",
+      "adapter": null,
+      "candidate_ids": [
+        "C18"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:elasticnet": {
+      "key": "more:elasticnet",
+      "family": "more",
+      "lane": "elasticnet",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[elasticnet]",
+      "adapter": null,
+      "candidate_ids": [
+        "C18"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:sparse-coder": {
+      "key": "expanded:sparse-coder",
+      "family": "expanded",
+      "lane": "sparse-coder",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[sparse-coder]",
+      "adapter": null,
+      "candidate_ids": [
+        "C18",
+        "C28"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:sgd-clf": {
+      "key": "expanded:sgd-clf",
+      "family": "expanded",
+      "lane": "sgd-clf",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[sgd-clf]",
+      "adapter": null,
+      "candidate_ids": [
+        "C19"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:sgd-reg": {
+      "key": "expanded:sgd-reg",
+      "family": "expanded",
+      "lane": "sgd-reg",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[sgd-reg]",
+      "adapter": null,
+      "candidate_ids": [
+        "C19"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:perceptron": {
+      "key": "expanded:perceptron",
+      "family": "expanded",
+      "lane": "perceptron",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[perceptron]",
+      "adapter": null,
+      "candidate_ids": [
+        "C19"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:pa-clf": {
+      "key": "expanded:pa-clf",
+      "family": "expanded",
+      "lane": "pa-clf",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[pa-clf]",
+      "adapter": null,
+      "candidate_ids": [
+        "C19"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:pa-reg": {
+      "key": "expanded:pa-reg",
+      "family": "expanded",
+      "lane": "pa-reg",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[pa-reg]",
+      "adapter": null,
+      "candidate_ids": [
+        "C19"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:sgd-ocsvm": {
+      "key": "expanded:sgd-ocsvm",
+      "family": "expanded",
+      "lane": "sgd-ocsvm",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[sgd-ocsvm]",
+      "adapter": null,
+      "candidate_ids": [
+        "C19"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "classical:svc": {
+      "key": "classical:svc",
+      "family": "classical",
+      "lane": "svc",
+      "source": "tools/classical_two_datasets.py",
+      "saved_recipe": "tools/classical_two_datasets.py:LANES[svc]",
+      "adapter": null,
+      "candidate_ids": [
+        "C20",
+        "C21",
+        "C22"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:svr": {
+      "key": "more:svr",
+      "family": "more",
+      "lane": "svr",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[svr]",
+      "adapter": null,
+      "candidate_ids": [
+        "C20",
+        "C21",
+        "C22"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:ocsvm": {
+      "key": "expanded:ocsvm",
+      "family": "expanded",
+      "lane": "ocsvm",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[ocsvm]",
+      "adapter": null,
+      "candidate_ids": [
+        "C20",
+        "C21",
+        "C22"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:kernel-ridge": {
+      "key": "more:kernel-ridge",
+      "family": "more",
+      "lane": "kernel-ridge",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[kernel-ridge]",
+      "adapter": null,
+      "candidate_ids": [
+        "C22",
+        "C30"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:kernel-pca": {
+      "key": "expanded:kernel-pca",
+      "family": "expanded",
+      "lane": "kernel-pca",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[kernel-pca]",
+      "adapter": null,
+      "candidate_ids": [
+        "C22",
+        "C30"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:incremental-pca": {
+      "key": "expanded:incremental-pca",
+      "family": "expanded",
+      "lane": "incremental-pca",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[incremental-pca]",
+      "adapter": null,
+      "candidate_ids": [
+        "C23"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:lda-clf": {
+      "key": "expanded:lda-clf",
+      "family": "expanded",
+      "lane": "lda-clf",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[lda-clf]",
+      "adapter": null,
+      "candidate_ids": [
+        "C23"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:qda": {
+      "key": "expanded:qda",
+      "family": "expanded",
+      "lane": "qda",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[qda]",
+      "adapter": null,
+      "candidate_ids": [
+        "C23",
+        "C56"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:qr": {
+      "key": "expanded:qr",
+      "family": "expanded",
+      "lane": "qr",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[qr]",
+      "adapter": null,
+      "candidate_ids": [
+        "C24"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:svd": {
+      "key": "expanded:svd",
+      "family": "expanded",
+      "lane": "svd",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[svd]",
+      "adapter": null,
+      "candidate_ids": [
+        "C24"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:randomized-svd": {
+      "key": "expanded:randomized-svd",
+      "family": "expanded",
+      "lane": "randomized-svd",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[randomized-svd]",
+      "adapter": null,
+      "candidate_ids": [
+        "C24",
+        "C25"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:gaussian-rp": {
+      "key": "expanded:gaussian-rp",
+      "family": "expanded",
+      "lane": "gaussian-rp",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[gaussian-rp]",
+      "adapter": null,
+      "candidate_ids": [
+        "C25"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:sparse-rp": {
+      "key": "expanded:sparse-rp",
+      "family": "expanded",
+      "lane": "sparse-rp",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[sparse-rp]",
+      "adapter": null,
+      "candidate_ids": [
+        "C25"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:nystroem": {
+      "key": "more:nystroem",
+      "family": "more",
+      "lane": "nystroem",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[nystroem]",
+      "adapter": null,
+      "candidate_ids": [
+        "C25"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:rbf-sampler": {
+      "key": "more:rbf-sampler",
+      "family": "more",
+      "lane": "rbf-sampler",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[rbf-sampler]",
+      "adapter": null,
+      "candidate_ids": [
+        "C25"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:nmf": {
+      "key": "expanded:nmf",
+      "family": "expanded",
+      "lane": "nmf",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[nmf]",
+      "adapter": null,
+      "candidate_ids": [
+        "C26"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:dict-learning": {
+      "key": "expanded:dict-learning",
+      "family": "expanded",
+      "lane": "dict-learning",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[dict-learning]",
+      "adapter": null,
+      "candidate_ids": [
+        "C26",
+        "C28"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:mb-dict-learning": {
+      "key": "expanded:mb-dict-learning",
+      "family": "expanded",
+      "lane": "mb-dict-learning",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[mb-dict-learning]",
+      "adapter": null,
+      "candidate_ids": [
+        "C26",
+        "C28"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:fastica": {
+      "key": "expanded:fastica",
+      "family": "expanded",
+      "lane": "fastica",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[fastica]",
+      "adapter": null,
+      "candidate_ids": [
+        "C27"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:factor-analysis": {
+      "key": "expanded:factor-analysis",
+      "family": "expanded",
+      "lane": "factor-analysis",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[factor-analysis]",
+      "adapter": null,
+      "candidate_ids": [
+        "C27"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:cca": {
+      "key": "expanded:cca",
+      "family": "expanded",
+      "lane": "cca",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[cca]",
+      "adapter": null,
+      "candidate_ids": [
+        "C27"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:pls-canonical": {
+      "key": "expanded:pls-canonical",
+      "family": "expanded",
+      "lane": "pls-canonical",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[pls-canonical]",
+      "adapter": null,
+      "candidate_ids": [
+        "C27"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:als": {
+      "key": "expanded:als",
+      "family": "expanded",
+      "lane": "als",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[als]",
+      "adapter": null,
+      "candidate_ids": [
+        "C28"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:lof": {
+      "key": "expanded:lof",
+      "family": "expanded",
+      "lane": "lof",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[lof]",
+      "adapter": null,
+      "candidate_ids": [
+        "C29"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:label-propagation": {
+      "key": "expanded:label-propagation",
+      "family": "expanded",
+      "lane": "label-propagation",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[label-propagation]",
+      "adapter": null,
+      "candidate_ids": [
+        "C29",
+        "C33",
+        "C43"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:label-spreading": {
+      "key": "expanded:label-spreading",
+      "family": "expanded",
+      "lane": "label-spreading",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[label-spreading]",
+      "adapter": null,
+      "candidate_ids": [
+        "C29",
+        "C33",
+        "C43"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:isomap": {
+      "key": "expanded:isomap",
+      "family": "expanded",
+      "lane": "isomap",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[isomap]",
+      "adapter": null,
+      "candidate_ids": [
+        "C29",
+        "C43"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:lle": {
+      "key": "expanded:lle",
+      "family": "expanded",
+      "lane": "lle",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[lle]",
+      "adapter": null,
+      "candidate_ids": [
+        "C29",
+        "C43"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "classical:dbscan": {
+      "key": "classical:dbscan",
+      "family": "classical",
+      "lane": "dbscan",
+      "source": "tools/classical_two_datasets.py",
+      "saved_recipe": "tools/classical_two_datasets.py:LANES[dbscan]",
+      "adapter": null,
+      "candidate_ids": [
+        "C30",
+        "C31",
+        "C32",
+        "C33"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:agglomerative": {
+      "key": "more:agglomerative",
+      "family": "more",
+      "lane": "agglomerative",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[agglomerative]",
+      "adapter": null,
+      "candidate_ids": [
+        "C30",
+        "C34"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:radius-neighbors": {
+      "key": "expanded:radius-neighbors",
+      "family": "expanded",
+      "lane": "radius-neighbors",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[radius-neighbors]",
+      "adapter": null,
+      "candidate_ids": [
+        "C30",
+        "C31",
+        "C32"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:connected-components": {
+      "key": "expanded:connected-components",
+      "family": "expanded",
+      "lane": "connected-components",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[connected-components]",
+      "adapter": null,
+      "candidate_ids": [
+        "C33"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:minibatch-kmeans": {
+      "key": "expanded:minibatch-kmeans",
+      "family": "expanded",
+      "lane": "minibatch-kmeans",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[minibatch-kmeans]",
+      "adapter": null,
+      "candidate_ids": [
+        "C36",
+        "C37",
+        "C39"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:bisecting-kmeans": {
+      "key": "expanded:bisecting-kmeans",
+      "family": "expanded",
+      "lane": "bisecting-kmeans",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[bisecting-kmeans]",
+      "adapter": null,
+      "candidate_ids": [
+        "C36",
+        "C37",
+        "C38",
+        "C39"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:meanshift": {
+      "key": "expanded:meanshift",
+      "family": "expanded",
+      "lane": "meanshift",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[meanshift]",
+      "adapter": null,
+      "candidate_ids": [
+        "C40"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:optics": {
+      "key": "expanded:optics",
+      "family": "expanded",
+      "lane": "optics",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[optics]",
+      "adapter": null,
+      "candidate_ids": [
+        "C41"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:agglomerative@active_linkage": {
+      "key": "more:agglomerative@active_linkage",
+      "family": "more",
+      "lane": "agglomerative",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[agglomerative] + declared full-row report/fit_transform extension; explicit x_cluster linkage/output variant, settings pending; incumbent hierarchy recipe is not substituted",
+      "adapter": "classical_agglomerative",
+      "candidate_ids": [
+        "C42"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null,
+      "adapter_path": "experiments/classical_identical_ideas/more_workloads.py",
+      "pending_reason": "Full dataset/version/hash/settings/cap audit and native route admission unresolved; adapter source is not execution evidence."
+    },
+    "more:spectral-embedding": {
+      "key": "more:spectral-embedding",
+      "family": "more",
+      "lane": "spectral-embedding",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[spectral-embedding]",
+      "adapter": null,
+      "candidate_ids": [
+        "C43"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:spectral": {
+      "key": "more:spectral",
+      "family": "more",
+      "lane": "spectral",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[spectral]",
+      "adapter": null,
+      "candidate_ids": [
+        "C43"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:pagerank": {
+      "key": "expanded:pagerank",
+      "family": "expanded",
+      "lane": "pagerank",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[pagerank]",
+      "adapter": null,
+      "candidate_ids": [
+        "C43"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:umap": {
+      "key": "more:umap",
+      "family": "more",
+      "lane": "umap",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[umap]",
+      "adapter": null,
+      "candidate_ids": [
+        "C44"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:gmm": {
+      "key": "more:gmm",
+      "family": "more",
+      "lane": "gmm",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[gmm]",
+      "adapter": null,
+      "candidate_ids": [
+        "C53"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:bayesian-gmm": {
+      "key": "expanded:bayesian-gmm",
+      "family": "expanded",
+      "lane": "bayesian-gmm",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[bayesian-gmm]",
+      "adapter": null,
+      "candidate_ids": [
+        "C53"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:gpc": {
+      "key": "more:gpc",
+      "family": "more",
+      "lane": "gpc",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[gpc]",
+      "adapter": null,
+      "candidate_ids": [
+        "C54"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:svgp": {
+      "key": "expanded:svgp",
+      "family": "expanded",
+      "lane": "svgp",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[svgp]",
+      "adapter": null,
+      "candidate_ids": [
+        "C54"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:multinomial-nb": {
+      "key": "expanded:multinomial-nb",
+      "family": "expanded",
+      "lane": "multinomial-nb",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[multinomial-nb]",
+      "adapter": null,
+      "candidate_ids": [
+        "C55"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:bernoulli-nb": {
+      "key": "expanded:bernoulli-nb",
+      "family": "expanded",
+      "lane": "bernoulli-nb",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[bernoulli-nb]",
+      "adapter": null,
+      "candidate_ids": [
+        "C55"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:complement-nb": {
+      "key": "expanded:complement-nb",
+      "family": "expanded",
+      "lane": "complement-nb",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[complement-nb]",
+      "adapter": null,
+      "candidate_ids": [
+        "C55"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:ets": {
+      "key": "more:ets",
+      "family": "more",
+      "lane": "ets",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[ets]",
+      "adapter": null,
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:theta": {
+      "key": "expanded:theta",
+      "family": "expanded",
+      "lane": "theta",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[theta]",
+      "adapter": null,
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:optimized-theta": {
+      "key": "expanded:optimized-theta",
+      "family": "expanded",
+      "lane": "optimized-theta",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[optimized-theta]",
+      "adapter": null,
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:dynamic-theta": {
+      "key": "expanded:dynamic-theta",
+      "family": "expanded",
+      "lane": "dynamic-theta",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[dynamic-theta]",
+      "adapter": null,
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:dynamic-optimized-theta": {
+      "key": "expanded:dynamic-optimized-theta",
+      "family": "expanded",
+      "lane": "dynamic-optimized-theta",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[dynamic-optimized-theta]",
+      "adapter": null,
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:auto-theta": {
+      "key": "expanded:auto-theta",
+      "family": "expanded",
+      "lane": "auto-theta",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[auto-theta]",
+      "adapter": null,
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:damped-ets": {
+      "key": "expanded:damped-ets",
+      "family": "expanded",
+      "lane": "damped-ets",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[damped-ets]",
+      "adapter": null,
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:garch": {
+      "key": "expanded:garch",
+      "family": "expanded",
+      "lane": "garch",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[garch]",
+      "adapter": null,
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:prophet": {
+      "key": "expanded:prophet",
+      "family": "expanded",
+      "lane": "prophet",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[prophet]",
+      "adapter": null,
+      "candidate_ids": [
+        "C58"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "more:arima": {
+      "key": "more:arima",
+      "family": "more",
+      "lane": "arima",
+      "source": "tools/bench_board_more.py",
+      "saved_recipe": "tools/bench_board_more.py:LANES[arima]",
+      "adapter": null,
+      "candidate_ids": [
+        "C59"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    },
+    "expanded:autoarima": {
+      "key": "expanded:autoarima",
+      "family": "expanded",
+      "lane": "autoarima",
+      "source": "tools/bench_board_algos.py",
+      "saved_recipe": "tools/bench_board_algos.py:LANES[autoarima]",
+      "adapter": null,
+      "candidate_ids": [
+        "C59",
+        "C60"
+      ],
+      "source_reach": "See per-ID caller ledger; transitive reach is not demonstrated",
+      "recipe_status": "PENDING",
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "intrinsic_cap_audit": {
+        "reviewed": false,
+        "unresolved": [
+          "Saved lane sub/slice/row limits must be reconciled with the full intended workload."
+        ]
+      },
+      "input_files": [],
+      "required_outputs": null,
+      "inference": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "timed_boundary": "preparation + fit/training + synchronization + consumed outputs; inference separated where supported; cold/warmup/repeated invocation and repeated inference distinct",
+      "source_admission": null
+    }
+  }
+}

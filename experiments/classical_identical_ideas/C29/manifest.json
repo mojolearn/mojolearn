@@ -1,0 +1,592 @@
+{
+  "schema": 1,
+  "id": "C29",
+  "title": "Streaming exact distance-to-top-k",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "neighbors/impl/detail/knn_brute_force.mojo",
+    "neighbors/impl/detail/classical_stream_topk.mojo",
+    "neighbors/estimator.mojo",
+    "core/knn_host_predict.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_C29_STREAM_TOPK"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Every neighbor/index/distance and downstream predictions or LOF score; large k, ties, duplicates and tails.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C29",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C29",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C29",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C29",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C29",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/graph_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/graph_controls.mojo"
+  ],
+  "default_configuration": "stream_topk",
+  "configurations": {
+    "stream_topk": {
+      "name": "stream_topk",
+      "candidate_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C29"
+      ],
+      "source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence."
+      ],
+      "scope": [
+        "NearestNeighbors",
+        "KNNClassifier",
+        "KNNRegressor",
+        "LocalOutlierFactor",
+        "exact graph construction"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle"
+      ]
+    },
+    "stream_topk_tile_128": {
+      "name": "stream_topk_tile_128",
+      "candidate_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C29_TILE_128"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C29"
+      ],
+      "source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence."
+      ],
+      "scope": [
+        "NearestNeighbors",
+        "KNNClassifier",
+        "KNNRegressor",
+        "LocalOutlierFactor",
+        "exact graph construction"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle"
+      ]
+    },
+    "combined": {
+      "name": "combined",
+      "selectable": true,
+      "candidate_ids": [
+        "C29"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C29_TILE_128"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence."
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle"
+      ],
+      "component_arms": [
+        {
+          "id": "C29",
+          "configuration": "stream_topk"
+        },
+        {
+          "id": "C29",
+          "configuration": "stream_topk_tile_128"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_graph_complete": {
+      "name": "interaction_graph_complete",
+      "selectable": true,
+      "candidate_ids": [
+        "C29",
+        "C31",
+        "C32",
+        "C33",
+        "C34",
+        "C43",
+        "C44"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C29_TILE_128",
+        "MOJOLEARN_C31_DEVICE_BUCKETS",
+        "MOJOLEARN_C32_COUNT_FUSION",
+        "MOJOLEARN_C32_EMIT_FUSION",
+        "MOJOLEARN_C33_FROZEN_CHUNKS",
+        "MOJOLEARN_C33_CHUNK_4",
+        "MOJOLEARN_C34_PARALLEL_EDGES",
+        "MOJOLEARN_C43_RESIDENT_NORMALIZATION",
+        "MOJOLEARN_C44_SAMPLING_DESCRIPTORS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+        "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate.",
+        "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+        "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there.",
+        "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction.",
+        "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers.",
+        "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced."
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle",
+        "expanded:radius-neighbors",
+        "classical:dbscan",
+        "classical:hdbscan",
+        "expanded:connected-components",
+        "more:agglomerative",
+        "more:spectral-embedding",
+        "more:spectral",
+        "expanded:pagerank",
+        "more:umap"
+      ],
+      "component_arms": [
+        {
+          "id": "C29",
+          "configuration": "combined"
+        },
+        {
+          "id": "C31",
+          "configuration": "device_buckets"
+        },
+        {
+          "id": "C32",
+          "configuration": "combined"
+        },
+        {
+          "id": "C33",
+          "configuration": "combined"
+        },
+        {
+          "id": "C34",
+          "configuration": "parallel_edges"
+        },
+        {
+          "id": "C43",
+          "configuration": "resident_normalization"
+        },
+        {
+          "id": "C44",
+          "configuration": "sampling_descriptors"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c29_c31": {
+      "name": "interaction_c29_c31",
+      "selectable": true,
+      "candidate_ids": [
+        "C29",
+        "C31"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C31_DEVICE_BUCKETS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+        "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate."
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle",
+        "expanded:radius-neighbors",
+        "classical:dbscan",
+        "classical:hdbscan"
+      ],
+      "component_arms": [
+        {
+          "id": "C29",
+          "configuration": "stream_topk"
+        },
+        {
+          "id": "C31",
+          "configuration": "device_buckets"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c29_c32": {
+      "name": "interaction_c29_c32",
+      "selectable": true,
+      "candidate_ids": [
+        "C29",
+        "C32"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C32_COUNT_FUSION"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+        "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission."
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle",
+        "expanded:radius-neighbors",
+        "classical:dbscan"
+      ],
+      "component_arms": [
+        {
+          "id": "C29",
+          "configuration": "stream_topk"
+        },
+        {
+          "id": "C32",
+          "configuration": "count_fusion"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c29_c33": {
+      "name": "interaction_c29_c33",
+      "selectable": true,
+      "candidate_ids": [
+        "C29",
+        "C33"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C33_FROZEN_CHUNKS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+        "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there."
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle",
+        "classical:dbscan",
+        "expanded:connected-components"
+      ],
+      "component_arms": [
+        {
+          "id": "C29",
+          "configuration": "stream_topk"
+        },
+        {
+          "id": "C33",
+          "configuration": "frozen_chunks"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c29_c34": {
+      "name": "interaction_c29_c34",
+      "selectable": true,
+      "candidate_ids": [
+        "C29",
+        "C34"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C34_PARALLEL_EDGES"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+        "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction."
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle",
+        "classical:hdbscan",
+        "more:agglomerative"
+      ],
+      "component_arms": [
+        {
+          "id": "C29",
+          "configuration": "stream_topk"
+        },
+        {
+          "id": "C34",
+          "configuration": "parallel_edges"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c29_c43": {
+      "name": "interaction_c29_c43",
+      "selectable": true,
+      "candidate_ids": [
+        "C29",
+        "C43"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C43_RESIDENT_NORMALIZATION"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+        "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers."
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle",
+        "more:spectral-embedding",
+        "more:spectral",
+        "expanded:pagerank"
+      ],
+      "component_arms": [
+        {
+          "id": "C29",
+          "configuration": "stream_topk"
+        },
+        {
+          "id": "C43",
+          "configuration": "resident_normalization"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c29_c44": {
+      "name": "interaction_c29_c44",
+      "selectable": true,
+      "candidate_ids": [
+        "C29",
+        "C44"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C44_SAMPLING_DESCRIPTORS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+        "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced."
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "more:knn-clf",
+        "more:knn-reg",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle",
+        "more:umap"
+      ],
+      "component_arms": [
+        {
+          "id": "C29",
+          "configuration": "stream_topk"
+        },
+        {
+          "id": "C44",
+          "configuration": "sampling_descriptors"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence."
+  ],
+  "catalog_estimators": [
+    "NearestNeighbors",
+    "KNNClassifier/Regressor",
+    "LOF",
+    "exact graph construction"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "classical:knn",
+    "more:knn-clf",
+    "more:knn-reg",
+    "expanded:lof",
+    "expanded:label-propagation",
+    "expanded:label-spreading",
+    "expanded:isomap",
+    "expanded:lle"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

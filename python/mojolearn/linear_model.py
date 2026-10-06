@@ -328,6 +328,26 @@ def _column_means(b, x, weights):
     return _means(b, wx, rows, cols, total)[1]
 
 
+def _classical_xy_means(b, x, y):
+    """C02 exact X/y sum streams in one native invocation; default OFF.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    flag = _optional_export(b, "lm_classical_stats")
+    if flag is None or not bool(flag()):
+        return None
+    rows, cols = x.shape
+    sx, sy = empty((cols,), "<f8"), empty((1,), "<f8")
+    b.lm_col_sums_pair(addr_ro(x, name="X"), addr_ro(y, name="y"),
+                       addr(sx, name="X sums"), addr(sy, name="y sum"), [rows, cols])
+    xm64, xm32 = empty((cols,), "<f8"), empty((cols,), "<f4")
+    ym64, ym32 = empty((1,), "<f8"), empty((1,), "<f4")
+    b.lm_means_finish(addr(sx, name="X sums"), addr(xm64, name="X means"),
+                      addr(xm32, name="X means32"), [cols, rows, 0], 0.0)
+    b.lm_means_finish(addr(sy, name="y sum"), addr(ym64, name="y mean"),
+                      addr(ym32, name="y mean32"), [1, rows, 0], 0.0)
+    return xm32, float(ym64[0]), ym32
+
+
 def _vector_mean(b, v, weights):
     """(float64 mean, float32 mean `Array` of one) of the target, weighted
     when `weights` is not None: the 1-D half of `_column_means`."""
@@ -691,9 +711,13 @@ class LinearRegression(NumericModeMixin):
             # one puts the intercept in the wrong place without moving any
             # coefficient enough to notice.
             b = self._bind("_mojolearn_estimators")
-            mu32 = _column_means(b, x, weights)
+            paired = _classical_xy_means(b, x, target) if weights is None else None
+            if paired is None:
+                mu32 = _column_means(b, x, weights)
+                self._y_mean, y32 = _vector_mean(b, target, weights)
+            else:
+                mu32, self._y_mean, y32 = paired
             self._x_mean = mu32
-            self._y_mean, y32 = _vector_mean(b, target, weights)
             # NumPy narrowed the Python-float y mean to float32 BEFORE the
             # float32 subtract (value-based / weak-scalar casting); the
             # same order here (`lm_means_finish`' float32 mean) so the
@@ -882,9 +906,13 @@ class Ridge(NumericModeMixin):
         elif self.fit_intercept:
             # The same centering as LinearRegression, for the same
             # reasons; read that class's fit.
-            mu32 = _column_means(b, x, None)
+            paired = _classical_xy_means(b, x, target)
+            if paired is None:
+                mu32 = _column_means(b, x, None)
+                self._y_mean, y32 = _vector_mean(b, target, None)
+            else:
+                mu32, self._y_mean, y32 = paired
             self._x_mean = mu32
-            self._y_mean, y32 = _vector_mean(b, target, None)
             work_x = _center(b, x, mu32)
             work_y = _shift(b, target, y32)
         else:

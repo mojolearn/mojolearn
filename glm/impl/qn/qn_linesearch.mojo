@@ -45,6 +45,7 @@ from glm.impl.qn.qn_util import (
 )
 from glm.impl.qn.simple_mat.dense import VEC_ELEM_TPB, axpy, copy_vec, dot, dot_kernel, read_scalars
 from core.column_stats import STATS_TPB
+from experiments.classical_identical_ideas.linear_controls import C17_LS_TRIALS
 from checks.numerics import ftz, identical_mul_add,GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
 
 
@@ -167,7 +168,7 @@ def ls_backtrack(
     # One same-process warmup/score; synthetic public caller components,
     # not full-board qualification. Accepted identity/compilation reused.
     # Evidence: overnight-ab-20261006/{amd,nvidia} normalized I12 receipts.
-    comptime if GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]():
+    comptime if GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL and (C17_LS_TRIALS or is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]()):
         if param.linesearch==LBFGS_LS_BT_ARMIJO and param.max_linesearch>0 and n>0 and n<=(16*1024*1024-96)//32:
             return ls_backtrack_exact_trials(ctx,param,f,fx,x,grad,step,drt,xp,n,scalar,ls_iters,stage,fresh,gradp,dg_ready)
     return ls_backtrack_sequential(ctx,param,f,fx,x,grad,step,drt,xp,n,scalar,ls_iters,stage,fresh,gradp,dg_ready)
@@ -232,7 +233,7 @@ def ls_backtrack_exact_trials(ctx: DeviceContext,param: LBFGSParam,mut f: GLMWit
     is recorded separately. Every rejection and min/max test is walked in
     the original order; all later trial words are discarded on acceptance.
     """
-    var count = min(4,param.max_linesearch)
+    var count = min(2 if C17_LS_TRIALS else 4,param.max_linesearch)
     var before = f.n_evals
     ls_iters=0
     var initial = fx

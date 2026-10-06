@@ -6,6 +6,7 @@ the same cells on the same values (eigh: `DKit.eigh`, DevExec's solve), so
 the same words as the host column. Each Python scalar read (the largest
 eigenvalue, a norm, a convergence limit) is one word home where Python read
 it. GPU binding only."""
+from experiments.classical_identical_ideas.linear_controls import C27_COMPONENTS
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from x_decomp.api import _f, _n
@@ -34,6 +35,11 @@ def sym_decorrelation_dev(mut k: DKit, W: DMat) raises -> DMat:
 
 
 def ica_g_dev(k: DKit, Y: DMat, fun: Int, alpha: Float64, mut gp: DMat) raises -> DMat:
+    comptime if C27_COMPONENTS:
+        var g1 = DMat(0, 0)
+        var gx = k.classical_contrast(Y, fun, alpha, g1)
+        gp = k.ew1(OP_SCALE, k.rowsum(g1), 1.0 / Float64(Y.c))
+        return gx^
     var gx: DMat
     var g1: DMat
     if fun == 0:

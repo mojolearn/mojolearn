@@ -195,6 +195,15 @@ def _kfeat_flags(est):
     return int(fn()) if fn is not None else 0
 
 
+def _classical_graph_normalization(est):
+    """C43 binary capability, IDENTICAL only and default OFF.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    flag = getattr(est._bind(), "x_neighbors_classical_graph_normalization", None)
+    return flag is not None and bool(flag())
+
+
 def _lp_fast_resident(est):
     """Whether the bound binary takes the resident kNN-graph loop
     (x_neighbors/iter_device.mojo LP_FAST_RESIDENT: FAST + Apple, off with
@@ -1427,7 +1436,9 @@ class _LabelPropagationBase(_XNeighbors):
             info = empty((2,), "<i4")
             tol_bits = struct.unpack("<Q", struct.pack("<d", float(self.tol)))[0]
             self._op("lp_iterate", [(G, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
-                     (n, C, int(self.max_iter), 0 if self._variant == "propagation" else 1,
+                     (n, C, int(self.max_iter),
+                      (0 if self._variant == "propagation" else 1) +
+                      (2 if getattr(self, "_classical_raw_graph", False) else 0),
                       tol_bits >> 32, tol_bits & 0xFFFFFFFF),
                      (_f32_scalar(self.alpha) if self._variant != "propagation" else 0.0,))
             n_iter = int(info.tolist()[0])
@@ -1502,6 +1513,9 @@ class LabelPropagation(_LabelPropagationBase):
 
     def _build_graph(self, X):
         A = self._graph_affinity(X)
+        self._classical_raw_graph = _classical_graph_normalization(self)
+        if self._classical_raw_graph:
+            return A
         G = empty(A.shape, "<f4")
         self._op("row_normalize", [(A, 0), (G, 1)], A.shape)
         return G
@@ -1529,6 +1543,9 @@ class LabelSpreading(_LabelPropagationBase):
 
     def _build_graph(self, X):
         A = self._graph_affinity(X)
+        self._classical_raw_graph = _classical_graph_normalization(self)
+        if self._classical_raw_graph:
+            return A
         n = A.shape[0]
         G = _empty_out((n, n), "<f4")
         if _OLD_ITEMS:

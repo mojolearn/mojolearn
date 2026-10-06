@@ -1,3 +1,4 @@
+from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IVF-FLAT's search: coarse select, probe, select again.
@@ -901,7 +902,7 @@ def ivf_flat_search_prepared(
                 var grid = (n_queries + FIVF_QPB - 1) // FIVF_QPB
                 comptime for KM in [8, 16, 32]:
                     if k <= KM and (KM == 8 or k > KM // 2):
-                        comptime if IVF_IDENTICAL_SCAN or IVF_APPLE_FAST_BALANCED:
+                        comptime if IVF_IDENTICAL_SCAN or IVF_APPLE_FAST_BALANCED or C35_PACKED_LISTS:
                             # I16 2026-10-06 AMD MI325X scoped LOSER, source 5b467815b:
                             # balanced / flat ratios 3.253-16.510; staged / flat 1.381-2.200.
                             # 100000 rows, 128 queries, features7/33/65, 64 lists/probes,
@@ -916,7 +917,7 @@ def ivf_flat_search_prepared(
                             # balanced candidate/baseline1.20x-4.17x time. One warmup/score;
                             # IDENTICAL opt-in remains off. Evidence: overnight-ab-20261006/
                             # nvidia/default-repair-normalized-measurements.json.
-                            if IVF_APPLE_FAST_BALANCED or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
+                            if C35_PACKED_LISTS or IVF_APPLE_FAST_BALANCED or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
                                 comptime if IVF_APPLE_FAST_BALANCED and is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
                                     _BALANCED_AUDIT.get_or_create_ptr()[].hits += 1
                                 ivf_balanced_scan[KM](ctx,dq,dq_norm,dev.dlist_data,dev.dlist_norm,dev.d_off,dev.d_ind,dprobe_idx,d_keep,keep_len,d_od,d_oi,n_queries,n_probes,dim,k)

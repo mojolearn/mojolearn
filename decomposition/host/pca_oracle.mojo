@@ -1,3 +1,9 @@
+from experiments.classical_identical_ideas.shared_controls import C01_LEAF64, C01_LEAF128
+from core.classical_stats import classical_column_mean
+from experiments.classical_identical_ideas.linear_controls import C23_CENTERED_PANELS
+from x_decomp.classical_cells import centered_gram_cell as c23_centered_gram_cell
+from experiments.classical_identical_ideas.shared_controls import C04_LOAD_CENTER
+from core.classical_centered import centered_gram_v1_cell
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
@@ -237,6 +243,13 @@ def host_column_mean(x: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32
 def host_column_mean_launch(x: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32]:
     """`core/xtdz_coalesced.mojo::column_mean_launch`'s value: the tile
     order under IDN_XTY_TILED (lane fam2-shared), else `host_column_mean`."""
+    comptime if C01_LEAF64 or C01_LEAF128:
+        if n_rows >= 1 and n_cols >= 1:
+            var means = List[Float32](length=n_cols, fill=Float32(0))
+            var ptr = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            for column in range(n_cols):
+                means[column] = classical_column_mean(ptr, n_rows, n_cols, column)
+            return means^
     comptime if IDN_XTY_TILED:
         if n_rows >= 1 and n_cols >= 1:
             return host_column_mean_tiled(x, n_rows, n_cols)
@@ -725,8 +738,24 @@ def host_pca_fit(
     host_pca_validate(n_rows, n_cols, n_components)
     var mu = host_column_mean_launch(x, n_rows, n_cols)
     var cov: List[Float32]
-    if host_gram_applies(n_cols):
+    if C23_CENTERED_PANELS:
+        cov = List[Float32](length=n_cols*n_cols, fill=Float32(0))
+        var xp = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var mp = mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        for i in range(n_cols):
+            for j in range(i, n_cols):
+                var value = c23_centered_gram_cell(xp, mp, n_rows, n_cols, i, j)
+                cov[i*n_cols+j] = value
+                cov[j*n_cols+i] = value
+    elif host_gram_applies(n_cols):
         cov = host_gram_splitk(x, mu, True, n_cols, n_rows)
+    elif C04_LOAD_CENTER:
+        cov = List[Float32](length=n_cols*n_cols, fill=Float32(0))
+        var xp = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var mp = mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        for i in range(n_cols):
+            for j in range(n_cols):
+                cov[i*n_cols+j] = centered_gram_v1_cell(xp, mp, n_rows, n_cols, i, j)
     else:
         var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
         cov = host_gemm_tn(centered, n_cols, n_rows)
