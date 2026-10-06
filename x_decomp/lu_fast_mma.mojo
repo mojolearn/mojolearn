@@ -76,6 +76,7 @@ comptime LFM_NB = get_defined_int["MOJOLEARN_LU_FAST_MMA_NB", 256]()
 comptime LFM_PANEL = 32
 # Shared direct fragments retain the caller strided subtract epilogue. No
 # additional buffer or pass; eligibility is kernel limits, never board size.
+# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
 comptime LFM_SHARED_SUB = AFN_GEMM_APPLE and is_defined["MOJOLEARN_LU_FAST_SHARED_SUB"]()
 
 comptime _M64 = SIMD[DType.float32, 64]

@@ -56,6 +56,7 @@ def finite_key(value: Float32) -> UInt32:
 #: in shared memory once (when `features <= FOREST_SHARED_ROW_CAPACITY`) and
 #: every lane's feature reads come from that tile. The values compared are
 #: the same words in either case. Both are default off until the pod A/B.
+# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
 comptime FOREST_SHARED_ROWS = is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
 comptime FOREST_SHARED_ROW_CAPACITY = 256
 
@@ -91,6 +92,7 @@ comptime FOREST_ROW_THREADS_SABOTAGE = is_defined["MOJOLEARN_FOREST_ROW_THREADS_
 #: the comparison arm. The old opt-in `MOJOLEARN_FOREST_PACKED_NODES` is
 #: accepted and changes nothing. The layout is a device-side cache of the
 #: same nodes; the archive arrays, the comparison and the fold are the same.
+# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
 comptime FOREST_PACKED_NODES = not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]()
 
 

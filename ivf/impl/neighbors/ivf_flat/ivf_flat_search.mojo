@@ -251,6 +251,7 @@ comptime IVF_FAST_SCAN = (
 # F14 keeps IVF's chosen centroids/probes and filter semantics. The separate
 # Apple FAST flag changes only compact list-task buffering and arithmetic;
 # it needs approximate recall and actual caller quality qualification.
+# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
 comptime IVF_APPLE_FAST_BALANCED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_IVF_FAST_BALANCED_TASKS"]()
 
 struct _BalancedAudit(Defaultable, Movable):
@@ -904,6 +905,7 @@ def ivf_flat_search_prepared(
                             # I16 new candidate remains default off. Qualification is pending: native
                             # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
                             if IVF_APPLE_FAST_BALANCED or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
+                                # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
                                 comptime if IVF_APPLE_FAST_BALANCED and is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
                                     _BALANCED_AUDIT.get_or_create_ptr()[].hits += 1
                                 ivf_balanced_scan[KM](ctx,dq,dq_norm,dev.dlist_data,dev.dlist_norm,dev.d_off,dev.d_ind,dprobe_idx,d_keep,keep_len,d_od,d_oi,n_queries,n_probes,dim,k)

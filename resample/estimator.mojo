@@ -2300,6 +2300,7 @@ def resample_indices_host(
 # docs/apple-fast/ab/resample-gpu-recovery.md; no new board promotion.
 comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER"]())
 
 
@@ -2309,10 +2310,12 @@ comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 # float32 all-GPU gather entrance, never the hybrid narrow route.
 comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     and is_defined["MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"]())
 
 comptime RESAMPLE_FAST_TILED_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     and is_defined["MOJOLEARN_RESAMPLE_FAST_TILED_GATHER"]())
 
 
@@ -2343,6 +2346,7 @@ def resample_gather_grouped(
     _ = keep^
 
 
+# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
 comptime RESAMPLE_FAST_DEVICE_PERMUTE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"]()
 
 def resample_permutation_gather_gpu(

@@ -33,6 +33,7 @@ from std.sys.compile import is_defined
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel, shared_sub_record
 
+# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
 comptime CHOL_SHARED_SUB = AFN_GEMM_APPLE and is_defined["MOJOLEARN_CHOL_FAST_SHARED_SUB"]()
 
 comptime FTS_BLOCK = 512
