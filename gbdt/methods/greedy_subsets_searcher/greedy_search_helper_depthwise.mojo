@@ -2216,6 +2216,8 @@ def fit_non_symmetric_tree[
     # One current snapshot plus the binary tree's bounded node arena.
     var lg_resident_stats = List[DeviceBuffer[DType.float32]]()
     var lg_resident_snapshots = 0
+    # I17 new candidate remains default off. Qualification is pending: native
+    # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
     comptime if LG_EXACT_ID and is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]():
         if lg_exact and max_leaves>0 and stat_count>0 and max_leaves<=(1<<22)//(3*stat_count):
             lg_resident_stats.append(ctx.enqueue_create_buffer[DType.float32]((2*max_leaves-1)*stat_count))

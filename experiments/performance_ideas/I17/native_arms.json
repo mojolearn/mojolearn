@@ -1,0 +1,153 @@
+{
+  "schema": 1,
+  "id": "I17",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "new_candidates_default_off": true,
+  "existing_promoted_defaults_unchanged": true,
+  "arms": [
+    {
+      "name": "incumbent",
+      "source": "experiments/performance_ideas/I17/check.mojo",
+      "defines": [],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I17/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I17/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I17/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "lg_exact_off",
+      "source": "experiments/performance_ideas/I17/check.mojo",
+      "defines": [
+        "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I17/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "inherit_off",
+      "source": "experiments/performance_ideas/I17/check.mojo",
+      "defines": [
+        "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I17/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "legacy_both_off",
+      "source": "experiments/performance_ideas/I17/check.mojo",
+      "defines": [
+        "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1",
+        "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I17/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1",
+        "--define",
+        "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    }
+  ]
+}
