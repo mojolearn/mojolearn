@@ -90,7 +90,7 @@
       "base_sha256": "cf11311ca8bf966e99eef2a28cb4973f827b40ef5cbd19fb7860c487ebd3c168",
       "changed": true,
       "changed_incumbent_module_assignments": {},
-      "integrated_sha256": "9cc6ca47e5083d55939077a401bda4d44a928faf47fca46d77cc2d1c3ed20b24",
+      "integrated_sha256": "aeb5dd246e8d4c243b6f8268cf39de110bc8379c9b61571da24a9220e76cfeb3",
       "path": "tools/bench_board_state.py"
     },
     {
@@ -154,11 +154,12 @@
     }
   ],
   "merge_review": {
-    "numerical_validation": "Retained metadata rendering only; no compilation or numerical verification",
+    "numerical_validation": "19 metadata/file-retention tests passed; no product model execution, builds or numerical verification.",
     "reviewed_changes": {
+      "tools/bench_board_state.py": "Optional persistent original public NPZ export after timing; original model-state hash/contract unchanged, no upgrade of partial exports. Captured bytes and file SHA retained.",
       "tools/performance_measurement_board.py": "Separate footer retains failed/quality-rejected attempts, worker exits, sample coverage and explicitly unqualified complete-pair timing. Fix ratio label to A/B. No changed metrics, dataset, estimator or default acceptance. Show observed complete-pair ratios separately from admitted ratios; pending quality/identity remains explicit."
     },
-    "source_sha": "00ae203818d188a132dad37429423fd8c558bde2"
+    "source_sha": "2d062b7d458ad50fe5b58e2137fc101eb6d2e556"
   },
   "opponent_execution": "NOT RUN; opponent source/dependencies/results untouched",
   "policy": "Existing datasets, splits, seeds, preprocessing, workload sizes, estimator settings, modes, quality rules, timing definitions and opponent roster are immutable. Added capture/selector APIs do not authorize alternate races.",

@@ -51,17 +51,23 @@ def retain_values(value,path):
     tree=encode(value);path.write_text(json.dumps(dict(schema='mojolearn.typed-values/1',tree=tree),allow_nan=False,indent=2)+'\n')
 
 
-def capture_model(runner, expected_paths=None):
+def capture_model(runner, expected_paths=None, *, retain_path=None):
     from bench_board_state import runner_model
     model=runner_model(runner)
     if model is None:return dict(status='UNAVAILABLE',reason='Runner exposes no public model owner',missing_state=['model owner'])
     if callable(getattr(model,'state_dict',None)):
-        return capture(model.state_dict(),'public state_dict',expected_paths=expected_paths)
+        state=model.state_dict()
+        result=capture(state,'public state_dict',expected_paths=expected_paths)
+        if retain_path is not None:
+            retain_values(state,retain_path)
+            result['retained_values']=str(retain_path)
+        return result
     # Only explicitly reviewed public save schemas can establish complete
     # fitted-state coverage. Generic prediction-only exports remain partial.
     # Existing receipts are never rewritten or upgraded by this future capture.
     from bench_board_state import public_fitted_state
-    state,provenance=public_fitted_state(model)
+    export_directory=Path(retain_path).with_suffix('.export') if retain_path is not None else None
+    state,provenance=public_fitted_state(model,retain_directory=export_directory)
     if state is None:return provenance
     paths=provenance['contract_paths']
     result=capture(state,'complete public fitted state: '+provenance['contract'],expected_paths=paths)
@@ -71,6 +77,9 @@ def capture_model(runner, expected_paths=None):
         result['unexpected_declared_paths']=sorted(set(expected_paths)-set(paths))
         result['reason']='Recipe model-state paths differ from the complete reviewed export contract'
     result['provenance']=provenance
+    if retain_path is not None:
+        retain_values(state,retain_path)
+        result['retained_values']=str(retain_path)
     return result
 
 

@@ -1,5 +1,9 @@
 """Invented archive/schema fixtures only; no product imports or model execution."""
 from types import SimpleNamespace
+import hashlib
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
 import numpy as np
@@ -41,6 +45,44 @@ def fixture_model(name, module, arrays, error=None):
 
 
 class PublicStateMetadataTest(unittest.TestCase):
+    def test_retention_keeps_original_export_and_typed_state_after_capture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / 'scored-A.model-state.json'
+            model = fixture_model('PCA', 'mojolearn.decomposition', pca_archive())
+            result = capture_model(SimpleNamespace(est=model), retain_path=destination)
+            self.assertEqual(result['status'], 'CAPTURED')
+            exported = result['provenance']['retained_export']
+            raw = Path(exported['path']).read_bytes()
+            self.assertEqual(exported['sha256'], hashlib.sha256(raw).hexdigest())
+            self.assertEqual(exported['bytes'], len(raw))
+            self.assertEqual(result['retained_values'], str(destination))
+            tree = json.loads(destination.read_text())['tree']
+            arrays = [value for _, value in tree['dict'] if 'array' in value]
+            self.assertTrue(arrays)
+            for leaf in arrays:
+                self.assertEqual(leaf['sha256'], hashlib.sha256(Path(leaf['array']).read_bytes()).hexdigest())
+            duplicate = capture_model(SimpleNamespace(est=model), retain_path=destination)
+            self.assertEqual(duplicate['status'], 'UNAVAILABLE')
+            self.assertEqual(Path(exported['path']).read_bytes(), raw)
+
+    def test_partial_export_retained_without_upgrading_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            model = fixture_model('OtherPCA', 'mojolearn.testing', pca_archive())
+            result = capture_model(SimpleNamespace(est=model),
+                                   retain_path=Path(directory) / 'partial.json')
+            self.assertEqual(result['status'], 'UNAVAILABLE')
+            exported = result['partial_export']['retained_export']
+            self.assertEqual(hashlib.sha256(Path(exported['path']).read_bytes()).hexdigest(), exported['sha256'])
+
+    def test_state_dict_values_retained_without_a_save_export(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / 'state.json'
+            model = SimpleNamespace(state_dict=lambda: {'weights': np.zeros(2, dtype='<f4')})
+            result = capture_model(SimpleNamespace(est=model), ['$.weights'], retain_path=destination)
+            self.assertEqual(result['completeness'], 'complete_declared_scope')
+            leaf = json.loads(destination.read_text())['tree']['dict'][0][1]
+            self.assertEqual(hashlib.sha256(Path(leaf['array']).read_bytes()).hexdigest(), leaf['sha256'])
+
     def capture(self, name='PCA', arrays=None, paths=None, module=None, error=None):
         if arrays is None:
             arrays = pca_archive(name) if name.endswith('PCA') else kmeans_archive(name)

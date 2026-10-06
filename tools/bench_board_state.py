@@ -8,6 +8,28 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+from contextlib import contextmanager
+
+
+@contextmanager
+def _export_directory(retain_directory, prefix):
+    """Keep requested evidence; temporary exports remain explicitly hash-only."""
+    if retain_directory is None:
+        with tempfile.TemporaryDirectory(prefix=prefix) as directory:
+            yield Path(directory)
+    else:
+        directory = Path(retain_directory)
+        directory.mkdir(parents=True, exist_ok=False)
+        yield directory
+
+
+def _retained_export(path):
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(block)
+    return dict(path=str(path), bytes=path.stat().st_size,
+                sha256=digest.hexdigest(), encoding='original public save file bytes')
 
 
 # Reviewed against the public save/load and fit methods at numerical freeze
@@ -109,7 +131,7 @@ def normalize_public_fitted_state(arrays, estimator, saved_estimator):
     return state
 
 
-def public_fitted_state(model):
+def public_fitted_state(model, *, retain_directory=None):
     """Read one public save export after clocks stop; never inspect handles.
 
     Returns (typed state, provenance), or (None, explicit unavailable evidence).
@@ -124,7 +146,7 @@ def public_fitted_state(model):
             missing = ['retained training mean _x_mean', 'retained training mean _y_mean']
         return None, dict(status='UNAVAILABLE', missing_state=missing,
                           reason='Public export is not a reviewed complete fitted-state contract',
-                          partial_export=model_receipt(model))
+                          partial_export=model_receipt(model, retain_directory=retain_directory))
     contract = PUBLIC_FITTED_STATE_CONTRACTS[estimator]
     metadata = dict(contract=contract['id'], contract_source=contract['source'],
                     contract_paths=public_fitted_state_paths(estimator),
@@ -134,11 +156,13 @@ def public_fitted_state(model):
                         reason='public host route subclass uses the same versioned fitted-state format')})
     try:
         import numpy as np
-        with tempfile.TemporaryDirectory(prefix='mojolearn-typed-fitted-state-') as directory:
+        with _export_directory(retain_directory, 'mojolearn-typed-fitted-state-') as directory:
             path = Path(directory) / 'model.npz'
             model.save(path)
             with np.load(path, allow_pickle=False) as saved:
                 arrays = {name: saved[name] for name in saved.files}
+            if retain_directory is not None:
+                metadata['retained_export'] = _retained_export(path)
         metadata['complete_export_sha256'] = canonical_hash(arrays)
         state = normalize_public_fitted_state(arrays, estimator, key[1])
         return state, metadata
@@ -181,7 +205,7 @@ def canonical_hash(value):
     return h.hexdigest()
 
 
-def _model_receipt(model):
+def _model_receipt(model, *, retain_directory=None):
     """Hash a public snapshot; never fit, predict, or inspect opaque handles."""
     if model is None:
         return {"status": "unavailable", "reason": "runner does not retain an exportable model"}
@@ -193,7 +217,7 @@ def _model_receipt(model):
         return dict(info, status="ok", source="public state_dict", sha256=canonical_hash(state))
     if callable(getattr(model, "save", None)):
         import numpy as np
-        with tempfile.TemporaryDirectory(prefix="mojolearn-scored-state-") as directory:
+        with _export_directory(retain_directory, "mojolearn-scored-state-") as directory:
             path = Path(directory) / "model.npz"
             model.save(path)
             with np.load(path, allow_pickle=False) as saved:
@@ -204,14 +228,17 @@ def _model_receipt(model):
                 omitted = [key for key in ("device",) if key in state]
                 for key in omitted:
                     del state[key]
-                return dict(info, status="ok", source="public save npz", sha256=canonical_hash(state),
-                            complete_export_sha256=full, excluded_metadata=omitted)
+                result = dict(info, status="ok", source="public save npz", sha256=canonical_hash(state),
+                              complete_export_sha256=full, excluded_metadata=omitted)
+                if retain_directory is not None:
+                    result['retained_export'] = _retained_export(path)
+                return result
     return dict(info, status="unavailable", reason="no public state_dict or save export")
 
 
-def model_receipt(model):
+def model_receipt(model, *, retain_directory=None):
     try:
-        return _model_receipt(model)
+        return _model_receipt(model, retain_directory=retain_directory)
     except Exception as exc:
         # Keep the scored measurement and its original diagnostic. Failed
         # exports are never an identity claim and can be repaired separately.
