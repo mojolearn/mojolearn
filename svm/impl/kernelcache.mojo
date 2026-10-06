@@ -336,8 +336,10 @@ struct KernelCache(Movable):
                         self.ws_idx_mod.unsafe_ptr(), Int32(q), self.classical_keys.unsafe_ptr(), Int32(self.classical_slots),
                         grid_dim=1, block_dim=1,
                     )
+                    # Both index arguments are read-only views of the same live working set.
+                    var ws_ptr = rebind[MutPointer[Int32, MutAnyOrigin]](self.ws_idx_mod.unsafe_ptr())
                     ctx.enqueue_function[classical_cache_gather_kernel](
-                        self.classical_cache.unsafe_ptr(), self.ws_idx_mod.unsafe_ptr(), Int32(q), self.ws_idx_mod.unsafe_ptr(),
+                        self.classical_cache.unsafe_ptr(), ws_ptr, Int32(q), ws_ptr,
                         self.kernel_tile.unsafe_ptr(), Int32(self.n_rows), Int32(n_ws), Int32(self.classical_slots),
                         grid_dim=_grid(n_ws), block_dim=SEL_TPB,
                     )

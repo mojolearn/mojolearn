@@ -3253,4 +3253,4 @@ def mamba3_prefill_session_export_weights_binding(session: PythonObject, addrs: 
         owner[].busy = False
         raise error
     owner[].busy = False
-    return PythonObject(generation)
+    return generation
