@@ -6,9 +6,8 @@ from experiments.performance_ideas.N08.fused_threshold import threshold_graph
 from gemm.checks.gemm_step_arms import gemm_step_fill
 
 
-def main() raises:
+def _case(rows: Int,cols: Int,dims: Int) raises:
     var ctx=DeviceContext()
-    var rows=17;var cols=33;var dims=3
     var q=ctx.enqueue_create_buffer[DType.float32](rows*dims)
     var x=ctx.enqueue_create_buffer[DType.float32](cols*dims)
     var hq=ctx.enqueue_create_host_buffer[DType.float32](rows*dims)
@@ -41,6 +40,20 @@ def main() raises:
             ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(),src_buf=ia)
             ctx.enqueue_copy(dst_ptr=hj.unsafe_ptr(),src_buf=ja)
             ctx.synchronize()
+            var max_bin=0
+            if e==2 or e==3:max_bin=1
+            elif e==4:max_bin=3
+            var row_edges=0
+            for col in range(cols):
+                if col%4<=max_bin:row_edges+=1
+            for row in range(rows+1):
+                if Int(hi[row])!=row*row_edges:raise Error("analytical CSR count/offset mismatch")
+            for row in range(rows):
+                var position=row*row_edges
+                for col in range(cols):
+                    if col%4<=max_bin:
+                        if Int(hj[position])!=col:raise Error("analytical canonical edge mismatch")
+                        position+=1
             if arm==0:
                 count=Int(hi[rows])
                 for row in range(rows+1):expected.append(hi[row])
@@ -52,3 +65,8 @@ def main() raises:
                 for edge in range(count):
                     if hj[edge]!=expected[rows+1+edge]:raise Error("CSR canonical edge mismatch")
         print("N08_CSR_PASS epsilon_bits="+hex(epsbits[e])+" edges="+String(count)+" avoided_distance_bytes="+String(rows*cols*4))
+
+
+def main() raises:
+    _case(17,33,3)
+    _case(128,1,3)
