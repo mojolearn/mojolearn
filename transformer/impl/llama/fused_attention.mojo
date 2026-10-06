@@ -9317,15 +9317,15 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
     return g[].bufs[at].create_sub_buffer[DType.float32](0, cells)
 
 
-# I06 new candidate remains default off. Qualification is pending: native
-# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
-# I06 NVIDIA L40S 2026-10-06 component WIN: candidate1.567/3.263 ms
+# I06 remains default off; corrected isolated-toggle measurement is pending.
+# I06 NVIDIA L40S 2026-10-06 confounded bundle WIN: candidate1.567/3.263 ms
 # versus baseline1.860/3.549 ms, length1024/1536, heads12,kvheads4.
-# One warmup/score; paired-vendor full-workload qualification still pending.
+# Original driver also changes backward kvgrid schedule with the reuse flag.
+# One warmup/score; isolated-toggle and full-workload qualification pending.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 comptime ATTN_GQA_HEAD_REUSE = (
     GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL
-    # NEVER RUN — PENDING MEASUREMENT
+    # Original bundled measurement below does not qualify this isolated toggle.
     and is_defined["MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and lib_smem_page_fits_for[TARGET_COLUMN,_fwd_r2_page_bytes(64,True)]()
