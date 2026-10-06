@@ -70,7 +70,8 @@ def build(inventory, index):
     return {'schema': 'mojolearn.performance-measurement-board/1', 'campaign': inventory['campaign'],
             'identity_policy': 'Previously validated; no separate retest by owner instruction',
             'promotion': False, 'machines': index.get('machines', []),
-            'cards': list(cards.values()), 'notes': index.get('notes', [])}
+            'cards': list(cards.values()), 'notes': index.get('notes', []),
+            'decisions': index.get('decisions', [])}
 
 
 def escape(value):
@@ -92,7 +93,7 @@ def write(board, out):
         temp.replace(target)
         lines = ['# Candidate A/B measurements', '',
                  'One excluded warmup and one scored sample. Identity and compilation are reused; no separate retests.',
-                 'Component and public-caller fixtures retain their stated scope. Full-workload results and opponent comparisons require their own measurements. Defaults remain unchanged.', '',
+                 'Component and public-caller fixtures retain their stated scope. Full-workload results and opponent comparisons require their own measurements. Default decisions are recorded beside source toggles; this board does not change them.', '',
                  '| Candidate | Mode | Measurement status | Captured pairs |', '|---|---|---|---:|']
         for card in data['cards']:
             measured = sum(c['status'] == 'MEASURED' for c in card['cells'])
@@ -107,6 +108,10 @@ def write(board, out):
                           cell.get('scope', ''), cell['status'], f'{ratio:.4f}' if ratio is not None else '—', cell.get('evidence', '')]
                 lines.append('| ' + ' | '.join(map(escape, values)) + ' |')
         lines += ['', '## Campaign notes', ''] + ['- ' + escape(n) for n in data['notes']]
+        if data['decisions']:
+            lines += ['', '## Recorded source decisions', '', '| Candidate / arm | Decision | Source commit | Evidence |', '|---|---|---|---|']
+            for decision in data['decisions']:
+                lines.append('| ' + ' | '.join(escape(decision.get(k, '')) for k in ['candidate', 'decision', 'commit', 'evidence']) + ' |')
         target = out / (name + '.md')
         temp = target.with_suffix('.tmp')
         temp.write_text('\n'.join(lines) + '\n')

@@ -4568,8 +4568,45 @@
         "amd",
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "A06",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 2, \"AB_K\": 8, \"AB_QUERIES\": 2000, \"AB_ROWS\": 100000}",
+          "scope": "public_caller_component",
+          "status": "NO_DISTINCT_RUNTIME_ARM",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "measurement_stage": "repaired_full_caller",
+          "reason": "Both requested256 and AMD default resolve used_tile256; original card has no alternate compile defines. Same-configuration repeat is not a candidate comparison.",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+        },
+        {
+          "id": "A06",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 8, \"AB_K\": 8, \"AB_QUERIES\": 2000, \"AB_ROWS\": 100000}",
+          "scope": "public_caller_component",
+          "status": "NO_DISTINCT_RUNTIME_ARM",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "measurement_stage": "repaired_full_caller",
+          "reason": "Both requested256 and AMD default resolve used_tile256; original card has no alternate compile defines. Same-configuration repeat is not a candidate comparison.",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+        },
+        {
+          "id": "A06",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 17, \"AB_K\": 8, \"AB_QUERIES\": 2000, \"AB_ROWS\": 100000}",
+          "scope": "public_caller_component",
+          "status": "NO_DISTINCT_RUNTIME_ARM",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "measurement_stage": "repaired_full_caller",
+          "reason": "Both requested256 and AMD default resolve used_tile256; original card has no alternate compile defines. Same-configuration repeat is not a candidate comparison.",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+        }
+      ],
+      "status": "NO_DISTINCT_RUNTIME_ARM"
     },
     {
       "id": "A07",
@@ -4580,8 +4617,114 @@
         "amd",
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "A07",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 32, \"AB_ROWS\": 100000}-production_tasks256",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "692f818e60c90980e26d9666a9836f43bd16b90533441888e933432c32e74796",
+            "candidate": "9583ce98ae125f89c0af8ef0cf078e6e8b1e484152292c8ab4c9d3d72fc115fe"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 335.773905,
+          "candidate_ms": 333.376677,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "production_default512",
+          "candidate_arm": "production_tasks256",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "ARM A07-score 333.376677",
+            "MODEL A07-score 9258246770034211058"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 0.9928605887345533
+        },
+        {
+          "id": "A07",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 33, \"AB_ROWS\": 100001}-production_tasks256",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "692f818e60c90980e26d9666a9836f43bd16b90533441888e933432c32e74796",
+            "candidate": "9583ce98ae125f89c0af8ef0cf078e6e8b1e484152292c8ab4c9d3d72fc115fe"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 337.714222,
+          "candidate_ms": 336.107111,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "production_default512",
+          "candidate_arm": "production_tasks256",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "ARM A07-score 336.107111",
+            "MODEL A07-score 9836013116804333071"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 0.9952412101851014
+        },
+        {
+          "id": "A07",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 17, \"AB_ROWS\": 65537}-production_tasks256",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "692f818e60c90980e26d9666a9836f43bd16b90533441888e933432c32e74796",
+            "candidate": "9583ce98ae125f89c0af8ef0cf078e6e8b1e484152292c8ab4c9d3d72fc115fe"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 293.831635,
+          "candidate_ms": 293.199587,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "production_default512",
+          "candidate_arm": "production_tasks256",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "ARM A07-score 293.199587",
+            "MODEL A07-score 15919492026362710506"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 0.99784894502595
+        }
+      ],
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "A08",
@@ -4592,8 +4735,429 @@
         "amd",
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 32, \"AB_ROWS\": 100000}-old1024",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "fc4f6ff6fdcd93c0a9ec531f1f8062c915f265af1b28a90743fc2b5c08ebf0ec"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 3.085919,
+          "candidate_ms": 3.718356,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "old1024",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=100000 features=32 clusters=32 elapsed_ns=5770402",
+            "MEASURE id=A08 phase=1 rows=100000 features=32 clusters=32 elapsed_ns=3718356"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 1.2049428387459296
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 33, \"AB_ROWS\": 100001}-old1024",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "fc4f6ff6fdcd93c0a9ec531f1f8062c915f265af1b28a90743fc2b5c08ebf0ec"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 3.295095,
+          "candidate_ms": 3.985798,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "old1024",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=100001 features=33 clusters=32 elapsed_ns=6051725",
+            "MEASURE id=A08 phase=1 rows=100001 features=33 clusters=32 elapsed_ns=3985798"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 1.209615504257085
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 17, \"AB_ROWS\": 65537}-old1024",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "fc4f6ff6fdcd93c0a9ec531f1f8062c915f265af1b28a90743fc2b5c08ebf0ec"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 4.358267,
+          "candidate_ms": 6.2145,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "old1024",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=65537 features=17 clusters=32 elapsed_ns=8516041",
+            "MEASURE id=A08 phase=1 rows=65537 features=17 clusters=32 elapsed_ns=6214500"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 1.4259108035372776
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 32, \"AB_ROWS\": 100000}-wide4096",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "3a264846f414a3e4ccbc4f3593e4130eac94fd6171fb1b95e078135ddb693700"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 3.085919,
+          "candidate_ms": 8.802624,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "wide4096",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=100000 features=32 clusters=32 elapsed_ns=10566890",
+            "MEASURE id=A08 phase=1 rows=100000 features=32 clusters=32 elapsed_ns=8802624"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 2.8525129791157835
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 33, \"AB_ROWS\": 100001}-wide4096",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "3a264846f414a3e4ccbc4f3593e4130eac94fd6171fb1b95e078135ddb693700"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 3.295095,
+          "candidate_ms": 9.367341,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "wide4096",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=100001 features=33 clusters=32 elapsed_ns=11205523",
+            "MEASURE id=A08 phase=1 rows=100001 features=33 clusters=32 elapsed_ns=9367341"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 2.842813636632631
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 17, \"AB_ROWS\": 65537}-wide4096",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "3a264846f414a3e4ccbc4f3593e4130eac94fd6171fb1b95e078135ddb693700"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 4.358267,
+          "candidate_ms": 19.381664,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "wide4096",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=65537 features=17 clusters=32 elapsed_ns=22007227",
+            "MEASURE id=A08 phase=1 rows=65537 features=17 clusters=32 elapsed_ns=19381664"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 4.447103401420795
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 32, \"AB_ROWS\": 100000}-256_conv_poll1",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "61417ddc1b4637fc05f74c3e876da25c8dfced45efb1eebc86e218e0566ddbc4"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 3.085919,
+          "candidate_ms": 2.570114,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "256_conv_poll1",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=100000 features=32 clusters=32 elapsed_ns=5000463",
+            "MEASURE id=A08 phase=1 rows=100000 features=32 clusters=32 elapsed_ns=2570114"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 0.8328520612498254
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 33, \"AB_ROWS\": 100001}-256_conv_poll1",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "61417ddc1b4637fc05f74c3e876da25c8dfced45efb1eebc86e218e0566ddbc4"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 3.295095,
+          "candidate_ms": 2.763179,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "256_conv_poll1",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=100001 features=33 clusters=32 elapsed_ns=5144060",
+            "MEASURE id=A08 phase=1 rows=100001 features=33 clusters=32 elapsed_ns=2763179"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 0.8385733946972698
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 17, \"AB_ROWS\": 65537}-256_conv_poll1",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "61417ddc1b4637fc05f74c3e876da25c8dfced45efb1eebc86e218e0566ddbc4"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 4.358267,
+          "candidate_ms": 4.308101,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "256_conv_poll1",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=65537 features=17 clusters=32 elapsed_ns=6796736",
+            "MEASURE id=A08 phase=1 rows=65537 features=17 clusters=32 elapsed_ns=4308101"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 0.988489461522206
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 32, \"AB_ROWS\": 100000}-1024_conv_poll1",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "7ead7e10d39d27bab78242b59ed0382cf475cce9404e34777aeb18b925ac9f66"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 3.085919,
+          "candidate_ms": 3.528141,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "1024_conv_poll1",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=100000 features=32 clusters=32 elapsed_ns=5660626",
+            "MEASURE id=A08 phase=1 rows=100000 features=32 clusters=32 elapsed_ns=3528141"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 1.1433031780808245
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 33, \"AB_ROWS\": 100001}-1024_conv_poll1",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "7ead7e10d39d27bab78242b59ed0382cf475cce9404e34777aeb18b925ac9f66"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 3.295095,
+          "candidate_ms": 3.833953,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "1024_conv_poll1",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=100001 features=33 clusters=32 elapsed_ns=5670407",
+            "MEASURE id=A08 phase=1 rows=100001 features=33 clusters=32 elapsed_ns=3833953"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 1.163533373089395
+        },
+        {
+          "id": "A08",
+          "vendor": "amd",
+          "route": "gfx942",
+          "case": "{\"AB_FEATURES\": 17, \"AB_ROWS\": 65537}-1024_conv_poll1",
+          "scope": "public_caller_component",
+          "machine": "DigitalOcean-606508222-MI325X",
+          "baseline_machine": "DigitalOcean-606508222-MI325X",
+          "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "baseline_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "candidate_source_sha": "4252d8155ac4e2801f9c4372c1d1e1035f0f3b6c",
+          "artifact_hashes": {
+            "baseline": "80b648e2ba66f12287d032bb848dffe1f15cacb846a0424464fde4af0786deb2",
+            "candidate": "7ead7e10d39d27bab78242b59ed0382cf475cce9404e34777aeb18b925ac9f66"
+          },
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json",
+          "warmups": 1,
+          "scored_samples": 1,
+          "warmup_scope": "same_process",
+          "baseline_ms": 4.358267,
+          "candidate_ms": 6.36654,
+          "returncode": 0,
+          "status": "MEASURED",
+          "baseline_arm": "current256",
+          "candidate_arm": "1024_conv_poll1",
+          "measurement_stage": "repaired_full_caller",
+          "limitation": "Complete production fit/search on representative generated fixture; named-dataset board full workload remains separate",
+          "scored_records": [
+            "MEASURE id=A08 phase=0 rows=65537 features=17 clusters=32 elapsed_ns=8612532",
+            "MEASURE id=A08 phase=1 rows=65537 features=17 clusters=32 elapsed_ns=6366540"
+          ],
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
+          "candidate_over_baseline": 1.460796229326932
+        }
+      ],
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "I01",
@@ -4974,5 +5538,35 @@
     "Existing identity and compilation accepted by owner; no separate validation passes.",
     "Reused native component executables warm up in a separate process; scored first calls may include JIT. These are not steady-state or full-workload promotion evidence.",
     "Winners and losers are recorded beside source toggles as sufficient measurements arrive; partial component screens leave defaults unchanged."
+  ],
+  "decisions": [
+    {
+      "candidate": "F03 / resident",
+      "vendor": "apple",
+      "decision": "CONFIRMED EXISTING DEFAULT: B/A trajectory 0.5125\u20130.5565; already enabled",
+      "commit": "b953bc9a2",
+      "evidence": "M3 measured heldout and resume results; source _byte_lm_impl.py _is_resident"
+    },
+    {
+      "candidate": "F08 / BWD_NOSYNC",
+      "vendor": "apple",
+      "decision": "PROMOTED: Apple FAST only; 12-step train B/A0.8766 with matching loss/resume; explicit OFF escape; one scored sample",
+      "commit": "b953bc9a2",
+      "evidence": "training/byte_lm_afn.mojo:53; M3 F08/default retained result"
+    },
+    {
+      "candidate": "F08 / fused, views",
+      "vendor": "apple",
+      "decision": "RETAIN OFF: small or mixed gain; views cold call regressed",
+      "commit": "b953bc9a2",
+      "evidence": "M3 F08 independent-arm results; baseline manifests explicitly disable NOSYNC"
+    },
+    {
+      "candidate": "F07, F10, F11",
+      "vendor": "apple",
+      "decision": "RETAIN OFF for evaluated experimental arms: mixed/regressing measured cases; see source for each scoped outcome",
+      "commit": "b953bc9a2",
+      "evidence": "Inline toggle annotations retain case timing and quality counts"
+    }
   ]
 }

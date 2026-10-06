@@ -1,7 +1,7 @@
 # Candidate A/B measurements
 
 One excluded warmup and one scored sample. Identity and compilation are reused; no separate retests.
-Component and public-caller fixtures retain their stated scope. Full-workload results and opponent comparisons require their own measurements. Defaults remain unchanged.
+Component and public-caller fixtures retain their stated scope. Full-workload results and opponent comparisons require their own measurements. Default decisions are recorded beside source toggles; this board does not change them.
 
 | Candidate | Mode | Measurement status | Captured pairs |
 |---|---|---|---:|
@@ -10,9 +10,9 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | A03 | identical | PARTIAL_MEASUREMENTS_RETAINED | 42 |
 | A04 | identical | PENDING_MEASUREMENT | 0 |
 | A05 | identical | PARTIAL_MEASUREMENTS_RETAINED | 21 |
-| A06 | identical | PENDING_MEASUREMENT | 0 |
-| A07 | identical | PENDING_MEASUREMENT | 0 |
-| A08 | identical | PENDING_MEASUREMENT | 0 |
+| A06 | identical | NO_DISTINCT_RUNTIME_ARM | 0 |
+| A07 | identical | PARTIAL_MEASUREMENTS_RETAINED | 3 |
+| A08 | identical | PARTIAL_MEASUREMENTS_RETAINED | 12 |
 | I01 | identical | PENDING_MEASUREMENT | 0 |
 | I02 | identical | PENDING_MEASUREMENT | 0 |
 | I03 | identical | PENDING_MEASUREMENT | 0 |
@@ -193,6 +193,24 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | A05 | amd/gfx942 | 4096x1024x1024-op0-compact_rows | component | MEASURED | 0.9811 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/capture/artifacts/summary.json |
 | A05 | amd/gfx942 | 4096x1024x1024-op1-compact_rows | component | MEASURED | 1.6291 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/capture/artifacts/summary.json |
 | A05 | amd/gfx942 | 4096x1024x1024-op2-compact_rows | component | MEASURED | 1.6246 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/capture/artifacts/summary.json |
+| A06 | amd/gfx942 | {"AB_FEATURES": 2, "AB_K": 8, "AB_QUERIES": 2000, "AB_ROWS": 100000} | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A06 | amd/gfx942 | {"AB_FEATURES": 8, "AB_K": 8, "AB_QUERIES": 2000, "AB_ROWS": 100000} | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A06 | amd/gfx942 | {"AB_FEATURES": 17, "AB_K": 8, "AB_QUERIES": 2000, "AB_ROWS": 100000} | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A07 | amd/gfx942 | {"AB_FEATURES": 32, "AB_ROWS": 100000}-production_tasks256 | public_caller_component | MEASURED | 0.9929 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A07 | amd/gfx942 | {"AB_FEATURES": 33, "AB_ROWS": 100001}-production_tasks256 | public_caller_component | MEASURED | 0.9952 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A07 | amd/gfx942 | {"AB_FEATURES": 17, "AB_ROWS": 65537}-production_tasks256 | public_caller_component | MEASURED | 0.9978 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 32, "AB_ROWS": 100000}-old1024 | public_caller_component | MEASURED | 1.2049 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 33, "AB_ROWS": 100001}-old1024 | public_caller_component | MEASURED | 1.2096 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 17, "AB_ROWS": 65537}-old1024 | public_caller_component | MEASURED | 1.4259 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 32, "AB_ROWS": 100000}-wide4096 | public_caller_component | MEASURED | 2.8525 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 33, "AB_ROWS": 100001}-wide4096 | public_caller_component | MEASURED | 2.8428 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 17, "AB_ROWS": 65537}-wide4096 | public_caller_component | MEASURED | 4.4471 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 32, "AB_ROWS": 100000}-256_conv_poll1 | public_caller_component | MEASURED | 0.8329 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 33, "AB_ROWS": 100001}-256_conv_poll1 | public_caller_component | MEASURED | 0.8386 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 17, "AB_ROWS": 65537}-256_conv_poll1 | public_caller_component | MEASURED | 0.9885 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 32, "AB_ROWS": 100000}-1024_conv_poll1 | public_caller_component | MEASURED | 1.1433 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 33, "AB_ROWS": 100001}-1024_conv_poll1 | public_caller_component | MEASURED | 1.1635 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
+| A08 | amd/gfx942 | {"AB_FEATURES": 17, "AB_ROWS": 65537}-1024_conv_poll1 | public_caller_component | MEASURED | 1.4608 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json |
 
 ## Campaign notes
 
@@ -201,3 +219,12 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 - Existing identity and compilation accepted by owner; no separate validation passes.
 - Reused native component executables warm up in a separate process; scored first calls may include JIT. These are not steady-state or full-workload promotion evidence.
 - Winners and losers are recorded beside source toggles as sufficient measurements arrive; partial component screens leave defaults unchanged.
+
+## Recorded source decisions
+
+| Candidate / arm | Decision | Source commit | Evidence |
+|---|---|---|---|
+| F03 / resident | CONFIRMED EXISTING DEFAULT: B/A trajectory 0.5125–0.5565; already enabled | b953bc9a2 | M3 measured heldout and resume results; source _byte_lm_impl.py _is_resident |
+| F08 / BWD_NOSYNC | PROMOTED: Apple FAST only; 12-step train B/A0.8766 with matching loss/resume; explicit OFF escape; one scored sample | b953bc9a2 | training/byte_lm_afn.mojo:53; M3 F08/default retained result |
+| F08 / fused, views | RETAIN OFF: small or mixed gain; views cold call regressed | b953bc9a2 | M3 F08 independent-arm results; baseline manifests explicitly disable NOSYNC |
+| F07, F10, F11 | RETAIN OFF for evaluated experimental arms: mixed/regressing measured cases; see source for each scoped outcome | b953bc9a2 | Inline toggle annotations retain case timing and quality counts |

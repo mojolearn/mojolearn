@@ -30800,5 +30800,35 @@
     "Existing identity and compilation accepted by owner; no separate validation passes.",
     "Reused native component executables warm up in a separate process; scored first calls may include JIT. These are not steady-state or full-workload promotion evidence.",
     "Winners and losers are recorded beside source toggles as sufficient measurements arrive; partial component screens leave defaults unchanged."
+  ],
+  "decisions": [
+    {
+      "candidate": "F03 / resident",
+      "vendor": "apple",
+      "decision": "CONFIRMED EXISTING DEFAULT: B/A trajectory 0.5125\u20130.5565; already enabled",
+      "commit": "b953bc9a2",
+      "evidence": "M3 measured heldout and resume results; source _byte_lm_impl.py _is_resident"
+    },
+    {
+      "candidate": "F08 / BWD_NOSYNC",
+      "vendor": "apple",
+      "decision": "PROMOTED: Apple FAST only; 12-step train B/A0.8766 with matching loss/resume; explicit OFF escape; one scored sample",
+      "commit": "b953bc9a2",
+      "evidence": "training/byte_lm_afn.mojo:53; M3 F08/default retained result"
+    },
+    {
+      "candidate": "F08 / fused, views",
+      "vendor": "apple",
+      "decision": "RETAIN OFF: small or mixed gain; views cold call regressed",
+      "commit": "b953bc9a2",
+      "evidence": "M3 F08 independent-arm results; baseline manifests explicitly disable NOSYNC"
+    },
+    {
+      "candidate": "F07, F10, F11",
+      "vendor": "apple",
+      "decision": "RETAIN OFF for evaluated experimental arms: mixed/regressing measured cases; see source for each scoped outcome",
+      "commit": "b953bc9a2",
+      "evidence": "Inline toggle annotations retain case timing and quality counts"
+    }
   ]
 }

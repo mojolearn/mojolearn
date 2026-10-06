@@ -1,7 +1,7 @@
 # Candidate A/B measurements
 
 One excluded warmup and one scored sample. Identity and compilation are reused; no separate retests.
-Component and public-caller fixtures retain their stated scope. Full-workload results and opponent comparisons require their own measurements. Defaults remain unchanged.
+Component and public-caller fixtures retain their stated scope. Full-workload results and opponent comparisons require their own measurements. Default decisions are recorded beside source toggles; this board does not change them.
 
 | Candidate | Mode | Measurement status | Captured pairs |
 |---|---|---|---:|
@@ -1102,3 +1102,12 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 - Existing identity and compilation accepted by owner; no separate validation passes.
 - Reused native component executables warm up in a separate process; scored first calls may include JIT. These are not steady-state or full-workload promotion evidence.
 - Winners and losers are recorded beside source toggles as sufficient measurements arrive; partial component screens leave defaults unchanged.
+
+## Recorded source decisions
+
+| Candidate / arm | Decision | Source commit | Evidence |
+|---|---|---|---|
+| F03 / resident | CONFIRMED EXISTING DEFAULT: B/A trajectory 0.5125–0.5565; already enabled | b953bc9a2 | M3 measured heldout and resume results; source _byte_lm_impl.py _is_resident |
+| F08 / BWD_NOSYNC | PROMOTED: Apple FAST only; 12-step train B/A0.8766 with matching loss/resume; explicit OFF escape; one scored sample | b953bc9a2 | training/byte_lm_afn.mojo:53; M3 F08/default retained result |
+| F08 / fused, views | RETAIN OFF: small or mixed gain; views cold call regressed | b953bc9a2 | M3 F08 independent-arm results; baseline manifests explicitly disable NOSYNC |
+| F07, F10, F11 | RETAIN OFF for evaluated experimental arms: mixed/regressing measured cases; see source for each scoped outcome | b953bc9a2 | Inline toggle annotations retain case timing and quality counts |
