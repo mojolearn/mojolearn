@@ -10,6 +10,7 @@ from neighbors.checks.knn_check import check_fused_griddimx_merge
 from neighbors.checks.knn_identity_check import check_knn_fused_tie_set_is_geometry_invariant
 from neighbors.checks.knn_selector_bound_compact_check import check_case as bound_case
 
+# NEVER RUN — PENDING VALIDATION
 def main() raises:
     var ctx=DeviceContext()
     check_certified_caller(ctx)
