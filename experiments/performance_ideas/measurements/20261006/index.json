@@ -64139,24 +64139,24 @@
       "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-d67f72db7ec36b60d4b62ba1f5802aff142bdeacd5a575bcbaef785da7a6d57e.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-normalized-measurements.json": {
-      "sha256": "2f7f32e13a176504c26bfaf2dda5312a2a7fdd61d9a26aa51667d7cc1799c1c5",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-2f7f32e13a176504c26bfaf2dda5312a2a7fdd61d9a26aa51667d7cc1799c1c5.json"
+      "sha256": "9546bc09cfb8251814f3ec3a1228db0c773d96fe3caa46d59190325134f6aeb3",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-9546bc09cfb8251814f3ec3a1228db0c773d96fe3caa46d59190325134f6aeb3.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-normalized-measurements.json": {
-      "sha256": "151d0ee725a1e829577ad8f02eb0cef7b172af9ed1144271789a375de58947d6",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-151d0ee725a1e829577ad8f02eb0cef7b172af9ed1144271789a375de58947d6.json"
+      "sha256": "7654cd8b64c30fabf48860912723f7f53e09a516ef6c3781a14ca2f3a7cc972c",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-7654cd8b64c30fabf48860912723f7f53e09a516ef6c3781a14ca2f3a7cc972c.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json": {
       "sha256": "802868623a18c495f992b835b3ad628fa804013fb9f68091f462cabe90e6ce90",
       "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-802868623a18c495f992b835b3ad628fa804013fb9f68091f462cabe90e6ce90.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json": {
-      "sha256": "ed9ffde14325e3f5937fe0ebf66d6d76f76baedd953947989831e678e8719df2",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-ed9ffde14325e3f5937fe0ebf66d6d76f76baedd953947989831e678e8719df2.json"
+      "sha256": "41c6c3bedd3d30752e1139870cae549671f3262a2f5090737df54ef514981b32",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-41c6c3bedd3d30752e1139870cae549671f3262a2f5090737df54ef514981b32.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json": {
-      "sha256": "b98bab2698df3095d6c01a0c1c0df4cfc3ddc31b8f51a5f72bf4ecc4b1099785",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-b98bab2698df3095d6c01a0c1c0df4cfc3ddc31b8f51a5f72bf4ecc4b1099785.json"
+      "sha256": "3eb6bb24ae357c2cacc6c5a1b882a3d5febdab25ff829a9f2cbcfe66c403f03a",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-3eb6bb24ae357c2cacc6c5a1b882a3d5febdab25ff829a9f2cbcfe66c403f03a.json"
     }
   },
   "decisions": [
