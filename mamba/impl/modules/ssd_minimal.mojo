@@ -126,7 +126,7 @@ comptime SAB_FOLD_SERIAL_ZERO_SEED = is_defined[
 #: together with the oracle (mamba/checks/mamba2_oracle.mojo, same define).
 comptime IDN_M2_CB_LOWER = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # I08 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
+    # I08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     and not is_defined["MOJOLEARN_IDN_M2_CB_LOWER_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
@@ -682,7 +682,7 @@ comptime M2_CS_IC = 32
 # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
 comptime M2_RETAIN_GL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # NEVER RUN — PENDING VALIDATION
+    # NEVER RUN — PENDING MEASUREMENT
     and is_defined["MOJOLEARN_IDN_M2_RETAIN_GL"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not SSD_ANY_SABOTAGE

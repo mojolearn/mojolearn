@@ -7,7 +7,7 @@ from experiments.performance_ideas.I07.state_cost import state_cost
 from transformer.checks.transformer_fused_check import FusedCase, run_case
 from transformer.impl.llama.fused_attention import ATTN_V1_RECOMPUTE_BACKWARD, FUSED_RAN, fused_attention_arm_parse
 
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 def main() raises:
     var ctx = DeviceContext()
     # Model selection requests retention; a globally forced-recompute

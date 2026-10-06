@@ -10,7 +10,7 @@ from cluster.checks.kmeans_identity_check import check_assignment_geometry_invar
 from cluster.checks.reduce_by_key import BLOCK_ACC_ROWS
 
 
-# A08 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
+# A08 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
 # A08 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Incumbent promoted256 default retained; alternate chunk/poll arms require defines.
 def main() raises:

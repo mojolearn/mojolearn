@@ -2123,7 +2123,7 @@ struct GLMWithData(Movable):
         were two (three with `grad_norm`, four under OWL-QN). The host
         arithmetic on them is unchanged."""
         if not drain:
-            # NEVER RUN — PENDING VALIDATION
+            # NEVER RUN — PENDING MEASUREMENT
             comptime if not (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]()):
                 raise Error("qn: deferred exact evaluation requires IDENTICAL trial experiment")
         self.n_evals += 1

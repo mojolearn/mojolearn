@@ -633,10 +633,10 @@ comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 # candidate round"). The candidate arm is P = 4.
 # =========================================================
 # `-D MOJOLEARN_2012_SMEM_COPIES4=1` selects P = 4; 1 is shipped.
-# N07 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
+# N07 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
 # N07 PENDING: production feature chunks + replicas use the existing exact
 # fixed-point BinT addends and scales. Default off; resource/device gates owed.
-# NEVER RUN — PENDING VALIDATION: new opt-in streamed replica route.
+# NEVER RUN — PENDING MEASUREMENT: new opt-in streamed replica route.
 comptime IDN_RF_STREAM_REPLICAS = BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_STREAM_REPLICAS"]()
 
 struct _StreamReplicaAudit(Defaultable, Movable):

@@ -6,7 +6,7 @@ No pathological quadratic baseline; operation bound is explicit."""
 from max.gpu.host import DeviceContext
 from neighbors.checks.rbc_canonical_merge_check import check
 
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 def main() raises:
     var ctx = DeviceContext()
     var sizes: List[Int] = [0,1,2,7,31,257,3,513,2,1025,0]

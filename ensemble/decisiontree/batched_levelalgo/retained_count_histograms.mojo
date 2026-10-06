@@ -29,7 +29,7 @@ struct _RetainedAudit(Defaultable,Movable):
 comptime _RETAINED_AUDIT=_Global[StorageType=_RetainedAudit,name="MojolearnRetainedHistogramAudit",init_fn=_RetainedAudit.__init__]
 
 def retained_histogram_reused() raises -> Int:
-    # I18: NEVER RUN — PENDING VALIDATION; explicit experiment/audit only.
+    # I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment/audit only.
     comptime if is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT"]():
         ref audit=_RETAINED_AUDIT.get_or_create_ptr()[]
         return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.reused)))
@@ -161,7 +161,7 @@ def subtract_retained[O: ObjectiveLike](hist: MutPointer[O.BinT, MutAnyOrigin], 
         cache[key*Int(slots)+offset] = value
         if offset == 0:
             valid[key] = UInt8(1)
-            # I18: NEVER RUN — PENDING VALIDATION; explicit experiment/audit only.
+            # I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment/audit only.
             comptime if is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT"]():
                 _ = Atomic.fetch_add(reused,UInt32(1))
 
@@ -222,7 +222,7 @@ struct RetainedCountHistograms(Movable):
         ctx.enqueue_function[subtract_retained[O]](hist,items,samples,self.cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.valid.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.parents.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.skip.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),Int32(n),Int32(col),Int32(width),Int32(self.columns),Int32(self.slots),Int32(self.capacity),self.live.unsafe_origin_cast[MutAnyOrigin](),self.reused.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),grid_dim=((cells+127)//128,1,1),block_dim=(128,1,1))
 
     def publish_audit(mut self,ctx: DeviceContext) raises:
-        # I18: NEVER RUN — PENDING VALIDATION; explicit experiment/audit only.
+        # I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment/audit only.
         comptime if is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT"]():
             ref audit=_RETAINED_AUDIT.get_or_create_ptr()[]
             with self.reused.map_to_host() as values:

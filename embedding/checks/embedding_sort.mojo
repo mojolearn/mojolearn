@@ -41,7 +41,7 @@ comptime _ID_ONLY_UNSTABLE = is_defined["MOJOLEARN_EMB_SABOTAGE_SORT_KEY_ID_ONLY
 # (or MOJOLEARN_IDN_ALL_OFF) restores the bitonic network.
 comptime EMB_RADIX_SORT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # I11 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
+    # I11 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     and not (is_defined["MOJOLEARN_IDN_EMB_RADIX_SORT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
     and not _REVERSE_TIES
     and not _ID_ONLY_UNSTABLE

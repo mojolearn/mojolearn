@@ -64,7 +64,7 @@ comptime GMM_IDN_CHOL_MAX_D = GMM_IDN_CHOL_TPB
 comptime IDN_GMM_FUSED_CHOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
-        # I21 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
+        # I21 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
         is_defined["MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )

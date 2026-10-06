@@ -128,9 +128,9 @@ def main() raises:
         var full=_rf_params(3,True,Float32(1),6,16,GINI,n_streams=streams)
         print("I18_FULL",streams,_fit_clf(ctx,521,43,4,full,False,UInt64(871)))
         var reused=retained_histogram_reused()-before
-        # I18: NEVER RUN — PENDING VALIDATION; explicit experiment/audit only.
+        # I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment/audit only.
         comptime if is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT"]():
-            # I18: NEVER RUN — PENDING VALIDATION; explicit experiment/audit only.
+            # I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment/audit only.
             comptime if is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST"]():
                 if reused<=0:
                     raise Error("I18 normal GPU forest fit did not subtract retained histograms")

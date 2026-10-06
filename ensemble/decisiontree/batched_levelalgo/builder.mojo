@@ -90,7 +90,7 @@ from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import Re
 # PENDING qualification; default OFF. Explicit IDENTICAL opt-in only.
 # No feature resampling or weighted/fixed-point algebra is admitted. The
 # cache's byte cap is a resource bound; it never selects benchmark shapes.
-# I18: NEVER RUN — PENDING VALIDATION; explicit experiment, default OFF.
+# I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment, default OFF.
 comptime RETAINED_COUNT_HIST = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST"]()
 comptime RETAINED_COUNT_HIST_BYTES = get_defined_int["MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES", 8*1024*1024]()
 
@@ -195,12 +195,12 @@ comptime ALIGN_VALUE = 512
 # bench/results/trees_identical/h100_2026-09-10/).
 # `-D MOJOLEARN_2011_HIST_ITEMS1=1` restores the one-item mapping; the old
 # opt-in `MOJOLEARN_2011_HIST_ITEMS4` is accepted and is now the default.
-# A07 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
+# A07 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
 # A07 PENDING: independent real-node histogram tasks are bounded by256 rows.
 # Explicit IDENTICAL opt-in only; promoted four-item/512-row default retained.
 # More descriptors trade launch/scan overhead for a shorter heavy-node tail.
 # Partition uses its unchanged TPB128 table; phase reuse remains disabled.
-# NEVER RUN — PENDING VALIDATION: new opt-in histogram task map.
+# NEVER RUN — PENDING MEASUREMENT: new opt-in histogram task map.
 comptime IDN_RF_TASK_ROWS256 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_TASK_ROWS256"]()
 comptime HIST_ITEMS_PER_THREAD = 2 if IDN_RF_TASK_ROWS256 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4)
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD

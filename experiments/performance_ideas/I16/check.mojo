@@ -46,7 +46,7 @@ def check(ctx: DeviceContext, dim: Int, occupancy: Int) raises:
     _ = unsetenv("MOJOLEARN_IVF_SCAN_GROUPED")
     _ = unsetenv("MOJOLEARN_IVF_SCAN_STAGED")
 
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 def main() raises:
     var ctx = DeviceContext()
     for d in [7, 33, 65]:

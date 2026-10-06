@@ -27,7 +27,7 @@ def fused_bias_kernel(c: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,
         c.unsafe_store(cell,ftz(ftz(c.unsafe_load(cell))+ftz(bias.unsafe_load(cell%Int(n)))))
 
 
-# I05 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
+# I05 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
 # I05 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Explicit fused adapter only; rounded product seam must pass independent bits.
 def gemm_bias[FUSED: Bool](ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],

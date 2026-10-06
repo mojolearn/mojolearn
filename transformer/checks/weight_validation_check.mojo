@@ -8,7 +8,7 @@ from transformer.impl.llama.modeling_llama import LlamaDims, LlamaDeviceWeights
 
 
 def main() raises:
-    # I02 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
+    # I02 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     comptime assert is_defined["MOJOLEARN_STEP_PHASE_TIMERS"](), "counters required"
     var ctx = DeviceContext()
     var dims = LlamaDims(32, 2, 1, 16, 64)

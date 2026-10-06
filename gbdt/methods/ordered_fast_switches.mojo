@@ -75,7 +75,7 @@ def ord_all_on(n_features: Int) -> Bool:
 # promotion is unchanged; IDENTICAL/non-Apple builds cannot admit this candidate.
 comptime ORD_DOC_ID_STORAGE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     and is_defined["MOJOLEARN_ORD_DOC_ID_STORAGE"]()
 )
 

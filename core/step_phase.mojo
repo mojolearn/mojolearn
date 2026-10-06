@@ -40,7 +40,7 @@ from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 
-# I02 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
+# I02 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
 comptime STEP_PHASE_TIMERS = is_defined["MOJOLEARN_STEP_PHASE_TIMERS"]()
 
 

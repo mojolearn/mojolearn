@@ -43,9 +43,9 @@ from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, McdCompactWorkspac
 # fitted-state/support/rank gates, positive caller reach, then M3 A/B timing.
 # Existing ordered-covariance HOLD is not waived by this separate candidate.
 # See docs/apple-fast/ab/mcd-g1-gram.md and EXPERIMENTS.md (MCD_FAST_G1_GRAM).
-# NEVER RUN — PENDING VALIDATION: opt-in MCD self-Gram route.
+# NEVER RUN — PENDING MEASUREMENT: opt-in MCD self-Gram route.
 comptime MCD_G1_GRAM = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM"]()
-# NEVER RUN — PENDING VALIDATION: opt-in MCD self-Gram reach audit.
+# NEVER RUN — PENDING MEASUREMENT: opt-in MCD self-Gram reach audit.
 comptime MCD_G1_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"]()
 # LEGACY, default OFF: the old window admitted only d 129..256 features and
 # K 128..1023 selected rows, which brackets the board (istella 220 features).
@@ -102,7 +102,7 @@ comptime MCD_ORDERED_COV = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 # Bound the queued candidate plane independently of features/datasets. This
 # scheduling experiment preserves inactive-candidate gates and input strides;
 # it changes neither support selection nor candidate count.
-# NEVER RUN — PENDING VALIDATION: bounded MCD candidate batches.
+# NEVER RUN — PENDING MEASUREMENT: bounded MCD candidate batches.
 comptime MCD_FAST_BOUND_BATCH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_MCD_FAST_BOUND_BATCH"]())

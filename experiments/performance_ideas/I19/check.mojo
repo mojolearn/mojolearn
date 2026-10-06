@@ -29,10 +29,10 @@ def check(ctx: DeviceContext,n: Int,bits: Int,all_equal: Bool) raises:
         var bsum = ctx.enqueue_create_buffer[DType.int32](stable_radix_bsum_len(n))
         ctx.enqueue_copy(dst_buf=dk,src_ptr=keys.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=dv,src_ptr=values.unsafe_ptr())
-        # NEVER RUN — PENDING VALIDATION
+        # NEVER RUN — PENDING MEASUREMENT
         comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
             if arm==1:
-                # NEVER RUN — PENDING VALIDATION
+                # NEVER RUN — PENDING MEASUREMENT
                 comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
                     stable_nibble_pairs_u32[128](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
                 else:
@@ -43,10 +43,10 @@ def check(ctx: DeviceContext,n: Int,bits: Int,all_equal: Bool) raises:
             stable_radix_sort_pairs_u32(ctx,n,32 if arm==0 else bits,dk,dv,tk,tv,counts,bsum)
         # Reuse the same workspace without a host roundtrip; idempotence
         # must hold, including value carry within every equal-key run.
-        # NEVER RUN — PENDING VALIDATION
+        # NEVER RUN — PENDING MEASUREMENT
         comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
             if arm==1:
-                # NEVER RUN — PENDING VALIDATION
+                # NEVER RUN — PENDING MEASUREMENT
                 comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
                     stable_nibble_pairs_u32[128](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
                 else:
@@ -72,7 +72,7 @@ def check(ctx: DeviceContext,n: Int,bits: Int,all_equal: Bool) raises:
                 raise Error("I19 radix wrote beyond live capacity")
         _ = dk^; _ = dv^; _ = tk^; _ = tv^; _ = counts^; _ = bsum^
 
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 def main() raises:
     var ctx = DeviceContext()
     check_float_ragged(ctx)

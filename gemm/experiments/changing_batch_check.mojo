@@ -8,7 +8,7 @@ from gemm.checks.gemm_identical import identical_gemm_flat_kernel,contract_parti
 from gemm.checks.gemm_step_arms import gemm_step_fill,gemm_step_poison,gemm_step_readback,gemm_step_compare,gemm_step_digest
 
 
-# N05 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
+# N05 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
 # N05 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Explicit changed-input grouped fixture; graph replay remains unsupported and absent.
 def main() raises:

@@ -36,7 +36,7 @@ def check(ctx: DeviceContext, mut got: DeviceBuffer[DType.float32],
 
 
 def main() raises:
-    # I02 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
+    # I02 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     comptime assert is_defined["MOJOLEARN_STEP_PHASE_TIMERS"](), "enable counters"
     comptime assert is_defined["MOJOLEARN_NUMERIC_IDENTICAL"](), "IDENTICAL required"
     var ctx = DeviceContext()

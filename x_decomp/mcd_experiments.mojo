@@ -20,9 +20,9 @@ from neighbors.impl.ball_cover.scan import (rbc_exclusive_scan_kernel, rbc_pscan
 from x_decomp.cells import F32Ptr, I32Ptr
 
 # F06 PENDING: default off. Source builds do not qualify fit quality/speed.
-# NEVER RUN — PENDING VALIDATION: active-candidate compaction.
+# NEVER RUN — PENDING MEASUREMENT: active-candidate compaction.
 comptime MCD_FAST_ACTIVE_COMPACT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_MCD_FAST_ACTIVE_COMPACT"]()
-# NEVER RUN — PENDING VALIDATION: phase-local covariance reuse.
+# NEVER RUN — PENDING MEASUREMENT: phase-local covariance reuse.
 comptime MCD_FAST_COV_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_MCD_FAST_COV_REUSE"]()
 # Three Int32 candidate planes occupy at most768KiB; larger phases retain
 # the incumbent route. This resource limit is independent of dataset shapes.

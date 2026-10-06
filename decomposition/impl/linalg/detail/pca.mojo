@@ -77,7 +77,7 @@ from decomposition.checks.jacobi_eigh_device import (
 # Default-off FAST experiment: compensate only centered covariance products.
 # One writer per covariance cell; no atomic/split-policy race, host arithmetic,
 # or input shift/restore pass. Performance admission belongs to full PCA fit.
-# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime PCA_COMPENSATED_COV = AFN_GEMM_APPLE and is_defined["MOJOLEARN_PCA_FAST_COMPENSATED_COV"]()
 
 struct PcaCovAudit(Defaultable, Movable):

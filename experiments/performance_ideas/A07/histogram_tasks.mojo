@@ -84,7 +84,7 @@ def node_merge_kernel[BINS: Int](partials: MutPointer[Int64,MutAnyOrigin],output
     output.unsafe_store(cell,total)
 
 
-# A07 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
+# A07 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
 # A07 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Explicit integer node-task adapter; the production workload map has a separate opt-in.
 def histogram_tasks[CHUNK: Int,BINS: Int,REPLICAS: Int,TASKED: Bool](ctx: DeviceContext,

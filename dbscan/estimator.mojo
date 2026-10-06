@@ -161,7 +161,7 @@ comptime IDN_DBSCAN_DIRECT_OUT = (
         is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
-# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 ) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"]())
 
 comptime COSINE_TPB = 256

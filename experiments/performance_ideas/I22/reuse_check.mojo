@@ -19,7 +19,7 @@ def check_factor_reuse(ctx: DeviceContext,m: Int,d: Int) raises:
     var factors = 0
     for rhs in range(3):
         var reuse = False
-        # NEVER RUN — PENDING VALIDATION
+        # NEVER RUN — PENDING MEASUREMENT
         comptime if is_defined["MOJOLEARN_IDN_TSQR_REUSE"]():
             reuse=True
         if not reuse or rhs==0:
@@ -48,7 +48,7 @@ def check_factor_reuse(ctx: DeviceContext,m: Int,d: Int) raises:
         _ = q^
         ts_free_host()
     var expected_factors = 3
-    # NEVER RUN — PENDING VALIDATION
+    # NEVER RUN — PENDING MEASUREMENT
     comptime if is_defined["MOJOLEARN_IDN_TSQR_REUSE"]():
         expected_factors=1
     if factors!=expected_factors:

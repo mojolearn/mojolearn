@@ -78,12 +78,12 @@ comptime AFN_ATTN_ROPE_CACHE = AFN_ATTN_ON and (
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_ROPE_CACHE"]()
 )
 comptime AFN_ATTN_GQA_TILE = AFN_ATTN_ON and (
-    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_GQA_TILE"]()
 )
 #: FLASH is also what GQA_TILE runs (at GROUP 1 when n_kv == n_heads).
 comptime AFN_ATTN_FLASH = AFN_ATTN_ON and (
-    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_ATTN_ALL or AFN_ATTN_GQA_TILE or is_defined["MOJOLEARN_AFN_ATTN_FLASH"]()
 )
 comptime AFN_ATTN_FUSE_PRE = AFN_ATTN_ON and (
@@ -801,7 +801,7 @@ struct FlashCallerAudit(Defaultable, Movable):
         self.grouped_calls = 0
 
 comptime FLASH_AUDIT = _Global[StorageType=FlashCallerAudit, name="AppleFlashCallerAudit", init_fn=FlashCallerAudit.__init__]
-# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime AFN_FLASH_AUDIT_ON = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN_ATTN_AUDIT"]()
 
 def afn_flash_call_count(grouped: Bool) raises -> Int:

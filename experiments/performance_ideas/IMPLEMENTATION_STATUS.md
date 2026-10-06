@@ -13,19 +13,31 @@ completed public calls on the M3 Ultra.
 
 ## Requested completion plan
 
-Finish and merge all supported candidates into the dedicated integration
-branch first. Freeze ONE commit, then run ONE exhaustive compile campaign for
-the distinct source/define/target configurations. Retry only compiler failures
-that require source fixes. Preliminary campaigns were stopped at the owner's
-request and do not establish final all-card compilation. Compilation runs on the rented
-NVIDIA builder and the retained M3 Ultra for Apple Metal. The M2 instance and
-its Dedicated Host are being retired after preserving their work.
+All 60 supported candidates are implemented on the dedicated integration
+branch, with their per-card commit history preserved. The owner requested
+merging into main now with new switches off and the literal source comment
+`NEVER RUN — PENDING MEASUREMENT` beside the experiment controls. Existing
+promoted behavior is preserved. Measurement and broader qualification are
+not a gate for this merge.
 
-For IDENTICAL, collect exact-output GPU witnesses where hardware is available
-and record missing vendor/host checks explicitly. Every new experiment stays
-default off and pending numerical/performance qualification. Preserve existing
-promoted defaults. After the compile matrix passes, merge into main, retaining
-the per-card commit history. Do not require a timing campaign before this merge.
+Successful device verification already proves compilation for its exact
+source, defines and target. Reuse that evidence; do not rebuild unchanged
+verified configurations. The one frozen compile campaign started at
+`c58945cd08380400c7b0276945c480efa0fc5398`; actual compiler failures and
+scoped source repairs have separate retained receipts. Apple FAST's 87
+configurations have successful artifact evidence, including nine compiler
+failure retries. Selected correctness checks have run on the local M4 and
+rented NVIDIA. This is not a performance measurement or promotion.
+
+Continue only missing primary-target configurations: NVIDIA for shared and
+NVIDIA cards, AMD cross-compilation on the same NVIDIA builder for AMD-specific
+cards, and Apple for FAST. Completed secondary-target evidence is retained;
+remaining optional shared AMD targets are explicitly pending. No AMD GPU was
+rented. The M2 instance is terminated and its dedicated host released.
+
+Remaining compile targets and numerical/performance qualification stay visible
+as pending after the requested merge. No candidate's default is enabled by a
+compile pass, a smoke check, this ledger, or the merge.
 
 The machine-readable [progress ledger](progress.json) records this plan and
 links the compile coverage. A manifest or successful parser check alone does

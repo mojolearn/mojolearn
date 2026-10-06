@@ -6,7 +6,7 @@ from max.gpu.host import DeviceContext
 from transformer.checks.transformer_fused_check import FusedCase, run_case
 from transformer.impl.llama.fused_attention import FUSED_RAN, fused_attention_arm_parse
 
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 def main() raises:
     var ctx = DeviceContext()
     var arms = List[String]()

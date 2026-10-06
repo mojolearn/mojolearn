@@ -72,7 +72,7 @@ def merge_kernel(partials: MutPointer[Int64,MutAnyOrigin],output: MutPointer[Int
         output.unsafe_store(cell,total)
 
 
-# N07 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
+# N07 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
 # N07 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Explicit bounded integer adapter; production fixed-point weighted route is separately guarded.
 def streamed_histogram[CHUNK: Int,BINS: Int,REPLICAS: Int](ctx: DeviceContext,

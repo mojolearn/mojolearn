@@ -484,7 +484,7 @@ def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_ivf")
         m.def_function[ivf_vendor_binding]("ivf_vendor")
         m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
-        # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+        # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
         comptime if is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
             m.def_function[ivf_fast_balanced_hits_binding]("ivf_fast_balanced_hits")
         m.def_function[ivf_flat_build_and_search_binding](

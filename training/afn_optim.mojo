@@ -124,14 +124,14 @@ comptime AFN_APPLE_FAST = (
 #: (opt-in only).
 comptime AFN_OPTIM_ALL = is_defined["MOJOLEARN_AFN_OPTIM_ALL"]()
 comptime AFN_OPT_FUSE_SCAN = AFN_APPLE_FAST and (
-    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_FUSE_SCAN"]()
 )
 comptime AFN_OPT_CLIP_FUSE = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_CLIP_FUSE"]()
 )
 comptime AFN_OPT_MULTITENSOR = AFN_APPLE_FAST and (
-    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_MULTITENSOR"]()
 )
 comptime AFN_OPT_VEC4 = AFN_APPLE_FAST and (

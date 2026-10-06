@@ -72,7 +72,7 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
         raise Error("ragged float sort: output capacity below logical length")
     if largest>len(keys) or largest>len(positions) or largest>len(temp_keys) or largest>len(temp_positions) or len(counts)<stable_radix_counts_len(largest) or len(bsum)<stable_radix_bsum_len(largest):
         raise Error("ragged float sort: caller scratch capacity too short")
-    # NEVER RUN — PENDING VALIDATION
+    # NEVER RUN — PENDING MEASUREMENT
     comptime if not is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
         if largest>4096:
             raise Error("ragged float sort: rank control restricted to bounded small rows")
@@ -81,12 +81,12 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
         var n = offsets[s+1]-base
         if n==0:
             continue
-        # NEVER RUN — PENDING VALIDATION
+        # NEVER RUN — PENDING MEASUREMENT
         comptime if is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
             ctx.enqueue_function[_keys](src.unsafe_ptr(),keys.unsafe_ptr(),positions.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
-            # NEVER RUN — PENDING VALIDATION
+            # NEVER RUN — PENDING MEASUREMENT
             comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
-                # NEVER RUN — PENDING VALIDATION
+                # NEVER RUN — PENDING MEASUREMENT
                 comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
                     stable_nibble_pairs_u32[128](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
                 else:

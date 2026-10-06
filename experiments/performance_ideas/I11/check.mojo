@@ -65,7 +65,7 @@ def check_case(ctx: DeviceContext, n: Int, vocab: Int, width: Int, skew: Int, pa
             _ = perm^
 
 
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 def main() raises:
     var ctx = DeviceContext()
     for vocab in [7, 131, 7]:

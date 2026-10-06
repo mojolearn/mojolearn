@@ -67,7 +67,7 @@ from kde.impl.neighbors.kernel_density import (
 
 # Immutable retained fit snapshots and direct upload are separate controls.
 # Buffer copies are transport; the GPU score/statistics remain unchanged.
-# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime KDE_FAST_IMMUTABLE_FIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"]()
 comptime KDE_FAST_DIRECT_PREP = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_KDE_FAST_DIRECT_PREP"]()
 

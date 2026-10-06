@@ -102,7 +102,7 @@ comptime MAX_LABEL = Int32(2147483647)
 comptime IDN_DBSCAN_CC_GATED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
-        # I14 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
+        # I14 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
         is_defined["MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
@@ -114,12 +114,12 @@ comptime IDN_DBSCAN_CC_GATED = (
 # four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
 # defaults stay unchanged; this campaign attributes explicit experiment arms.
 comptime IDN_DBSCAN_CC_CHUNK = (
-    # NEVER RUN — PENDING VALIDATION
+    # NEVER RUN — PENDING MEASUREMENT
     4 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK4"]()
     else (
-        # NEVER RUN — PENDING VALIDATION
+        # NEVER RUN — PENDING MEASUREMENT
         16 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK16"]()
-        # NEVER RUN — PENDING VALIDATION
+        # NEVER RUN — PENDING MEASUREMENT
         else (32 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK32"]() else 8)
     )
 )
@@ -134,12 +134,12 @@ comptime IDN_DBSCAN_CC_CHUNK = (
 #: differ. `-D MOJOLEARN_IDN_DBSCAN_CC_SPLIT4=1`, `..._SPLIT8=1`,
 #: `..._SPLIT16=1`.
 comptime IDN_DBSCAN_CC_SPLIT = (
-    # NEVER RUN — PENDING VALIDATION
+    # NEVER RUN — PENDING MEASUREMENT
     4 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT4"]()
     else (
-        # NEVER RUN — PENDING VALIDATION
+        # NEVER RUN — PENDING MEASUREMENT
         8 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT8"]()
-        # NEVER RUN — PENDING VALIDATION
+        # NEVER RUN — PENDING MEASUREMENT
         else (16 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT16"]() else 1)
     )
 )

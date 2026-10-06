@@ -10,7 +10,7 @@ from checks.depthwise_check import Fixture, default_options
 from checks.lossguide_check import fit_policy, lossguide_options
 from checks.gbdt_partition_cache_check import tree_hash
 
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 def main() raises:
     var ctx = DeviceContext()
     var fx = Fixture(ctx.copy())

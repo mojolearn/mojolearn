@@ -370,7 +370,7 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 # and `bwd.attention`). A timer build synchronizes around every launch:
 # its numbers are a breakdown, never a request price.
 # ===========================================================================
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 comptime ATTN_ARM_TRIAL = is_defined["MOJOLEARN_ATTN_ARM_TRIAL"]()
 comptime ATTN_PHASE_TIMERS = is_defined["MOJOLEARN_ATTN_PHASE_TIMERS"]()
 
@@ -1387,7 +1387,7 @@ default resolves to: `_launch_fwd_r2_keep[64, 32, True, True, False]` and
 of the trial tree (the sabotage copies stay trial-only, like
 `ATTN_SHIPPED_BWD_KV`'s)."""
 
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
 comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
 comptime ATTN_V1_ALIAS_Y_ESTASH = (
@@ -9321,7 +9321,7 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
 # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
 comptime ATTN_GQA_HEAD_REUSE = (
     GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL
-    # NEVER RUN — PENDING VALIDATION
+    # NEVER RUN — PENDING MEASUREMENT
     and is_defined["MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and lib_smem_page_fits_for[TARGET_COLUMN,_fwd_r2_page_bytes(64,True)]()

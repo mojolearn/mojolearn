@@ -586,7 +586,7 @@ def means_divide_kernel(
 # I21 pending qualification: default-off pair staging shares each X load
 # between two components. Canonical subtraction/multiply and each covariance
 # GEMM keep their original spelling/order; this is not a new reduction profile.
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 comptime GMM_CENTER_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GMM_CENTER_PAIR"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime GMM_CENTER_PAIR_MAX_CELLS = 1 << 20  # four Float32 planes <=16 MiB
 

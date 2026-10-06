@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "user_plan": "all 60 supported candidates implemented; compilation only where no matching proof exists; verified binaries already prove compilation and are never rebuilt unchanged; use local M4 and rented NVIDIA correctness; optional shared AMD targets pending; every selectable experiment/control arm labeled NEVER RUN \u2014 PENDING VALIDATION, new defaults off; merge main after required coverage",
+  "user_plan": "all 60 supported candidates implemented; compilation only where no matching proof exists; verified binaries already prove compilation and are never rebuilt unchanged; use local M4 and rented NVIDIA correctness; optional shared AMD targets pending; every selectable experiment/control arm labeled NEVER RUN \u2014 PENDING MEASUREMENT, new defaults off; merge main now per owner; continue missing configuration compilation with no duplicate verified builds",
   "compile_repetition_policy": "reuse matching successful verification/build artifacts; one compiler invocation per missing configuration; retry only actual failures or relevant source fixes",
   "performance_timing_required_before_merge": false,
   "new_experiment_defaults": "off; existing main behavior preserved",
-  "qualification": "pending; source comments sufficient; no performance qualification gate before main merge",
-  "main_merge": "pending_compile_matrix",
+  "qualification": "pending measurement; selected correctness checks completed; new switches off; no qualification gate before requested main merge",
+  "main_merge": "authorized_now; incomplete compile targets and measurements explicitly pending",
   "unsupported_policy": "record missing Modular support or numerical contract explicitly; do not manufacture unsupported toolchain workarounds",
   "hardware": {
     "nvidia": "guarded rented NVIDIA RTX 4090 builder",
@@ -497,7 +497,7 @@
   ],
   "source_freeze": "all_sixty_supported_sources_merged; ready_for_single_frozen_compile_campaign",
   "preliminary_campaigns": "stopped at owner request; retained evidence is not final all-60 compile proof",
-  "source_toggle_comment": "NEVER RUN \u2014 PENDING VALIDATION",
+  "source_toggle_comment": "NEVER RUN \u2014 PENDING MEASUREMENT",
   "compile_campaign": {
     "original_source": "c58945cd08380400c7b0276945c480efa0fc5398",
     "failed_only_source": "b3d5730e4",
@@ -541,5 +541,6 @@
     "local Apple M4",
     "rented NVIDIA RTX 4090"
   ],
-  "optional_amd_policy": "preserve completed cross-compiles; finish AMD-specific A01-A08 arms; remaining shared AMD targets uncompiled pending per faster-local owner steering"
+  "optional_amd_policy": "preserve completed cross-compiles; finish AMD-specific A01-A08 arms; remaining shared AMD targets uncompiled pending per faster-local owner steering",
+  "measurement_required_before_merge": false
 }

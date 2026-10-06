@@ -11,7 +11,7 @@ from core.identity_trace import IdentityTrace
 from arima.checks.fit_check import check_grad_matches_float64, check_lbfgs_rules_match_glm, check_fit_is_batch_composition_invariant, check_fit_refuses_by_name
 from arima.checks.arima_check import check_grad_device_equals_oracle, check_predict_device_equals_oracle, check_kalman_launch_invariant
 
-# NEVER RUN — PENDING VALIDATION
+# NEVER RUN — PENDING MEASUREMENT
 def main() raises:
     var ctx=DeviceContext()
     var trace=IdentityTrace.disabled()

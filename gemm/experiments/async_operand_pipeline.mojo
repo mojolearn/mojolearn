@@ -67,7 +67,7 @@ def pipeline_kernel[ASYNC: Bool](c: MutPointer[Float32,MutAnyOrigin],a: MutPoint
     c.unsafe_store(cell,ftz(_fold_drain(stack,occ)))
 
 
-# N03 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
+# N03 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
 # N03 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Explicit NVIDIA-only async adapter; no production default or unsupported vendor fallback.
 def pipeline_gemm[ASYNC: Bool](ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],

@@ -96,7 +96,7 @@ from mamba.checks.mamba2_fixture import (
 #: +0.0 above the diagonal.
 comptime IDN_M2_CB_LOWER_ORACLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # I08 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
+    # I08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     and not is_defined["MOJOLEARN_IDN_M2_CB_LOWER_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )

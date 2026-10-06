@@ -300,12 +300,12 @@ def rbc_canonicalize_row_order(
 
     # I13 new candidate remains default off. Qualification is pending: native
     # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
-    # NEVER RUN — PENDING VALIDATION
+    # NEVER RUN — PENDING MEASUREMENT
     comptime if is_defined["MOJOLEARN_RBC_CANON_DEGREE_BUCKETS"]():
         rbc_canonicalize_degree_buckets(ctx, adj_ia, adj_ja, n_queries, nnz)
         return
 
-    # NEVER RUN — PENDING VALIDATION
+    # NEVER RUN — PENDING MEASUREMENT
     comptime if not is_defined["MOJOLEARN_RBC_CANON_MERGE"]():
         var ranked = ctx.enqueue_create_buffer[DType.int32](nnz)
         ctx.enqueue_function[rbc_canonical_row_order_kernel](

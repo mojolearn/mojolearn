@@ -21,13 +21,13 @@ from gemm.afn_apple_fast import AFN_GEMM_APPLE
 # G2 narrow1.203750->0.865625ms; different baseline from this AFN adapter.
 # Separate shared G1/G5 PCA transforms were faster, inverses slower; none
 # supplies PCA-fit or broad-regime admission. See GEMM_INLINE_OUTCOMES.md.
-# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime TALL = is_defined["MOJOLEARN_SCOPED_GEMM_G1_TALL"]()
 comptime DENSE = is_defined["MOJOLEARN_SCOPED_GEMM_G1_DENSE"]()
-# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime GRAM = is_defined["MOJOLEARN_SCOPED_GEMM_G1_GRAM"]()
 comptime NARROW = is_defined["MOJOLEARN_SCOPED_GEMM_G2_NARROW"]()
-# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
 # HOLD-quality, scoped-pca-fit-istella-q-v1, compiled201fe736, zero allowance:
 # singular_relative1.964589033e-5->1.964642456e-5 and noise_relative
@@ -35,7 +35,7 @@ comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
 # Saved report serialization is INCOMPLETE; preserved fields show HOLD,
 # never PASS inferred from process rc. Rejudge saved captures (no GPU replay)
 # is owed; no fit timing/default admission. Mechanism PASS above is separate.
-# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
+# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
 comptime PCA = is_defined["MOJOLEARN_SCOPED_GEMM_PCA"]()
 comptime AUDIT = is_defined["MOJOLEARN_SCOPED_GEMM_AUDIT"]()
 # LEGACY, default OFF: the old per-route windows (TALL M>=4096 N32..128
