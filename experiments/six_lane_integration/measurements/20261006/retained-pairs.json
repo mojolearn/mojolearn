@@ -1,5 +1,5 @@
 {
-  "updated_at": 1791308034.779279,
+  "updated_at": 1791309059.139325,
   "pairs": [
     {
       "configuration": "AF.X.complete-proposed",
@@ -598,8 +598,8 @@
         }
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
-      "quality_assessment": "PENDING",
-      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+      "quality_assessment": "QUALITY_FAILED",
+      "quality_reason": "Saved candidate task metrics are worse than at least one exact-full-input/settings opponent under existing tolerance; no default admission."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -660,8 +660,8 @@
         }
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
-      "quality_assessment": "PENDING",
-      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -822,8 +822,8 @@
         }
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
-      "quality_assessment": "PENDING",
-      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -901,7 +901,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -984,8 +984,8 @@
         }
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
-      "quality_assessment": "PENDING",
-      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
     },
     {
       "configuration": "AF.X.complete-proposed",
@@ -2939,8 +2939,8 @@
         }
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
-      "quality_assessment": "PENDING",
-      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -3023,8 +3023,8 @@
         }
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
-      "quality_assessment": "PENDING",
-      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -3107,8 +3107,8 @@
         }
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
-      "quality_assessment": "PENDING",
-      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -3191,8 +3191,8 @@
         }
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
-      "quality_assessment": "PENDING",
-      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -3270,7 +3270,7 @@
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
-      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -3431,8 +3431,8 @@
         }
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
-      "quality_assessment": "PENDING",
-      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -3515,8 +3515,8 @@
         }
       },
       "admission": "Pending independent quality, required identity and affected-workload coverage",
-      "quality_assessment": "PENDING",
-      "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
     },
     {
       "configuration": "I.X.complete-proposed",

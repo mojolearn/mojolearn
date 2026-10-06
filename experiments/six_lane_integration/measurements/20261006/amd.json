@@ -41,6 +41,14 @@
       "individual_constituents": "Not decided by this combined-configuration result"
     },
     {
+      "candidate": "AF.X.complete-proposed/algos/resample@dataset=istella/attempt-0001",
+      "decision": "NOT PROMOTED: Saved candidate task metrics are worse than at least one exact-full-input/settings opponent under existing tolerance; no default admission.",
+      "commit": "55a815e13728392be41903769c33ece8948cad4a",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Not decided by this combined-configuration result"
+    },
+    {
       "candidate": "AF.X.complete-proposed/algos/huber@dataset=istella/attempt-0001",
       "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
       "commit": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",

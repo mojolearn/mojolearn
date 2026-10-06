@@ -1,0 +1,72 @@
+{
+  "observed_at": "2026-10-06T17:49:44.144767+00:00",
+  "scope": "Byte-exact live external reviewer, alert, capture and continuation scripts; no numerical evidence embedded",
+  "files": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/review-next-reg-resample.py",
+      "sha256": "5e74e48e0cd56ba84cad15ce6b80a9b680b55c58c18d3b6c0f4f4bd0bf3d3610",
+      "bytes": 10897,
+      "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/quality-review/review-next-reg-resample.py"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/review-new-opponents.py",
+      "sha256": "9b2ff15b20f47bca3c30f2bb4cff93f4bef612a8b6c6f63d5c098f6f6167ee69",
+      "bytes": 7056,
+      "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/quality-review/review-new-opponents.py"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-opponent-contracts.py",
+      "sha256": "ca7939ad18af863eac050b3a0ebd3a1780c006395aa82d2e347788a09653d8ba",
+      "bytes": 4767,
+      "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/quality-review/semantic-opponent-contracts.py"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/continue-review.py",
+      "sha256": "738d75b8fdfa1c5d0fdbd46e5b31bb4dc4f516e39bf4caa7f03de90b98af6cf7",
+      "bytes": 3238,
+      "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/quality-review/continue-review.py"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/quality-alerts.py",
+      "sha256": "445ef26543ee6c83050fbe7a5ad8683b7792a301d4520da6665c5755d26e44f4",
+      "bytes": 2364,
+      "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/quality-review/quality-alerts.py"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/capture.py",
+      "sha256": "a8970a258e7fd3ab8d6782df55e19ec2171a42367b9425b48896c31040a83540",
+      "bytes": 936,
+      "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/apple/opponent-quality/capture.py"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/launch.py",
+      "sha256": "828c8c3477299bc10ceb858e0cdc347352e41c5ac55e0ed2810f54cddaa9df65",
+      "bytes": 1465,
+      "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/apple/opponent-quality/launch.py"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/continue-remote.py",
+      "sha256": "a0ddf7a8df1a3dacdafeb57567c57675934ab18056e61b0e14224bd00578f638",
+      "bytes": 2375,
+      "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/apple/opponent-quality/continue-remote.py"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/selector-repair-970784c89/repair_selector.py",
+      "sha256": "b0968f7523da5cde023200f07cf252c8df5e9139e2e1f5c74fef47f2a13ab7ca",
+      "bytes": 5315,
+      "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/apple/opponent-quality/captured/selector-repair-970784c89/repair_selector.py"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/selector-repair-970784c89/selected_cpu_board.py",
+      "sha256": "adde37abac4d1de8d11d2a7b35f7c48ac4925e97077e44fa7815299eddcfc927",
+      "bytes": 1167,
+      "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/apple/opponent-quality/captured/selector-repair-970784c89/selected_cpu_board.py"
+    }
+  ],
+  "source_audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+  "freeze_map": {
+    "original_recipe_and_numerical_source": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+    "failed_only_selector_repair": "970784c891b6f0854695a65f51b1eae9cf338708"
+  },
+  "active_daemon_pid": 10588
+}

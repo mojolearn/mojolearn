@@ -577,14 +577,14 @@
         "Affected-estimator/configuration coverage; scope does not establish complete-default acceptance"
       ],
       "new_full_opponent_review": {
-        "qualified": [],
-        "unqualified": [
+        "qualified": [
           {
             "arm": "torch-gpu",
             "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-04/board/raw/classical/rows-full/kmeans-taxi.json",
             "receipt_sha256": "43216fc65acd803cda3036337b5053d2885e491da7f3d600ec3947b93b99d81a",
             "input_npz_sha256": "0db47891038cb000a320470f8f6f7172285118e9c0697bc3e118dab2bc4921e0",
-            "parameter_mismatches": {
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
               "random_state": [
                 7,
                 null
@@ -598,16 +598,103 @@
                 null
               ]
             },
-            "reasons": [
-              "Constructor settings differ or are missing: {\"init_centroids\": [null, null], \"oversampling_factor\": [0.0, null], \"random_state\": [7, null]}"
-            ]
+            "semantic_equivalences": [
+              {
+                "field": "init_centroids",
+                "recorded_values": [
+                  null,
+                  null
+                ],
+                "reason": "Explicit-centroid buffer is inactive under k-means++ in frozen KMeans source.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "random_state",
+                "recorded_values": [
+                  7,
+                  null
+                ],
+                "reason": "Frozen TorchKMeans creates a per-fit torch.Generator and manual_seed(7); declared seed7 matches our random_state7, without claiming identical RNG draws.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "oversampling_factor",
+                "recorded_values": [
+                  0.0,
+                  null
+                ],
+                "reason": "Frozen classical lane explicitly pairs our sequential k-means++ (oversampling0) with reference greedy k-means++ on the same Lloyd/inertia task. Initialization algorithms intentionally differ and are recorded; independent inertia quality remains mandatory.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "inertia": 401662517.47630227,
+              "n_iter": 69
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "inertia": [
+                  "SAME",
+                  401987663.1286732,
+                  401662517.47630227,
+                  -0.0008088448531985248
+                ],
+                "n_iter": [
+                  "INFO",
+                  84.0,
+                  69.0,
+                  null
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "inertia": [
+                  "SAME",
+                  401987663.1286732,
+                  401662517.47630227,
+                  -0.0008088448531985248
+                ],
+                "n_iter": [
+                  "INFO",
+                  84.0,
+                  69.0,
+                  null
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
           }
         ],
+        "unqualified": [],
         "expected_arms": [
           "sklearn-cpu",
           "torch-gpu"
         ],
-        "matched_arms": [],
+        "matched_arms": [
+          "torch-gpu"
+        ],
         "scope": "Saved task-quality only; no opponent ratios or default promotion"
       },
       "original_review_receipt_path": "/Users/andrewhendel/CascadeProjects/mojolearn/experiments/six_lane_integration/measurements/20261006/receipts/apple/449522fb6bd97f700c04/attempt-0001/receipt.json"
@@ -1586,14 +1673,14 @@
         "Affected-estimator/configuration coverage and both-vendor performance decision"
       ],
       "new_full_opponent_review": {
-        "qualified": [],
-        "unqualified": [
+        "qualified": [
           {
             "arm": "torch-gpu",
             "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-04/board/raw/classical/rows-full/kmeans-taxi.json",
             "receipt_sha256": "43216fc65acd803cda3036337b5053d2885e491da7f3d600ec3947b93b99d81a",
             "input_npz_sha256": "0db47891038cb000a320470f8f6f7172285118e9c0697bc3e118dab2bc4921e0",
-            "parameter_mismatches": {
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
               "random_state": [
                 7,
                 null
@@ -1607,16 +1694,103 @@
                 null
               ]
             },
-            "reasons": [
-              "Constructor settings differ or are missing: {\"init_centroids\": [null, null], \"oversampling_factor\": [0.0, null], \"random_state\": [7, null]}"
-            ]
+            "semantic_equivalences": [
+              {
+                "field": "init_centroids",
+                "recorded_values": [
+                  null,
+                  null
+                ],
+                "reason": "Explicit-centroid buffer is inactive under k-means++ in frozen KMeans source.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "random_state",
+                "recorded_values": [
+                  7,
+                  null
+                ],
+                "reason": "Frozen TorchKMeans creates a per-fit torch.Generator and manual_seed(7); declared seed7 matches our random_state7, without claiming identical RNG draws.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "oversampling_factor",
+                "recorded_values": [
+                  0.0,
+                  null
+                ],
+                "reason": "Frozen classical lane explicitly pairs our sequential k-means++ (oversampling0) with reference greedy k-means++ on the same Lloyd/inertia task. Initialization algorithms intentionally differ and are recorded; independent inertia quality remains mandatory.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "inertia": 401662517.47630227,
+              "n_iter": 69
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "inertia": [
+                  "SAME",
+                  401879537.12380916,
+                  401662517.47630227,
+                  -0.0005400116887266005
+                ],
+                "n_iter": [
+                  "INFO",
+                  51.0,
+                  69.0,
+                  null
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "inertia": [
+                  "SAME",
+                  401987663.1286732,
+                  401662517.47630227,
+                  -0.0008088448531985248
+                ],
+                "n_iter": [
+                  "INFO",
+                  84.0,
+                  69.0,
+                  null
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
           }
         ],
+        "unqualified": [],
         "expected_arms": [
           "sklearn-cpu",
           "torch-gpu"
         ],
-        "matched_arms": [],
+        "matched_arms": [
+          "torch-gpu"
+        ],
         "scope": "Saved task-quality only; no opponent ratios or default promotion"
       },
       "original_review_receipt_path": "/Users/andrewhendel/CascadeProjects/mojolearn/experiments/six_lane_integration/measurements/20261006/receipts/nvidia/fb6aa398a4fe2f787945/attempt-0001/receipt.json"
@@ -1631,6 +1805,6 @@
     "required_fix": "Publish original failure and repaired success under distinct run-qualified paths and update each summary reference; preserve original captures.",
     "parent_notified": true
   },
-  "new_opponent_review_at": "2026-10-06T17:33:54.674222+00:00",
+  "new_opponent_review_at": "2026-10-06T17:50:58.907115+00:00",
   "publication_repair": "Original review retained externally; links relocated by exact receipt SHA256 into controller-qualified paths. Distinct failed and repaired attempts no longer collide."
 }

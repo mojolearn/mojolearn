@@ -190,7 +190,7 @@
           },
           "warmups": 1,
           "scored_samples": 1,
-          "quality": "PENDING",
+          "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
           "receipt_sha256": "fbf191894b5c4a303edf219a0e47159e58d8fb7d0a703a96f0dcb8c6c0671668",
@@ -318,8 +318,8 @@
               "status": "PENDING"
             }
           },
-          "quality_assessment": "PENDING",
-          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+          "quality_assessment": "TASK_METRIC_GATE_PASSED",
+          "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
         },
         {
           "id": "I.X.complete-proposed",
@@ -359,7 +359,7 @@
           },
           "warmups": 1,
           "scored_samples": 1,
-          "quality": "PENDING",
+          "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
           "receipt_sha256": "32ac494cdb2dc082aba8d18aa3f0034c36ff5cc900b7994499268a3303c52a1e",
@@ -487,8 +487,8 @@
               "status": "PENDING"
             }
           },
-          "quality_assessment": "PENDING",
-          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+          "quality_assessment": "TASK_METRIC_GATE_PASSED",
+          "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
         },
         {
           "id": "I.X.complete-proposed",
@@ -528,7 +528,7 @@
           },
           "warmups": 1,
           "scored_samples": 1,
-          "quality": "PENDING",
+          "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
           "receipt_sha256": "58c6cac6d1a0e706376db7dcb57f6daa29b537c648c764e9897365deff5efc86",
@@ -656,8 +656,8 @@
               "status": "PENDING"
             }
           },
-          "quality_assessment": "PENDING",
-          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+          "quality_assessment": "TASK_METRIC_GATE_PASSED",
+          "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
         },
         {
           "id": "I.X.complete-proposed",
@@ -697,7 +697,7 @@
           },
           "warmups": 1,
           "scored_samples": 1,
-          "quality": "PENDING",
+          "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
           "receipt_sha256": "0ef319b7b718eace211c38e70fa505e353e508d2c93d3cd939183a07e8ffa58f",
@@ -825,8 +825,8 @@
               "status": "PENDING"
             }
           },
-          "quality_assessment": "PENDING",
-          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+          "quality_assessment": "TASK_METRIC_GATE_PASSED",
+          "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
         },
         {
           "id": "I.X.complete-proposed",
@@ -995,7 +995,7 @@
             }
           },
           "quality_assessment": "PENDING",
-          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1204,7 +1204,7 @@
           },
           "warmups": 1,
           "scored_samples": 1,
-          "quality": "PENDING",
+          "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
           "receipt_sha256": "e3d080542065c87c62e05809ddd176c2e1f1daffab266122ac97ab67537f348e",
@@ -1332,8 +1332,8 @@
               "status": "PENDING"
             }
           },
-          "quality_assessment": "PENDING",
-          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+          "quality_assessment": "TASK_METRIC_GATE_PASSED",
+          "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1373,7 +1373,7 @@
           },
           "warmups": 1,
           "scored_samples": 1,
-          "quality": "PENDING",
+          "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
           "receipt_sha256": "3fdfedcb9c1daa65b02fa6884c774fa22b0e5ec5d66fdb3dc8e72b32c37de32f",
@@ -1501,8 +1501,8 @@
               "status": "PENDING"
             }
           },
-          "quality_assessment": "PENDING",
-          "quality_reason": "New full opponent output retained but comparable settings, complete opponent roster, or established metric directions remain unresolved."
+          "quality_assessment": "TASK_METRIC_GATE_PASSED",
+          "quality_reason": "Saved candidate preserves baseline and meets all selected supported same-full-input/settings opponent task metrics under existing tolerances."
         },
         {
           "id": "I.X.complete-proposed",
@@ -6098,6 +6098,14 @@
       "decision": "NOT PROMOTED: Candidate and baseline both have worse inertia than retained same-data sklearn; deficit is inherited, not introduced by candidate.",
       "commit": "51a3eb11bd99b921e775fa5fc6f6dbedca125382",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Not decided by this combined-configuration result"
+    },
+    {
+      "candidate": "AF.X.complete-proposed/algos/resample@dataset=istella/attempt-0001",
+      "decision": "NOT PROMOTED: Saved candidate task metrics are worse than at least one exact-full-input/settings opponent under existing tolerance; no default admission.",
+      "commit": "55a815e13728392be41903769c33ece8948cad4a",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json",
       "default_changed": false,
       "individual_constituents": "Not decided by this combined-configuration result"
     },
