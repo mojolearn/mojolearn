@@ -135,6 +135,7 @@ comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
 #: cell kernels (it has no shared memory).
 comptime IDN_M2_SSD_TILES = (
     _IDN_MAMBA_DEVICE
+    # I08 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     and not is_defined["MOJOLEARN_IDN_M2_SSD_TILES_OFF"]()
     and lib_smem_page_fits_for[TARGET_COLUMN, 20480]()
 )
