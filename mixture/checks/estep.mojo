@@ -1072,11 +1072,19 @@ def mahal_stacked_kernel(
 # Default-off schedule candidate: a byte-bounded component batch instead
 # of retaining all K projected sample matrices. Every GEMM cell keeps the
 # same contract_partition(d), and mahal_fold is unchanged.
-# I21 new candidate remains default off. Qualification is pending: native
-# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
+# I21 2026-10-06 component-batch LOSS, frozen source 5b467815b51b.
+# Complete generated COV_FULL fits, k=9, rows/features=10000/17,10001/18,
+# 32769/9: candidate/incumbent time ratios AMD 1.138/1.082/1.048 and
+# NVIDIA L40S 1.054/2.058/1.127. This enables the byte-bounded E-step
+# projection schedule below; IDENTICAL cannot select FAST fused E-step.
+# Each binary used one excluded same-context fit and one scored fit; all
+# recorded converged=True and rc=0. Runtime batch-width counters were not
+# emitted. Prior identity evidence reused; no new identity/quality validation.
+# Remains OFF: these representative fits lose, and full-board qualification
+# remains pending. Other existing GMM controls are unchanged.
+# Evidence: experiments/performance_ideas/measurements/20261006/index.json.
 comptime GMM_COMPONENT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # NEVER RUN — PENDING MEASUREMENT
     and is_defined["MOJOLEARN_IDN_GMM_COMPONENT_BATCH"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
