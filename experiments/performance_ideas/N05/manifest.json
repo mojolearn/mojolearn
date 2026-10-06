@@ -8,7 +8,7 @@
     "amd",
     "apple"
   ],
-  "status": "source_ready",
+  "status": "build_passed",
   "implementation_paths": [
     "gemm/experiments/grouped_jobs.mojo",
     "gemm/experiments/changing_batch_check.mojo",
@@ -46,7 +46,8 @@
     "exact intermediate outputs and poison control",
     "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
     "Native harness instantiates explicit control and candidate; all compared cells and poison/failure gates required",
-    "Build target/column must match actual device; CPU identity uses independent host references and separately owed host caller qualification, not a GPU DeviceContext host run"
+    "Build target/column must match actual device; CPU identity uses independent host references and separately owed host caller qualification, not a GPU DeviceContext host run",
+    "Grouped launches are implemented; graph/replay remains a separate unqualified arm until a supported installed SDK capture/replay interface and fixed-address lifecycle are established"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
   "blocker": null,
