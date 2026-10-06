@@ -811,10 +811,19 @@ def gmm_initial_resp_host(
 #: With `IDN_GMM_FUSED_CHOL` that is one working drain an EM iteration. The
 #: same value is read (nothing between the E-step and the read writes
 #: `meanll`). `-D MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF=1` restores the late copy.
+# I21 2026-10-06 legacy_both_off partial AMD LOSS, source 5b467815b51b:
+# generated COV_FULL fits k=9, rows/features=10000/17,10001/18,32769/9,
+# both-OFF/incumbent time ratios 2.051/1.913/1.471. This arm restores BOTH
+# the component Cholesky chain and the late meanll copy below; its timing
+# cannot isolate this drain control. NVIDIA combined rollback and the
+# isolated one_drain_off arm remain pending. All three AMD executions
+# converged=True, rc=0; one excluded same-context fit and one scored fit.
+# Retain the existing ON default. Prior identity evidence reused without
+# revalidation; synthetic caller results do not qualify full-board changes.
+# Evidence: experiments/performance_ideas/measurements/20261006/index.json.
 comptime IDN_GMM_ONE_DRAIN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
-        # I21 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
         is_defined["MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )

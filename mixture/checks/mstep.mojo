@@ -601,8 +601,9 @@ def means_divide_kernel(
 # full-board qualification. All combined executions converged=True, rc=0,
 # with the same one excluded warmup/one score protocol.
 # Existing fused-Cholesky stays ON: all six fused_cholesky_off rollbacks lose
-# (see mixture/chol_order.mojo). One-drain-off and both-off rollback timings
-# remain pending in this snapshot; the existing one-drain default is unchanged.
+# (see mixture/chol_order.mojo). Both-off also loses on AMD (2.051/1.913/
+# 1.471); matching NVIDIA and isolated one-drain-off remain pending. This
+# combined rollback does not isolate one-drain; its existing ON is unchanged.
 # Evidence: experiments/performance_ideas/measurements/20261006/index.json.
 comptime GMM_CENTER_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GMM_CENTER_PAIR"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime GMM_CENTER_PAIR_MAX_CELLS = 1 << 20  # four Float32 planes <=16 MiB
