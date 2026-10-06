@@ -43,6 +43,15 @@ comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
 # prior broad fit-quality HOLD is not waived. Keep scoped/PCA defaults OFF.
 # One excluded warmup+one scored call. Evidence ab-20261006/repairs-54c1f35a5
 # results/F01 and F02/pca; original results/F02/sdk. No validation retests.
+# Full Istella PCA operation, M3 FAST, source ec3c8c850 (2026-10-06):
+# F01 A=717.265 ms, B=710.393 ms, B/A=0.99042. All 2,043,304 train and
+# 500,000 query rows; preparation, fit, transform, inverse and output reads.
+# One excluded warmup and one score; reconstruction passed, hashes retained.
+# A single approximately 1% difference does not qualify a default. Keep OFF;
+# full taxi, other affected workloads and interactions remain pending.
+# Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
+# pca-istella-summary.json. F02/pca shares this exact artifact pair/workload;
+# its other adapters remain separately pending.
 comptime PCA = is_defined["MOJOLEARN_SCOPED_GEMM_PCA"]()
 comptime AUDIT = is_defined["MOJOLEARN_SCOPED_GEMM_AUDIT"]()
 # LEGACY, default OFF: the old per-route windows (TALL M>=4096 N32..128

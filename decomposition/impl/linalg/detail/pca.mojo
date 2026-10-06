@@ -85,6 +85,15 @@ from decomposition.checks.jacobi_eigh_device import (
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F11/compensated-pca.
 # No combined-switch or full-board default claim from these component cases.
+# Full Istella PCA operation, M3 FAST, source ec3c8c850 (2026-10-06):
+# F11/compensated-pca A=716.473 ms, B=1955.869 ms, B/A=2.72986.
+# All 2,043,304 training rows and 500,000 query rows; preparation, fit,
+# transform, inverse and consumed outputs included. One excluded warmup and
+# one scored sample per arm; reconstruction gate passed, model/output hashes
+# retained. This full-workload regression keeps the switch OFF. Full taxi,
+# downstream LLE and interactions remain pending; no campaign-wide claim.
+# Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
+# pca-istella-summary.json (full receipts linked by the measurement board).
 comptime PCA_COMPENSATED_COV = AFN_GEMM_APPLE and is_defined["MOJOLEARN_PCA_FAST_COMPENSATED_COV"]()
 
 struct PcaCovAudit(Defaultable, Movable):

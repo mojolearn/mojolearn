@@ -1,0 +1,60 @@
+[
+  {
+    "cell": "F11-compensated-pca-istella-full",
+    "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+    "dimensions": {
+      "train": [
+        2043304,
+        220
+      ],
+      "query": [
+        500000,
+        220
+      ]
+    },
+    "A_ms": 716.472708,
+    "B_ms": 1955.868625,
+    "B_over_A": 2.729857820348406,
+    "reconstruction_A": 0.00013548076753591536,
+    "reconstruction_B": 0.00013074743124813544,
+    "reconstruction_gate": true,
+    "model_hash_A": "bb712945e1865507cfa94579caf297ddebe3dcc1f4bd2fce5a7e07959bd8b8bb",
+    "model_hash_B": "1556d062c7c90c3988b0ab9ca629361d6e5d11ab714b5da47fd536f303be71d5",
+    "output_hash_A": "c126619d0c99dde97ace628fb1215334d972a6f259fd312ce936cc3c1b36b749",
+    "output_hash_B": "c3062c8dcec343e712c110b205d071e085a5e78cc09bcc4ca9ba68ae77280324",
+    "candidate_reached": true,
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "promotion": false,
+    "pending": "Full taxi; affected nonPCA workloads and interactions; existing accepted quality gates retained"
+  },
+  {
+    "cell": "F01-default-pca-istella-full",
+    "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+    "dimensions": {
+      "train": [
+        2043304,
+        220
+      ],
+      "query": [
+        500000,
+        220
+      ]
+    },
+    "A_ms": 717.26475,
+    "B_ms": 710.39325,
+    "B_over_A": 0.9904198554299509,
+    "reconstruction_A": 0.00013548110504827944,
+    "reconstruction_B": 0.0001354802260970955,
+    "reconstruction_gate": true,
+    "model_hash_A": "f78c2636247a690c6e7865ea0bbc390e910754041b7a7db7b09fc1cdbe991a56",
+    "model_hash_B": "50008f580ddc60fac5a0bc02e219e335a6d92f805de4b12ef4b6c406eaf35d26",
+    "output_hash_A": "22a464215f7b39c246ecd82f6ecb65c76522d0e73c9106db4d0758713046d593",
+    "output_hash_B": "fca771be10f70ba5b1d5e619832ddee057cd19ab776a26cec363635ed2ffaa0b",
+    "candidate_reached": true,
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "promotion": false,
+    "pending": "Full taxi; affected nonPCA workloads and interactions; existing accepted quality gates retained"
+  }
+]
