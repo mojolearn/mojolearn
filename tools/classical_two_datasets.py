@@ -2239,18 +2239,35 @@ def worker(args):
             r = int(parts[1])
             try:
                 mem.start()
+                whole_start = time.perf_counter()
+                whole_requested = os.environ.get("MOJOLEARN_BENCH_WHOLE_OPERATION") == "1"
+                if whole_requested:
+                    # Recreate per operation so constructor-side fit/preparation
+                    # (notably kNN/KDE) is included, on every scored arm equally.
+                    runner = BUILDERS[(args.lane, args.arm)](data, rec)
+                    runner.sync()
+                preparation_ms = (time.perf_counter() - whole_start) * 1000.0
                 t0 = time.perf_counter()
                 runner.call()
                 runner.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                outputs = runner.outputs()
+                runner.sync()
+                operation_ms = (time.perf_counter() - whole_start) * 1000.0
                 m = mem.stop()
-                digest = _digest(runner.outputs())
+                digest = _digest(outputs)
+                from bench_board_state import scored_receipt
+                state_receipt = scored_receipt(outputs, runner) if r > 0 else None
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
-            say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m})
+            say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
+                               "scope": "prepare-fit-consume" if whole_requested else "call-consume",
+                               "dataset_load_included": False,
+                               "fresh_process": False, "startup_probe_preparation_excluded": True}})
         elif parts[0] == "infer":
             # `race --infer` only. An inference failure is reported and the
             # worker stays up: its fit outputs still have to be saved.
@@ -2797,6 +2814,10 @@ def race(args):
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
             result["arms"][arm]["digests"].append(msg["digest"])
+            if msg.get("operation") is not None:
+                result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
+            if msg.get("state_receipt") is not None:
+                result["arms"][arm].setdefault("state_receipts", []).append(msg["state_receipt"])
             result["arms"][arm]["mem"].append(msg.get("mem"))
             print("CTD-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)

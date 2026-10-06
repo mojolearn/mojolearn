@@ -1284,14 +1284,16 @@ def main(argv=None):
     # it the shapes are still reported and that one check is skipped; an
     # expectation is never invented.
     retained_scores = {}
+    # Keep final scored results for every own tree lane; this only wraps the
+    # existing untimed scorer and never adds a fit or prediction.
+    for arm in arms:
+        if arm.name.startswith("ours"):
+            retain_scored_forest(arm, retained_scores)
     if args.save_scored_models:
         if lane not in ("rf", "et"):
             raise ValueError("--save-scored-models currently supports RF/ET only")
         if os.path.exists(args.save_scored_models):
             raise ValueError("--save-scored-models requires a fresh directory")
-        for arm in arms:
-            if arm.name.startswith("ours"):
-                retain_scored_forest(arm, retained_scores)
     models = {}
     if args.infer:
         # Keep each arm's LAST fitted model for the inference phase. The
@@ -1308,6 +1310,14 @@ def main(argv=None):
         import forest_board_arms
         fit_context = forest_board_arms.TreeMem(lane).context
     live = spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg, fit_context=fit_context)
+    from bench_board_state import scored_receipt
+    for arm in live:
+        if arm.name in retained_scores:
+            model, triples, _ = retained_scores[arm.name]
+            outputs = {str(i) + ":" + metric: pred for i, (metric, _, pred) in enumerate(triples)
+                       if pred is not None}
+            print("FSPEED-STATE " + json.dumps(dict(arm=arm.name, lane=lane,
+                  receipt=scored_receipt(outputs, model=model)), sort_keys=True), flush=True)
     if args.save_scored_models:
         save_scored_forests(args.save_scored_models, retained_scores, {a.name for a in live})
     if args.infer:

@@ -2141,12 +2141,17 @@ class Skipped(Exception):
 
 
 class Runner:
-    def __init__(self, info, fit, outputs, infer=None, sync=None, record=None):
+    def __init__(self, info, fit, outputs, infer=None, sync=None, record=None, model_for_hash=None):
+        self.model_for_hash = model_for_hash
         self.info, self._fit, self._out, self._infer, self._sync = info, fit, outputs, infer, sync
         #: what this arm was constructed with, for tools/bench_board_params.py:
         #: BP.arm_record(constructed object), or a declared {"__library__": ...}
         #: dict of the values really passed (a function-call arm)
         self.record = record
+
+    def sync_for_receipt(self):
+        if self._sync:
+            self._sync()
 
     def fit(self):
         self._fit()
@@ -2494,7 +2499,7 @@ def _build_est(lane, arm, D):
         return o
 
     return Runner(info, fit, outputs, infer if has_infer(lane) else None, sync,
-                  record=_BP().arm_record(make()))
+                  record=_BP().arm_record(make()), model_for_hash=lambda: S.get("est"))
 
 
 # ---- LSTM / GRU / RNN estimators -------------------------------------------
@@ -4314,25 +4319,41 @@ def worker(args):
             r = int(parts[1])
             try:
                 mem.start()
+                whole_start = time.perf_counter()
+                whole_requested = os.environ.get("MOJOLEARN_BENCH_WHOLE_OPERATION") == "1"
+                if whole_requested:
+                    # Recreate per operation so constructor-side fit/preparation
+                    # (notably kNN/KDE) is included, on every scored arm equally.
+                    runner = build(args.lane, args.arm, D)
+                    runner.sync_for_receipt()
+                preparation_ms = (time.perf_counter() - whole_start) * 1000.0
                 t0 = time.perf_counter()
                 runner.fit()
                 ms = (time.perf_counter() - t0) * 1000.0
                 t1 = time.perf_counter()
                 did = runner.infer()
                 ims = (time.perf_counter() - t1) * 1000.0 if did else None
-                m = mem.stop()
                 last = runner.outputs()
+                runner.sync_for_receipt()
+                operation_ms = (time.perf_counter() - whole_start) * 1000.0
+                m = mem.stop()
                 h = hashlib.sha256()
                 for k in sorted(last):
                     h.update(k.encode())
                     h.update(np.ascontiguousarray(last[k]).data)
                 digest = h.hexdigest()[:16]
+                from bench_board_state import scored_receipt
+                state_receipt = scored_receipt(last, runner) if r > 0 else None
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
-            say({"event": "round", "round": r, "ms": ms, "infer_ms": ims, "digest": digest, "mem": m})
+            say({"event": "round", "round": r, "ms": ms, "infer_ms": ims, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
+                               "scope": "prepare-fit-consume" if whole_requested else "call-consume",
+                               "dataset_load_included": False,
+                               "fresh_process": False, "startup_probe_preparation_excluded": True}})
         elif parts[0] == "save":
             try:
                 path = parts[1]
@@ -4878,6 +4899,10 @@ def race(args):
                 if msg.get("infer_ms") is not None:
                     a["infer_ms"].append(msg["infer_ms"])
             a["digests"].append(msg["digest"])
+            if msg.get("operation") is not None:
+                a.setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
+            if msg.get("state_receipt") is not None:
+                a.setdefault("state_receipts", []).append(msg["state_receipt"])
             a["mem"].append(msg.get("mem"))
             print("ALGOS-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f infer_ms=%s digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg.get("infer_ms"), msg["digest"]), flush=True)

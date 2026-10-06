@@ -766,7 +766,8 @@ def length_scale_of(D):
 class Runner:
     """`call` is timed; `outputs` is run after the clock, once per round."""
 
-    def __init__(self, info, call, outputs, sync=None, params=None):
+    def __init__(self, info, call, outputs, sync=None, params=None, model_for_hash=None):
+        self.model_for_hash = model_for_hash
         self.info, self._call, self._outputs, self._sync = info, call, outputs, sync
         # the constructed estimator (or a declared dict for a function arm);
         # the worker sends its tools/bench_board_params.py record
@@ -967,12 +968,16 @@ def _build_ours(lane, D, rec, S):
     X = D.get("X")
     if lane == "umap":
         make = lambda: ml.UMAP(random_state=SEED, **_umap_kw())  # noqa: E731
-        call = lambda: S.update(e=make().fit_transform(X))  # noqa: E731
+        def call():
+            S["est"] = make()
+            S["e"] = S["est"].fit_transform(X)
         out = lambda: {"embedding": np.asarray(S["e"], dtype=np.float32)}  # noqa: E731
     elif lane == "spectral-embedding":
         make = lambda: ml.SpectralEmbedding(n_components=2, affinity="nearest_neighbors",  # noqa: E731
                                             n_neighbors=10, random_state=SEED)
-        call = lambda: S.update(e=make().fit_transform(X))  # noqa: E731
+        def call():
+            S["est"] = make()
+            S["e"] = S["est"].fit_transform(X)
         out = lambda: {"embedding": np.asarray(S["e"], dtype=np.float32)}  # noqa: E731
     elif lane == "gmm":
         make = lambda: ml.GaussianMixture(n_components=GMM_COMPONENTS, covariance_type="full",  # noqa: E731
@@ -1107,7 +1112,7 @@ def _build_ours(lane, D, rec, S):
     info = _ours(lane, probe)
     if d is not None:
         info["n_features"] = d
-    return Runner(info, call, out, params=probe)
+    return Runner(info, call, out, params=probe, model_for_hash=lambda: S.get("est"))
 
 
 def _build_sklearn(lane, D, rec, S):
@@ -1457,23 +1462,39 @@ def worker(args):
             r = int(parts[1])
             try:
                 mem.start()
+                whole_start = time.perf_counter()
+                whole_requested = os.environ.get("MOJOLEARN_BENCH_WHOLE_OPERATION") == "1"
+                if whole_requested:
+                    # Recreate per operation so constructor-side fit/preparation
+                    # (notably kNN/KDE) is included, on every scored arm equally.
+                    runner = build(args.lane, args.arm, lane_arrays(args.lane, B), rec)
+                    runner.sync()
+                preparation_ms = (time.perf_counter() - whole_start) * 1000.0
                 t0 = time.perf_counter()
                 runner.call()
                 runner.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
-                m = mem.stop()
                 last = runner.outputs()
+                runner.sync()
+                operation_ms = (time.perf_counter() - whole_start) * 1000.0
+                m = mem.stop()
                 h = hashlib.sha256()
                 for k in sorted(last):
                     h.update(k.encode())
                     h.update(np.ascontiguousarray(last[k]).data)
                 digest = h.hexdigest()[:16]
+                from bench_board_state import scored_receipt
+                state_receipt = scored_receipt(last, runner) if r > 0 else None
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
-            say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m})
+            say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
+                               "scope": "prepare-fit-consume" if whole_requested else "call-consume",
+                               "dataset_load_included": False,
+                               "fresh_process": False, "startup_probe_preparation_excluded": True}})
         elif parts[0] == "save":
             try:
                 path = parts[1]
@@ -1815,6 +1836,10 @@ def race(args):
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
             result["arms"][arm]["digests"].append(msg["digest"])
+            if msg.get("operation") is not None:
+                result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
+            if msg.get("state_receipt") is not None:
+                result["arms"][arm].setdefault("state_receipts", []).append(msg["state_receipt"])
             result["arms"][arm]["mem"].append(msg.get("mem"))
             print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)

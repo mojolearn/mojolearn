@@ -1398,6 +1398,7 @@ def parse_tree_log(path):
     summ = _load_tool("bench_all_summarize")
     arms, verdict, shape = summ.parse_tree_log(path)
     bindings, warm, notes, verdict_line, mem, libs = {}, {}, [], None, {}, {}
+    states = {}
     with open(path, errors="replace") as fh:
         for line in fh:
             head, _, rest = line.rstrip("\n").partition(" ")
@@ -1418,6 +1419,9 @@ def parse_tree_log(path):
                     libs[d.get("arm")] = d
                 except ValueError:
                     pass
+            elif head == "FSPEED-STATE":
+                d = json.loads(rest)
+                states[d["arm"]] = d["receipt"]
             elif head == "FSPEED-FIT-VERDICT":
                 verdict_line = rest[:300]
             elif head == "FSPEED-MEM":
@@ -1438,7 +1442,7 @@ def parse_tree_log(path):
     return {"arms": arms, "verdict": verdict, "verdict_line": verdict_line,
             "shape": shape, "notes": notes, "bindings": bindings, "warmup": warm,
             "mem": {a: [rs[k] for k in sorted(rs)] for a, rs in mem.items()},
-            "libraries": libs}
+            "libraries": libs, "state_receipts": states}
 
 
 def tree_cmd(ctx, race):
@@ -1514,6 +1518,8 @@ def tree_cells(ctx, race, parsed):
                     quality=dict(a["acc"]),
                     hash=(a["hashes"][-1] if a["hashes"] else None),
                     hash_stable=(len(set(a["hashes"])) == 1) if a["hashes"] else None,
+                    state_receipts=([parsed["state_receipts"][arm]]
+                                    if arm in parsed.get("state_receipts", {}) else []),
                     fit=a["fit"], shape=parsed["shape"],
                     comparability={"fit_verdict": parsed["verdict"] or "UNKNOWN",
                                    "fit_verdict_line": parsed["verdict_line"]},
@@ -1848,6 +1854,7 @@ def classical_cells(ctx, race, r):
                     rounds=len(ms), status=_status(ms, refused, rounds),
                     quality=q, hash=(a.get("digests") or [None])[-1],
                     hash_stable=a.get("digest_stable"), shape=shape,
+                    state_receipts=a.get("state_receipts", []), operations=a.get("operations", []),
                     device=info.get("device", cell["device"]),
                     device_name=info.get("device_name") or info.get("cpu_model"),
                     library_version=info.get("version"),

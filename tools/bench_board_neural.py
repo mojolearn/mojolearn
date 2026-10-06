@@ -1485,7 +1485,10 @@ def worker(args):
     try:
         with np.load(args.data) as z:
             data = {k: z[k] for k in z.files}
+        preparation_start = time.perf_counter()
         runner = build_runner(args.lane, args.arm, args.shape, data)
+        runner.sync()
+        preparation_ms = (time.perf_counter() - preparation_start) * 1000.0
     except (Exception, SystemExit) as exc:  # noqa: BLE001  (a twin's refuse() exits)
         import traceback
         traceback.print_exc()
@@ -1510,8 +1513,13 @@ def worker(args):
                 runner.call()
                 runner.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                outputs = runner.outputs()
+                runner.sync()
+                operation_ms = (time.perf_counter() - t0) * 1000.0
                 m = mem.stop()
                 digest = runner.digest()
+                from bench_board_state import scored_receipt
+                state_receipt = scored_receipt(outputs, runner) if r > 0 else None
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -1521,7 +1529,10 @@ def worker(args):
                          args.arm, where, r, " (compile happens here)"
                          if r == 0 and "compile" in args.arm else "", repr(exc)[:2000])})
                 return 1
-            say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m})
+            say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "operation": {"ms": operation_ms, "preparation_ms": preparation_ms if r == 0 else 0.0,
+                               "scope": "training-step-or-forward-consume", "dataset_load_included": False,
+                               "cold_total_ms": preparation_ms + operation_ms if r == 0 else None}})
         elif parts[0] == "save":
             try:
                 path = parts[1]
@@ -1777,6 +1788,10 @@ def race(args):
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
             result["arms"][arm]["digests"].append(msg["digest"])
+            if msg.get("operation") is not None:
+                result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
+            if msg.get("state_receipt") is not None:
+                result["arms"][arm].setdefault("state_receipts", []).append(msg["state_receipt"])
             result["arms"][arm]["mem"].append(msg.get("mem"))
             print("NEURAL-ROUND lane=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, arm, r, msg["ms"], msg["digest"]), flush=True)
