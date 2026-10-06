@@ -3,15 +3,17 @@
 digests. Device queue only. Compare full-fit digests against the flag-off arm.
 No timings are inferred from this correctness/attribution check."""
 from std.sys.info import size_of
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
 from ensemble.checks.rf_perf_candidates_check import Fixture, ObjT, BinT, N_COLS, N_CLASSES, MAX_N_BINS, build_workload, upload_structs, upload_i32
 from ensemble.checks.fingerprint_probe import _rf_params, _fit_clf, _fit_reg
 from ensemble.decisiontree.decisiontree import GINI, MSE
-from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import RetainedCountHistograms
+from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import RetainedCountHistograms, retained_histogram_reused
+from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import LOOP_HDR_WORDS
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import NodeWorkItem, InstanceRange, WorkloadInfo, SharedMemoryConfig
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import DeviceArgs, HistogramArgs, launch_build_histograms_kernel
 
-def phase(ctx: DeviceContext, mut fx: Fixture, mut cache: RetainedCountHistograms, items: List[NodeWorkItem], samples: List[Int32], candidate: Bool) raises -> List[UInt32]:
+def phase(ctx: DeviceContext, mut fx: Fixture, mut cache: RetainedCountHistograms, items: List[NodeWorkItem], samples: List[Int32], candidate: Bool, live_n: Int=-1) raises -> List[UInt32]:
     var n=len(items)
     var counts=List[Int]()
     for item in items:
@@ -32,10 +34,15 @@ def phase(ctx: DeviceContext, mut fx: Fixture, mut cache: RetainedCountHistogram
     var slots=MAX_N_BINS*N_CLASSES
     var hist=ctx.enqueue_create_buffer[DType.uint32](n*2*slots)
     var result=List[UInt32]()
+    var header=ctx.enqueue_create_buffer[DType.int32](LOOP_HDR_WORDS)
     for i in range(n*N_COLS*slots):
         result.append(UInt32(0xdeadbeef))
     if candidate:
-        cache.prepare(ctx,ip,n)
+        if live_n>=0:
+            header.enqueue_fill(Int32(live_n))
+            cache.prepare_device(ctx,ip,n,header.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+        else:
+            cache.prepare(ctx,ip,n)
     for col in [0,2]:
         hist.enqueue_fill(UInt32(0))
         if candidate:
@@ -49,7 +56,7 @@ def phase(ctx: DeviceContext, mut fx: Fixture, mut cache: RetainedCountHistogram
                     var physical=Int(samples[node*N_COLS+col+c])
                     for cell in range(slots):
                         result[(node*N_COLS+physical)*slots+cell]=h[(node*2+c)*slots+cell]
-    _ = di^; _ = dw^; _ = ds^; _ = blob^; _ = hist^
+    _ = di^; _ = dw^; _ = ds^; _ = blob^; _ = hist^; _ = header^
     return result^
 
 def equal(a: List[UInt32],b: List[UInt32]) raises:
@@ -84,6 +91,22 @@ def mechanism(ctx: DeviceContext) raises:
         for col in range(N_COLS):
             if mask[2*N_COLS+col]!=(UInt8(0) if col==2 else UInt8(1)):
                 raise Error("I18 sibling route/permutation witness failed")
+    # The production queue pads capacity with idx0/empty-range items.
+    # Device CUR must exclude these from every cache-writing task.
+    var padded=children.copy()
+    var padded_samples=samples.copy()
+    for i in range(2):
+        padded.append(NodeWorkItem(0,Int32(0),InstanceRange(0,0)))
+        for col in [0,1,2,3]:
+            padded_samples.append(Int32(col))
+    equal(phase(ctx,fx,cache,padded,padded_samples,True,2),phase(ctx,fx,cache,padded,padded_samples,False))
+    var inactive=phase(ctx,fx,cache,padded,padded_samples,True,0)
+    for value in inactive:
+        if value!=UInt32(0):
+            raise Error("I18 inactive padded batch wrote histogram data")
+    with cache.counts.map_to_host() as counts:
+        if Int(counts[0])!=fx.n_rows:
+            raise Error("I18 padded idx0 corrupted retained root interval")
     # Beyond the byte-bounded node cache, every column must use the row loop.
     var overflow=List[NodeWorkItem]()
     overflow.append(NodeWorkItem(4,Int32(2),InstanceRange(left,fx.n_rows-left)))
@@ -101,10 +124,22 @@ def main() raises:
     var ctx=DeviceContext()
     mechanism(ctx)
     for streams in [1,2]:
+        var before=retained_histogram_reused()
         var full=_rf_params(3,True,Float32(1),6,16,GINI,n_streams=streams)
         print("I18_FULL",streams,_fit_clf(ctx,521,43,4,full,False,UInt64(871)))
+        var reused=retained_histogram_reused()-before
+        comptime if is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT"]():
+            comptime if is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST"]():
+                if reused<=0:
+                    raise Error("I18 normal GPU forest fit did not subtract retained histograms")
+            else:
+                if reused!=0:
+                    raise Error("I18 OFF forest unexpectedly reached candidate")
+        print("I18_REUSED",streams,reused)
         var partial=_rf_params(3,True,Float32(.5),6,16,GINI,n_streams=streams)
         print("I18_SUBSAMPLED_FALLBACK",streams,_fit_clf(ctx,521,43,4,partial,False,UInt64(871)))
         var regression=_rf_params(2,True,Float32(1),5,16,MSE,n_streams=streams)
         print("I18_REGRESSION_FALLBACK",streams,_fit_reg(ctx,521,7,regression,UInt64(972)))
+        if retained_histogram_reused()-before!=reused:
+            raise Error("I18 partial-feature or regression fallback reached candidate")
     print("I18 PASS mechanism permutations cache_bound reset full_forest_digests; compare OFF arm")

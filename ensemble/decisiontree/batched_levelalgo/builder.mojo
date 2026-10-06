@@ -58,6 +58,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
 from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import (
     LOOP_HDR_WORDS,
     LOOP_H_DEPTH,
+    LOOP_H_CUR,
     LOOP_H_HEAD,
     LOOP_H_NODES,
     LOOP_H_OVERFLOW,
@@ -1424,7 +1425,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             if n_sampled_rows > 0 and n_sampled_rows <= 2147483647 and n_cols > 0 and Int(params.max_n_bins) > 0 and num_outputs > 0 and n_sampled_cols_for(params.max_features,n_cols) == n_cols:
                 var slots = Int(params.max_n_bins)*Int(num_outputs)
                 var bytes_per_node = n_cols*(4*slots+2)+17
-                var capacity = min(2*n_sampled_rows-1, RETAINED_COUNT_HIST_BYTES//bytes_per_node)
+                var capacity = min(2*n_sampled_rows-1, (RETAINED_COUNT_HIST_BYTES-4-4*LOOP_HDR_WORDS)//bytes_per_node)
                 if capacity >= 3:
                     self.retained_counts = RetainedCountHistograms(ctx,capacity,n_cols,slots)
 
@@ -2401,15 +2402,18 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         )
         self.retained_counts_phase = False
         comptime if RETAINED_COUNT_HIST and Self.O.BinT.is_classification and not Self.O.BinT.weighted:
-            # The host queue's work-item count is exact. Device-loop padded
-            # batches, partial feature rounds and unbounded/weighted cases
-            # retain the incumbent, including its small-node fused route.
-            if dev_n < 0 and n > 0 and sample_offset == 0 and n_sampled_cols == self.n_cols and Int(dataset.n_sampled_cols) == self.n_cols and self.retained_counts:
+            # Metadata and cache kernels limit padded device batches by the
+            # queue header's live prefix. Partial-feature/weighted routes
+            # retain the incumbent. No host queue or count readback is added.
+            if n > 0 and sample_offset == 0 and n_sampled_cols == self.n_cols and Int(dataset.n_sampled_cols) == self.n_cols and self.retained_counts:
                 ref cache = self.retained_counts.value()
                 if self.retained_counts_reset:
                     cache.reset(ctx)
                     self.retained_counts_reset = False
-                cache.prepare(ctx,self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),n)
+                if dev_n>=0:
+                    cache.prepare_device(ctx,self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),n,self.loop_hdr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+                else:
+                    cache.prepare(ctx,self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),n)
                 self.retained_counts_phase = True
         # DEVIATION 401 (added with the 2026-08-22 identity audit) -- the
         # round's sampled COLUMNS, the per-node feature-sample RNG's
@@ -3237,6 +3241,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         two nodes); `depth_counter` is the deepest child's depth
         (`:133-134`), which is the LAST node's: the FIFO hands out ids in
         non-decreasing depth."""
+        comptime if RETAINED_COUNT_HIST:
+            if self.retained_counts and not self.retained_counts_reset:
+                self.retained_counts.value().publish_audit(ctx)
         var n_out = Int(ts.ds.num_outputs)
         var t0 = instr.times.start()
         self._ensure_leaf_capacity(ctx, n_nodes, n_out)
