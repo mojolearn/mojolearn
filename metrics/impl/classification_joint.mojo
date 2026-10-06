@@ -36,6 +36,7 @@ def enqueue_joint_classification_counts(ctx: DeviceContext,mut truth: DeviceBuff
     prf.enqueue_fill(Int32(0))
     if n==0:
         return
+    # I24: NEVER RUN — PENDING VALIDATION; explicit experiment, default OFF.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_METRICS_JOINT_COUNTS"]():
         ctx.enqueue_function[joint_classification_count_kernel](truth.unsafe_ptr(),prediction.unsafe_ptr(),Int32(n),Int32(classes),matrix.unsafe_ptr(),prf.unsafe_ptr(),grid_dim=((n+255)//256,1,1),block_dim=(256,1,1))
     else:
