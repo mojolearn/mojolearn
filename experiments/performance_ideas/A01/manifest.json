@@ -21,25 +21,24 @@
   ],
   "baseline_defines": [],
   "build_argv": [
-    "pixi",
-    "run",
-    "mojo",
-    "build",
-    "-j1",
-    "-D",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "-I",
-    "{repo}",
-    "{repo}/gemm/experiments/profile_check.mojo",
-    "-o",
-    "{output}"
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A01/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
   ],
   "run_argv": [
     "{python}",
     "{repo}/gemm/experiments/profile_campaign.py",
     "{repo}/experiments/performance_ideas/A01/campaign.json",
     "--evidence",
-    "{output}"
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
   ],
   "validation_paths": [
     "gemm/checks/gemm_step_arms_check.mojo",
@@ -49,8 +48,20 @@
   "quality_gates": [
     "same-version NVIDIA/AMD/Apple/host output bits",
     "exact intermediate outputs and poison control",
-    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower"
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Campaign receipt contains explicit baseline and independently compiled candidate arms; do not rebuild for run-only"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
-  "blocker": null
+  "blocker": null,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A01/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ],
+  "build_uses_compile_slot": true
 }
