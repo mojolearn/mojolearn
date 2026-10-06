@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T08:11:32Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T08:12:22Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T08:11:32Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 90 done, 3 failed, 0 unsupported, 20 pending. Cells: 188 (REFUSED 3, ok 185).
+Races: 113 planned, 94 done, 3 failed, 0 unsupported, 16 pending. Cells: 192 (REFUSED 3, ok 189).
 
 Inference cells: 140 (REFUSED 2, ok 138).
 
@@ -171,6 +171,13 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | logreg | taxi | nonfinite_proba_rows | - | - | cuml-gpu 0 |
 | classical2 | ridge | taxi | r2 (higher is better) | - | - | cuml-gpu 0.908983 |
 | classical2 | ridge | taxi | rmse (lower is better) | - | - | cuml-gpu 4.805051 |
+| classical2 | spectral-embedding | taxi | trustworthiness_k15 (higher is better, 1 at most) | - | - | cuml-gpu 0.891595 |
+| classical2 | spectral | taxi | n_clusters | - | - | cuml-gpu 8 |
+| classical2 | spectral | taxi | silhouette (higher is better) | - | - | cuml-gpu 0.087609 |
+| classical2 | svr | taxi | r2 (higher is better) | - | - | cuml-gpu 0.767551 |
+| classical2 | svr | taxi | rmse (lower is better) | - | - | cuml-gpu 7.680405 |
+| classical2 | tsvd | taxi | explained_variance_ratio_sum (higher is better) | - | - | cuml-gpu 0.999964 |
+| classical2 | tsvd | taxi | relative_reconstruction_error (lower is better) | - | - | cuml-gpu 0.003257 |
 
 ## Inference at a glance
 
@@ -922,6 +929,122 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | seed | "none (deterministic)" |
 | solver | "eig" |
 | tol | 0.0001 |
+
+### spectral-embedding / taxi (rows full, shape X 20000x11)
+
+race: done, driver rc 0, log `logs/classical2.spectral-embedding.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 73.0 | 73.0..73.0 | 1 | - | - | 971.2 | 478.0 | trustworthiness_k15=0.891595 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_components=2, affinity='nearest_neighbors', n_neighbors=10, random_state=7. Rows: the umap block (20000 stride rows, standardized by the fit rows). Timed: fit_transform.
+
+mismatch: eigensolver: ours Lanczos (default tolerance); scikit-learn arpack (its default); cuML its own
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| affinity | "nearest_neighbors" |
+| n_components | 2 |
+| n_neighbors | 10 |
+| seed | 7 |
+
+### spectral / taxi (rows full, shape X 10000x11)
+
+race: done, driver rc 0, log `logs/classical2.spectral.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 212.8 | 212.8..212.8 | 1 | - | - | 1048.9 | 480.0 | n_clusters=8, silhouette=0.087609 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_clusters=8, affinity='nearest_neighbors', n_neighbors=10, n_init=1, random_state=42 (the cuML benchmark's SpectralClustering), assign_labels='kmeans', n_components=8. Rows: 10000 stride rows of the cls block (standardized by the fit rows); O(n^2) affinity. Timed: fit.
+
+mismatch: eigensolver: ours Lanczos eigen_tol 1e-5 (its default); scikit-learn arpack eigen_tol='auto'; each library's own k-means on the embedding
+
+mismatch: gamma, degree, coef0: not read by the nearest_neighbors affinity; ours refuses any value (None), scikit-learn holds 1.0, 3, 1
+
+config: cuML benchmark (RAPIDS), SpectralClustering (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 42): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| affinity | "nearest_neighbors" |
+| n_clusters | 8 |
+| n_components | 8 |
+| n_init | 1 |
+| n_neighbors | 10 |
+| seed | 42 |
+
+### svr / taxi (rows full, shape X 10000x11; Xq 10000x11; y 10000; yq 10000)
+
+race: done, driver rc 0, log `logs/classical2.svr.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 42.2 | 42.2..42.2 | 1 | - | - | 911.3 | 442.0 | finite=True, r2=0.767551, rmse=7.680405 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: kernel='rbf', gamma=1/d, C=1.0, epsilon=0.1, tol=1e-3, degree=3, coef0=0.0, max_iter=-1, cache_size=2000 MB. Rows: 10000 fit and 10000 held-out stride rows of the reg block (standardized by the fit rows). Timed: fit.
+
+mismatch: cache_size=2000 on every arm; ours honors it at predict only (DEVIATION 871); libsvm is single-threaded; shrinking=True is scikit-learn's only
+
+mismatch: seed: no arm has a seed argument
+
+config: cuML benchmark (RAPIDS), SVR-RBF (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| C | 1.0 |
+| coef0 | 0.0 |
+| degree | 3 |
+| epsilon | 0.1 |
+| gamma | 0.09090909090909091 |
+| kernel | "rbf" |
+| max_iter | -1 |
+| seed | "none (deterministic)" |
+| tol | 0.001 |
+
+### tsvd / taxi (rows full, shape X 1000000x11)
+
+race: done, driver rc 0, log `logs/classical2.tsvd.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 5.9 | 5.9..5.9 | 1 | - | - | 982.5 | 516.0 | explained_variance_ratio_sum=0.999964, relative_reconstruction_error=0.003257 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7. Rows: 1000000 stride rows of the train split, raw (sentinel cleaned, not scaled). Timed: fit.
+
+mismatch: algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'
+
+config: cuML benchmark (RAPIDS), tSVD (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| algorithm | "full" |
+| n_components | 10 |
+| n_iter | 15 |
+| seed | 7 |
+| tol | 1e-07 |
 
 ## Algorithm expansion
 

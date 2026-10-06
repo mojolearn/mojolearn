@@ -44799,8 +44799,749 @@
       "stored_arms": [],
       "stored_now": 1,
       "wall_s": 3.3
+    },
+    "classical2/spectral-embedding/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit_transform",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 4.4655147939920425
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical2",
+          "hash": "e291001aae3bf432",
+          "hash_stable": null,
+          "lane": "spectral-embedding",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 72.98550382256508,
+          "median_ms": 72.98550382256508,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 478.0,
+            "peak_host_mb": 971.2,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 478.0,
+            "warmup_host_mb": 963.8
+          },
+          "min_ms": 72.98550382256508,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "affinity": "nearest_neighbors",
+              "n_components": 2,
+              "n_neighbors": 10,
+              "seed": 7
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 478.0,
+          "peak_host_mb": 971.2,
+          "quality": {
+            "trustworthiness_k15": 0.891594818374464
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "manifold",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_more.py",
+            "interleaved": true,
+            "lane_config": {
+              "mismatches": [
+                "eigensolver: ours Lanczos (default tolerance); scikit-learn arpack (its default); cuML its own"
+              ],
+              "params": "n_components=2, affinity='nearest_neighbors', n_neighbors=10, random_state=7",
+              "quality": "trustworthiness k=15 over every row",
+              "rows": "the umap block (20000 stride rows, standardized by the fit rows)",
+              "timed": "fit_transform"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 20000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            72.98550382256508
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 324.26415383815765
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_more.py",
+        "race",
+        "--lane",
+        "spectral-embedding",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/more-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical2/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical2",
+      "finished": "2026-10-06T08:12:05Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "classical2/spectral-embedding/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "spectral-embedding",
+      "lane_config": {
+        "mismatches": [
+          "eigensolver: ours Lanczos (default tolerance); scikit-learn arpack (its default); cuML its own"
+        ],
+        "params": "n_components=2, affinity='nearest_neighbors', n_neighbors=10, random_state=7",
+        "quality": "trustworthiness k=15 over every row",
+        "rows": "the umap block (20000 stride rows, standardized by the fit rows)",
+        "timed": "fit_transform"
+      },
+      "log": "logs/classical2.spectral-embedding.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "affinity": "nearest_neighbors",
+              "n_components": 2,
+              "n_neighbors": 10,
+              "seed": 7
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical2",
+        "lane": "spectral-embedding",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical2/rows-full/spectral-embedding-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:11:32Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 32.3
+    },
+    "classical2/spectral/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 4.566624760627747
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical2",
+          "hash": "a7662591d602ac9f",
+          "hash_stable": null,
+          "lane": "spectral",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 212.79255859553814,
+          "median_ms": 212.79255859553814,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 480.0,
+            "peak_host_mb": 1048.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 480.0,
+            "warmup_host_mb": 1041.5
+          },
+          "min_ms": 212.79255859553814,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "affinity": "nearest_neighbors",
+              "n_clusters": 8,
+              "n_components": 8,
+              "n_init": 1,
+              "n_neighbors": 10,
+              "seed": 42
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 480.0,
+          "peak_host_mb": 1048.9,
+          "quality": {
+            "n_clusters": 8,
+            "silhouette": 0.08760917457460066
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "cls",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "SpectralClustering",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_more.py",
+            "interleaved": true,
+            "lane_config": {
+              "mismatches": [
+                "eigensolver: ours Lanczos eigen_tol 1e-5 (its default); scikit-learn arpack eigen_tol='auto'; each library's own k-means on the embedding",
+                "gamma, degree, coef0: not read by the nearest_neighbors affinity; ours refuses any value (None), scikit-learn holds 1.0, 3, 1"
+              ],
+              "params": "n_clusters=8, affinity='nearest_neighbors', n_neighbors=10, n_init=1, random_state=42 (the cuML benchmark's SpectralClustering), assign_labels='kmeans', n_components=8",
+              "quality": "cluster count, silhouette, ARI vs ours",
+              "rows": "10000 stride rows of the cls block (standardized by the fit rows); O(n^2) affinity",
+              "timed": "fit"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 42,
+            "warmup_rounds": 1
+          },
+          "shape": "X 10000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            212.79255859553814
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 519.2786101251841
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_more.py",
+        "race",
+        "--lane",
+        "spectral",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/more-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical2/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical2",
+      "finished": "2026-10-06T08:12:13Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "classical2/spectral/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "spectral",
+      "lane_config": {
+        "mismatches": [
+          "eigensolver: ours Lanczos eigen_tol 1e-5 (its default); scikit-learn arpack eigen_tol='auto'; each library's own k-means on the embedding",
+          "gamma, degree, coef0: not read by the nearest_neighbors affinity; ours refuses any value (None), scikit-learn holds 1.0, 3, 1"
+        ],
+        "params": "n_clusters=8, affinity='nearest_neighbors', n_neighbors=10, n_init=1, random_state=42 (the cuML benchmark's SpectralClustering), assign_labels='kmeans', n_components=8",
+        "quality": "cluster count, silhouette, ARI vs ours",
+        "rows": "10000 stride rows of the cls block (standardized by the fit rows); O(n^2) affinity",
+        "timed": "fit"
+      },
+      "log": "logs/classical2.spectral.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "affinity": "nearest_neighbors",
+              "n_clusters": 8,
+              "n_components": 8,
+              "n_init": 1,
+              "n_neighbors": 10,
+              "seed": 42
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical2",
+        "lane": "spectral",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 42,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical2/rows-full/spectral-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:12:05Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 8.1
+    },
+    "classical2/svr/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 11.978235095739365
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical2",
+          "hash": "f296ecf1728ba8f6",
+          "hash_stable": null,
+          "lane": "svr",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 42.1505831182003,
+          "median_ms": 42.1505831182003,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 442.0,
+            "peak_host_mb": 911.3,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 440.0,
+            "warmup_host_mb": 903.1
+          },
+          "min_ms": 42.1505831182003,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "C": 1.0,
+              "coef0": 0.0,
+              "degree": 3,
+              "epsilon": 0.1,
+              "gamma": 0.09090909090909091,
+              "kernel": "rbf",
+              "max_iter": -1,
+              "seed": "none (deterministic)",
+              "tol": 0.001
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 442.0,
+          "peak_host_mb": 911.3,
+          "quality": {
+            "finite": true,
+            "r2": 0.7675505020547824,
+            "rmse": 7.68040535374185
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "reg",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "SVR-RBF",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_more.py",
+            "interleaved": true,
+            "lane_config": {
+              "mismatches": [
+                "cache_size=2000 on every arm; ours honors it at predict only (DEVIATION 871); libsvm is single-threaded; shrinking=True is scikit-learn's only",
+                "seed: no arm has a seed argument"
+              ],
+              "params": "kernel='rbf', gamma=1/d, C=1.0, epsilon=0.1, tol=1e-3, degree=3, coef0=0.0, max_iter=-1, cache_size=2000 MB",
+              "quality": "held-out R2 and RMSE",
+              "rows": "10000 fit and 10000 held-out stride rows of the reg block (standardized by the fit rows)",
+              "timed": "fit"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 10000x11; Xq 10000x11; y 10000; yq 10000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            42.1505831182003
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 207.86634646356106
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_more.py",
+        "race",
+        "--lane",
+        "svr",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/more-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical2/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical2",
+      "finished": "2026-10-06T08:12:16Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "classical2/svr/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "svr",
+      "lane_config": {
+        "mismatches": [
+          "cache_size=2000 on every arm; ours honors it at predict only (DEVIATION 871); libsvm is single-threaded; shrinking=True is scikit-learn's only",
+          "seed: no arm has a seed argument"
+        ],
+        "params": "kernel='rbf', gamma=1/d, C=1.0, epsilon=0.1, tol=1e-3, degree=3, coef0=0.0, max_iter=-1, cache_size=2000 MB",
+        "quality": "held-out R2 and RMSE",
+        "rows": "10000 fit and 10000 held-out stride rows of the reg block (standardized by the fit rows)",
+        "timed": "fit"
+      },
+      "log": "logs/classical2.svr.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "C": 1.0,
+              "coef0": 0.0,
+              "degree": 3,
+              "epsilon": 0.1,
+              "gamma": 0.09090909090909091,
+              "kernel": "rbf",
+              "max_iter": -1,
+              "seed": "none (deterministic)",
+              "tol": 0.001
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical2",
+        "lane": "svr",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical2/rows-full/svr-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:12:13Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 3.2
+    },
+    "classical2/tsvd/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 48.43557998538017
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical2",
+          "hash": "d09ebd056d7ff0c4",
+          "hash_stable": null,
+          "lane": "tsvd",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 5.925681442022324,
+          "median_ms": 5.925681442022324,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 516.0,
+            "peak_host_mb": 982.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 516.0,
+            "warmup_host_mb": 975.1
+          },
+          "min_ms": 5.925681442022324,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "algorithm": "full",
+              "n_components": 10,
+              "n_iter": 15,
+              "seed": 7,
+              "tol": 1e-07
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 516.0,
+          "peak_host_mb": 982.5,
+          "quality": {
+            "explained_variance_ratio_sum": 0.9999642728589039,
+            "relative_reconstruction_error": 0.003257073482141212
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "tsvd",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "tSVD",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_more.py",
+            "interleaved": true,
+            "lane_config": {
+              "mismatches": [
+                "algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'"
+              ],
+              "params": "n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7",
+              "quality": "explained-variance ratio sum (TruncatedSVD's definition), relative reconstruction error",
+              "rows": "1000000 stride rows of the train split, raw (sentinel cleaned, not scaled)",
+              "timed": "fit"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            5.925681442022324
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 158.66768173873425
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_more.py",
+        "race",
+        "--lane",
+        "tsvd",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/more-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical2/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical2",
+      "finished": "2026-10-06T08:12:22Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "classical2/tsvd/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "tsvd",
+      "lane_config": {
+        "mismatches": [
+          "algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'"
+        ],
+        "params": "n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7",
+        "quality": "explained-variance ratio sum (TruncatedSVD's definition), relative reconstruction error",
+        "rows": "1000000 stride rows of the train split, raw (sentinel cleaned, not scaled)",
+        "timed": "fit"
+      },
+      "log": "logs/classical2.tsvd.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "algorithm": "full",
+              "n_components": 10,
+              "n_iter": 15,
+              "seed": 7,
+              "tol": 1e-07
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical2",
+        "lane": "tsvd",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical2/rows-full/tsvd-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:12:16Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 5.4
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T08:11:32Z"
+  "updated": "2026-10-06T08:12:22Z"
 }
