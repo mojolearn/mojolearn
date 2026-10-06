@@ -232,7 +232,8 @@ comptime KNN_APPLE_MMA_DIST = (
 comptime KNN_CERTIFIED_MMA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_COLUMN == COLUMN_APPLE
-    # I15 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+    # I15 2026-10-06: NVIDIA/AMD have NO_DISTINCT_RUNTIME_ARM (Apple-only guard).
+    # Recorded cloud timings are not A/B evidence; Apple qualification remains pending.
     and not is_defined["MOJOLEARN_KNN_CERTIFIED_MMA_OFF"]()
 )
 # Experimental metadata only: no new query route or device work. This

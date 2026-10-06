@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
+# N08 2026-10-06 L40S component marginal WIN: 0.785 vs 0.813 ms and
+# 0.850 vs 0.854 ms; one warmup/score, no full dataset promotion.
 """Full canonical CSR equality at epsilon neighbors, duplicate and dense input."""
 from std.time import perf_counter_ns
 from gemm.checks.gemm_step_arms import gemm_step_env_int
