@@ -5,4 +5,13 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'apple_fast'))
 from support import capture_main
 from arima_task import search_cases
-if __name__=='__main__':capture_main(search_cases)
+def exercise(args):
+    from mojolearn import ARIMA
+    binding=ARIMA()._extension()
+    before=int(binding.arima_product_df_count())
+    result=search_cases(args)
+    reached=int(binding.arima_product_df_count())-before
+    if args.arm=='B':assert reached>0,'public AutoARIMA never reached admitted compensated production tail'
+    result['compensated_product_hits']=reached
+    return result
+if __name__=='__main__':capture_main(exercise)

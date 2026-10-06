@@ -1,30 +1,46 @@
 {
   "schema": 1,
   "id": "F16",
-  "title": "Compensated Kalman full estimator prerequisite and quality fixture",
+  "title": "Integrate compensated production Kalman tail with independent gradient prerequisite",
   "mode": "fast",
   "vendors": [
     "apple"
   ],
-  "status": "blocked_prerequisite",
+  "status": "source_ready",
   "implementation_paths": [
+    "arima/impl/fast_eval_ws.mojo",
+    "arima/impl/fast_eval_df.mojo",
+    "arima/checks/product_df_quality_check.mojo",
     "experiments/performance_ideas/F16/caller.py",
-    "experiments/performance_ideas/F16/prerequisite.py",
-    "experiments/performance_ideas/apple_fast/arima_task.py",
-    "arima/impl/fast_scalar_df.mojo"
+    "experiments/performance_ideas/apple_fast/arima_task.py"
   ],
   "candidate_defines": [
-    "MOJOLEARN_ARIMA_FAST_K3_DF_PROBE"
+    "MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL=1"
   ],
   "baseline_defines": [],
-  "build_argv": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F16",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
   "run_argv": [
     "{python}",
-    "experiments/performance_ideas/F16/prerequisite.py"
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F16",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
   ],
   "validation_paths": [
-    "experiments/performance_ideas/F16/prerequisite.py",
-    "tools/arima_k3_df_gpu_quality.py"
+    "arima/checks/product_df_quality_check.mojo",
+    "experiments/performance_ideas/F16/caller.py"
   ],
   "depends_on": [],
   "quality_gates": [
@@ -33,11 +49,17 @@
     "selected order and heldout forecast quality"
   ],
   "timing_contract": "No timing authorization until production compensated likelihood+gradient integration and full quality pass",
-  "blocker": "Installed K3 DF candidate is a supplied-state private AR1 probe, not a full AutoARIMA likelihood/gradient route; no actual product caller exists. Root considering safe FastEvalWS adapter.",
+  "blocker": null,
   "output_kind": "directory",
   "binding": "arima",
   "prerequisite_bindings": [
     "core"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "native_checks": [
+    {
+      "name": "F16-independent-gradient",
+      "source": "arima/checks/product_df_quality_check.mojo"
+    }
+  ]
 }
