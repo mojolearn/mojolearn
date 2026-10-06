@@ -10,8 +10,13 @@ from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm_workspace_m
 
 # I02 2026-10-06 L40S retained-scratch GEMM component WIN: 0.265 vs
 # 0.287 ms and 0.246 vs 0.267 ms (~1.084x), one same-process warmup/score.
-# AMD and full caller qualification remain pending; incumbent defaults retained.
+# Full caller qualification remains pending; incumbent defaults retained.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
+# I02 AMD MI325X component WINNER, source cbcc8dcd3303 (2026-10-06):
+# retained / temporary 0.358 (0.181 / 0.504 ms), m1024/n1024/k2048.
+# One same-process warmup and score; existing identity evidence reused, not rerun.
+# Scope is a GEMM component, not a full application. No default admission.
+# Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I02.
 # Explicit caller-owned experiment workspace; no default dispatcher admission.
 struct BoundedGemmWorkspace(Movable):
     var workspace: GemmWorkspace
