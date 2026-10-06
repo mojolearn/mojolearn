@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "id": "I18",
+  "title": "Retain bounded exact forest histograms and subtract compatible siblings",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/I18/check.mojo",
+    "ensemble/decisiontree/batched_levelalgo/exact_histogram_subtract.mojo",
+    "ensemble/decisiontree/batched_levelalgo/retained_count_histograms.mojo",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+    "experiments/performance_ideas/I18/forest_check.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_TREE_EXACT_SIBLING_HIST=1"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "pixi",
+    "run",
+    "mojo",
+    "build",
+    "-j1",
+    "-I",
+    "{repo}",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_TREE_EXACT_SIBLING_HIST=1",
+    "experiments/performance_ideas/I18/forest_check.mojo",
+    "-o",
+    "{output}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/I18/check.mojo",
+    "experiments/performance_ideas/I18/forest_check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "public semantics and canonical tie order retained",
+    "NVIDIA+AMD combined faster and neither materially slower",
+    "retained parent and independently tallied child cells match exactly",
+    "different per-node feature permutations preserve count cells and produce actual reuse",
+    "cache byte bound and tree reset do not leak stale histograms",
+    "complete classifier forest digests agree with OFF arm; feature-sampled and regression fallbacks unchanged"
+  ],
+  "timing_contract": "Frozen source; one scored complete fit per arm on NVIDIA and AMD, counting bounded cache allocation, device routing, preparation and readback. Separate correctness/launch-log attribution runs; never time the fingerprint or mechanism fixture. Apple IDENTICAL is an identity witness only. Full feature unweighted count rounds and exact host-queue batches admitted; partial-feature, weighted, padded device-loop and uncached node routes retain exact fallback.",
+  "blocker": null,
+  "baseline_build_argv": [
+    "pixi",
+    "run",
+    "mojo",
+    "build",
+    "-j1",
+    "-I",
+    "{repo}",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "experiments/performance_ideas/I18/forest_check.mojo",
+    "-o",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{output}"
+  ]
+}
