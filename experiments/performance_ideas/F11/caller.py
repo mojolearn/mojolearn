@@ -46,7 +46,7 @@ def pca(args):
     cases={}
     for kind in ('collinear','low-rank','clustered'):
         rng=np.random.default_rng(981)
-        rows,cols,rank=997,37,7
+        rows,cols,rank=997,(137 if args.variant=="pca" else 37),7
         u,_=np.linalg.qr(rng.normal(size=(rows,cols)))
         v,_=np.linalg.qr(rng.normal(size=(cols,cols)))
         spectrum=np.geomspace(1,.0001,cols) if kind=='collinear' else (np.r_[np.linspace(1,.8,rank),np.full(cols-rank,1e-6)] if kind=='low-rank' else np.r_[np.ones(rank),np.full(cols-rank,.5)])
