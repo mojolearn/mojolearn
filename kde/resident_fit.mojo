@@ -30,6 +30,9 @@ cpu host route). The context and the buffers are destroyed in DEVIATION
 1946's order, buffers before the context.
 """
 from std.ffi import _Global
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import NUMERIC_FAST
 
 from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -57,6 +60,12 @@ from kde.impl.neighbors.kernel_density import (
     kernel_from_name,
     metric_from_name,
 )
+
+
+# Immutable retained fit snapshots and direct upload are separate controls.
+# Buffer copies are transport; the GPU score/statistics remain unchanged.
+comptime KDE_FAST_IMMUTABLE_FIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"]()
+comptime KDE_FAST_DIRECT_PREP = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_KDE_FAST_DIRECT_PREP"]()
 
 
 struct ResidentKdeFit(Movable):
@@ -93,9 +102,14 @@ struct ResidentKdeFit(Movable):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         var n = n_train * n_features
         var train = ctx.enqueue_create_buffer[DType.float32](n)
-        var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-        copy_f32(train_ptr, host.unsafe_ptr(), n)
-        ctx.enqueue_copy(dst_buf=train, src_ptr=host.unsafe_ptr())
+        var host = ctx.enqueue_create_host_buffer[DType.float32](1 if KDE_FAST_DIRECT_PREP else n)
+        comptime if KDE_FAST_DIRECT_PREP:
+            # Caller retains the immutable host snapshot through this function's
+            # existing completion; no pinned staging copy is needed.
+            ctx.enqueue_copy(dst_buf=train, src_ptr=train_ptr)
+        else:
+            copy_f32(train_ptr, host.unsafe_ptr(), n)
+            ctx.enqueue_copy(dst_buf=train, src_ptr=host.unsafe_ptr())
         var sum_w = Float32(n_train)
         var wbuf: DeviceBuffer[DType.float32]
         if has_weights:
