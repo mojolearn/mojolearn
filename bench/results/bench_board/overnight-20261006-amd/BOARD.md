@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:08:42Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:09:49Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T07:08:42Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 84 planned, 31 done, 11 failed, 0 unsupported, 42 pending. Cells: 77 (REFUSED 9, ok 68).
+Races: 84 planned, 35 done, 11 failed, 0 unsupported, 38 pending. Cells: 91 (REFUSED 9, ok 82).
 
-Inference cells: 72 (UNKNOWN 18, ok 54).
+Inference cells: 84 (UNKNOWN 18, ok 66).
 
 ## Quality at a glance
 
@@ -55,6 +55,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | gru-reg | synthetic | rmse (lower is better) | - | - | torch-eager-fp32 0.155672; torch-compile-fp32 0.155672; torch-eager-bf16 0.155700; torch-compile-bf16 0.155700 |
 | algos | gru-reg | taxi-hourly | r2 (higher is better) | - | - | torch-eager-fp32 0.748219; torch-compile-fp32 0.748219; torch-eager-bf16 0.748254; torch-compile-bf16 0.748254 |
 | algos | gru-reg | taxi-hourly | rmse (lower is better) | - | - | torch-eager-fp32 0.544182; torch-compile-fp32 0.544182; torch-eager-bf16 0.544144; torch-compile-bf16 0.544144 |
+| algos | layernorm | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.006116; torch-eager-bf16 0.000000; torch-compile-bf16 0.006116 |
+| algos | layernorm | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 5.286e-08; torch-eager-bf16 0.000000; torch-compile-bf16 5.286e-08 |
 | algos | lstm-clf | synthetic | accuracy (higher is better) | - | - | torch-eager-fp32 0.968696; torch-compile-fp32 0.968696; torch-eager-bf16 0.968913; torch-compile-bf16 0.968913 |
 | algos | lstm-clf | taxi-hourly | accuracy (higher is better) | - | - | torch-eager-fp32 0.868218; torch-compile-fp32 0.868218; torch-eager-bf16 0.868056; torch-compile-bf16 0.868056 |
 | algos | lstm-reg | synthetic | r2 (higher is better) | - | - | torch-eager-fp32 0.981013; torch-compile-fp32 0.981013; torch-eager-bf16 0.981004; torch-compile-bf16 0.981004 |
@@ -65,12 +67,17 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | lstsq | taxi | relative_residual | - | - | torch-gpu 0.756366 |
 | algos | lu-factor | synthetic | relative_residual | - | - | torch-gpu 4.003e-07 |
 | algos | lu-solve | synthetic | relative_residual | - | - | torch-gpu 4.041e-07 |
+| algos | moe | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.044703; torch-eager-bf16 22862.630675; torch-compile-bf16 22880.029448 |
+| algos | moe | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 2.011e-07; torch-eager-bf16 0.055222; torch-compile-bf16 0.055199 |
 | algos | qr | istella | relative_gram_difference | - | - | torch-gpu 0.0001698 |
 | algos | qr | taxi | relative_gram_difference | - | - | torch-gpu 6.794e-07 |
 | algos | randomized-svd | istella | relative_reconstruction_error (lower is better) | - | - | torch-gpu 0.0002359 |
 | algos | randomized-svd | taxi | relative_reconstruction_error (lower is better) | - | - | torch-gpu 0.027197 |
+| algos | rmsprop | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 6.375e-09 |
 | algos | rnn-clf | synthetic | accuracy (higher is better) | - | - | torch-eager-fp32 0.953559; torch-compile-fp32 0.953559; torch-eager-bf16 0.953559; torch-compile-bf16 0.953559 |
 | algos | rnn-clf | taxi-hourly | accuracy (higher is better) | - | - | torch-eager-fp32 0.868056; torch-compile-fp32 0.868056; torch-eager-bf16 0.867947; torch-compile-bf16 0.867947 |
+| algos | rnn-reg | synthetic | r2 (higher is better) | - | - | torch-eager-fp32 0.977348; torch-compile-fp32 0.977348; torch-eager-bf16 0.977371; torch-compile-bf16 0.977371 |
+| algos | rnn-reg | synthetic | rmse (lower is better) | - | - | torch-eager-fp32 0.174374; torch-compile-fp32 0.174374; torch-eager-bf16 0.174283; torch-compile-bf16 0.174283 |
 | algos | rnn-reg | taxi-hourly | r2 (higher is better) | - | - | torch-eager-fp32 0.738796; torch-compile-fp32 0.738796; torch-eager-bf16 0.739017; torch-compile-bf16 0.739017 |
 | algos | rnn-reg | taxi-hourly | rmse (lower is better) | - | - | torch-eager-fp32 0.554271; torch-compile-fp32 0.554271; torch-eager-bf16 0.554037; torch-compile-bf16 0.554037 |
 | algos | svd | istella | max_rel_singular_value_error | - | - | torch-gpu 2.707e+08 |
@@ -106,12 +113,15 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | gru-clf | taxi-hourly | Xq | - | - | - | - | torch-eager-fp32 6.3 ms (IDENTICAL/arm -); torch-compile-fp32 6.3 ms (IDENTICAL/arm -); torch-eager-bf16 5.9 ms (IDENTICAL/arm -); torch-compile-bf16 6.9 ms (IDENTICAL/arm -) |
 | algos | gru-reg | synthetic | Xq | - | - | - | - | torch-eager-fp32 6.1 ms (IDENTICAL/arm -); torch-compile-fp32 6.1 ms (IDENTICAL/arm -); torch-eager-bf16 6.6 ms (IDENTICAL/arm -); torch-compile-bf16 6.8 ms (IDENTICAL/arm -) |
 | algos | gru-reg | taxi-hourly | Xq | - | - | - | - | torch-eager-fp32 6.1 ms (IDENTICAL/arm -); torch-compile-fp32 6.2 ms (IDENTICAL/arm -); torch-eager-bf16 6.7 ms (IDENTICAL/arm -); torch-compile-bf16 6.7 ms (IDENTICAL/arm -) |
+| algos | layernorm | synthetic | Xq | - | - | - | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm -); torch-compile-fp32 0.1 ms (IDENTICAL/arm -); torch-eager-bf16 0.1 ms (IDENTICAL/arm -); torch-compile-bf16 0.1 ms (IDENTICAL/arm -) |
 | algos | lstm-clf | synthetic | Xq | - | - | - | - | torch-eager-fp32 3.4 ms (IDENTICAL/arm -); torch-compile-fp32 3.4 ms (IDENTICAL/arm -); torch-eager-bf16 2.9 ms (IDENTICAL/arm -); torch-compile-bf16 3.2 ms (IDENTICAL/arm -) |
 | algos | lstm-clf | taxi-hourly | Xq | - | - | - | - | torch-eager-fp32 3.1 ms (IDENTICAL/arm -); torch-compile-fp32 3.1 ms (IDENTICAL/arm -); torch-eager-bf16 3.2 ms (IDENTICAL/arm -); torch-compile-bf16 3.2 ms (IDENTICAL/arm -) |
 | algos | lstm-reg | synthetic | Xq | - | - | - | - | torch-eager-fp32 3.5 ms (IDENTICAL/arm -); torch-compile-fp32 3.5 ms (IDENTICAL/arm -); torch-eager-bf16 3.3 ms (IDENTICAL/arm -); torch-compile-bf16 3.4 ms (IDENTICAL/arm -) |
 | algos | lstm-reg | taxi-hourly | Xq | - | - | - | - | torch-eager-fp32 3.0 ms (IDENTICAL/arm -); torch-compile-fp32 3.5 ms (IDENTICAL/arm -); torch-eager-bf16 2.9 ms (IDENTICAL/arm -); torch-compile-bf16 3.4 ms (IDENTICAL/arm -) |
+| algos | moe | synthetic | Xq | - | - | - | - | torch-eager-fp32 5.1 ms (IDENTICAL/arm -); torch-compile-fp32 5.4 ms (IDENTICAL/arm -); torch-eager-bf16 2.8 ms (IDENTICAL/arm -); torch-compile-bf16 3.1 ms (IDENTICAL/arm -) |
 | algos | rnn-clf | synthetic | Xq | - | - | - | - | torch-eager-fp32 2.8 ms (IDENTICAL/arm -); torch-compile-fp32 2.8 ms (IDENTICAL/arm -); torch-eager-bf16 3.0 ms (IDENTICAL/arm -); torch-compile-bf16 3.3 ms (IDENTICAL/arm -) |
 | algos | rnn-clf | taxi-hourly | Xq | - | - | - | - | torch-eager-fp32 2.2 ms (IDENTICAL/arm -); torch-compile-fp32 2.8 ms (IDENTICAL/arm -); torch-eager-bf16 3.2 ms (IDENTICAL/arm -); torch-compile-bf16 3.3 ms (IDENTICAL/arm -) |
+| algos | rnn-reg | synthetic | Xq | - | - | - | - | torch-eager-fp32 2.4 ms (IDENTICAL/arm -); torch-compile-fp32 2.7 ms (IDENTICAL/arm -); torch-eager-bf16 2.6 ms (IDENTICAL/arm -); torch-compile-bf16 2.7 ms (IDENTICAL/arm -) |
 | algos | rnn-reg | taxi-hourly | Xq | - | - | - | - | torch-eager-fp32 2.7 ms (IDENTICAL/arm -); torch-compile-fp32 2.4 ms (IDENTICAL/arm -); torch-eager-bf16 2.8 ms (IDENTICAL/arm -); torch-compile-bf16 2.8 ms (IDENTICAL/arm -) |
 | algos | svgp | istella | Xq | - | - | - | - | gpytorch-gpu 11.7 ms (IDENTICAL/arm -) |
 | algos | svgp | taxi | Xq | - | - | - | - | gpytorch-gpu 11.5 ms (IDENTICAL/arm -) |
@@ -851,6 +861,48 @@ inference call, torch-eager-bf16: predict(Xq)(Xq)
 
 inference call, torch-compile-bf16: predict(Xq)(Xq)
 
+### layernorm / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.layernorm.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 0.8 | 0.8..0.8 | 1 | - | - | 2690.0 | 320.6 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 1.0 | 1.0..1.0 | 1 | - | - | 2866.8 | 320.1 | max_rel_diff_vs_torch_eager_fp32=0.006116, rel_fro_vs_torch_eager_fp32=5.286e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 0.9 | 0.9..0.9 | 1 | - | - | 2687.3 | 320.6 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 1.2 | 1.2..1.2 | 1 | - | - | 2798.9 | 320.1 | max_rel_diff_vs_torch_eager_fp32=0.006116, rel_fro_vs_torch_eager_fp32=5.286e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'bias': True, 'elementwise_affine': True, 'eps': 1e-05, 'normalized_shape': 1024}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| eps | 1e-05 | 1e-05 | 1e-05 | 1e-05 |
+| seed | 7 | 7 | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 0.1 | 0.1..0.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 0.1 | 0.1..0.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 0.1 | 0.1..0.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 0.1 | 0.1..0.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-bf16: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-bf16: forward(x) (no autograd)(Xq)
+
 ### lstm-clf / synthetic (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
 race: done, driver rc 0, log `logs/algos.lstm-clf.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
@@ -1131,6 +1183,48 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | library (source) | torch (declared) |
 | seed | "none (deterministic)" |
 
+### moe / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.moe.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 5.6 | 5.6..5.6 | 1 | - | - | 3220.1 | 514.6 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 6.8 | 6.8..6.8 | 1 | - | - | 3395.8 | 514.6 | max_rel_diff_vs_torch_eager_fp32=0.044703, rel_fro_vs_torch_eager_fp32=2.011e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 3.6 | 3.6..3.6 | 1 | - | - | 3597.0 | 623.0 | max_rel_diff_vs_torch_eager_fp32=22862.630675, rel_fro_vs_torch_eager_fp32=0.055222 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 3.2 | 3.2..3.2 | 1 | - | - | 3723.1 | 501.4 | max_rel_diff_vs_torch_eager_fp32=22880.029448, rel_fro_vs_torch_eager_fp32=0.055199 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'hidden_size': 1024, 'intermediate_size': 2816, 'norm_topk_prob': True, 'num_experts': 8, 'top_k': 2}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| hidden_size | 1024 | 1024 | 1024 | 1024 |
+| seed | 7 | 7 | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 5.1 | 5.1..5.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 5.4 | 5.4..5.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 2.8 | 2.8..2.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 3.1 | 3.1..3.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-bf16: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-bf16: forward(x) (no autograd)(Xq)
+
 ### qr / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
 race: done, driver rc 0, log `logs/algos.qr.istella.rows-full.log`, ran on mojolearn-steward-do-amd
@@ -1223,6 +1317,33 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | n_iter | 4 |
 | seed | 7 |
 
+### rmsprop / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.rmsprop.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 5.1 | 5.1..5.1 | 1 | - | - | 2833.1 | 896.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 281.9 | 281.9..281.9 | 1 | - | - | 2924.1 | 832.0 | rel_fro_vs_torch_eager_fp32=6.375e-09 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'alpha': 0.99, 'centered': False, 'eps': 1e-08, 'lr': 0.001, 'momentum': 0.0, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| alpha | 0.99 | 0.99 |
+| eps | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 |
+| momentum | 0.0 | 0.0 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
+
 ### rnn-clf / synthetic (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
 race: done, driver rc 0, log `logs/algos.rnn-clf.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
@@ -1312,6 +1433,55 @@ Inference (each arm predicts with its own model from the fit rounds above):
 | torch-compile-fp32 | Xq | - | 2.8 | 2.8..2.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 | torch-eager-bf16 | Xq | - | 3.2 | 3.2..3.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 | torch-compile-bf16 | Xq | - | 3.3 | 3.3..3.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: predict(Xq)(Xq)
+
+### rnn-reg / synthetic (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
+
+race: done, driver rc 0, log `logs/algos.rnn-reg.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 891.9 | 891.9..891.9 | 1 | - | - | 3040.0 | 109.9 | finite=True, r2=0.977348, rmse=0.174374 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 901.6 | 901.6..901.6 | 1 | - | - | 3082.4 | 109.9 | finite=True, r2=0.977348, rmse=0.174374 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 898.5 | 898.5..898.5 | 1 | - | - | 3663.2 | 98.4 | finite=True, r2=0.977371, rmse=0.174283 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 953.5 | 953.5..953.5 | 1 | - | - | 3705.5 | 98.4 | finite=True, r2=0.977371, rmse=0.174283 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'nonlinearity': 'tanh', 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 |
+| num_layers | 1 | 1 | 1 | 1 |
+| seed | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 2.4 | 2.4..2.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 2.7 | 2.7..2.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 2.6 | 2.6..2.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 2.7 | 2.7..2.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, torch-eager-fp32: predict(Xq)(Xq)
 
