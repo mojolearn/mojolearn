@@ -5,6 +5,10 @@ This directory implements the cards in
 Each card has its own source changes and manifest. Candidates remain opt-in;
 source availability and a successful build do not establish a performance win.
 
+The [experiment file index](../apple_fast_trees/EXPERIMENT_INDEX.md) maps all
+60 existing cards and 48 new Apple FAST tree cards to their files, alongside
+the new interaction plans and older tree A/B records.
+
 The same runner also exposes the 48 namespaced `AFT_F01`–`AFT_P12`
 [Apple FAST tree candidates](../apple_fast_trees/README.md). Their manifests
 are derived directly from the idea records, with paired-binding and full-workload

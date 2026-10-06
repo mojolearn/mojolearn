@@ -2,7 +2,12 @@
 
 The [idea list](IDEAS.md) was written before parallel implementation. It has
 48 individual candidates and 12 interaction experiments. The implementation
-records refine the initial proposals to the actual source mechanisms:
+records refine the initial proposals to the actual source mechanisms.
+
+The [experiment file index](EXPERIMENT_INDEX.md) lists every new candidate and
+interaction, exact A/B defines and implementation files, the existing 60-card
+performance catalog, older RF/ExtraTrees comparisons, and historical tree
+experiments with their recorded verdicts and source locations.
 
 | Lane | Ideas | Exact implementation records |
 | --- | --- | --- |
