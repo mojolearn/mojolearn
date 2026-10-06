@@ -69,5 +69,8 @@
     "{output}",
     "--define",
     "MOJOLEARN_ATTN_ARM_TRIAL=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
