@@ -15,3 +15,8 @@ has its own binary/log/receipt. The campaign validates R/Q replay and lifetime
 reach; it deliberately does not time its correctness fixture. Full-operation
 timing must compare reuse and strip individually before attributing a combined
 gain. Apple remains an identity witness only.
+
+Merge admission: new source candidates remain explicit default-off opt-ins.
+Qualification remains pending. `native_arms.json` lists independently compiled
+incumbent/candidate and available rollback arms; compilation never promotes a
+switch or supplies performance evidence. Existing promoted defaults remain unchanged.

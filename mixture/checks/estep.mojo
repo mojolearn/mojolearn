@@ -1072,6 +1072,8 @@ def mahal_stacked_kernel(
 # Default-off schedule candidate: a byte-bounded component batch instead
 # of retaining all K projected sample matrices. Every GEMM cell keeps the
 # same contract_partition(d), and mahal_fold is unchanged.
+# I21 new candidate remains default off. Qualification is pending: native
+# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
 comptime GMM_COMPONENT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_GMM_COMPONENT_BATCH"]()

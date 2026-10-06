@@ -17,10 +17,7 @@
   "candidate_defines": [
     "MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT=1"
   ],
-  "baseline_defines": [
-    "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1",
-    "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
-  ],
+  "baseline_defines": [],
   "build_argv": [
     "{python}",
     "{repo}/gemm/experiments/native_build.py",
@@ -66,11 +63,7 @@
     "--mojo",
     "{mojo}",
     "--output",
-    "{output}",
-    "--define",
-    "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1",
-    "--define",
-    "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
+    "{output}"
   ],
   "validation_argv": [
     "{output}"

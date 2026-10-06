@@ -246,6 +246,9 @@ struct _CertifiedReach(Defaultable,Movable):
 comptime _CERTIFIED_REACH = _Global[StorageType=_CertifiedReach,
     name="MojolearnCertifiedKnnReachV1",init_fn=_CertifiedReach.__init__]
 
+# I15 experiment qualification pending: compile/fixtures do not establish
+# four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
+# defaults stay unchanged; this campaign attributes explicit experiment arms.
 def certified_knn_reach_clear() raises:
     comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
         var p=_CERTIFIED_REACH.get_or_create_ptr()

@@ -1,0 +1,455 @@
+{
+  "schema": 1,
+  "id": "I14",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "new_candidates_default_off": true,
+  "existing_promoted_defaults_unchanged": true,
+  "arms": [
+    {
+      "name": "incumbent",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1",
+        "MOJOLEARN_IDN_HDB_ONE_SYNC_OFF=1",
+        "MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF=1",
+        "MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF=1",
+        "MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF=1",
+        "MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF=1",
+        "MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF=1",
+        "MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1",
+        "--define",
+        "MOJOLEARN_IDN_HDB_ONE_SYNC_OFF=1",
+        "--define",
+        "MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF=1",
+        "--define",
+        "MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF=1",
+        "--define",
+        "MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF=1",
+        "--define",
+        "MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF=1",
+        "--define",
+        "MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF=1",
+        "--define",
+        "MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK16=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK16=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "cc_chunk4",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK4=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK4=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "cc_chunk32",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK32=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK32=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "cc_split4",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT4=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT4=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "cc_split8",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT8=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT8=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "cc_split16",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT16=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT16=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "cc_ungated",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "one_sync",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_ONE_SYNC_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_HDB_ONE_SYNC_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "condense_two_reads",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "select_one_read",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "mr_fused_guard",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "soft_lean",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "predict_device_cast",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "predict_lean",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I14/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    }
+  ]
+}

@@ -2000,6 +2000,8 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
         tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
         tr.shadow_step = tr.completed_steps
     var use_live_status = False
+    # I10 new candidate remains default off. Qualification is pending: native
+    # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
     comptime if is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]():
         # This mechanism changes scheduling only on the existing admitted
         # OOP Adam path. Fault builds keep the required post-fault scan;

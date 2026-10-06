@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "id": "I17",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "GPU DeviceContext fixture; host qualification is an independent owed gate, not this executable.",
+  "default_policy": "New candidates default off; existing promoted controls unchanged.",
+  "arms": [
+    {
+      "name": "incumbent",
+      "source": "experiments/performance_ideas/I17/check.mojo",
+      "defines": []
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I17/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT=1"
+      ]
+    },
+    {
+      "name": "lg_exact_off",
+      "source": "experiments/performance_ideas/I17/check.mojo",
+      "defines": [
+        "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1"
+      ]
+    },
+    {
+      "name": "inherit_off",
+      "source": "experiments/performance_ideas/I17/check.mojo",
+      "defines": [
+        "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
+      ]
+    },
+    {
+      "name": "legacy_both_off",
+      "source": "experiments/performance_ideas/I17/check.mojo",
+      "defines": [
+        "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1",
+        "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
+      ]
+    }
+  ]
+}

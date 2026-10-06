@@ -677,6 +677,8 @@ comptime M2_CS_PT = 8
 comptime M2_CS_IC = 32
 
 
+# I08 new candidate remains default off. Qualification is pending: native
+# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
 comptime M2_RETAIN_GL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_M2_RETAIN_GL"]()

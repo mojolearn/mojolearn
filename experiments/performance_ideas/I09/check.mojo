@@ -3,6 +3,9 @@
 absolute token positions. Every recurrence stage, including final state,
 is compared by the existing contract oracle on neighboring prefix tails.
 New chunk/affine profiles remain conditional on complete replay contracts."""
+# I09 experiment qualification pending: compile/fixtures do not establish
+# four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
+# defaults stay unchanged; this campaign attributes explicit experiment arms.
 from max.gpu.host import DeviceContext
 from mamba.checks.mamba_check import planted_weights, clause_d
 from mamba.checks.mamba_fixture import corpus_case_seed, corpus_x, MambaDims

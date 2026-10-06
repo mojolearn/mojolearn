@@ -16,10 +16,7 @@
   "candidate_defines": [
     "MOJOLEARN_IDN_M2_RETAIN_GL=1"
   ],
-  "baseline_defines": [
-    "MOJOLEARN_IDN_M2_SSD_TILES_OFF=1",
-    "MOJOLEARN_IDN_M2_CB_LOWER_OFF=1"
-  ],
+  "baseline_defines": [],
   "build_argv": [
     "{python}",
     "{repo}/gemm/experiments/native_build.py",
@@ -64,11 +61,7 @@
     "--mojo",
     "{mojo}",
     "--output",
-    "{output}",
-    "--define",
-    "MOJOLEARN_IDN_M2_SSD_TILES_OFF=1",
-    "--define",
-    "MOJOLEARN_IDN_M2_CB_LOWER_OFF=1"
+    "{output}"
   ],
   "validation_argv": [
     "{output}"

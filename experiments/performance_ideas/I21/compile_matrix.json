@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "id": "I21",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "GPU DeviceContext fixture; host qualification is an independent owed gate, not this executable.",
+  "default_policy": "New candidates default off; existing promoted controls unchanged.",
+  "arms": [
+    {
+      "name": "incumbent",
+      "source": "experiments/performance_ideas/I21/check.mojo",
+      "defines": []
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I21/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GMM_COMPONENT_BATCH=1"
+      ]
+    },
+    {
+      "name": "fused_cholesky_off",
+      "source": "experiments/performance_ideas/I21/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF=1"
+      ]
+    },
+    {
+      "name": "one_drain_off",
+      "source": "experiments/performance_ideas/I21/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF=1"
+      ]
+    },
+    {
+      "name": "legacy_both_off",
+      "source": "experiments/performance_ideas/I21/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF=1",
+        "MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF=1"
+      ]
+    },
+    {
+      "name": "center_pair",
+      "source": "experiments/performance_ideas/I21/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GMM_CENTER_PAIR=1"
+      ]
+    },
+    {
+      "name": "component_and_center_pair",
+      "source": "experiments/performance_ideas/I21/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GMM_COMPONENT_BATCH=1",
+        "MOJOLEARN_IDN_GMM_CENTER_PAIR=1"
+      ]
+    }
+  ]
+}

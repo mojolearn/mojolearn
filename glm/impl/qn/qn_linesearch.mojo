@@ -159,6 +159,8 @@ def ls_backtrack(
                 ctx, param, f, fx, x, grad, step, drt, xp, n, scalar, ls_iters,
                 stage, fresh, gradp, dg_ready,
             )
+    # I12 new candidate remains default off. Qualification is pending: native
+    # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
     comptime if GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]():
         if param.linesearch==LBFGS_LS_BT_ARMIJO and param.max_linesearch>0 and n>0 and n<=(16*1024*1024-96)//32:
             return ls_backtrack_exact_trials(ctx,param,f,fx,x,grad,step,drt,xp,n,scalar,ls_iters,stage,fresh,gradp,dg_ready)

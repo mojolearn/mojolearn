@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "id": "I22",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "GPU DeviceContext fixture; host qualification is an independent owed gate, not this executable.",
+  "default_policy": "New candidates default off; existing promoted controls unchanged.",
+  "arms": [
+    {
+      "name": "incumbent",
+      "source": "experiments/performance_ideas/I22/check.mojo",
+      "defines": []
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I22/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_TSQR_REUSE=1",
+        "MOJOLEARN_IDN_TSQR_STRIP_UPDATE=1"
+      ]
+    },
+    {
+      "name": "reuse",
+      "source": "experiments/performance_ideas/I22/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_TSQR_REUSE=1"
+      ]
+    },
+    {
+      "name": "strip",
+      "source": "experiments/performance_ideas/I22/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_TSQR_STRIP_UPDATE=1"
+      ]
+    },
+    {
+      "name": "legacy_grid_off",
+      "source": "experiments/performance_ideas/I22/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_TSQR_GRID_OFF=1"
+      ]
+    },
+    {
+      "name": "legacy_norm_off",
+      "source": "experiments/performance_ideas/I22/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_TSQR_NORM_OFF=1"
+      ]
+    },
+    {
+      "name": "legacy_both_off",
+      "source": "experiments/performance_ideas/I22/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_TSQR_GRID_OFF=1",
+        "MOJOLEARN_IDN_TSQR_NORM_OFF=1"
+      ]
+    }
+  ]
+}

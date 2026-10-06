@@ -12,15 +12,14 @@
   "implementation_paths": [
     "experiments/performance_ideas/I21/check.mojo",
     "mixture/checks/estep.mojo",
-    "experiments/performance_ideas/I21/component_check.mojo"
+    "experiments/performance_ideas/I21/component_check.mojo",
+    "mixture/checks/mstep.mojo"
   ],
   "candidate_defines": [
-    "MOJOLEARN_IDN_GMM_COMPONENT_BATCH=1"
+    "MOJOLEARN_IDN_GMM_COMPONENT_BATCH=1",
+    "MOJOLEARN_IDN_GMM_CENTER_PAIR=1"
   ],
-  "baseline_defines": [
-    "MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF=1",
-    "MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF=1"
-  ],
+  "baseline_defines": [],
   "build_argv": [
     "{python}",
     "{repo}/gemm/experiments/native_build.py",
@@ -36,7 +35,9 @@
     "--output",
     "{output}",
     "--define",
-    "MOJOLEARN_IDN_GMM_COMPONENT_BATCH=1"
+    "MOJOLEARN_IDN_GMM_COMPONENT_BATCH=1",
+    "--define",
+    "MOJOLEARN_IDN_GMM_CENTER_PAIR=1"
   ],
   "run_argv": [
     "{output}"
@@ -65,11 +66,7 @@
     "--mojo",
     "{mojo}",
     "--output",
-    "{output}",
-    "--define",
-    "MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF=1",
-    "--define",
-    "MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF=1"
+    "{output}"
   ],
   "validation_argv": [
     "{output}"
