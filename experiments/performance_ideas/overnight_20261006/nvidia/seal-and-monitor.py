@@ -28,6 +28,8 @@ print(json.dumps(dict(groups=groups,claims=claims)))
    else:
     build_ready=all((groups[g].get('phase')=='BUILDS_FINISHED' or groups[g].get('status') in ['FINISHED','BUILDS_FINISHED','COMPLETE']) for g in ['nvidia-family-repairs','nvidia-more','amd-remaining'])
     blockers=list(claims);expected={'I02','I03','I04','I05','I06','I07','I08','I09','I10','I11','I12','I13','I14','I15','I16','I17','I18','I19','I20','I21','I22','I23','I24','A04','A07','A08'}
+   bad_builds=[x['_meta_path'] for x in meta if x['returncode']!=0 and (route=='default' or x.get('id','').startswith('N') or x.get('name')=='paired')]
+   build_ready=build_ready and not bad_builds
    seen={x['candidate_id'] for x in q};eligible=build_ready and not blockers and not missing and not failed and expected<=seen
    remote="python3 - <<'X'\nimport pathlib,json\nr=pathlib.Path('/root/overnight-nvidia');o=pathlib.Path('/root/campaign-results');ready=r/'opponents-ready.json';tail=o/'gpu-opponents/status.json';print(json.dumps(dict(ready=json.loads(ready.read_text()) if ready.exists() else {},tail=json.loads(tail.read_text()) if tail.exists() else {},worker=json.loads((o/'status.json').read_text()))))\nX"
    actual=json.loads(run([*ssh,remote]).stdout);eligible=eligible and actual['ready'].get('failed')==0
@@ -38,7 +40,7 @@ print(json.dumps(dict(groups=groups,claims=claims)))
    tail=actual['tail']
    if tail.get('phase')=='FAILED':alert('tail-'+route,'NVIDIA '+route+' GPU-opponent tail failed; inspect captured gpu-opponents/board.log and status.json under '+str(E/(route+'-capture/artifacts')))
    if actual['ready'].get('failed',0):alert('deps-'+route,'NVIDIA '+route+' opponent dependency setup failed; inspect captured opponent-setup logs. Tail is blocked, candidate measurements remain authorized.')
-   summary[route]=dict(sealed=eligible,build_ready=build_ready,pending_claims=blockers,missing_measurements=missing,failed_measurements=failed,missing_ids=sorted(expected-seen),remote=actual)
+   summary[route]=dict(sealed=eligible,build_ready=build_ready,failed_builds=bad_builds,pending_claims=blockers,missing_measurements=missing,failed_measurements=failed,missing_ids=sorted(expected-seen),remote=actual)
   atom(E/'tail-monitor-status.json',dict(pid=os.getpid(),time=time.time(),routes=summary))
  except Exception as e:
   (E/'tail-monitor-error.log').write_text(traceback.format_exc());alert('monitor-'+type(e).__name__,'NVIDIA tail monitor infrastructure problem: '+str(E/'tail-monitor-error.log')+'; check cloud idle deadlines.')
