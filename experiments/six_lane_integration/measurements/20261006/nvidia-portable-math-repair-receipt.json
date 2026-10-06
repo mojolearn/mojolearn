@@ -1,0 +1,20 @@
+{
+  "previous_results": "/root/campaign-results/measurements-tsvd-full-v1/results.json",
+  "preserved_completed": 2,
+  "original_failed_receipt": "/root/campaign-results/measurements-tsvd-full-v1/2e86e210874fc70e8089/attempts/attempt-0001/receipt.json",
+  "runtime": {
+    "A": {
+      "path": "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/.libs/libMojolearnMath.so",
+      "sha256": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+      "accepted_build_receipt": "/root/campaign-results/native-tsvd-full-v1/math-repair1/portable-math-build.json",
+      "scope": "Packaged portable scalar math prerequisite, accepted same-source existing Linux binary; no new compilation; file hash checked before and after queue, not a claim of ctypes load tracing"
+    },
+    "B": {
+      "path": "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/.libs/libMojolearnMath.so",
+      "sha256": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+      "accepted_build_receipt": "/root/campaign-results/native-tsvd-full-v1/math-repair1/portable-math-build.json",
+      "scope": "Packaged portable scalar math prerequisite, accepted same-source existing Linux binary; no new compilation; file hash checked before and after queue, not a claim of ctypes load tracing"
+    }
+  },
+  "source_unchanged": true
+}

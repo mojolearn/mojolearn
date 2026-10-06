@@ -1,0 +1,141 @@
+{
+  "status": "MEASURED_FULL_QUALITY_PENDING",
+  "completed": 2,
+  "expected": 2,
+  "controller_returncode": 0,
+  "scope": "Combined Apple FAST proposed configuration; individual switches and default acceptance remain pending",
+  "pairs": [
+    {
+      "workload": "algos/randomized-svd@dataset=taxi@input=tsvd-full-v1",
+      "status": "MEASURED_FULL",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/tsvd-full-v1/runs/aad81edca8ccf47b9ecc/attempts/attempt-0001/receipt.json",
+      "dimensions": {
+        "X": [
+          4725078,
+          11
+        ],
+        "Xq": [
+          525008,
+          11
+        ]
+      },
+      "a_seconds": 1.3783062079455703,
+      "b_seconds": 1.3334462499478832,
+      "a_over_b": 1.0336421194325909,
+      "output_sha256": {
+        "A": "82ead7abf3982e098bf2839933929ada465d1a8551f1d504aef640d1f11d014a",
+        "B": "60fa508765e490123892b455fddc32a6a4d03cad7731bbb93457e169d9bce79c"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "model owner"
+          ],
+          "reason": "Runner exposes no public model owner",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "model owner"
+          ],
+          "reason": "Runner exposes no public model owner",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "task_quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality/randomized-svd; full-input opponent and complete state qualification pending",
+          "metrics": {
+            "ours-fast": {
+              "relative_reconstruction_error": 0.027209519221198897
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality/randomized-svd; full-input opponent and complete state qualification pending",
+          "metrics": {
+            "ours-fast": {
+              "relative_reconstruction_error": 0.02720951922113826
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "timed_boundary": "Preparation/load, existing lane split, construction, operation, required synchronization and consumed outputs; hashes and independent quality outside timer.",
+      "sample_counts": {
+        "excluded_warmups_per_arm": 1,
+        "scored_per_arm": 1
+      }
+    },
+    {
+      "workload": "algos/randomized-svd@dataset=istella@input=tsvd-full-v1",
+      "status": "MEASURED_FULL",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/tsvd-full-v1/runs/c8188af9b06dceb11c17/attempts/attempt-0001/receipt.json",
+      "dimensions": {
+        "X": [
+          1838974,
+          220
+        ],
+        "Xq": [
+          204330,
+          220
+        ]
+      },
+      "a_seconds": 1.787532874965109,
+      "b_seconds": 1.5521876660641283,
+      "a_over_b": 1.151621620275945,
+      "output_sha256": {
+        "A": "d1bad669f31f0e71d8098812c640a4dd84a1263caed337dbbcd921eb7fc0808f",
+        "B": "6e7f0f026c8a7365b64d5f366237543a59045880157ea1e3cba9e270d1fd49e8"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "model owner"
+          ],
+          "reason": "Runner exposes no public model owner",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "model owner"
+          ],
+          "reason": "Runner exposes no public model owner",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "task_quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality/randomized-svd; full-input opponent and complete state qualification pending",
+          "metrics": {
+            "ours-fast": {
+              "relative_reconstruction_error": 0.00022958200131431916
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality/randomized-svd; full-input opponent and complete state qualification pending",
+          "metrics": {
+            "ours-fast": {
+              "relative_reconstruction_error": 0.00022958200159608837
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "timed_boundary": "Preparation/load, existing lane split, construction, operation, required synchronization and consumed outputs; hashes and independent quality outside timer.",
+      "sample_counts": {
+        "excluded_warmups_per_arm": 1,
+        "scored_per_arm": 1
+      }
+    }
+  ]
+}

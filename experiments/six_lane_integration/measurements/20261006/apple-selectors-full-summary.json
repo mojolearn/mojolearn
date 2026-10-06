@@ -1,0 +1,345 @@
+{
+  "status": "MEASURED_FULL_QUALITY_PENDING",
+  "completed": 4,
+  "expected": 4,
+  "controller_returncode": 0,
+  "scope": "Combined Apple FAST proposed configuration; individual switches and default acceptance remain pending",
+  "pairs": [
+    {
+      "workload": "algos/select-f-regression@dataset=taxi",
+      "status": "MEASURED_FULL",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/selectors-full/runs/3bb7fcd8cc23a07afee7/attempts/attempt-0001/receipt.json",
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "a_seconds": 0.5372816659510136,
+      "b_seconds": 0.5497665000148118,
+      "a_over_b": 0.97729066055596,
+      "output_sha256": {
+        "A": "2a4678cf8f2cc6950c5aef34716db54e204186927286d324d86332f5cd078512",
+        "B": "2a4678cf8f2cc6950c5aef34716db54e204186927286d324d86332f5cd078512"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SelectKBest",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SelectKBest",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "task_quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
+          "metrics": {
+            "ours-fast": {
+              "n_selected": 5
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
+          "metrics": {
+            "ours-fast": {
+              "n_selected": 5
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "timed_boundary": "load original saved full reg inputs + unchanged preparation + SelectKBest construction + fit on every saved training row + synchronization + consume complete support mask; existing race has no query transform; hashing and independent quality outside whole-operation timer",
+      "sample_counts": {
+        "excluded_warmups_per_arm": 1,
+        "scored_per_arm": 1
+      }
+    },
+    {
+      "workload": "algos/select-f-regression@dataset=istella",
+      "status": "MEASURED_FULL",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/selectors-full/runs/bceac841eda6c1e6cc53/attempts/attempt-0001/receipt.json",
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "a_seconds": 1.0595173330511898,
+      "b_seconds": 1.0542124159401283,
+      "a_over_b": 1.005032114051067,
+      "output_sha256": {
+        "A": "236307c86572746edfeec0a76190b2d860f9243f8d0366c5e2b19461569f6439",
+        "B": "236307c86572746edfeec0a76190b2d860f9243f8d0366c5e2b19461569f6439"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SelectKBest",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SelectKBest",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "task_quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
+          "metrics": {
+            "ours-fast": {
+              "n_selected": 110
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
+          "metrics": {
+            "ours-fast": {
+              "n_selected": 110
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "timed_boundary": "load original saved full reg inputs + unchanged preparation + SelectKBest construction + fit on every saved training row + synchronization + consume complete support mask; existing race has no query transform; hashing and independent quality outside whole-operation timer",
+      "sample_counts": {
+        "excluded_warmups_per_arm": 1,
+        "scored_per_arm": 1
+      }
+    },
+    {
+      "workload": "algos/select-r-regression@dataset=taxi",
+      "status": "MEASURED_FULL",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/selectors-full/runs/b9e816c552496edb13ef/attempts/attempt-0001/receipt.json",
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "a_seconds": 0.5431199170416221,
+      "b_seconds": 0.5564376250840724,
+      "a_over_b": 0.9760661259374075,
+      "output_sha256": {
+        "A": "59e9236a89ddad2206be323912a2ec89d6e8e8e76179618238975afb9d0ed23b",
+        "B": "59e9236a89ddad2206be323912a2ec89d6e8e8e76179618238975afb9d0ed23b"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SelectKBest",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SelectKBest",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "task_quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
+          "metrics": {
+            "ours-fast": {
+              "n_selected": 5
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
+          "metrics": {
+            "ours-fast": {
+              "n_selected": 5
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "timed_boundary": "load original saved full reg inputs + unchanged preparation + SelectKBest construction + fit on every saved training row + synchronization + consume complete support mask; existing race has no query transform; hashing and independent quality outside whole-operation timer",
+      "sample_counts": {
+        "excluded_warmups_per_arm": 1,
+        "scored_per_arm": 1
+      }
+    },
+    {
+      "workload": "algos/select-r-regression@dataset=istella",
+      "status": "MEASURED_FULL",
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/selectors-full/runs/ab68cf756738987139b1/attempts/attempt-0001/receipt.json",
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "a_seconds": 1.0481146249221638,
+      "b_seconds": 1.0465909579070285,
+      "a_over_b": 1.0014558381224528,
+      "output_sha256": {
+        "A": "cd8a457f265130322dfb5d885f59fcbc6d263a83c53f569596e81a8eed54bc8e",
+        "B": "cd8a457f265130322dfb5d885f59fcbc6d263a83c53f569596e81a8eed54bc8e"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SelectKBest",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "SelectKBest",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "task_quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
+          "metrics": {
+            "ours-fast": {
+              "n_selected": 110
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality(select): n_selected and jaccard_vs_sklearn; existing matching full-opponent gate pending",
+          "metrics": {
+            "ours-fast": {
+              "n_selected": 110
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "timed_boundary": "load original saved full reg inputs + unchanged preparation + SelectKBest construction + fit on every saved training row + synchronization + consume complete support mask; existing race has no query transform; hashing and independent quality outside whole-operation timer",
+      "sample_counts": {
+        "excluded_warmups_per_arm": 1,
+        "scored_per_arm": 1
+      }
+    }
+  ]
+}

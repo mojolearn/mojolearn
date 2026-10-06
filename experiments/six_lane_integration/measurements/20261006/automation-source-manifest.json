@@ -1,11 +1,11 @@
 {
-  "observed_at": "2026-10-06T17:49:44.144767+00:00",
+  "observed_at": "2026-10-06T17:53:55.335249+00:00",
   "scope": "Byte-exact live external reviewer, alert, capture and continuation scripts; no numerical evidence embedded",
   "files": [
     {
       "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/review-next-reg-resample.py",
-      "sha256": "5e74e48e0cd56ba84cad15ce6b80a9b680b55c58c18d3b6c0f4f4bd0bf3d3610",
-      "bytes": 10897,
+      "sha256": "02b535993c16b6d2993ec36a562b91d139897031699dcacf61aade545c8cd6e8",
+      "bytes": 10917,
       "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/quality-review/review-next-reg-resample.py"
     },
     {
@@ -68,5 +68,6 @@
     "original_recipe_and_numerical_source": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
     "failed_only_selector_repair": "970784c891b6f0854695a65f51b1eae9cf338708"
   },
-  "active_daemon_pid": 10588
+  "active_daemon_pid": 10588,
+  "latest_change": "Parse @dataset value independently of newly appended @input= recipe-version tag; full workload ID and dataset hash retained unchanged."
 }

@@ -1,6 +1,6 @@
 {
   "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
-  "key": "ac705e553ce95e6d7c85",
+  "key": "ecf473c2267b567ce952",
   "mode": "identical",
   "workload": {
     "arms": {
@@ -9,7 +9,7 @@
           "/root/six-lane-full-ab-20261006/source/.pixi/envs/bench/bin/python",
           "/root/six-lane-full-ab-20261006/source/tools/six_lane_ab_worker.py",
           "--recipe",
-          "/root/campaign-results/native-isotonic-cv/queue-workers/ac705e553ce95e6d7c85.json",
+          "/root/campaign-results/native-tsvd-full-v1/math-repair1/workers/ecf473c2267b567ce952.json",
           "--arm",
           "A",
           "--phase",
@@ -227,7 +227,7 @@
           "/root/six-lane-full-ab-20261006/source/.pixi/envs/bench/bin/python",
           "/root/six-lane-full-ab-20261006/source/tools/six_lane_ab_worker.py",
           "--recipe",
-          "/root/campaign-results/native-isotonic-cv/queue-workers/ac705e553ce95e6d7c85.json",
+          "/root/campaign-results/native-tsvd-full-v1/math-repair1/workers/ecf473c2267b567ce952.json",
           "--arm",
           "B",
           "--phase",
@@ -440,14 +440,14 @@
             "MOJOLEARN_XCNN_NO_DIRECT_CONV=1"
           ],
           "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
-          "path": "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn.so",
-          "receipt": "/root/campaign-results/native-isotonic-cv/receipts/A/3e610e13e7761daa4d15.json",
+          "path": "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/identical/_mojolearn.so",
+          "receipt": "/root/campaign-results/native-tsvd-full-v1/receipts/A/3e610e13e7761daa4d15.json",
           "sha256": "b3660479b5de3b69c2c5a954521afc1e89fa9eefa6db032647941d74d89059d5",
           "source_closure_sha256": "ea44e4afd8783f0058c7492ba7632a16435344aadcd03f6fccfda56b23e7daff",
           "target": "nvidia-native"
         },
         {
-          "compiler": "498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53be00000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
+          "compiler": "453 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11d200000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
           "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
           "defines": [
             "MOJOLEARN_C29_STREAM_TOPK=1",
@@ -640,284 +640,68 @@
             "MOJOLEARN_TREES_T45_LINEAR_UNWIND=1",
             "MOJOLEARN_XCNN_NO_DIRECT_CONV=1"
           ],
-          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
-          "path": "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn_estimators.so",
-          "receipt": "/root/campaign-results/native-isotonic-cv/receipts/A/0e6cf332c3aa4fc21119.json",
-          "sha256": "9df14311faae93419a226d81995ac43577016df4ff7a3ee8b1e09796c4bdfa22",
-          "source_closure_sha256": "36aa488c47f36bb1aebe4b40de55f8d10832a90ad53c38de3a6ac0c18438a101",
-          "target": "nvidia-native"
-        },
-        {
-          "compiler": "497 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51de80000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
-          "defines": [
-            "MOJOLEARN_C29_STREAM_TOPK=1",
-            "MOJOLEARN_C30_DIRECT_DISTANCE=1",
-            "MOJOLEARN_C31_DEVICE_BUCKETS=1",
-            "MOJOLEARN_C32_COUNT_FUSION=1",
-            "MOJOLEARN_C33_FROZEN_CHUNKS=1",
-            "MOJOLEARN_C34_PARALLEL_EDGES=1",
-            "MOJOLEARN_C35_PACKED_LISTS=1",
-            "MOJOLEARN_C36_CENTROID_TILES=1",
-            "MOJOLEARN_C37_ROW_PANELS=1",
-            "MOJOLEARN_C38_REUSE_NEAREST=1",
-            "MOJOLEARN_C39_RETAIN_STATE=1",
-            "MOJOLEARN_C40_SEED_TILES=1",
-            "MOJOLEARN_C41_FUSED_MINIMA=1",
-            "MOJOLEARN_C42_ACTIVE_TRIANGLE=1",
-            "MOJOLEARN_C43_RESIDENT_NORMALIZATION=1",
-            "MOJOLEARN_C44_SAMPLING_DESCRIPTORS=1",
-            "MOJOLEARN_C52_PAIR_128=1",
-            "MOJOLEARN_C53_CENTER4=1",
-            "MOJOLEARN_C54_PREDICT_TILES=1",
-            "MOJOLEARN_C57_CANDIDATE_STATE=1",
-            "MOJOLEARN_C58_SHARED_PREP=1",
-            "MOJOLEARN_C59_TRIAL_STATE=1",
-            "MOJOLEARN_C60_LAG4=1",
-            "MOJOLEARN_CLASSICAL_C01_LEAF64=1",
-            "MOJOLEARN_CLASSICAL_C02_STATS_PAIR=1",
-            "MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA=1",
-            "MOJOLEARN_CLASSICAL_C04_LOAD_CENTER=1",
-            "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH=1",
-            "MOJOLEARN_CLASSICAL_C06_ROWS2=1",
-            "MOJOLEARN_CLASSICAL_C07_DIGIT4=1",
-            "MOJOLEARN_CLASSICAL_C08_DICTIONARY=1",
-            "MOJOLEARN_CLASSICAL_C09_REG_BUNDLE=1",
-            "MOJOLEARN_CLASSICAL_C10_RANK_REUSE=1",
-            "MOJOLEARN_CLASSICAL_C11_DRAW_GATHER=1",
-            "MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS=1",
-            "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
-            "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
-            "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
-            "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
-            "MOJOLEARN_CLASSICAL_C17_OVR=1",
-            "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-            "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1",
-            "MOJOLEARN_CLASSICAL_C20_ROW_CACHE=1",
-            "MOJOLEARN_CLASSICAL_C21_EXTREMA=1",
-            "MOJOLEARN_CLASSICAL_C22_TRIANGLE=1",
-            "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS=1",
-            "MOJOLEARN_CLASSICAL_C24_PANEL8=1",
-            "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE=1",
-            "MOJOLEARN_CLASSICAL_C26_PRODUCTS=1",
-            "MOJOLEARN_CLASSICAL_C27_COMPONENTS=1",
-            "MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES=1",
-            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP=1",
-            "MOJOLEARN_CLASSICAL_C56_LDA_INPUT=1",
-            "MOJOLEARN_IDN_AF_COL_CHUNK_FOLD=1",
-            "MOJOLEARN_IDN_LM_PARAM_VIEWS=1",
-            "MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE=1",
-            "MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE=1",
-            "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED=1",
-            "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER=1",
-            "MOJOLEARN_IDN_NEURAL_CHAINS=2",
-            "MOJOLEARN_IDN_NEURAL_LEAF=64",
-            "MOJOLEARN_IDN_NEURAL_NN02=1",
-            "MOJOLEARN_IDN_NEURAL_NN03=1",
-            "MOJOLEARN_IDN_NEURAL_NN04=1",
-            "MOJOLEARN_IDN_NEURAL_NN05=1",
-            "MOJOLEARN_IDN_NEURAL_NN06=1",
-            "MOJOLEARN_IDN_NEURAL_NN07=1",
-            "MOJOLEARN_IDN_NEURAL_NN11=1",
-            "MOJOLEARN_IDN_NEURAL_NN12=1",
-            "MOJOLEARN_IDN_NEURAL_NN16=1",
-            "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS=16777216",
-            "MOJOLEARN_IDN_SAMBA_FORWARD_TAPE=1",
-            "MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN=1",
-            "MOJOLEARN_IDN_TRAIN_SWIGLU=1",
-            "MOJOLEARN_NI06_GEMM_ONE_PAGE=1",
-            "MOJOLEARN_NI07_GROUPED_PROJECTIONS=1",
-            "MOJOLEARN_NI09_TILED_BIAS=1",
-            "MOJOLEARN_NI10_BUDGETED_CNN_TAPE=1",
-            "MOJOLEARN_NI11_DIRECT_CONV_TAPS64=1",
-            "MOJOLEARN_NI14_TILED_COL2IM=1",
-            "MOJOLEARN_NI15_BIAS_NO_ONES=1",
-            "MOJOLEARN_NI16_CONV_RELU_FUSED=1",
-            "MOJOLEARN_NI17_BALANCED_NORM=1",
-            "MOJOLEARN_NI18_FUSED_EPOCH_GATHER=1",
-            "MOJOLEARN_NI57_GRAPH_TREE64=1",
-            "MOJOLEARN_NI58_SAGE_FEATURE4=1",
-            "MOJOLEARN_NI59_DROPOUT_CHANNEL=1",
-            "MOJOLEARN_NN14_BOUNDED_IM2COL=1",
-            "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE=1",
-            "MOJOLEARN_NN24_NORM_LANES8=1",
-            "MOJOLEARN_NN25_RMS_SPLIT_SCALE=1",
-            "MOJOLEARN_NN26_TRAIN_SWIGLU=1",
-            "MOJOLEARN_NN27_QK_ROPE_PAIR=1",
-            "MOJOLEARN_NN28_DEAD_TRAINING_CACHE=1",
-            "MOJOLEARN_NN29_RING_PAIR=1",
-            "MOJOLEARN_NN31_BOUNDED_CHECKPOINTS=1",
-            "MOJOLEARN_NN32_RETAIN_FORWARD=1",
-            "MOJOLEARN_NN33_CSTATE_P16=1",
-            "MOJOLEARN_NN33_YDIAG_ROWS8=1",
-            "MOJOLEARN_NN34_AFFINE_PREFIX=1",
-            "MOJOLEARN_NN35_CONV_PAIR=1",
-            "MOJOLEARN_NN36_SHARED_DECAY=1",
-            "MOJOLEARN_NN37_TRIANGLE_TASKS=1",
-            "MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS=1",
-            "MOJOLEARN_NN39_M2_GRAD_TREE=1",
-            "MOJOLEARN_NN40_OWNED_WEIGHTS=1",
-            "MOJOLEARN_NN40_WS_HEADROOM=1",
-            "MOJOLEARN_NN42_INPUT_BIAS_FUSED=1",
-            "MOJOLEARN_NN43_WGRAD_FIXED128=1",
-            "MOJOLEARN_NN44_EXPERT_BISECT=1",
-            "MOJOLEARN_NN44_STABLE_GROUP=1",
-            "MOJOLEARN_NN45_CONV_RELU=1",
-            "MOJOLEARN_NN46_GATHER_BOUNDS=1",
-            "MOJOLEARN_NN47_APPLY_RUNNING=1",
-            "MOJOLEARN_NN48_CSR_TILES=1",
-            "MOJOLEARN_NN49_EMB_VECTOR4=1",
-            "MOJOLEARN_NN50_OWNED_RUNS=1",
-            "MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION=1",
-            "MOJOLEARN_NN52_CE_WEIGHT_GRAD=1",
-            "MOJOLEARN_NN53_HEAD_CHUNK512=1",
-            "MOJOLEARN_NN54_LOSS_PROFILE=1",
-            "MOJOLEARN_NN55_BLOCK_STATUS=1",
-            "MOJOLEARN_NN56_GROUPED_ADAM=1",
-            "MOJOLEARN_NN57_NORM_PROFILE=1",
-            "MOJOLEARN_NN58_ACCUMULATE_STATUS=1",
-            "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1",
-            "MOJOLEARN_NN60_BLOCK_VIEWS=1",
-            "MOJOLEARN_NN62_LIFETIME_ARENA=1",
-            "MOJOLEARN_NN63_CANONICAL_SHARD_MERGE=1",
-            "MOJOLEARN_NN64_SESSION_PACK=1",
-            "MOJOLEARN_NUMERIC_IDENTICAL=1",
-            "MOJOLEARN_TREES_C45_GBDT=1",
-            "MOJOLEARN_TREES_C47_GBDT=1",
-            "MOJOLEARN_TREES_C47_IF_LIVE_TASKS=1",
-            "MOJOLEARN_TREES_C48=1",
-            "MOJOLEARN_TREES_C48_IF_PARTITION=1",
-            "MOJOLEARN_TREES_C50_GB_PACKED=1",
-            "MOJOLEARN_TREES_C50_IF_PACKED=1",
-            "MOJOLEARN_TREES_T01=1",
-            "MOJOLEARN_TREES_T01_REPLICAS=2",
-            "MOJOLEARN_TREES_T01_ROWS=128",
-            "MOJOLEARN_TREES_T02=1",
-            "MOJOLEARN_TREES_T03=1",
-            "MOJOLEARN_TREES_T04=1",
-            "MOJOLEARN_TREES_T05=1",
-            "MOJOLEARN_TREES_T06=1",
-            "MOJOLEARN_TREES_T07=1",
-            "MOJOLEARN_TREES_T08=1",
-            "MOJOLEARN_TREES_T08_BITS=8",
-            "MOJOLEARN_TREES_T08_LAYOUT=1",
-            "MOJOLEARN_TREES_T09=1",
-            "MOJOLEARN_TREES_T10=1",
-            "MOJOLEARN_TREES_T11=1",
-            "MOJOLEARN_TREES_T11_LEVELS=2",
-            "MOJOLEARN_TREES_T12=1",
-            "MOJOLEARN_TREES_T13=1",
-            "MOJOLEARN_TREES_T14=1",
-            "MOJOLEARN_TREES_T15=1",
-            "MOJOLEARN_TREES_T16=1",
-            "MOJOLEARN_TREES_T17=1",
-            "MOJOLEARN_TREES_T18=1",
-            "MOJOLEARN_TREES_T19=1",
-            "MOJOLEARN_TREES_T20=1",
-            "MOJOLEARN_TREES_T21=1",
-            "MOJOLEARN_TREES_T22=1",
-            "MOJOLEARN_TREES_T23=1",
-            "MOJOLEARN_TREES_T24=1",
-            "MOJOLEARN_TREES_T25=1",
-            "MOJOLEARN_TREES_T26=1",
-            "MOJOLEARN_TREES_T27=1",
-            "MOJOLEARN_TREES_T28=1",
-            "MOJOLEARN_TREES_T29=1",
-            "MOJOLEARN_TREES_T30=1",
-            "MOJOLEARN_TREES_T31_PACKED_A=1",
-            "MOJOLEARN_TREES_T32_SHARED_ROWS=1",
-            "MOJOLEARN_TREES_T33_COST_SCHEDULE=1",
-            "MOJOLEARN_TREES_T34_CHUNK_FOLD=1",
-            "MOJOLEARN_TREES_T35_LEAF_REUSE=1",
-            "MOJOLEARN_TREES_T36_FINITE_STAGE=1",
-            "MOJOLEARN_TREES_T37_WORKSPACE=1",
-            "MOJOLEARN_TREES_T38_FUSED_LABELS=1",
-            "MOJOLEARN_TREES_T39_AUXILIARY_WALK=1",
-            "MOJOLEARN_TREES_T40_ROWMAJOR=1",
-            "MOJOLEARN_TREES_T41_TREE_BATCH=1",
-            "MOJOLEARN_TREES_T42_CORRECTION_CACHE=1",
-            "MOJOLEARN_TREES_T43_RADIX_SELECT=1",
-            "MOJOLEARN_TREES_T44_METADATA_CACHE=1",
-            "MOJOLEARN_TREES_T45_LINEAR_UNWIND=1",
-            "MOJOLEARN_XCNN_NO_DIRECT_CONV=1"
-          ],
-          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
-          "path": "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn_x_metrics.so",
-          "receipt": "/root/campaign-results/native-isotonic-cv/receipts/A/aab7bfd8fe6f8cf7f046.json",
-          "sha256": "482bbd09876978b4d5e652ed7c84b7a22afa14a40015b1711ee3a7073c42437c",
-          "source_closure_sha256": "97b5095a64d1e4d3e220ea0aacaaa07d5f346ef2c5bcf7bfe91b12ecf2a728c5",
+          "numerical_source_sha": "76165b54ec6a31b71854f9e2a7b2952934783b3a",
+          "path": "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/identical/_mojolearn_x_decomp.so",
+          "receipt": "/root/campaign-results/native-tsvd-full-v1/receipts/A/7734db0606cfdd6bc893.json",
+          "sha256": "6db04cf91a93e013d77ccf5368484bb48d00ce9d9d21ac2d816db66507147e9c",
+          "source_closure_sha256": "af1670dffa40b4cbabd3202b261fab85310144d5df35fa28e04b3042c27fc7bd",
           "target": "nvidia-native"
         }
       ],
       "B": [
         {
-          "compiler": "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
-          "defines": [
-            "MOJOLEARN_NUMERIC_IDENTICAL=1"
-          ],
-          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
-          "path": "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn_estimators.so",
-          "receipt": "/root/campaign-results/native-isotonic-cv/receipts/B/835f186f14e7800f93c5.json",
-          "sha256": "e89e1ab1ae07f38d72ce44698fb20339148ec96a9a79cc5ba7fe6551811a78b0",
-          "source_closure_sha256": "36aa488c47f36bb1aebe4b40de55f8d10832a90ad53c38de3a6ac0c18438a101",
-          "target": "nvidia-native"
-        },
-        {
-          "compiler": "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
-          "defines": [
-            "MOJOLEARN_NUMERIC_IDENTICAL=1"
-          ],
-          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
-          "path": "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn_x_metrics.so",
-          "receipt": "/root/campaign-results/native-isotonic-cv/receipts/B/ed0ce42925e93f721cfb.json",
-          "sha256": "cdcf6f0e491fa609a340f1559c4b4abbfe9171a27533bca486e6f06da61c285a",
-          "source_closure_sha256": "97b5095a64d1e4d3e220ea0aacaaa07d5f346ef2c5bcf7bfe91b12ecf2a728c5",
-          "target": "nvidia-native"
-        },
-        {
           "compiler": "498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53be00000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
           "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
           "defines": [
             "MOJOLEARN_NUMERIC_IDENTICAL=1"
           ],
           "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
-          "path": "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn.so",
-          "receipt": "/root/campaign-results/native-isotonic-cv/receipts/B/edb58a11758774dc9693.json",
+          "path": "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/identical/_mojolearn.so",
+          "receipt": "/root/campaign-results/native-tsvd-full-v1/receipts/B/edb58a11758774dc9693.json",
           "sha256": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
           "source_closure_sha256": "ea44e4afd8783f0058c7492ba7632a16435344aadcd03f6fccfda56b23e7daff",
+          "target": "nvidia-native"
+        },
+        {
+          "compiler": "453 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11d200000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
+          "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+          "defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "numerical_source_sha": "76165b54ec6a31b71854f9e2a7b2952934783b3a",
+          "path": "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/identical/_mojolearn_x_decomp.so",
+          "receipt": "/root/campaign-results/native-tsvd-full-v1/receipts/B/f7bea6bd6354ca0734cc.json",
+          "sha256": "a7df85ad36de6cb08509dac57d010c1f1cabc5044eac3be9e3f3ea022dbb5dff",
+          "source_closure_sha256": "af1670dffa40b4cbabd3202b261fab85310144d5df35fa28e04b3042c27fc7bd",
           "target": "nvidia-native"
         }
       ]
     },
     "blocked": [],
-    "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+    "changes_frozen_race": true,
+    "dataset_sha256": "b381dd2daedbe63b8bc30e056fdbe379186397a0569f42f0404c80af6a6adeeb",
     "dimensions": {
       "X": [
-        2043304,
+        1838974,
         220
       ],
       "Xq": [
-        500000,
+        204330,
         220
-      ],
-      "y": [
-        2043304
-      ],
-      "yq": [
-        500000
       ]
     },
     "estimator_settings": {
       "__record__": true,
       "library": "mojolearn",
       "params": {
-        "cv": 5,
-        "estimator": "LinearRegression",
-        "scoring": "r2"
+        "compute_inverse_components": false,
+        "dense_output": false,
+        "density": "auto",
+        "eps": 0.1,
+        "n_components": 10,
+        "random_state": 7
       },
-      "source": "declared"
+      "source": "get_params"
     },
     "full_dataset_coverage": true,
     "implementation_ids": [
@@ -1100,7 +884,7 @@
       "I.N.NI59"
     ],
     "intrinsic_caps": [],
-    "key": "ac705e553ce95e6d7c85",
+    "key": "ecf473c2267b567ce952",
     "master_selection": {
       "A": {
         "defines": [
@@ -3121,6 +2905,22 @@
     },
     "matrix_status": "PENDING_COVERAGE",
     "mode": "identical",
+    "registered_input_variant": {
+      "original_cell_key": "f89f1e69f69a6c488877",
+      "original_workload_id": "expanded:sparse-rp@dataset=istella",
+      "projection_receipt": {
+        "path": "/root/six-lane-full-ab-20261006/data/tsvd-full-v1/istella/projection-receipt.json",
+        "sha256": "0a80942cb906d1a04f5d489bc88f0b22163a690119e2739b3e931737de7eea54"
+      },
+      "proposal": {
+        "path": "/root/six-lane-full-ab-20261006/data/tsvd-full-v1/istella/variant-recipes.json",
+        "sha256": "52a4902053c09eba050661f08ee89ade3c7eaa315a1f31470a6f31a478148e07"
+      },
+      "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+      "variant": "tsvd-full-v1",
+      "variant_cell_key": "ecf473c2267b567ce952",
+      "variant_workload_id": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1"
+    },
     "source_coverage_pending": [
       "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
       "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
@@ -3219,27 +3019,44 @@
       "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
       "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
     ],
-    "timed_boundary": "load original saved full reg inputs + unchanged preparation + original five unshuffled folds + fresh LinearRegression fit and held-out R2 scoring per fold + synchronization + consume all5scores; original saved Xq/yq not used; hashing and independent quality outside whole-operation timer",
+    "timed_boundary": "Preparation/load, existing lane split, construction, operation, required synchronization and consumed outputs; hashes and independent quality outside timer.",
+    "workload_id": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1",
     "timeout_seconds": 86400,
-    "workload_id": "expanded:cross-val-score@dataset=istella"
+    "runtime_dependency_provenance": {
+      "A": {
+        "path": "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/.libs/libMojolearnMath.so",
+        "sha256": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+        "accepted_build_receipt": "/root/campaign-results/native-tsvd-full-v1/math-repair1/portable-math-build.json",
+        "scope": "Packaged portable scalar math prerequisite, accepted same-source existing Linux binary; no new compilation; file hash checked before and after queue, not a claim of ctypes load tracing"
+      },
+      "B": {
+        "path": "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/.libs/libMojolearnMath.so",
+        "sha256": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+        "accepted_build_receipt": "/root/campaign-results/native-tsvd-full-v1/math-repair1/portable-math-build.json",
+        "scope": "Packaged portable scalar math prerequisite, accepted same-source existing Linux binary; no new compilation; file hash checked before and after queue, not a claim of ctypes load tracing"
+      }
+    },
+    "repair_history": {
+      "previous_receipt": null,
+      "scope": "Only failed or previously unrun cell; original valid pair never rerun"
+    }
   },
-  "started": 1791309340.7929766,
+  "started": 1791309694.8818727,
   "runs": [
     {
       "phase": "warmup",
       "arm": "A",
       "excluded": true,
       "returncode": 0,
-      "process_wall_seconds": 22.987737894058228,
-      "log": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/warmup-A.log",
-      "output": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/warmup-A.json",
-      "result_sha256": "b93e276479493fde54c9f26c4412a9238844872fa19a4936e37ff0b0285767e3",
+      "process_wall_seconds": 7.188270568847656,
+      "log": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/warmup-A.log",
+      "output": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/warmup-A.json",
+      "result_sha256": "62a6263af9413efbb61b824d28aff7f015da696e989455d4424d3e53228c854a",
       "result": {
         "arm": "A",
         "compiler": [
           "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53be00000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "497 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51de80000000, nodemask=1)\nMojo 1.0.0 (ed45d567)"
+          "453 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11d200000000, nodemask=1)\nMojo 1.0.0 (ed45d567)"
         ],
         "configuration": {
           "defines": [
@@ -3440,33 +3257,31 @@
           },
           "runtime": {}
         },
-        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_sha256": "b381dd2daedbe63b8bc30e056fdbe379186397a0569f42f0404c80af6a6adeeb",
         "dataset_split": {
-          "evaluation_rows": 500000,
           "fit": [
             0,
+            1838974
+          ],
+          "query": [
+            1838974,
             2043304
-          ]
+          ],
+          "rule": "Original cut=max(N-N//10,1), X-only archive; no loader Xq; randomized-svd does not use query arrays"
         },
-        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_version": "tsvd-full-v1; complete regression training population; raw X-only projection",
         "declared_hardware": null,
         "declared_resource_policy": {
-          "policy": "full allocated NVIDIA worker; actual affinity/cgroup and effective pools captured in each worker; arms serial; no inherited diagnostic caps"
+          "policy": "Serial arms on full allocated worker, actual pools/cgroup recorded by the future scored execution"
         },
         "dimensions": {
           "X": [
-            2043304,
+            1838974,
             220
           ],
           "Xq": [
-            500000,
+            204330,
             220
-          ],
-          "y": [
-            2043304
-          ],
-          "yq": [
-            500000
           ]
         },
         "effective_pools": [
@@ -3485,11 +3300,14 @@
           "__record__": true,
           "library": "mojolearn",
           "params": {
-            "cv": 5,
-            "estimator": "LinearRegression",
-            "scoring": "r2"
+            "compute_inverse_components": false,
+            "dense_output": false,
+            "density": "auto",
+            "eps": 0.1,
+            "n_components": 10,
+            "random_state": 7
           },
-          "source": "declared"
+          "source": "get_params"
         },
         "full_dataset_coverage": true,
         "hardware": {
@@ -3710,13 +3528,13 @@
           "cpu_count": 208,
           "machine": "x86_64",
           "native_readback": {
-            "config": "mojolearn.cross_val_score(cv=5, estimator=<mojolearn.linear_model.LinearRegression object at 0x72ec4ea3c440>, scoring='r2')",
+            "config": "mojolearn.SparseRandomProjection(compute_inverse_components=False, dense_output=False, density='auto', eps=0.1, n_components=10, random_state=7)",
             "device": "gpu",
             "input_home": "host",
             "library": "mojolearn",
-            "module_path": "/root/six-lane-full-ab-20261006/packages/A/mojolearn/__init__.py",
+            "module_path": "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/__init__.py",
             "numeric_mode_env": "identical",
-            "numeric_mode_how": "_mojolearn_x_metrics numeric_mode constant",
+            "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
             "numeric_mode_used": "identical",
             "pre_clock_fit": false,
             "vendor_used": "cuda",
@@ -3907,37 +3725,43 @@
           "I.N.NI59"
         ],
         "loaded_artifacts": {
-          "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn.so": "b3660479b5de3b69c2c5a954521afc1e89fa9eefa6db032647941d74d89059d5",
-          "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn_estimators.so": "9df14311faae93419a226d81995ac43577016df4ff7a3ee8b1e09796c4bdfa22",
-          "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn_x_metrics.so": "482bbd09876978b4d5e652ed7c84b7a22afa14a40015b1711ee3a7073c42437c"
+          "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/identical/_mojolearn.so": "b3660479b5de3b69c2c5a954521afc1e89fa9eefa6db032647941d74d89059d5",
+          "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/identical/_mojolearn_x_decomp.so": "6db04cf91a93e013d77ccf5368484bb48d00ce9d9d21ac2d816db66507147e9c"
         },
         "missing_timing_scopes": [],
         "mode": "identical",
         "model_state": {
           "missing_state": [
-            "model owner"
+            "reviewed complete typed fitted-state export"
           ],
-          "reason": "Runner exposes no public model owner",
+          "partial_export": {
+            "class": "SparseRandomProjection",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "77f0a7840c0a8f50a2522ca677187ae05dcdcaac74b6eba93048540a74d923a5",
+        "output_sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
           "manifest": [
             {
-              "bytes": 40,
+              "bytes": 16346400,
               "dtype": "<f8",
               "encoding": "C-order raw bytes; dtype endian preserved",
-              "path": "$.scores",
+              "path": "$.pred",
               "shape": [
-                5
+                204330,
+                10
               ]
             }
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "77f0a7840c0a8f50a2522ca677187ae05dcdcaac74b6eba93048540a74d923a5",
+          "sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
           "status": "CAPTURED"
         },
         "phase": "warmup",
@@ -3946,9 +3770,15 @@
             "index": 0,
             "model_state": {
               "missing_state": [
-                "model owner"
+                "reviewed complete typed fitted-state export"
               ],
-              "reason": "Runner exposes no public model owner",
+              "partial_export": {
+                "class": "SparseRandomProjection",
+                "reason": "no public state_dict or save export",
+                "schema": "mojolearn-benchmark-state-v1",
+                "status": "unavailable"
+              },
+              "reason": "Public export is not a reviewed complete fitted-state contract",
               "status": "UNAVAILABLE"
             },
             "outputs": {
@@ -3956,24 +3786,26 @@
               "encoding": "mojolearn-benchmark-state-v1",
               "manifest": [
                 {
-                  "bytes": 40,
+                  "bytes": 16346400,
                   "dtype": "<f8",
                   "encoding": "C-order raw bytes; dtype endian preserved",
-                  "path": "$.scores",
+                  "path": "$.pred",
                   "shape": [
-                    5
+                    204330,
+                    10
                   ]
                 }
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "77f0a7840c0a8f50a2522ca677187ae05dcdcaac74b6eba93048540a74d923a5",
+              "sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 4.389003152027726e-06,
-              "fit_or_training_seconds": 8.166725450995727,
-              "repeated_seconds": 8.166732254001545
+              "consumed_output_seconds": 0.007314696995308623,
+              "fit_or_training_seconds": 0.1714927200009697,
+              "inference_seconds": 0.020841169003688265,
+              "repeated_seconds": 0.19965015500201844
             }
           }
         ],
@@ -3985,15 +3817,15 @@
           "quota_source": "/sys/fs/cgroup/cpu.max",
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/warmup-A.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/warmup-A.values.json",
         "runtime_reach": {
-          "config": "mojolearn.cross_val_score(cv=5, estimator=<mojolearn.linear_model.LinearRegression object at 0x72ec4ea3c440>, scoring='r2')",
+          "config": "mojolearn.SparseRandomProjection(compute_inverse_components=False, dense_output=False, density='auto', eps=0.1, n_components=10, random_state=7)",
           "device": "gpu",
           "input_home": "host",
           "library": "mojolearn",
-          "module_path": "/root/six-lane-full-ab-20261006/packages/A/mojolearn/__init__.py",
+          "module_path": "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/__init__.py",
           "numeric_mode_env": "identical",
-          "numeric_mode_how": "_mojolearn_x_metrics numeric_mode constant",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
           "numeric_mode_used": "identical",
           "pre_clock_fit": false,
           "vendor_used": "cuda",
@@ -4106,10 +3938,10 @@
         "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
         "status": "PASS",
         "task_quality": {
-          "gate_source": "tools/bench_board_algos.py:quality(cv): mean_r2 and max_fold_score_diff_vs_sklearn; matching full-opponent gate pending",
+          "gate_source": "tools/bench_board_algos.py:quality/sparse-rp; full-input opponent and complete state qualification pending",
           "metrics": {
             "ours": {
-              "mean_r2": 0.33697171211242677
+              "mean_abs_distortion": 1.8836813746335406
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -4123,16 +3955,17 @@
           "OPENBLAS_NUM_THREADS": "22",
           "VECLIB_MAXIMUM_THREADS": null
         },
-        "timed_boundary": "load original saved full reg inputs + unchanged preparation + original five unshuffled folds + fresh LinearRegression fit and held-out R2 scoring per fold + synchronization + consume all5scores; original saved Xq/yq not used; hashing and independent quality outside whole-operation timer",
+        "timed_boundary": "Preparation/load, existing lane split, construction, operation, required synchronization and consumed outputs; hashes and independent quality outside timer.",
         "timings": {
-          "cold_seconds": 11.748059685000044,
-          "consumed_output_seconds": 2.673300332389772e-05,
-          "fit_or_training_seconds": 9.43356938699435,
-          "full_operation_seconds": 11.748059685000044,
-          "preparation_seconds": 2.314453956001671
+          "cold_seconds": 3.079864503997669,
+          "consumed_output_seconds": 0.02994369999942137,
+          "fit_or_training_seconds": 1.0925886220065877,
+          "full_operation_seconds": 3.079864503997669,
+          "inference_seconds": 0.024289269997098017,
+          "preparation_seconds": 1.9330404040010762
         },
         "vendor": "nvidia",
-        "workload_id": "expanded:cross-val-score@dataset=istella",
+        "workload_id": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -4142,20 +3975,27 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "77f0a7840c0a8f50a2522ca677187ae05dcdcaac74b6eba93048540a74d923a5",
+      "output_sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
       "model_state": {
         "missing_state": [
-          "model owner"
+          "reviewed complete typed fitted-state export"
         ],
-        "reason": "Runner exposes no public model owner",
+        "partial_export": {
+          "class": "SparseRandomProjection",
+          "reason": "no public state_dict or save export",
+          "schema": "mojolearn-benchmark-state-v1",
+          "status": "unavailable"
+        },
+        "reason": "Public export is not a reviewed complete fitted-state contract",
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 11.748059685000044,
-        "consumed_output_seconds": 2.673300332389772e-05,
-        "fit_or_training_seconds": 9.43356938699435,
-        "full_operation_seconds": 11.748059685000044,
-        "preparation_seconds": 2.314453956001671
+        "cold_seconds": 3.079864503997669,
+        "consumed_output_seconds": 0.02994369999942137,
+        "fit_or_training_seconds": 1.0925886220065877,
+        "full_operation_seconds": 3.079864503997669,
+        "inference_seconds": 0.024289269997098017,
+        "preparation_seconds": 1.9330404040010762
       },
       "model_identity_available": false
     },
@@ -4164,49 +4004,46 @@
       "arm": "B",
       "excluded": true,
       "returncode": 0,
-      "process_wall_seconds": 22.538837671279907,
-      "log": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/warmup-B.log",
-      "output": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/warmup-B.json",
-      "result_sha256": "33dd2881478a8ad4e827361b16cf364d9d874c2c7222d3dc252252da70955a23",
+      "process_wall_seconds": 7.389087200164795,
+      "log": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/warmup-B.log",
+      "output": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/warmup-B.json",
+      "result_sha256": "a14d81d2b5988dbfb5e226060b351a3bf33447e6262b0d60e865d43fed32b92b",
       "result": {
         "arm": "B",
         "compiler": [
-          "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53be00000000, nodemask=1)\nMojo 1.0.0 (ed45d567)"
+          "498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53be00000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
+          "453 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11d200000000, nodemask=1)\nMojo 1.0.0 (ed45d567)"
         ],
         "configuration": {
           "defines": [],
           "environment": {},
           "runtime": {}
         },
-        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_sha256": "b381dd2daedbe63b8bc30e056fdbe379186397a0569f42f0404c80af6a6adeeb",
         "dataset_split": {
-          "evaluation_rows": 500000,
           "fit": [
             0,
+            1838974
+          ],
+          "query": [
+            1838974,
             2043304
-          ]
+          ],
+          "rule": "Original cut=max(N-N//10,1), X-only archive; no loader Xq; randomized-svd does not use query arrays"
         },
-        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_version": "tsvd-full-v1; complete regression training population; raw X-only projection",
         "declared_hardware": null,
         "declared_resource_policy": {
-          "policy": "full allocated NVIDIA worker; actual affinity/cgroup and effective pools captured in each worker; arms serial; no inherited diagnostic caps"
+          "policy": "Serial arms on full allocated worker, actual pools/cgroup recorded by the future scored execution"
         },
         "dimensions": {
           "X": [
-            2043304,
+            1838974,
             220
           ],
           "Xq": [
-            500000,
+            204330,
             220
-          ],
-          "y": [
-            2043304
-          ],
-          "yq": [
-            500000
           ]
         },
         "effective_pools": [
@@ -4225,11 +4062,14 @@
           "__record__": true,
           "library": "mojolearn",
           "params": {
-            "cv": 5,
-            "estimator": "LinearRegression",
-            "scoring": "r2"
+            "compute_inverse_components": false,
+            "dense_output": false,
+            "density": "auto",
+            "eps": 0.1,
+            "n_components": 10,
+            "random_state": 7
           },
-          "source": "declared"
+          "source": "get_params"
         },
         "full_dataset_coverage": true,
         "hardware": {
@@ -4450,13 +4290,13 @@
           "cpu_count": 208,
           "machine": "x86_64",
           "native_readback": {
-            "config": "mojolearn.cross_val_score(cv=5, estimator=<mojolearn.linear_model.LinearRegression object at 0x7b66680f0440>, scoring='r2')",
+            "config": "mojolearn.SparseRandomProjection(compute_inverse_components=False, dense_output=False, density='auto', eps=0.1, n_components=10, random_state=7)",
             "device": "gpu",
             "input_home": "host",
             "library": "mojolearn",
-            "module_path": "/root/six-lane-full-ab-20261006/packages/B/mojolearn/__init__.py",
+            "module_path": "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/__init__.py",
             "numeric_mode_env": "identical",
-            "numeric_mode_how": "_mojolearn_x_metrics numeric_mode constant",
+            "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
             "numeric_mode_used": "identical",
             "pre_clock_fit": false,
             "vendor_used": "cuda",
@@ -4647,37 +4487,43 @@
           "I.N.NI59"
         ],
         "loaded_artifacts": {
-          "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn.so": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
-          "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn_estimators.so": "e89e1ab1ae07f38d72ce44698fb20339148ec96a9a79cc5ba7fe6551811a78b0",
-          "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn_x_metrics.so": "cdcf6f0e491fa609a340f1559c4b4abbfe9171a27533bca486e6f06da61c285a"
+          "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/identical/_mojolearn.so": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
+          "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/identical/_mojolearn_x_decomp.so": "a7df85ad36de6cb08509dac57d010c1f1cabc5044eac3be9e3f3ea022dbb5dff"
         },
         "missing_timing_scopes": [],
         "mode": "identical",
         "model_state": {
           "missing_state": [
-            "model owner"
+            "reviewed complete typed fitted-state export"
           ],
-          "reason": "Runner exposes no public model owner",
+          "partial_export": {
+            "class": "SparseRandomProjection",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "bc55964c37570438ccc6ece588e4f5060476f8ebad01918b393931f2a7fe3740",
+        "output_sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
           "manifest": [
             {
-              "bytes": 40,
+              "bytes": 16346400,
               "dtype": "<f8",
               "encoding": "C-order raw bytes; dtype endian preserved",
-              "path": "$.scores",
+              "path": "$.pred",
               "shape": [
-                5
+                204330,
+                10
               ]
             }
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "bc55964c37570438ccc6ece588e4f5060476f8ebad01918b393931f2a7fe3740",
+          "sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
           "status": "CAPTURED"
         },
         "phase": "warmup",
@@ -4686,9 +4532,15 @@
             "index": 0,
             "model_state": {
               "missing_state": [
-                "model owner"
+                "reviewed complete typed fitted-state export"
               ],
-              "reason": "Runner exposes no public model owner",
+              "partial_export": {
+                "class": "SparseRandomProjection",
+                "reason": "no public state_dict or save export",
+                "schema": "mojolearn-benchmark-state-v1",
+                "status": "unavailable"
+              },
+              "reason": "Public export is not a reviewed complete fitted-state contract",
               "status": "UNAVAILABLE"
             },
             "outputs": {
@@ -4696,24 +4548,26 @@
               "encoding": "mojolearn-benchmark-state-v1",
               "manifest": [
                 {
-                  "bytes": 40,
+                  "bytes": 16346400,
                   "dtype": "<f8",
                   "encoding": "C-order raw bytes; dtype endian preserved",
-                  "path": "$.scores",
+                  "path": "$.pred",
                   "shape": [
-                    5
+                    204330,
+                    10
                   ]
                 }
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "bc55964c37570438ccc6ece588e4f5060476f8ebad01918b393931f2a7fe3740",
+              "sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 1.198499376187101e-05,
-              "fit_or_training_seconds": 7.974668693997955,
-              "repeated_seconds": 7.974685531000432
+              "consumed_output_seconds": 0.006907871000294108,
+              "fit_or_training_seconds": 0.2068415809990256,
+              "inference_seconds": 0.02734920800139662,
+              "repeated_seconds": 0.2411003180022817
             }
           }
         ],
@@ -4725,15 +4579,15 @@
           "quota_source": "/sys/fs/cgroup/cpu.max",
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/warmup-B.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/warmup-B.values.json",
         "runtime_reach": {
-          "config": "mojolearn.cross_val_score(cv=5, estimator=<mojolearn.linear_model.LinearRegression object at 0x7b66680f0440>, scoring='r2')",
+          "config": "mojolearn.SparseRandomProjection(compute_inverse_components=False, dense_output=False, density='auto', eps=0.1, n_components=10, random_state=7)",
           "device": "gpu",
           "input_home": "host",
           "library": "mojolearn",
-          "module_path": "/root/six-lane-full-ab-20261006/packages/B/mojolearn/__init__.py",
+          "module_path": "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/__init__.py",
           "numeric_mode_env": "identical",
-          "numeric_mode_how": "_mojolearn_x_metrics numeric_mode constant",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
           "numeric_mode_used": "identical",
           "pre_clock_fit": false,
           "vendor_used": "cuda",
@@ -4846,10 +4700,10 @@
         "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
         "status": "PASS",
         "task_quality": {
-          "gate_source": "tools/bench_board_algos.py:quality(cv): mean_r2 and max_fold_score_diff_vs_sklearn; matching full-opponent gate pending",
+          "gate_source": "tools/bench_board_algos.py:quality/sparse-rp; full-input opponent and complete state qualification pending",
           "metrics": {
             "ours": {
-              "mean_r2": 0.33697172403335574
+              "mean_abs_distortion": 1.8836813746335406
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -4863,16 +4717,17 @@
           "OPENBLAS_NUM_THREADS": "22",
           "VECLIB_MAXIMUM_THREADS": null
         },
-        "timed_boundary": "load original saved full reg inputs + unchanged preparation + original five unshuffled folds + fresh LinearRegression fit and held-out R2 scoring per fold + synchronization + consume all5scores; original saved Xq/yq not used; hashing and independent quality outside whole-operation timer",
+        "timed_boundary": "Preparation/load, existing lane split, construction, operation, required synchronization and consumed outputs; hashes and independent quality outside timer.",
         "timings": {
-          "cold_seconds": 11.492729131998203,
-          "consumed_output_seconds": 4.647998139262199e-06,
-          "fit_or_training_seconds": 9.215222354003345,
-          "full_operation_seconds": 11.492729131998203,
-          "preparation_seconds": 2.2774989280005684
+          "cold_seconds": 3.224161500998889,
+          "consumed_output_seconds": 0.030451524995442014,
+          "fit_or_training_seconds": 1.271696402996895,
+          "full_operation_seconds": 3.224161500998889,
+          "inference_seconds": 0.030480703004286624,
+          "preparation_seconds": 1.8915315100020962
         },
         "vendor": "nvidia",
-        "workload_id": "expanded:cross-val-score@dataset=istella",
+        "workload_id": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -4882,20 +4737,27 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "bc55964c37570438ccc6ece588e4f5060476f8ebad01918b393931f2a7fe3740",
+      "output_sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
       "model_state": {
         "missing_state": [
-          "model owner"
+          "reviewed complete typed fitted-state export"
         ],
-        "reason": "Runner exposes no public model owner",
+        "partial_export": {
+          "class": "SparseRandomProjection",
+          "reason": "no public state_dict or save export",
+          "schema": "mojolearn-benchmark-state-v1",
+          "status": "unavailable"
+        },
+        "reason": "Public export is not a reviewed complete fitted-state contract",
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 11.492729131998203,
-        "consumed_output_seconds": 4.647998139262199e-06,
-        "fit_or_training_seconds": 9.215222354003345,
-        "full_operation_seconds": 11.492729131998203,
-        "preparation_seconds": 2.2774989280005684
+        "cold_seconds": 3.224161500998889,
+        "consumed_output_seconds": 0.030451524995442014,
+        "fit_or_training_seconds": 1.271696402996895,
+        "full_operation_seconds": 3.224161500998889,
+        "inference_seconds": 0.030480703004286624,
+        "preparation_seconds": 1.8915315100020962
       },
       "model_identity_available": false
     },
@@ -4904,16 +4766,15 @@
       "arm": "A",
       "excluded": false,
       "returncode": 0,
-      "process_wall_seconds": 22.890439987182617,
-      "log": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/scored-A.log",
-      "output": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/scored-A.json",
-      "result_sha256": "2416e32f981418c56aae205d46648e492cd9ff06c189229e6fff963596274065",
+      "process_wall_seconds": 7.18770432472229,
+      "log": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/scored-A.log",
+      "output": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/scored-A.json",
+      "result_sha256": "3063943b083bc7edc59f2a55fe687c86754361eb48445c3ddd0a34d82eaf3ab9",
       "result": {
         "arm": "A",
         "compiler": [
           "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53be00000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "497 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51de80000000, nodemask=1)\nMojo 1.0.0 (ed45d567)"
+          "453 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11d200000000, nodemask=1)\nMojo 1.0.0 (ed45d567)"
         ],
         "configuration": {
           "defines": [
@@ -5114,33 +4975,31 @@
           },
           "runtime": {}
         },
-        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_sha256": "b381dd2daedbe63b8bc30e056fdbe379186397a0569f42f0404c80af6a6adeeb",
         "dataset_split": {
-          "evaluation_rows": 500000,
           "fit": [
             0,
+            1838974
+          ],
+          "query": [
+            1838974,
             2043304
-          ]
+          ],
+          "rule": "Original cut=max(N-N//10,1), X-only archive; no loader Xq; randomized-svd does not use query arrays"
         },
-        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_version": "tsvd-full-v1; complete regression training population; raw X-only projection",
         "declared_hardware": null,
         "declared_resource_policy": {
-          "policy": "full allocated NVIDIA worker; actual affinity/cgroup and effective pools captured in each worker; arms serial; no inherited diagnostic caps"
+          "policy": "Serial arms on full allocated worker, actual pools/cgroup recorded by the future scored execution"
         },
         "dimensions": {
           "X": [
-            2043304,
+            1838974,
             220
           ],
           "Xq": [
-            500000,
+            204330,
             220
-          ],
-          "y": [
-            2043304
-          ],
-          "yq": [
-            500000
           ]
         },
         "effective_pools": [
@@ -5159,11 +5018,14 @@
           "__record__": true,
           "library": "mojolearn",
           "params": {
-            "cv": 5,
-            "estimator": "LinearRegression",
-            "scoring": "r2"
+            "compute_inverse_components": false,
+            "dense_output": false,
+            "density": "auto",
+            "eps": 0.1,
+            "n_components": 10,
+            "random_state": 7
           },
-          "source": "declared"
+          "source": "get_params"
         },
         "full_dataset_coverage": true,
         "hardware": {
@@ -5384,13 +5246,13 @@
           "cpu_count": 208,
           "machine": "x86_64",
           "native_readback": {
-            "config": "mojolearn.cross_val_score(cv=5, estimator=<mojolearn.linear_model.LinearRegression object at 0x72a0840e4440>, scoring='r2')",
+            "config": "mojolearn.SparseRandomProjection(compute_inverse_components=False, dense_output=False, density='auto', eps=0.1, n_components=10, random_state=7)",
             "device": "gpu",
             "input_home": "host",
             "library": "mojolearn",
-            "module_path": "/root/six-lane-full-ab-20261006/packages/A/mojolearn/__init__.py",
+            "module_path": "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/__init__.py",
             "numeric_mode_env": "identical",
-            "numeric_mode_how": "_mojolearn_x_metrics numeric_mode constant",
+            "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
             "numeric_mode_used": "identical",
             "pre_clock_fit": false,
             "vendor_used": "cuda",
@@ -5581,37 +5443,43 @@
           "I.N.NI59"
         ],
         "loaded_artifacts": {
-          "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn.so": "b3660479b5de3b69c2c5a954521afc1e89fa9eefa6db032647941d74d89059d5",
-          "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn_estimators.so": "9df14311faae93419a226d81995ac43577016df4ff7a3ee8b1e09796c4bdfa22",
-          "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn_x_metrics.so": "482bbd09876978b4d5e652ed7c84b7a22afa14a40015b1711ee3a7073c42437c"
+          "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/identical/_mojolearn.so": "b3660479b5de3b69c2c5a954521afc1e89fa9eefa6db032647941d74d89059d5",
+          "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/identical/_mojolearn_x_decomp.so": "6db04cf91a93e013d77ccf5368484bb48d00ce9d9d21ac2d816db66507147e9c"
         },
         "missing_timing_scopes": [],
         "mode": "identical",
         "model_state": {
           "missing_state": [
-            "model owner"
+            "reviewed complete typed fitted-state export"
           ],
-          "reason": "Runner exposes no public model owner",
+          "partial_export": {
+            "class": "SparseRandomProjection",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "77f0a7840c0a8f50a2522ca677187ae05dcdcaac74b6eba93048540a74d923a5",
+        "output_sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
           "manifest": [
             {
-              "bytes": 40,
+              "bytes": 16346400,
               "dtype": "<f8",
               "encoding": "C-order raw bytes; dtype endian preserved",
-              "path": "$.scores",
+              "path": "$.pred",
               "shape": [
-                5
+                204330,
+                10
               ]
             }
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "77f0a7840c0a8f50a2522ca677187ae05dcdcaac74b6eba93048540a74d923a5",
+          "sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
           "status": "CAPTURED"
         },
         "phase": "scored",
@@ -5620,9 +5488,15 @@
             "index": 0,
             "model_state": {
               "missing_state": [
-                "model owner"
+                "reviewed complete typed fitted-state export"
               ],
-              "reason": "Runner exposes no public model owner",
+              "partial_export": {
+                "class": "SparseRandomProjection",
+                "reason": "no public state_dict or save export",
+                "schema": "mojolearn-benchmark-state-v1",
+                "status": "unavailable"
+              },
+              "reason": "Public export is not a reviewed complete fitted-state contract",
               "status": "UNAVAILABLE"
             },
             "outputs": {
@@ -5630,24 +5504,26 @@
               "encoding": "mojolearn-benchmark-state-v1",
               "manifest": [
                 {
-                  "bytes": 40,
+                  "bytes": 16346400,
                   "dtype": "<f8",
                   "encoding": "C-order raw bytes; dtype endian preserved",
-                  "path": "$.scores",
+                  "path": "$.pred",
                   "shape": [
-                    5
+                    204330,
+                    10
                   ]
                 }
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "77f0a7840c0a8f50a2522ca677187ae05dcdcaac74b6eba93048540a74d923a5",
+              "sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 7.645998266525567e-06,
-              "fit_or_training_seconds": 8.092661497998051,
-              "repeated_seconds": 8.092673847997503
+              "consumed_output_seconds": 0.007162285997765139,
+              "fit_or_training_seconds": 0.22892565000074683,
+              "inference_seconds": 0.02743512899905909,
+              "repeated_seconds": 0.26352491499710595
             }
           }
         ],
@@ -5659,15 +5535,15 @@
           "quota_source": "/sys/fs/cgroup/cpu.max",
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/scored-A.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/scored-A.values.json",
         "runtime_reach": {
-          "config": "mojolearn.cross_val_score(cv=5, estimator=<mojolearn.linear_model.LinearRegression object at 0x72a0840e4440>, scoring='r2')",
+          "config": "mojolearn.SparseRandomProjection(compute_inverse_components=False, dense_output=False, density='auto', eps=0.1, n_components=10, random_state=7)",
           "device": "gpu",
           "input_home": "host",
           "library": "mojolearn",
-          "module_path": "/root/six-lane-full-ab-20261006/packages/A/mojolearn/__init__.py",
+          "module_path": "/root/six-lane-full-ab-20261006/packages-math-repair1/A/mojolearn/__init__.py",
           "numeric_mode_env": "identical",
-          "numeric_mode_how": "_mojolearn_x_metrics numeric_mode constant",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
           "numeric_mode_used": "identical",
           "pre_clock_fit": false,
           "vendor_used": "cuda",
@@ -5780,10 +5656,10 @@
         "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
         "status": "PASS",
         "task_quality": {
-          "gate_source": "tools/bench_board_algos.py:quality(cv): mean_r2 and max_fold_score_diff_vs_sklearn; matching full-opponent gate pending",
+          "gate_source": "tools/bench_board_algos.py:quality/sparse-rp; full-input opponent and complete state qualification pending",
           "metrics": {
             "ours": {
-              "mean_r2": 0.33697171211242677
+              "mean_abs_distortion": 1.8836813746335406
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -5797,16 +5673,17 @@
           "OPENBLAS_NUM_THREADS": "22",
           "VECLIB_MAXIMUM_THREADS": null
         },
-        "timed_boundary": "load original saved full reg inputs + unchanged preparation + original five unshuffled folds + fresh LinearRegression fit and held-out R2 scoring per fold + synchronization + consume all5scores; original saved Xq/yq not used; hashing and independent quality outside whole-operation timer",
+        "timed_boundary": "Preparation/load, existing lane split, construction, operation, required synchronization and consumed outputs; hashes and independent quality outside timer.",
         "timings": {
-          "cold_seconds": 11.614288439996017,
-          "consumed_output_seconds": 6.895999831613153e-06,
-          "fit_or_training_seconds": 9.301534293001168,
-          "full_operation_seconds": 11.614288439996017,
-          "preparation_seconds": 2.312742576999881
+          "cold_seconds": 3.0369434949971037,
+          "consumed_output_seconds": 0.032423368997115176,
+          "fit_or_training_seconds": 1.113126962001843,
+          "full_operation_seconds": 3.0369434949971037,
+          "inference_seconds": 0.03112979199795518,
+          "preparation_seconds": 1.8602623159968061
         },
         "vendor": "nvidia",
-        "workload_id": "expanded:cross-val-score@dataset=istella",
+        "workload_id": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -5816,20 +5693,27 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "77f0a7840c0a8f50a2522ca677187ae05dcdcaac74b6eba93048540a74d923a5",
+      "output_sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
       "model_state": {
         "missing_state": [
-          "model owner"
+          "reviewed complete typed fitted-state export"
         ],
-        "reason": "Runner exposes no public model owner",
+        "partial_export": {
+          "class": "SparseRandomProjection",
+          "reason": "no public state_dict or save export",
+          "schema": "mojolearn-benchmark-state-v1",
+          "status": "unavailable"
+        },
+        "reason": "Public export is not a reviewed complete fitted-state contract",
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 11.614288439996017,
-        "consumed_output_seconds": 6.895999831613153e-06,
-        "fit_or_training_seconds": 9.301534293001168,
-        "full_operation_seconds": 11.614288439996017,
-        "preparation_seconds": 2.312742576999881
+        "cold_seconds": 3.0369434949971037,
+        "consumed_output_seconds": 0.032423368997115176,
+        "fit_or_training_seconds": 1.113126962001843,
+        "full_operation_seconds": 3.0369434949971037,
+        "inference_seconds": 0.03112979199795518,
+        "preparation_seconds": 1.8602623159968061
       },
       "model_identity_available": false
     },
@@ -5838,49 +5722,46 @@
       "arm": "B",
       "excluded": false,
       "returncode": 0,
-      "process_wall_seconds": 22.739901065826416,
-      "log": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/scored-B.log",
-      "output": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/scored-B.json",
-      "result_sha256": "d283ce929f8cc2ebca25b767d5cb77d1124a1b3649abe24e1e5aed3030933466",
+      "process_wall_seconds": 7.489669561386108,
+      "log": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/scored-B.log",
+      "output": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/scored-B.json",
+      "result_sha256": "0e5ad755c5df7217aaa395e7e522aa94c110f5877efff023a71a5b4e04bb4306",
       "result": {
         "arm": "B",
         "compiler": [
-          "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
-          "498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53be00000000, nodemask=1)\nMojo 1.0.0 (ed45d567)"
+          "498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53be00000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
+          "453 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11d200000000, nodemask=1)\nMojo 1.0.0 (ed45d567)"
         ],
         "configuration": {
           "defines": [],
           "environment": {},
           "runtime": {}
         },
-        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_sha256": "b381dd2daedbe63b8bc30e056fdbe379186397a0569f42f0404c80af6a6adeeb",
         "dataset_split": {
-          "evaluation_rows": 500000,
           "fit": [
             0,
+            1838974
+          ],
+          "query": [
+            1838974,
             2043304
-          ]
+          ],
+          "rule": "Original cut=max(N-N//10,1), X-only archive; no loader Xq; randomized-svd does not use query arrays"
         },
-        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "dataset_version": "tsvd-full-v1; complete regression training population; raw X-only projection",
         "declared_hardware": null,
         "declared_resource_policy": {
-          "policy": "full allocated NVIDIA worker; actual affinity/cgroup and effective pools captured in each worker; arms serial; no inherited diagnostic caps"
+          "policy": "Serial arms on full allocated worker, actual pools/cgroup recorded by the future scored execution"
         },
         "dimensions": {
           "X": [
-            2043304,
+            1838974,
             220
           ],
           "Xq": [
-            500000,
+            204330,
             220
-          ],
-          "y": [
-            2043304
-          ],
-          "yq": [
-            500000
           ]
         },
         "effective_pools": [
@@ -5899,11 +5780,14 @@
           "__record__": true,
           "library": "mojolearn",
           "params": {
-            "cv": 5,
-            "estimator": "LinearRegression",
-            "scoring": "r2"
+            "compute_inverse_components": false,
+            "dense_output": false,
+            "density": "auto",
+            "eps": 0.1,
+            "n_components": 10,
+            "random_state": 7
           },
-          "source": "declared"
+          "source": "get_params"
         },
         "full_dataset_coverage": true,
         "hardware": {
@@ -6124,13 +6008,13 @@
           "cpu_count": 208,
           "machine": "x86_64",
           "native_readback": {
-            "config": "mojolearn.cross_val_score(cv=5, estimator=<mojolearn.linear_model.LinearRegression object at 0x751d3765c440>, scoring='r2')",
+            "config": "mojolearn.SparseRandomProjection(compute_inverse_components=False, dense_output=False, density='auto', eps=0.1, n_components=10, random_state=7)",
             "device": "gpu",
             "input_home": "host",
             "library": "mojolearn",
-            "module_path": "/root/six-lane-full-ab-20261006/packages/B/mojolearn/__init__.py",
+            "module_path": "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/__init__.py",
             "numeric_mode_env": "identical",
-            "numeric_mode_how": "_mojolearn_x_metrics numeric_mode constant",
+            "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
             "numeric_mode_used": "identical",
             "pre_clock_fit": false,
             "vendor_used": "cuda",
@@ -6321,37 +6205,43 @@
           "I.N.NI59"
         ],
         "loaded_artifacts": {
-          "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn.so": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
-          "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn_estimators.so": "e89e1ab1ae07f38d72ce44698fb20339148ec96a9a79cc5ba7fe6551811a78b0",
-          "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn_x_metrics.so": "cdcf6f0e491fa609a340f1559c4b4abbfe9171a27533bca486e6f06da61c285a"
+          "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/identical/_mojolearn.so": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
+          "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/identical/_mojolearn_x_decomp.so": "a7df85ad36de6cb08509dac57d010c1f1cabc5044eac3be9e3f3ea022dbb5dff"
         },
         "missing_timing_scopes": [],
         "mode": "identical",
         "model_state": {
           "missing_state": [
-            "model owner"
+            "reviewed complete typed fitted-state export"
           ],
-          "reason": "Runner exposes no public model owner",
+          "partial_export": {
+            "class": "SparseRandomProjection",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
           "status": "UNAVAILABLE"
         },
-        "output_sha256": "bc55964c37570438ccc6ece588e4f5060476f8ebad01918b393931f2a7fe3740",
+        "output_sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
         "outputs": {
           "completeness": "complete_declared_scope",
           "encoding": "mojolearn-benchmark-state-v1",
           "manifest": [
             {
-              "bytes": 40,
+              "bytes": 16346400,
               "dtype": "<f8",
               "encoding": "C-order raw bytes; dtype endian preserved",
-              "path": "$.scores",
+              "path": "$.pred",
               "shape": [
-                5
+                204330,
+                10
               ]
             }
           ],
           "missing_state": [],
           "scope": "all declared consumed outputs",
-          "sha256": "bc55964c37570438ccc6ece588e4f5060476f8ebad01918b393931f2a7fe3740",
+          "sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
           "status": "CAPTURED"
         },
         "phase": "scored",
@@ -6360,9 +6250,15 @@
             "index": 0,
             "model_state": {
               "missing_state": [
-                "model owner"
+                "reviewed complete typed fitted-state export"
               ],
-              "reason": "Runner exposes no public model owner",
+              "partial_export": {
+                "class": "SparseRandomProjection",
+                "reason": "no public state_dict or save export",
+                "schema": "mojolearn-benchmark-state-v1",
+                "status": "unavailable"
+              },
+              "reason": "Public export is not a reviewed complete fitted-state contract",
               "status": "UNAVAILABLE"
             },
             "outputs": {
@@ -6370,24 +6266,26 @@
               "encoding": "mojolearn-benchmark-state-v1",
               "manifest": [
                 {
-                  "bytes": 40,
+                  "bytes": 16346400,
                   "dtype": "<f8",
                   "encoding": "C-order raw bytes; dtype endian preserved",
-                  "path": "$.scores",
+                  "path": "$.pred",
                   "shape": [
-                    5
+                    204330,
+                    10
                   ]
                 }
               ],
               "missing_state": [],
               "scope": "repeated consumed outputs",
-              "sha256": "bc55964c37570438ccc6ece588e4f5060476f8ebad01918b393931f2a7fe3740",
+              "sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
               "status": "CAPTURED"
             },
             "timings": {
-              "consumed_output_seconds": 1.3525997928809375e-05,
-              "fit_or_training_seconds": 8.07719939800154,
-              "repeated_seconds": 8.077216898993356
+              "consumed_output_seconds": 0.007150704004743602,
+              "fit_or_training_seconds": 0.20526739500201074,
+              "inference_seconds": 0.026877160998992622,
+              "repeated_seconds": 0.23929713600227842
             }
           }
         ],
@@ -6399,15 +6297,15 @@
           "quota_source": "/sys/fs/cgroup/cpu.max",
           "utilization": "not inferred"
         },
-        "retained_output_values": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/scored-B.values.json",
+        "retained_output_values": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/scored-B.values.json",
         "runtime_reach": {
-          "config": "mojolearn.cross_val_score(cv=5, estimator=<mojolearn.linear_model.LinearRegression object at 0x751d3765c440>, scoring='r2')",
+          "config": "mojolearn.SparseRandomProjection(compute_inverse_components=False, dense_output=False, density='auto', eps=0.1, n_components=10, random_state=7)",
           "device": "gpu",
           "input_home": "host",
           "library": "mojolearn",
-          "module_path": "/root/six-lane-full-ab-20261006/packages/B/mojolearn/__init__.py",
+          "module_path": "/root/six-lane-full-ab-20261006/packages-math-repair1/B/mojolearn/__init__.py",
           "numeric_mode_env": "identical",
-          "numeric_mode_how": "_mojolearn_x_metrics numeric_mode constant",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
           "numeric_mode_used": "identical",
           "pre_clock_fit": false,
           "vendor_used": "cuda",
@@ -6520,10 +6418,10 @@
         "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
         "status": "PASS",
         "task_quality": {
-          "gate_source": "tools/bench_board_algos.py:quality(cv): mean_r2 and max_fold_score_diff_vs_sklearn; matching full-opponent gate pending",
+          "gate_source": "tools/bench_board_algos.py:quality/sparse-rp; full-input opponent and complete state qualification pending",
           "metrics": {
             "ours": {
-              "mean_r2": 0.33697172403335574
+              "mean_abs_distortion": 1.8836813746335406
             }
           },
           "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
@@ -6537,16 +6435,17 @@
           "OPENBLAS_NUM_THREADS": "22",
           "VECLIB_MAXIMUM_THREADS": null
         },
-        "timed_boundary": "load original saved full reg inputs + unchanged preparation + original five unshuffled folds + fresh LinearRegression fit and held-out R2 scoring per fold + synchronization + consume all5scores; original saved Xq/yq not used; hashing and independent quality outside whole-operation timer",
+        "timed_boundary": "Preparation/load, existing lane split, construction, operation, required synchronization and consumed outputs; hashes and independent quality outside timer.",
         "timings": {
-          "cold_seconds": 11.450838258002477,
-          "consumed_output_seconds": 8.88700014911592e-06,
-          "fit_or_training_seconds": 9.163040696999815,
-          "full_operation_seconds": 11.450838258002477,
-          "preparation_seconds": 2.2877843850001227
+          "cold_seconds": 3.25702029200329,
+          "consumed_output_seconds": 0.029658457002369687,
+          "fit_or_training_seconds": 1.2828140140045434,
+          "full_operation_seconds": 3.25702029200329,
+          "inference_seconds": 0.030350606997672003,
+          "preparation_seconds": 1.9141960050037596
         },
         "vendor": "nvidia",
-        "workload_id": "expanded:cross-val-score@dataset=istella",
+        "workload_id": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1",
         "master_qualification": {
           "timing": "timed",
           "quality": "not_assessed",
@@ -6556,29 +6455,36 @@
           "complete_state_available": false
         }
       },
-      "output_sha256": "bc55964c37570438ccc6ece588e4f5060476f8ebad01918b393931f2a7fe3740",
+      "output_sha256": "136f74c2a135fd23f5d3e989d505c15d19039ace574f861dcf17a0f8b40012b0",
       "model_state": {
         "missing_state": [
-          "model owner"
+          "reviewed complete typed fitted-state export"
         ],
-        "reason": "Runner exposes no public model owner",
+        "partial_export": {
+          "class": "SparseRandomProjection",
+          "reason": "no public state_dict or save export",
+          "schema": "mojolearn-benchmark-state-v1",
+          "status": "unavailable"
+        },
+        "reason": "Public export is not a reviewed complete fitted-state contract",
         "status": "UNAVAILABLE"
       },
       "timings": {
-        "cold_seconds": 11.450838258002477,
-        "consumed_output_seconds": 8.88700014911592e-06,
-        "fit_or_training_seconds": 9.163040696999815,
-        "full_operation_seconds": 11.450838258002477,
-        "preparation_seconds": 2.2877843850001227
+        "cold_seconds": 3.25702029200329,
+        "consumed_output_seconds": 0.029658457002369687,
+        "fit_or_training_seconds": 1.2828140140045434,
+        "full_operation_seconds": 3.25702029200329,
+        "inference_seconds": 0.030350606997672003,
+        "preparation_seconds": 1.9141960050037596
       },
       "model_identity_available": false
     }
   ],
-  "receipt": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/receipt.json",
+  "receipt": "/root/campaign-results/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/receipt.json",
   "previous_receipt": null,
   "warmup_scope": "separate_process",
   "steady_state_claim": false,
-  "finished": 1791309433.5422788,
+  "finished": 1791309725.5769813,
   "status": "MEASURED_FULL",
   "model_identity_available": false
 }

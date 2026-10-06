@@ -1,0 +1,9 @@
+{
+  "observed_at": "2026-10-06T17:53:29.318765+00:00",
+  "requested_root": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv",
+  "covered_by_existing_recursive_root": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts",
+  "script_change_required": false,
+  "captured_root_exists": false,
+  "policy": "Unknown metric directions, matched-opponent gaps and complete-state identity requirements remain explicit pending; no numerical work",
+  "parent_publisher_commit": "00ae20381"
+}

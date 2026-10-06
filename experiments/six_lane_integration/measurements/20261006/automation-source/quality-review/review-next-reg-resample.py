@@ -33,7 +33,7 @@ for vendor,root in roots:
   if lane in ('pca','ols','kmeans'):continue
   sha=hashlib.sha256(raw).hexdigest()
   if sha in seen:continue
-  seen.add(sha);dataset=wid.split('dataset=')[-1]
+  seen.add(sha);dataset=wid.partition('@dataset=')[2].split('@',1)[0]
   if receipt.get('status')!='MEASURED_FULL':unfinished.append({'vendor':vendor,'workload':wid,'receipt':str(path),'status':receipt.get('status','RUNNING')});continue
   scored={r['arm']:r for r in receipt.get('runs',[]) if r.get('phase')=='scored'}
   row={'vendor':vendor,'workload':wid,'mode':receipt.get('mode'),'lane':lane,'dataset':dataset,'source_sha':receipt.get('source_sha'),'receipt':str(path),'receipt_sha256':sha,'execution_status':receipt['status'],'returncodes':[r.get('returncode') for r in receipt.get('runs',[])],'dimensions':workload.get('dimensions'),'dataset_sha256':workload.get('dataset_sha256'),'promotion_authorized':False}
