@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "id": "F03",
+  "title": "Actual LM bounded resident session versus stateless calls",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/F03/caller.py",
+    "experiments/performance_ideas/apple_fast/lm_task.py",
+    "bindings/_mojolearn_byte_lm.mojo"
+  ],
+  "candidate_defines": [],
+  "baseline_defines": [],
+  "build_argv": [
+    "bash",
+    "bindings/build_byte_lm.sh"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F03",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F03/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "loaded FAST Metal binding",
+    "same fixed training task and optimizer settings",
+    "checkpoint/failed update recovery",
+    "heldout loss no material loss"
+  ],
+  "timing_contract": "Train step through consumed scalar, first step separate from repeated calls; A resident=False B resident=True; no new default",
+  "blocker": null
+}
