@@ -35,7 +35,7 @@ build (`eval`'s body exists only under KALMAN_FAST_EVAL_WS)."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from arima.impl.fast_eval_df import (PRODUCT_DF_ON,product_df_eligible,ProductDfScratch,
-    product_parts_kernel,product_finish_kernel,product_tail_kernel)
+    product_parts_kernel,product_finish_kernel,product_tail_kernel,product_df_hit)
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import inf, isinf
 from std.sys.compile import is_defined
@@ -480,7 +480,7 @@ struct FastEvalWS(Movable):
             self.css_into(ctx, order)
         else:
             fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, 32,
-                             1 if self.n_exog > 0 else 0, bool(self.compensated))
+                             1 if self.n_exog > 0 else 0, Bool(self.compensated))
             comptime if PRODUCT_DF_ON:
                 if self.compensated:
                     ref sc=self.compensated.value()
@@ -489,6 +489,7 @@ struct FastEvalWS(Movable):
                     ctx.enqueue_function[product_finish_kernel](sc.parts,sc.words,self.ws.loglike,
                         self.ws.info_init,self.ws.info_loop,Int32(self.n_obs),Int32(self.eb),
                         grid_dim=(self.eb,1,1),block_dim=(256,1,1))
+                    product_df_hit(0)
 
     def attach_exog(mut self, d_exog: DeviceBuffer[DType.float32], n_exog: Int) raises:
         """The fit's differenced regressors (`nb * n_exog * n_obs` floats),
@@ -565,6 +566,7 @@ struct FastEvalWS(Movable):
                 ctx.enqueue_function[product_tail_kernel](d_f,d_g,d_grad,d_x_pert,d_x,sc.words,
                     self.ws.info_init,self.ws.info_loop,d_bad,Int32(nb),Int32(N),h,scale,
                     grid_dim=(grid,1,1),block_dim=(LBFGS_TPB,1,1))
+                product_df_hit(1)
                 return
         # Shared by single-order and grouped-order fits: both arms retain
         # current main's accepted fused tail, independently of ORDER_BATCH.
