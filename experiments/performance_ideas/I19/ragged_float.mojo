@@ -72,7 +72,15 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
         raise Error("ragged float sort: output capacity below logical length")
     if largest>len(keys) or largest>len(positions) or largest>len(temp_keys) or largest>len(temp_positions) or len(counts)<stable_radix_counts_len(largest) or len(bsum)<stable_radix_bsum_len(largest):
         raise Error("ragged float sort: caller scratch capacity too short")
-    # NEVER RUN — PENDING MEASUREMENT
+    # I19 AMD MI325X scoped WINNER (2026-10-06, source5b467815b): radix/rank
+    # 0.683/0.465/0.356 at total65537/98305/131071,32segments (max2049/3073/4096).
+    # Complete ragged-quantile caller, one same-process warmup/score per arm;
+    # existing binaries and accepted identity evidence reused without revalidation.
+    # Original1M+ totals exceeded the rank control's4096-per-segment domain;
+    # those baseline refusals and large candidate-only receipts remain retained.
+    # This bounded component win does not qualify larger workloads or promotion.
+    # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I19;
+    # raw attempts: amd/live/repairs. Default radix admission remains OFF.
     comptime if not is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
         if largest>4096:
             raise Error("ragged float sort: rank control restricted to bounded small rows")
@@ -81,7 +89,7 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
         var n = offsets[s+1]-base
         if n==0:
             continue
-        # NEVER RUN — PENDING MEASUREMENT
+        # Bounded caller timings above retain this experiment as opt-in.
         comptime if is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
             ctx.enqueue_function[_keys](src.unsafe_ptr(),keys.unsafe_ptr(),positions.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
             # NEVER RUN — PENDING MEASUREMENT
