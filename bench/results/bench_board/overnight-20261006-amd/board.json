@@ -289,6 +289,1850 @@
     "neural/gemm-bf16/gaussian/shape=full"
   ],
   "races": {
+    "algos/adafactor/synthetic/rows=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-compile-fp32"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "7013b25dc50b90ad",
+          "hash_stable": null,
+          "lane": "adafactor",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 7.533973001045524,
+          "median_ms": 7.533973001045524,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 960.0,
+            "peak_host_mb": 2842.8,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 896.0,
+            "warmup_host_mb": 2778.7
+          },
+          "min_ms": 7.533973001045524,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "eps": [
+                null,
+                0.001
+              ],
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 960.0,
+          "peak_host_mb": 2842.8,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+              ],
+              "ours_class": "mojolearn.Adafactor",
+              "params": {
+                "beta2_decay": -0.8,
+                "d": 1.0,
+                "eps": [
+                  null,
+                  0.001
+                ],
+                "lr": 0.001,
+                "maximize": false,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            7.533973001045524
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 41.983385001003626
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "7013b25dc50b90ad",
+          "hash_stable": null,
+          "lane": "adafactor",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 65.2855879998242,
+          "median_ms": 65.2855879998242,
+          "memory": {
+            "children_mb": 864.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 960.0,
+            "peak_host_mb": 2887.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 896.0,
+            "warmup_host_mb": 2823.4
+          },
+          "min_ms": 65.2855879998242,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "eps": [
+                null,
+                0.001
+              ],
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 960.0,
+          "peak_host_mb": 2887.5,
+          "quality": {
+            "rel_fro_vs_torch_eager_fp32": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+              ],
+              "ours_class": "mojolearn.Adafactor",
+              "params": {
+                "beta2_decay": -0.8,
+                "d": 1.0,
+                "eps": [
+                  null,
+                  0.001
+                ],
+                "lr": 0.001,
+                "maximize": false,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            65.2855879998242
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 659.386680001262
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "adafactor",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-eager-fp32,torch-compile-fp32",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "synthetic",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:10:30Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "algos/adafactor/synthetic/rows=full",
+      "infer_cells": [],
+      "lane": "adafactor",
+      "lane_config": {
+        "block": "optim",
+        "datasets": [
+          "synthetic"
+        ],
+        "expansion_lane": "sequence",
+        "kind": "optim",
+        "mismatches": [],
+        "notes": [
+          "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+        ],
+        "ours_class": "mojolearn.Adafactor",
+        "params": {
+          "beta2_decay": -0.8,
+          "d": 1.0,
+          "eps": [
+            null,
+            0.001
+          ],
+          "lr": 0.001,
+          "maximize": false,
+          "weight_decay": 0.0
+        },
+        "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+        "task": "optim",
+        "timed_fit": "10 optimizer steps",
+        "timed_infer": null
+      },
+      "log": "logs/algos.adafactor.synthetic.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "eps": [
+                null,
+                0.001
+              ],
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "eps": [
+                null,
+                0.001
+              ],
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-compile-fp32",
+            "ours": [
+              null,
+              0.001
+            ],
+            "param": "eps",
+            "same": true,
+            "theirs": [
+              null,
+              0.001
+            ]
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          }
+        ],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/adafactor",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "torch-compile-fp32",
+          "torch-eager-fp32"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/adafactor-synthetic.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:10:21Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 9.3
+    },
+    "algos/adagrad/synthetic/rows=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-compile-fp32"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "2077f9cff4ce1884",
+          "hash_stable": null,
+          "lane": "adagrad",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 4.700380999565823,
+          "median_ms": 4.700380999565823,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 960.0,
+            "peak_host_mb": 2831.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 896.0,
+            "warmup_host_mb": 2767.4
+          },
+          "min_ms": 4.700380999565823,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "eps": 1e-10,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 960.0,
+          "peak_host_mb": 2831.4,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+              ],
+              "ours_class": "mojolearn.Adagrad",
+              "params": {
+                "eps": 1e-10,
+                "initial_accumulator_value": 0.0,
+                "lr": 0.001,
+                "lr_decay": 0.0,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            4.700380999565823
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 30.883876001098542
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "592ade904ef00ca1",
+          "hash_stable": null,
+          "lane": "adagrad",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 282.6540019996173,
+          "median_ms": 282.6540019996173,
+          "memory": {
+            "children_mb": 1405.6,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 832.0,
+            "peak_host_mb": 2923.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 768.0,
+            "warmup_host_mb": 2859.6
+          },
+          "min_ms": 282.6540019996173,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "eps": 1e-10,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 832.0,
+          "peak_host_mb": 2923.9,
+          "quality": {
+            "rel_fro_vs_torch_eager_fp32": 1.6032654616772613e-09
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+              ],
+              "ours_class": "mojolearn.Adagrad",
+              "params": {
+                "eps": 1e-10,
+                "initial_accumulator_value": 0.0,
+                "lr": 0.001,
+                "lr_decay": 0.0,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            282.6540019996173
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1614.5050650011399
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "adagrad",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-eager-fp32,torch-compile-fp32",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "synthetic",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:10:00Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "algos/adagrad/synthetic/rows=full",
+      "infer_cells": [],
+      "lane": "adagrad",
+      "lane_config": {
+        "block": "optim",
+        "datasets": [
+          "synthetic"
+        ],
+        "expansion_lane": "sequence",
+        "kind": "optim",
+        "mismatches": [],
+        "notes": [
+          "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+        ],
+        "ours_class": "mojolearn.Adagrad",
+        "params": {
+          "eps": 1e-10,
+          "initial_accumulator_value": 0.0,
+          "lr": 0.001,
+          "lr_decay": 0.0,
+          "weight_decay": 0.0
+        },
+        "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+        "task": "optim",
+        "timed_fit": "10 optimizer steps",
+        "timed_infer": null
+      },
+      "log": "logs/algos.adagrad.synthetic.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "eps": 1e-10,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "eps": 1e-10,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 1e-10,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-10
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          }
+        ],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/adagrad",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "torch-compile-fp32",
+          "torch-eager-fp32"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/adagrad-synthetic.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:09:49Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 10.7
+    },
+    "algos/adam/synthetic/rows=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-compile-fp32"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "7dee07cbd572da8d",
+          "hash_stable": null,
+          "lane": "adam",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 6.511294999654638,
+          "median_ms": 6.511294999654638,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 960.0,
+            "peak_host_mb": 2822.8,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 896.0,
+            "warmup_host_mb": 2758.8
+          },
+          "min_ms": 6.511294999654638,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 960.0,
+          "peak_host_mb": 2822.8,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "training",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager",
+                "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on both sides"
+              ],
+              "ours_class": "mojolearn.Adam or mojolearn.training.Adam",
+              "params": {
+                "betas": [
+                  0.9,
+                  0.999
+                ],
+                "eps": 1e-08,
+                "lr": 0.001,
+                "maximize": false,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            6.511294999654638
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 34.323304000281496
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "70bec277bd4c20c2",
+          "hash_stable": null,
+          "lane": "adam",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 307.96863400064467,
+          "median_ms": 307.96863400064467,
+          "memory": {
+            "children_mb": 1387.8,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 896.0,
+            "peak_host_mb": 2913.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 832.0,
+            "warmup_host_mb": 2849.0
+          },
+          "min_ms": 307.96863400064467,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 896.0,
+          "peak_host_mb": 2913.6,
+          "quality": {
+            "rel_fro_vs_torch_eager_fp32": 5.116406149053304e-08
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "training",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager",
+                "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on both sides"
+              ],
+              "ours_class": "mojolearn.Adam or mojolearn.training.Adam",
+              "params": {
+                "betas": [
+                  0.9,
+                  0.999
+                ],
+                "eps": 1e-08,
+                "lr": 0.001,
+                "maximize": false,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            307.96863400064467
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1580.593434999173
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "adam",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-eager-fp32,torch-compile-fp32",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "synthetic",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:10:51Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "algos/adam/synthetic/rows=full",
+      "infer_cells": [],
+      "lane": "adam",
+      "lane_config": {
+        "block": "optim",
+        "datasets": [
+          "synthetic"
+        ],
+        "expansion_lane": "training",
+        "kind": "optim",
+        "mismatches": [],
+        "notes": [
+          "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager",
+          "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on both sides"
+        ],
+        "ours_class": "mojolearn.Adam or mojolearn.training.Adam",
+        "params": {
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "lr": 0.001,
+          "maximize": false,
+          "weight_decay": 0.0
+        },
+        "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+        "task": "optim",
+        "timed_fit": "10 optimizer steps",
+        "timed_infer": null
+      },
+      "log": "logs/algos.adam.synthetic.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-compile-fp32",
+            "ours": false,
+            "param": "amsgrad",
+            "same": true,
+            "theirs": false
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          }
+        ],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/adam",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "torch-compile-fp32",
+          "torch-eager-fp32"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/adam-synthetic.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:10:40Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 10.7
+    },
+    "algos/adamax/synthetic/rows=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-compile-fp32"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "be370a9565834a99",
+          "hash_stable": null,
+          "lane": "adamax",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 5.692380998880253,
+          "median_ms": 5.692380998880253,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 960.0,
+            "peak_host_mb": 2836.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 896.0,
+            "warmup_host_mb": 2772.0
+          },
+          "min_ms": 5.692380998880253,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 960.0,
+          "peak_host_mb": 2836.1,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+              ],
+              "ours_class": "mojolearn.Adamax",
+              "params": {
+                "betas": [
+                  0.9,
+                  0.999
+                ],
+                "eps": 1e-08,
+                "lr": 0.001,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            5.692380998880253
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 39.73652199965727
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "e6112b259ef49dc6",
+          "hash_stable": null,
+          "lane": "adamax",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 299.1938359991764,
+          "median_ms": 299.1938359991764,
+          "memory": {
+            "children_mb": 1468.1,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 896.0,
+            "peak_host_mb": 2925.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 832.0,
+            "warmup_host_mb": 2861.2
+          },
+          "min_ms": 299.1938359991764,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 896.0,
+          "peak_host_mb": 2925.6,
+          "quality": {
+            "rel_fro_vs_torch_eager_fp32": 6.170472391443959e-09
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+              ],
+              "ours_class": "mojolearn.Adamax",
+              "params": {
+                "betas": [
+                  0.9,
+                  0.999
+                ],
+                "eps": 1e-08,
+                "lr": 0.001,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            299.1938359991764
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1656.0429550008848
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "adamax",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-eager-fp32,torch-compile-fp32",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "synthetic",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:10:10Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "algos/adamax/synthetic/rows=full",
+      "infer_cells": [],
+      "lane": "adamax",
+      "lane_config": {
+        "block": "optim",
+        "datasets": [
+          "synthetic"
+        ],
+        "expansion_lane": "sequence",
+        "kind": "optim",
+        "mismatches": [],
+        "notes": [
+          "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+        ],
+        "ours_class": "mojolearn.Adamax",
+        "params": {
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "lr": 0.001,
+          "weight_decay": 0.0
+        },
+        "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+        "task": "optim",
+        "timed_fit": "10 optimizer steps",
+        "timed_infer": null
+      },
+      "log": "logs/algos.adamax.synthetic.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-compile-fp32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          }
+        ],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/adamax",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "torch-compile-fp32",
+          "torch-eager-fp32"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/adamax-synthetic.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:10:00Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 10.5
+    },
+    "algos/adamw/synthetic/rows=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-compile-fp32"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "51d61832b6c13fea",
+          "hash_stable": null,
+          "lane": "adamw",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 6.855718000224442,
+          "median_ms": 6.855718000224442,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 960.0,
+            "peak_host_mb": 2835.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 896.0,
+            "warmup_host_mb": 2770.9
+          },
+          "min_ms": 6.855718000224442,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.01
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 960.0,
+          "peak_host_mb": 2835.0,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "training",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager",
+                "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on both sides"
+              ],
+              "ours_class": "mojolearn.AdamW or mojolearn.training.AdamW",
+              "params": {
+                "betas": [
+                  0.9,
+                  0.999
+                ],
+                "eps": 1e-08,
+                "lr": 0.001,
+                "maximize": false,
+                "weight_decay": 0.01
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            6.855718000224442
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 34.67658599947754
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "a14bc132079d9576",
+          "hash_stable": null,
+          "lane": "adamw",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 301.47117499836895,
+          "median_ms": 301.47117499836895,
+          "memory": {
+            "children_mb": 1341.1,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 896.0,
+            "peak_host_mb": 2926.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 832.0,
+            "warmup_host_mb": 2862.0
+          },
+          "min_ms": 301.47117499836895,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.01
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 896.0,
+          "peak_host_mb": 2926.5,
+          "quality": {
+            "rel_fro_vs_torch_eager_fp32": 2.2715691035000716e-07
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "training",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager",
+                "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on both sides"
+              ],
+              "ours_class": "mojolearn.AdamW or mojolearn.training.AdamW",
+              "params": {
+                "betas": [
+                  0.9,
+                  0.999
+                ],
+                "eps": 1e-08,
+                "lr": 0.001,
+                "maximize": false,
+                "weight_decay": 0.01
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            301.47117499836895
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1603.9594129997568
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "adamw",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-eager-fp32,torch-compile-fp32",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "synthetic",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:11:02Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "algos/adamw/synthetic/rows=full",
+      "infer_cells": [],
+      "lane": "adamw",
+      "lane_config": {
+        "block": "optim",
+        "datasets": [
+          "synthetic"
+        ],
+        "expansion_lane": "training",
+        "kind": "optim",
+        "mismatches": [],
+        "notes": [
+          "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager",
+          "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on both sides"
+        ],
+        "ours_class": "mojolearn.AdamW or mojolearn.training.AdamW",
+        "params": {
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "lr": 0.001,
+          "maximize": false,
+          "weight_decay": 0.01
+        },
+        "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+        "task": "optim",
+        "timed_fit": "10 optimizer steps",
+        "timed_infer": null
+      },
+      "log": "logs/algos.adamw.synthetic.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.01
+            },
+            "source": "optimizer.defaults"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.01
+            },
+            "source": "optimizer.defaults"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-compile-fp32",
+            "ours": false,
+            "param": "amsgrad",
+            "same": true,
+            "theirs": false
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.01,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.01
+          }
+        ],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/adamw",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "torch-compile-fp32",
+          "torch-eager-fp32"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/adamw-synthetic.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:10:51Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 10.7
+    },
     "algos/cholesky/synthetic/rows=full": {
       "arms": [
         "torch-gpu"
@@ -12792,6 +14636,382 @@
       "stored_now": 4,
       "wall_s": 19.7
     },
+    "algos/nadam/synthetic/rows=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-compile-fp32"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "bf20801fd1afd26a",
+          "hash_stable": null,
+          "lane": "nadam",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 7.001594000030309,
+          "median_ms": 7.001594000030309,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 960.0,
+            "peak_host_mb": 2835.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 896.0,
+            "warmup_host_mb": 2771.0
+          },
+          "min_ms": 7.001594000030309,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 960.0,
+          "peak_host_mb": 2835.0,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+              ],
+              "ours_class": "mojolearn.NAdam",
+              "params": {
+                "betas": [
+                  0.9,
+                  0.999
+                ],
+                "decoupled_weight_decay": false,
+                "eps": 1e-08,
+                "lr": 0.001,
+                "momentum_decay": 0.004,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            7.001594000030309
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 34.137947999624885
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "3567991a8c101ace",
+          "hash_stable": null,
+          "lane": "nadam",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 333.51286799916124,
+          "median_ms": 333.51286799916124,
+          "memory": {
+            "children_mb": 1626.4,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 896.0,
+            "peak_host_mb": 2927.7,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 832.0,
+            "warmup_host_mb": 2863.0
+          },
+          "min_ms": 333.51286799916124,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 896.0,
+          "peak_host_mb": 2927.7,
+          "quality": {
+            "rel_fro_vs_torch_eager_fp32": 1.4640475434154184e-07
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+              ],
+              "ours_class": "mojolearn.NAdam",
+              "params": {
+                "betas": [
+                  0.9,
+                  0.999
+                ],
+                "decoupled_weight_decay": false,
+                "eps": 1e-08,
+                "lr": 0.001,
+                "momentum_decay": 0.004,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            333.51286799916124
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1681.3737219999894
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "nadam",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-eager-fp32,torch-compile-fp32",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "synthetic",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:10:21Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "algos/nadam/synthetic/rows=full",
+      "infer_cells": [],
+      "lane": "nadam",
+      "lane_config": {
+        "block": "optim",
+        "datasets": [
+          "synthetic"
+        ],
+        "expansion_lane": "sequence",
+        "kind": "optim",
+        "mismatches": [],
+        "notes": [
+          "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager"
+        ],
+        "ours_class": "mojolearn.NAdam",
+        "params": {
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "decoupled_weight_decay": false,
+          "eps": 1e-08,
+          "lr": 0.001,
+          "momentum_decay": 0.004,
+          "weight_decay": 0.0
+        },
+        "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+        "task": "optim",
+        "timed_fit": "10 optimizer steps",
+        "timed_infer": null
+      },
+      "log": "logs/algos.nadam.synthetic.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-compile-fp32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          }
+        ],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/nadam",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "torch-compile-fp32",
+          "torch-eager-fp32"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/nadam-synthetic.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:10:10Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 10.7
+    },
     "algos/qr/istella/rows=full": {
       "arms": [
         "torch-gpu"
@@ -18815,6 +21035,369 @@
       "stored_arms": [],
       "stored_now": 4,
       "wall_s": 22.8
+    },
+    "algos/sgd/synthetic/rows=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-compile-fp32"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "0743826898a3d479",
+          "hash_stable": null,
+          "lane": "sgd",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 3.8607790011155885,
+          "median_ms": 3.8607790011155885,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 832.0,
+            "peak_host_mb": 2821.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 768.0,
+            "warmup_host_mb": 2757.3
+          },
+          "min_ms": 3.8607790011155885,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "dampening": 0.0,
+              "learning_rate": 0.001,
+              "momentum": 0.9,
+              "nesterov": false,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 832.0,
+          "peak_host_mb": 2821.4,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "training",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager",
+                "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on both sides"
+              ],
+              "ours_class": "mojolearn.SGD or mojolearn.training.SGD",
+              "params": {
+                "dampening": 0.0,
+                "lr": 0.001,
+                "maximize": false,
+                "momentum": 0.9,
+                "nesterov": false,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            3.8607790011155885
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 20.161038999503944
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "10 optimizer steps",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "algos",
+          "hash": "2d7fcb73adcc2d67",
+          "hash_stable": null,
+          "lane": "sgd",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 299.45343300096283,
+          "median_ms": 299.45343300096283,
+          "memory": {
+            "children_mb": 1335.9,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 832.0,
+            "peak_host_mb": 2921.2,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 768.0,
+            "warmup_host_mb": 2857.0
+          },
+          "min_ms": 299.45343300096283,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "dampening": 0.0,
+              "learning_rate": 0.001,
+              "momentum": 0.9,
+              "nesterov": false,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "peak_gpu_mb": 832.0,
+          "peak_host_mb": 2921.2,
+          "quality": {
+            "rel_fro_vs_torch_eager_fp32": 6.771708022544911e-10
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "optim",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "training",
+              "kind": "optim",
+              "mismatches": [],
+              "notes": [
+                "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager",
+                "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on both sides"
+              ],
+              "ours_class": "mojolearn.SGD or mojolearn.training.SGD",
+              "params": {
+                "dampening": 0.0,
+                "lr": 0.001,
+                "maximize": false,
+                "momentum": 0.9,
+                "nesterov": false,
+                "weight_decay": 0.0
+              },
+              "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+              "task": "optim",
+              "timed_fit": "10 optimizer steps",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            299.45343300096283
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1545.0539369994658
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "sgd",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-eager-fp32,torch-compile-fp32",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "synthetic",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:10:40Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "algos/sgd/synthetic/rows=full",
+      "infer_cells": [],
+      "lane": "sgd",
+      "lane_config": {
+        "block": "optim",
+        "datasets": [
+          "synthetic"
+        ],
+        "expansion_lane": "training",
+        "kind": "optim",
+        "mismatches": [],
+        "notes": [
+          "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager",
+          "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on both sides"
+        ],
+        "ours_class": "mojolearn.SGD or mojolearn.training.SGD",
+        "params": {
+          "dampening": 0.0,
+          "lr": 0.001,
+          "maximize": false,
+          "momentum": 0.9,
+          "nesterov": false,
+          "weight_decay": 0.0
+        },
+        "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+        "task": "optim",
+        "timed_fit": "10 optimizer steps",
+        "timed_infer": null
+      },
+      "log": "logs/algos.sgd.synthetic.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "dampening": 0.0,
+              "learning_rate": 0.001,
+              "momentum": 0.9,
+              "nesterov": false,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "dampening": 0.0,
+              "learning_rate": 0.001,
+              "momentum": 0.9,
+              "nesterov": false,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.0
+            },
+            "source": "optimizer.defaults"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.0,
+            "param": "dampening",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.9,
+            "param": "momentum",
+            "same": true,
+            "theirs": 0.9
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": false,
+            "param": "nesterov",
+            "same": true,
+            "theirs": false
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          }
+        ],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/sgd",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "torch-compile-fp32",
+          "torch-eager-fp32"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/sgd-synthetic.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:10:30Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 10.3
     },
     "algos/svd/istella/rows=full": {
       "arms": [
@@ -24900,5 +27483,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T07:09:49Z"
+  "updated": "2026-10-06T07:11:02Z"
 }

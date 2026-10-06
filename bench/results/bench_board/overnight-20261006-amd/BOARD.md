@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:09:49Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:11:02Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T07:09:49Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 84 planned, 35 done, 11 failed, 0 unsupported, 38 pending. Cells: 91 (REFUSED 9, ok 82).
+Races: 84 planned, 42 done, 11 failed, 0 unsupported, 31 pending. Cells: 105 (REFUSED 9, ok 96).
 
 Inference cells: 84 (UNKNOWN 18, ok 66).
 
@@ -46,6 +46,11 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 
 | family | lane | dataset | metric | ours FAST | ours IDENTICAL | opponents |
 |---|---|---|---|---|---|---|
+| algos | adafactor | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000 |
+| algos | adagrad | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 1.603e-09 |
+| algos | adam | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 5.116e-08 |
+| algos | adamax | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 6.17e-09 |
+| algos | adamw | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 2.272e-07 |
 | algos | cholesky | synthetic | relative_residual | - | - | torch-gpu 1.044e-07 |
 | algos | eigh | synthetic | max_eigenvalue_error | - | - | torch-gpu 1.254e-06 |
 | algos | eigh | synthetic | relative_residual | - | - | torch-gpu 1.269e-06 |
@@ -69,6 +74,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | lu-solve | synthetic | relative_residual | - | - | torch-gpu 4.041e-07 |
 | algos | moe | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.044703; torch-eager-bf16 22862.630675; torch-compile-bf16 22880.029448 |
 | algos | moe | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 2.011e-07; torch-eager-bf16 0.055222; torch-compile-bf16 0.055199 |
+| algos | nadam | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 1.464e-07 |
 | algos | qr | istella | relative_gram_difference | - | - | torch-gpu 0.0001698 |
 | algos | qr | taxi | relative_gram_difference | - | - | torch-gpu 6.794e-07 |
 | algos | randomized-svd | istella | relative_reconstruction_error (lower is better) | - | - | torch-gpu 0.0002359 |
@@ -80,6 +86,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | rnn-reg | synthetic | rmse (lower is better) | - | - | torch-eager-fp32 0.174374; torch-compile-fp32 0.174374; torch-eager-bf16 0.174283; torch-compile-bf16 0.174283 |
 | algos | rnn-reg | taxi-hourly | r2 (higher is better) | - | - | torch-eager-fp32 0.738796; torch-compile-fp32 0.738796; torch-eager-bf16 0.739017; torch-compile-bf16 0.739017 |
 | algos | rnn-reg | taxi-hourly | rmse (lower is better) | - | - | torch-eager-fp32 0.554271; torch-compile-fp32 0.554271; torch-eager-bf16 0.554037; torch-compile-bf16 0.554037 |
+| algos | sgd | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 6.772e-10 |
 | algos | svd | istella | max_rel_singular_value_error | - | - | torch-gpu 2.707e+08 |
 | algos | svd | istella | relative_reconstruction_error_100k_rows | - | - | torch-gpu 0.026534 |
 | algos | svd | taxi | max_rel_singular_value_error | - | - | torch-gpu 4.401e-05 |
@@ -622,6 +629,136 @@ Inference (each arm predicts with its own model from the fit rounds above):
 inference call, torch-gpu: torch (Xq - mean) @ components.T; Xq uploaded before the clock, which ends at the device synchronize
 
 ## Algorithm expansion
+
+### adafactor / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.adafactor.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 7.5 | 7.5..7.5 | 1 | - | - | 2842.8 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 65.3 | 65.3..65.3 | 1 | - | - | 2887.5 | 960.0 | rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'beta2_decay': -0.8, 'd': 1.0, 'eps': [None, 0.001], 'lr': 0.001, 'maximize': False, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| eps | [null, 0.001] | [null, 0.001] |
+| learning_rate | 0.001 | 0.001 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
+
+### adagrad / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.adagrad.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 4.7 | 4.7..4.7 | 1 | - | - | 2831.4 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 282.7 | 282.7..282.7 | 1 | - | - | 2923.9 | 832.0 | rel_fro_vs_torch_eager_fp32=1.603e-09 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'eps': 1e-10, 'initial_accumulator_value': 0.0, 'lr': 0.001, 'lr_decay': 0.0, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| eps | 1e-10 | 1e-10 |
+| learning_rate | 0.001 | 0.001 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
+
+### adam / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.adam.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 6.5 | 6.5..6.5 | 1 | - | - | 2822.8 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 308.0 | 308.0..308.0 | 1 | - | - | 2913.6 | 896.0 | rel_fro_vs_torch_eager_fp32=5.116e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'betas': [0.9, 0.999], 'eps': 1e-08, 'lr': 0.001, 'maximize': False, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| amsgrad | false | false |
+| betas | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
+
+### adamax / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.adamax.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 5.7 | 5.7..5.7 | 1 | - | - | 2836.1 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 299.2 | 299.2..299.2 | 1 | - | - | 2925.6 | 896.0 | rel_fro_vs_torch_eager_fp32=6.17e-09 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'betas': [0.9, 0.999], 'eps': 1e-08, 'lr': 0.001, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| betas | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
+
+### adamw / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.adamw.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 6.9 | 6.9..6.9 | 1 | - | - | 2835.0 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 301.5 | 301.5..301.5 | 1 | - | - | 2926.5 | 896.0 | rel_fro_vs_torch_eager_fp32=2.272e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'betas': [0.9, 0.999], 'eps': 1e-08, 'lr': 0.001, 'maximize': False, 'weight_decay': 0.01}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| amsgrad | false | false |
+| betas | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.01 | 0.01 |
 
 ### cholesky / synthetic (rows full, shape -)
 
@@ -1225,6 +1362,32 @@ inference call, torch-eager-bf16: forward(x) (no autograd)(Xq)
 
 inference call, torch-compile-bf16: forward(x) (no autograd)(Xq)
 
+### nadam / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.nadam.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 7.0 | 7.0..7.0 | 1 | - | - | 2835.0 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 333.5 | 333.5..333.5 | 1 | - | - | 2927.7 | 896.0 | rel_fro_vs_torch_eager_fp32=1.464e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'betas': [0.9, 0.999], 'decoupled_weight_decay': False, 'eps': 1e-08, 'lr': 0.001, 'momentum_decay': 0.004, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| betas | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
+
 ### qr / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
 race: done, driver rc 0, log `logs/algos.qr.istella.rows-full.log`, ran on mojolearn-steward-do-amd
@@ -1539,6 +1702,33 @@ inference call, torch-compile-fp32: predict(Xq)(Xq)
 inference call, torch-eager-bf16: predict(Xq)(Xq)
 
 inference call, torch-compile-bf16: predict(Xq)(Xq)
+
+### sgd / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.sgd.synthetic.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 3.9 | 3.9..3.9 | 1 | - | - | 2821.4 | 832.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 299.5 | 299.5..299.5 | 1 | - | - | 2921.2 | 832.0 | rel_fro_vs_torch_eager_fp32=6.772e-10 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'dampening': 0.0, 'lr': 0.001, 'maximize': False, 'momentum': 0.9, 'nesterov': False, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| dampening | 0.0 | 0.0 |
+| learning_rate | 0.001 | 0.001 |
+| momentum | 0.9 | 0.9 |
+| nesterov | false | false |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
 
 ### svd / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 

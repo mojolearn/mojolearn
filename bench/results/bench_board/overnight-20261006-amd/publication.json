@@ -2,15 +2,15 @@
   "coverage": {
     "cell_statuses": {
       "REFUSED": 9,
-      "ok": 82
+      "ok": 96
     },
-    "cells": 91,
-    "done": 35,
+    "cells": 105,
+    "done": 42,
     "failed": 11,
-    "pending": 38,
+    "pending": 31,
     "planned": 84,
     "race_statuses": {
-      "done": 35,
+      "done": 42,
       "failed": 11
     },
     "unsupported": 0
@@ -18,12 +18,12 @@
   "harness_repairs": [],
   "harness_source_sha": "b0f5242d244ef75cd9ba7d78ca92e10008d75510",
   "policy": "Exact opponent-only source files, hardware and failures retained. No A/B component ratios are derived.",
-  "published_at": 1791270646.10047,
+  "published_at": 1791270706.255931,
   "schema": "mojolearn-opponent-publication/1",
   "source_directory": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/opponents/board",
   "source_sha256": {
-    "board_json": "78abf350ee9e33e7e68c8fc0cec411ea22a9a9a646fd312265c14d772af43dd7",
-    "board_markdown": "2adcdd5f6252d60ed7ca9f1a3d9c841ef0425747664cdd2abed4379ccb3e9cc7"
+    "board_json": "794e93a56955caab872422bda69bedc57f61c66c6b222ebdfe6366bbceb406f2",
+    "board_markdown": "63aa67d6ac9a5b27001e2f7796ae41d48a0b25e2127a8d4f14f95b45bd82d0c1"
   },
-  "source_updated": "2026-10-06T07:09:49Z"
+  "source_updated": "2026-10-06T07:11:02Z"
 }
