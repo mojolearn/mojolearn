@@ -21,13 +21,25 @@
     "MOJOLEARN_RBC_CANON_DEGREE_BUCKETS=1"
   ],
   "baseline_defines": [],
-  "build_argv": [],
+  "build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A07/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ],
   "run_argv": [
     "{python}",
     "{repo}/gemm/experiments/profile_campaign.py",
     "{repo}/experiments/performance_ideas/A07/campaign.json",
     "--evidence",
-    "{output}"
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
   ],
   "validation_paths": [
     "gemm/checks/gemm_step_arms_check.mojo",
@@ -40,8 +52,20 @@
     "same-version NVIDIA/AMD/Apple/host output bits",
     "exact intermediate outputs and poison control",
     "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
-    "Histogram work scheduling must additionally qualify N07; graph qualification alone does not satisfy full forest fit"
+    "Histogram work scheduling must additionally qualify N07; graph qualification alone does not satisfy full forest fit",
+    "Campaign receipt contains explicit baseline and independently compiled candidate arms; do not rebuild for run-only"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
-  "blocker": null
+  "blocker": null,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A07/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ],
+  "build_uses_compile_slot": true
 }
