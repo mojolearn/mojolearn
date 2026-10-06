@@ -2589,14 +2589,14 @@ def _build_cnnclf(lane, arm, D):
     def infer():
         with torch.no_grad():
             out = torch.cat([run(S["fwd"], Xqt[i:i + 4096]).float() for i in range(0, Xqt.shape[0], 4096)])
-        S["pred"] = out.argmax(1).double()
+        S["pred"] = out.argmax(1)
         _torch_sync(torch, dev)
     rec = dict(__library__="torch", seed=p["random_state"], learning_rate=p["learning_rate"],
                momentum=p["momentum"], dampening=p["dampening"], nesterov=p["nesterov"],
                weight_decay=p["weight_decay"], batch_size=p["batch_size"], max_iter=p["max_iter"],
                shuffle=p["shuffle"], kernel_size=p["kernel_size"], pool_size=p["pool_size"],
                conv_channels=list(p["conv_channels"]), optimizer="sgd")
-    return Runner(info, fit, lambda: {"pred": S["pred"].cpu().numpy()}, infer, record=rec)
+    return Runner(info, fit, lambda: {"pred": _torch_metric_array(S["pred"])}, infer, record=rec)
 
 
 def _build_seqmodel(lane, arm, D):
@@ -2692,9 +2692,9 @@ def _build_seqmodel(lane, arm, D):
         with torch.no_grad():                    # in chunks, as ours' predict_chunk does
             out = torch.cat([run(S["fwd"], Xqt[i:i + 4096]).float()
                              for i in range(0, Xqt.shape[0], 4096)])
-        S["pred"] = out.argmax(1).double() if clf else out[:, 0].double()
+        S["pred"] = out.argmax(1) if clf else out[:, 0]
         _torch_sync(torch, dev)
-    return Runner(info, fit, lambda: {"pred": S["pred"].cpu().numpy()}, infer, record=rec)
+    return Runner(info, fit, lambda: {"pred": _torch_metric_array(S["pred"])}, infer, record=rec)
 
 
 # ---- DART -----------------------------------------------------------------
@@ -3268,6 +3268,16 @@ def _torch_device(torch):
     if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
         return "mps"
     return "cpu"
+
+
+def _torch_metric_array(pred):
+    """Export completed predictions as host float64, outside inference timing.
+
+    MPS has no float64 storage. Keep prediction selection in its native device
+    dtype and move to the CPU before the conductor's metric dtype conversion.
+    Training, forward precision and the prediction values are unchanged.
+    """
+    return pred.detach().cpu().double().numpy()
 
 
 def _torch_sync(torch, dev):
@@ -4228,7 +4238,7 @@ def _build_svgp(lane, arm, D):
             S["pred"] = S["m"](Xqt).mean
         _torch_sync(torch, dev)
     rec = dict(hyp, __library__="gpytorch", n_inducing=int(Z0.shape[0]), seed=SEED)
-    return Runner(info, fit, lambda: {"pred": S["pred"].double().cpu().numpy()}, infer, record=rec)
+    return Runner(info, fit, lambda: {"pred": _torch_metric_array(S["pred"])}, infer, record=rec)
 
 
 # ---------------------------------------------------------------------------

@@ -27,6 +27,35 @@ A = _load("bench_board_algos")
 bb = _load("bench_board")
 
 
+@pytest.mark.parametrize("values", [
+    np.array([0, 1, 1], dtype=np.int64),
+    np.array([0.25, -1.5, 3.75], dtype=np.float32),
+])
+def test_torch_metric_export_moves_to_host_before_float64(values):
+    # Model MPS's unsupported dtype, without importing any GPU runtime. This
+    # exercises export on completed classifier and regression predictions.
+    class DevicePrediction:
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return HostPrediction()
+
+        def double(self):
+            raise TypeError("MPS tensors cannot store float64")
+
+    class HostPrediction:
+        def double(self):
+            return self
+
+        def numpy(self):
+            return values.astype(np.float64)
+
+    exported = A._torch_metric_array(DevicePrediction())
+    assert exported.dtype == np.float64
+    np.testing.assert_array_equal(exported, values)
+
+
 def test_kernel_pca_quality_without_opponents():
     X = np.array([[0., 0.], [1., 0.], [0., 2.], [2., 3.]])
     K = np.exp(-((X[:, None] - X[None, :]) ** 2).sum(2) / X.shape[1])
