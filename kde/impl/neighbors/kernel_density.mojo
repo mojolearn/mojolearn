@@ -110,6 +110,7 @@ from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
+from kde.impl.chunk_workspace import KdeChunkWorkspace
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -3786,6 +3787,67 @@ def kde_chunk_lse_reduce_rowmax_kernel(
         if mc != neg_inf:
             s = ftz(identical_mul_add(part_sum.unsafe_load(base + b), ftz(identical_exp(ftz(mc - mx))), s))
     lse.unsafe_store(i, ftz(identical_log(s) + mx))
+
+
+def kde_score_samples_chunk_lse_reused(
+    ctx: DeviceContext,mut train: DeviceBuffer[DType.float32],mut query: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],has_weights: Bool,sum_weights: Float32,
+    n_train: Int,n_query: Int,n_features: Int,bandwidth: Float32,kernel: Int,metric: Int,
+    mut scores: DeviceBuffer[DType.float32],mut pool: KdeChunkWorkspace,key: UInt64,
+    elem_tpb: Int=KDE_ELEM_TPB,lse_tpb: Int=KDE_LSE_TPB,q_tpb: Int=KDE_TILED_Q_TPB,
+) raises -> Bool:
+    # Released-GIL scoring calls can share a resident fit. Only one owns
+    # its scratch; overlapping callers use the unchanged temporary path.
+    if not pool.try_lease():return False
+    var admitted=False
+    try:
+        admitted=_kde_score_samples_chunk_lse_reused_locked(ctx,train,query,weights,has_weights,sum_weights,
+            n_train,n_query,n_features,bandwidth,kernel,metric,scores,pool,key,elem_tpb,lse_tpb,q_tpb)
+    except e:
+        pool.release_lease()
+        raise e
+    pool.release_lease()
+    return admitted
+
+
+def _kde_score_samples_chunk_lse_reused_locked(
+    ctx: DeviceContext,mut train: DeviceBuffer[DType.float32],mut query: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],has_weights: Bool,sum_weights: Float32,
+    n_train: Int,n_query: Int,n_features: Int,bandwidth: Float32,kernel: Int,metric: Int,
+    mut scores: DeviceBuffer[DType.float32],mut pool: KdeChunkWorkspace,key: UInt64,
+    elem_tpb: Int=KDE_ELEM_TPB,lse_tpb: Int=KDE_LSE_TPB,q_tpb: Int=KDE_TILED_Q_TPB,
+) raises -> Bool:
+    """Same production kernels/fold with bounded caller-owned partial planes.
+
+    False admits the unchanged temporary-buffer path for an oversized call;
+    a source-key mismatch is a refusal. Log weights and partials are always
+    overwritten. This preserves the original completion contract: one drain
+    after the score kernels, with growth/invalidation frees charged separately.
+    """
+    if not kde_chunk_lse_metric_applies(metric):return False
+    if pool.source_key==UInt64(0):pool.bind(ctx,key,n_train,n_features)
+    if pool.n_train!=n_train or pool.n_features!=n_features:raise Error("KDE retained fit descriptor differs")
+    if elem_tpb<1 or lse_tpb<1 or q_tpb<1 or q_tpb>KDE_TILED_TILE_FLOATS:raise Error("invalid KDE retained launch geometry")
+    if len(train)<n_train*n_features or len(query)<n_query*n_features or len(scores)<n_query or (has_weights and len(weights)<n_train):raise Error("KDE retained caller buffers too small")
+    var chunk_rows=kde_chunk_rows_for(n_train)
+    var n_chunks=(n_train+chunk_rows-1)//chunk_rows
+    if not pool.prepare(ctx,key,n_query,n_chunks,has_weights):return False
+    pool.begin()
+    ref sc=pool.scratch.value()
+    if has_weights:
+        ctx.enqueue_function[log_weights_kernel](sc.logw.unsafe_ptr(),weights.unsafe_ptr(),Int32(n_train),
+            grid_dim=((n_train+elem_tpb-1)//elem_tpb,1,1),block_dim=(elem_tpb,1,1))
+    ctx.enqueue_function[kde_chunk_lse_kernel](sc.part.unsafe_ptr(),sc.psum.unsafe_ptr(),query.unsafe_ptr(),train.unsafe_ptr(),
+        sc.logw.unsafe_ptr(),Int32(n_query),Int32(n_train),Int32(n_features),Int32(n_chunks),Int32(chunk_rows),
+        Int32(1 if has_weights else 0),bandwidth,Int32(kernel),Int32(metric),
+        grid_dim=((n_query+q_tpb-1)//q_tpb,n_chunks,1),block_dim=(q_tpb,1,1))
+    ctx.enqueue_function[kde_chunk_lse_reduce_kernel](sc.lse.unsafe_ptr(),sc.part.unsafe_ptr(),sc.psum.unsafe_ptr(),Int32(n_query),Int32(n_chunks),
+        grid_dim=((n_query+lse_tpb-1)//lse_tpb,1,1),block_dim=(lse_tpb,1,1))
+    var log_sw=ftz(identical_log(sum_weights));var norm=log_kernel_norm(kernel,bandwidth,n_features)
+    ctx.enqueue_function[normalize_scores_kernel](scores.unsafe_ptr(),sc.lse.unsafe_ptr(),Int32(n_query),log_sw,norm,
+        grid_dim=((n_query+elem_tpb-1)//elem_tpb,1,1),block_dim=(elem_tpb,1,1))
+    pool.complete(ctx)
+    return True
 
 
 def kde_score_samples_chunk_lse_identical(
