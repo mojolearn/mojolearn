@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T06:53:59Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:06:36Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T06:53:59Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 0 done, 0 failed, 0 unsupported, 113 pending. Cells: 0 (none).
+Races: 113 planned, 3 done, 0 failed, 0 unsupported, 110 pending. Cells: 5 (ok 5).
 
 ## Quality at a glance
 
@@ -44,6 +44,89 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 
 | family | lane | dataset | metric | ours FAST | ours IDENTICAL | opponents |
 |---|---|---|---|---|---|---|
+| algos | adagrad | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000 |
+| algos | adamax | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 6.395e-09 |
+| algos | als | taxi-zones | recall_at_10 (higher is better) | - | - | implicit-gpu 0.076266 |
+
+## Algorithm expansion
+
+### adagrad / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.adagrad.synthetic.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 14.9 | 14.9..14.9 | 1 | - | - | 968.5 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 115.6 | 115.6..115.6 | 1 | - | - | 1302.1 | 832.0 | rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'eps': 1e-10, 'initial_accumulator_value': 0.0, 'lr': 0.001, 'lr_decay': 0.0, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| eps | 1e-10 | 1e-10 |
+| learning_rate | 0.001 | 0.001 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
+
+### adamax / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.adamax.synthetic.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 20.2 | 20.2..20.2 | 1 | - | - | 981.9 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 146.9 | 146.9..146.9 | 1 | - | - | 1445.6 | 896.0 | rel_fro_vs_torch_eager_fp32=6.395e-09 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'betas': [0.9, 0.999], 'eps': 1e-08, 'lr': 0.001, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| betas | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
+
+### als / taxi-zones (rows full, shape X 129352x261; Xq 14373x261)
+
+race: done, driver rc 0, log `logs/algos.als.taxi-zones.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| implicit-gpu | implicit | gpu | opponent | 879.9 | 879.9..879.9 | 1 | - | - | 649.8 | 514.0 | recall_at_10=0.076266 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, implicit-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'alpha': 1.0, 'calculate_training_loss': False, 'cg_steps': 3, 'factors': 64, 'iterations': 15, 'random_state': 7, 'regularization': 0.01, 'use_cg': False}. Rows: None. Timed: None.
+
+mismatch: implicit-gpu has only the conjugate-gradient solver (use_cg ignored there); ours and implicit-cpu solve each least-squares step exactly (use_cg=False)
+
+mismatch: each library draws its own initial factors from random_state=7
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `implicit-gpu`, seed 7): MATCHED
+
+| parameter | implicit-gpu |
+|---|---|
+| library (source) | implicit (declared) |
+| alpha | 1.0 |
+| n_estimators | 15 |
+| seed | 7 |
 
 ## Not covered by this board
 
