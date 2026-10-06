@@ -34,6 +34,8 @@ FAST on Apple only; nothing here is launched or instantiated in any other
 build (`eval`'s body exists only under KALMAN_FAST_EVAL_WS)."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from arima.impl.fast_eval_df import (PRODUCT_DF_ON,product_df_eligible,ProductDfScratch,
+    product_parts_kernel,product_finish_kernel,product_tail_kernel)
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import inf, isinf
 from std.sys.compile import is_defined
@@ -307,6 +309,7 @@ struct FastEvalWS(Movable):
     var p_ext: ARIMAParams
     var t_params: ARIMAParams
     var ws: KalmanWorkspace
+    var compensated: Optional[ProductDfScratch]
     var css: Bool
     """ARIMA_FAST_CSS_SEARCH: the evaluation is the conditional sum of
     squares (`css_ll_kernel`) on `y_ext` (the `nb` differenced series, NOT
@@ -353,6 +356,10 @@ struct FastEvalWS(Movable):
         self.p_ext = p_ext^
         self.t_params = t_params^
         self.ws = ws^
+        self.compensated = Optional[ProductDfScratch]()
+        comptime if PRODUCT_DF_ON:
+            if product_df_eligible(order,n_obs):
+                self.compensated = ProductDfScratch(ctx,eb,n_obs)
         self.css = False
         self.css_mask = ctx.enqueue_create_buffer[DType.int32](1)
         self.has_css_mask = False
@@ -398,6 +405,10 @@ struct FastEvalWS(Movable):
         self.p_ext = p_ext^
         self.t_params = t_params^
         self.ws = ws^
+        self.compensated = Optional[ProductDfScratch]()
+        comptime if PRODUCT_DF_ON:
+            if product_df_eligible(order,n_obs):
+                self.compensated = ProductDfScratch(ctx,eb,n_obs)
         self.css = False
         self.css_mask = ctx.enqueue_create_buffer[DType.int32](1)
         self.has_css_mask = False
@@ -434,6 +445,7 @@ struct FastEvalWS(Movable):
         self.p_ext = p_ext^
         self.t_params = t_params^
         self.ws = ws^
+        self.compensated = Optional[ProductDfScratch]()
         self.css = True
         self.css_mask = ctx.enqueue_create_buffer[DType.int32](1)
         self.has_css_mask = False
@@ -468,7 +480,15 @@ struct FastEvalWS(Movable):
             self.css_into(ctx, order)
         else:
             fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, 32,
-                             1 if self.n_exog > 0 else 0)
+                             1 if self.n_exog > 0 else 0, bool(self.compensated))
+            comptime if PRODUCT_DF_ON:
+                if self.compensated:
+                    ref sc=self.compensated.value()
+                    ctx.enqueue_function[product_parts_kernel](self.ws.vs,self.ws.Fs,sc.parts,
+                        Int32(self.n_obs),Int32(self.eb),grid_dim=(self.eb*((self.n_obs+255)//256),1,1),block_dim=(256,1,1))
+                    ctx.enqueue_function[product_finish_kernel](sc.parts,sc.words,self.ws.loglike,
+                        self.ws.info_init,self.ws.info_loop,Int32(self.n_obs),Int32(self.eb),
+                        grid_dim=(self.eb,1,1),block_dim=(256,1,1))
 
     def attach_exog(mut self, d_exog: DeviceBuffer[DType.float32], n_exog: Int) raises:
         """The fit's differenced regressors (`nb * n_exog * n_obs` floats),
@@ -539,6 +559,13 @@ struct FastEvalWS(Movable):
         var N = self.N
         var nb_x = nb * N
         var grid = (nb + LBFGS_TPB - 1) // LBFGS_TPB
+        comptime if PRODUCT_DF_ON:
+            if self.compensated:
+                ref sc=self.compensated.value()
+                ctx.enqueue_function[product_tail_kernel](d_f,d_g,d_grad,d_x_pert,d_x,sc.words,
+                    self.ws.info_init,self.ws.info_loop,d_bad,Int32(nb),Int32(N),h,scale,
+                    grid_dim=(grid,1,1),block_dim=(LBFGS_TPB,1,1))
+                return
         # Shared by single-order and grouped-order fits: both arms retain
         # current main's accepted fused tail, independently of ORDER_BATCH.
         comptime if ARIMA_FUSED_EVAL_TAIL:

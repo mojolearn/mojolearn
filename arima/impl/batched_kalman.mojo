@@ -1286,6 +1286,7 @@ def fast_kalman_into(
     mut ws: KalmanWorkspace,
     kalman_tpb: Int = KALMAN_TPB,
     has_exog: Int = 0,
+    capture_stages: Bool = False,
 ) raises:
     """lane/apple-fast-tsa (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`, FAST on
     Apple): `batched_kalman_filter_x`'s launch sequence into a CALLER-OWNED
@@ -1303,10 +1304,13 @@ def fast_kalman_into(
     fast_kalman_init_into(ctx, params, order, batch_size, ws)
     var kl_done = False
     comptime if KALMAN_LL_ONLY:
-        _launch_loop_ll_only(
-            ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb, has_exog
-        )
-        kl_done = True
+        # F16 actual-stage compensated tail needs the production innovations
+        # and variances. False keeps the original LL_ONLY path unchanged.
+        if not capture_stages:
+            _launch_loop_ll_only(
+                ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb, has_exog
+            )
+            kl_done = True
     if not kl_done:
         var grid = _grid(batch_size, kalman_tpb)
         var fast_rd = False
