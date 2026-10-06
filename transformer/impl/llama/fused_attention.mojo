@@ -1392,8 +1392,18 @@ of the trial tree (the sabotage copies stay trial-only, like
 # and kept_cells0. Raw candidate/base AMD1.002/1.003 and NVIDIA0.993/1.005
 # at length1024/1536, heads12/kv_heads4/hd64 are same-route controls, not a
 # retained-vs-recomputed result. One same-process warmup/score; identity reused.
-# Fix the measurement selector before judging this toggle; defaults unchanged.
+# This excluded selector was repaired by source47ff63bb below; defaults unchanged.
 # Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurement receipts.
+# Corrected I07 source47ff63bb (2026-10-06): retained/recompute scoped WIN
+# on MI325X0.560/0.586 and L40S0.666/0.665, length1024/1536, B1,heads12,kv4,hd64.
+# AMD1.623/2.538 vs2.897/4.330ms; NVIDIA1.031/2.183 vs1.548/3.280ms.
+# Both vendors recorded retained12,582,912/28,311,552 exp cells versus0,
+# with actual retained/recompute dispatch words6341638/50182. One same-process
+# warmup and score per arm; accepted identity evidence reused, no retest.
+# Generated forward/backward component scope; full application and memory
+# tradeoff qualification remain required. Preserve defaults and old exclusions.
+# Evidence: overnight-ab-20261006/amd/normalized-measurements.json and
+# overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json, I07.
 comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
 comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
 comptime ATTN_V1_ALIAS_Y_ESTASH = (
