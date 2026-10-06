@@ -75,7 +75,11 @@ comptime TABLE_BYTES = 256 * 1024 * 1024
 comptime SHAP_TREE_TAB = SHAP_TABLE and not is_defined["MOJOLEARN_SHAP_TREE_TAB_OFF"]()
 # Bounded adjacent rows in one thread reuse the same tree metadata; no new
 # pipeline/state overlap or attribution fold. Full SHAP caller decides speed.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# F13 SHAP M3 2026-10-06 MEASURED; keep OFF. Actual x_trees public binding,
+# depth3/c2,depth6/c3,depth9/c4skew; cold B/A1.0682/1.1598/1.7360,
+# repeat1.0757/1.4591/1.6713. All quality equal, paired reach2 each; one warmup
+# plus one score. Regression. ab-20261006/repairs-shap-3e19f734e/F13/shap.
+# Original wrong-binding failure retained; affected artifacts built fe1864e2c.
 comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
 struct ShapPairAudit(Defaultable, Movable):
     var calls: Int

@@ -56,7 +56,9 @@ def finite_key(value: Float32) -> UInt32:
 #: in shared memory once (when `features <= FOREST_SHARED_ROW_CAPACITY`) and
 #: every lane's feature reads come from that tile. The values compared are
 #: the same words in either case. Both are default off until the pod A/B.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# F13 M3 2026-10-06 MEASURED shared rows, depths4/11/9skew:
+# cold B/A0.9331/0.9938/0.9510, repeat1.1091/0.9332/0.9786; quality equal.
+# One warmup+score, mixed; FAST opt-in remains OFF. ab-20261006/repairs-54c1f35a5/F13.
 comptime FOREST_SHARED_ROWS = is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
 comptime FOREST_SHARED_ROW_CAPACITY = 256
 
@@ -92,7 +94,10 @@ comptime FOREST_ROW_THREADS_SABOTAGE = is_defined["MOJOLEARN_FOREST_ROW_THREADS_
 #: the comparison arm. The old opt-in `MOJOLEARN_FOREST_PACKED_NODES` is
 #: accepted and changes nothing. The layout is a device-side cache of the
 #: same nodes; the archive arrays, the comparison and the fold are the same.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# F13 packed-layout M3 2026-10-06 MEASURED on same cases: cold B/A
+# 1.2171/1.1355/1.2153, repeat0.9942/0.9843/0.9526, refit1.0205/1.0163/1.0359.
+# Quality/output survival equal; one warmup+score. Mixed/cold regression:
+# no new promotion; existing cross-mode layout default retained, OFF escape above.
 comptime FOREST_PACKED_NODES = not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]()
 
 
