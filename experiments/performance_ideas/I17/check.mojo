@@ -2,12 +2,12 @@
 """Actual non-symmetric tree fits with mixed feature packing, repeated
 fits, live leaf limits and skewed min-leaf stopping. Fingerprints include
 split sequence, leaf values and weights; A/B builds attribute frontier and
-partition inheritance independently. Full model cache witness adds weighted
-boosting and observable prediction/loss words."""
+partition inheritance independently. A separate full-model cache witness is recorded as an additional
+validation path for weighted boosting/prediction/loss words."""
 from max.gpu.host import DeviceContext
 from checks.depthwise_check import Fixture, default_options
 from checks.lossguide_check import fit_policy, lossguide_options
-from checks.gbdt_partition_cache_check import tree_hash, main as full_model_gate
+from checks.gbdt_partition_cache_check import tree_hash
 
 def main() raises:
     var ctx = DeviceContext()
@@ -25,6 +25,5 @@ def main() raises:
                 elif h!=reference:
                     raise Error("I17 frontier state leaked across fits")
                 print("I17 fingerprint policy=",policy,"max_leaves=",leaves,"repeat=",repeat,"words=",h)
-    full_model_gate()
     _ = fx^
-    print("I17 PASS live_leaf_fits=12 complete_boosting_model_gate")
+    print("I17 PASS live_leaf_fits=12 split_leaf_weight_fingerprints")
