@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:49:21Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:49:32Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T07:49:21Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 55 done, 2 failed, 0 unsupported, 56 pending. Cells: 130 (REFUSED 2, ok 128).
+Races: 113 planned, 56 done, 2 failed, 0 unsupported, 55 pending. Cells: 131 (REFUSED 2, ok 129).
 
 Inference cells: 106 (REFUSED 2, ok 104).
 
@@ -115,6 +115,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | qn-reg | istella | r2 (higher is better) | - | - | cuml-gpu 0.327567 |
 | algos | qn-reg | istella | rmse (lower is better) | - | - | cuml-gpu 0.684991 |
 | algos | qr | istella | relative_gram_difference | - | - | torch-gpu 3.787e-07; cupy-gpu 3.787e-07 |
+| algos | randomized-svd | istella | relative_reconstruction_error (lower is better) | - | - | torch-gpu 0.0002359 |
 
 ## Inference at a glance
 
@@ -2154,6 +2155,31 @@ Inference (each arm predicts with its own model from the fit rounds above):
 | cuml-gpu | Xq | - | 282.0 | 282.0..282.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, cuml-gpu: transform(Xq)(Xq)
+
+### randomized-svd / istella (rows full, shape X 900000x220; Xq 100000x220)
+
+race: done, driver rc 0, log `logs/algos.randomized-svd.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 65.7 | 65.7..65.7 | 1 | - | - | 1637.5 | 1012.2 | relative_reconstruction_error=0.0002359 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'n_components': 8, 'n_iter': 4, 'n_oversamples': 10, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: torch-gpu is torch.svd_lowrank(q=18, niter=4), its randomized range finder
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | torch-gpu |
+|---|---|
+| library (source) | torch (declared) |
+| n_components | 8 |
+| n_iter | 4 |
+| seed | 7 |
 
 ## Not covered by this board
 

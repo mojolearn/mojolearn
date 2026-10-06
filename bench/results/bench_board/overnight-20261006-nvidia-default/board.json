@@ -31418,8 +31418,210 @@
       "stored_arms": [],
       "stored_now": 1,
       "wall_s": 26.7
+    },
+    "algos/randomized-svd/istella/rows=full": {
+      "arms": [
+        "torch-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "randomized SVD",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "bb006034d9e9b62c",
+          "hash_stable": null,
+          "lane": "randomized-svd",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 65.66912308335304,
+          "median_ms": 65.66912308335304,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 1012.2,
+            "peak_host_mb": 1637.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 950.2,
+            "warmup_host_mb": 1628.2
+          },
+          "min_ms": 65.66912308335304,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "n_components": 8,
+              "n_iter": 4,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 1012.2,
+          "peak_host_mb": 1637.5,
+          "quality": {
+            "relative_reconstruction_error": 0.00023594584429967625
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tsvd",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "decomp",
+              "kind": "linalg",
+              "mismatches": [
+                "torch-gpu is torch.svd_lowrank(q=18, niter=4), its randomized range finder"
+              ],
+              "notes": [],
+              "ours_class": "mojolearn.randomized_svd or mojolearn.linalg.randomized_svd",
+              "params": {
+                "n_components": 8,
+                "n_iter": 4,
+                "n_oversamples": 10,
+                "random_state": 7
+              },
+              "quality": "relative rank-8 reconstruction error",
+              "task": "rsvd",
+              "timed_fit": "randomized SVD",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 900000x220; Xq 100000x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            65.66912308335304
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 179.0280845016241
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "randomized-svd",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:49:32Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/randomized-svd/istella/rows=full",
+      "infer_cells": [],
+      "lane": "randomized-svd",
+      "lane_config": {
+        "block": "tsvd",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "decomp",
+        "kind": "linalg",
+        "mismatches": [
+          "torch-gpu is torch.svd_lowrank(q=18, niter=4), its randomized range finder"
+        ],
+        "notes": [],
+        "ours_class": "mojolearn.randomized_svd or mojolearn.linalg.randomized_svd",
+        "params": {
+          "n_components": 8,
+          "n_iter": 4,
+          "n_oversamples": 10,
+          "random_state": 7
+        },
+        "quality": "relative rank-8 reconstruction error",
+        "task": "rsvd",
+        "timed_fit": "randomized SVD",
+        "timed_infer": null
+      },
+      "log": "logs/algos.randomized-svd.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "n_components": 8,
+              "n_iter": 4,
+              "seed": 7
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/randomized-svd",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/randomized-svd-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:49:21Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 11.6
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T07:49:21Z"
+  "updated": "2026-10-06T07:49:32Z"
 }
