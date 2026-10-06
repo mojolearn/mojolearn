@@ -15,6 +15,24 @@ def effective_environment(ident,env):
 def queue_install_command():
  tmp='/root/overnight-nvidia/repair-queue.incoming-'+str(os.getpid())+'-'+str(time.time_ns())
  return 'cat > '+tmp+' && mv '+tmp+' /root/overnight-nvidia/repair-queue.json'
+def route_retired(route):
+ p=E/(route+'-capture/manager-status.json')
+ return p.exists() and json.loads(p.read_text()).get('status')=='TERMINATED_VERIFIED'
+def publish_queues():
+ errors={}
+ for route in ['specific','default']:
+  try:
+   # Retained captures remain usable after their cloud resource retires.
+   normalize(route)
+   if route_retired(route):continue
+   queuefile=E/(route+'-repair-queue.json')
+   if queuefile.exists():
+    cfg=json.loads((E/(route+'-owner/config.json')).read_text());cmd(['ssh',*cfg['ssh'],queue_install_command()],input=queuefile.read_bytes())
+  except Exception as error:
+   errors[route]=repr(error)
+   (E/(route+'-publication-error.log')).write_text(traceback.format_exc())
+   notify('publication-'+route+'-'+type(error).__name__,'NVIDIA '+route+' queue publication failed; other routes continue. Inspect '+str(E/(route+'-publication-error.log')))
+ return errors
 def cases(id,source_sha=""):
  if id=="I06" and source_sha.startswith("e80a1d0a"):
   return [dict(AB_LENGTH=str(l),AB_HEADS="8",AB_KV_HEADS="4") for l in [1024,1536]]
@@ -110,7 +128,9 @@ print(json.dumps(rows))
    name=meta.get('name',meta.get('job',pathlib.Path(meta['_binary_path']).name));ident=meta.get('id',name.split('-')[0]);arm=meta.get('arm',name.split('-',1)[1] if '-' in name else 'paired')
    ids=['I03','I05','N03','N05'] if name=='paired' else [ident]
    for ident in ids:
-    route='specific' if ident.startswith('N') else 'default';cfg=json.loads((E/(route+'-owner/config.json')).read_text());ssh=['ssh',*cfg['ssh']]
+    route='specific' if ident.startswith('N') else 'default'
+    if route_retired(route):continue
+    cfg=json.loads((E/(route+'-owner/config.json')).read_text());ssh=['ssh',*cfg['ssh']]
     job=pathlib.Path(meta['_binary_path']).name+'-'+meta['source_sha'][:10];queuefile=E/(route+'-repair-queue.json');queue=json.loads(queuefile.read_text()) if queuefile.exists() else [];new=[]
     for i,env in enumerate(cases(ident,meta['source_sha'])):
      if name=='paired':env=dict(env,AB_KIND=str({'I05':0,'N03':1,'I03':2,'N05':3}[ident]))
@@ -128,12 +148,9 @@ print(json.dumps(rows))
     cmd([*ssh,queue_install_command()],input=queuefile.read_bytes());staged.extend(x['key'] for x in new)
     # Release staging hold only after actual queued work has been delivered.
     subprocess.run(['python3','/Users/andrewhendel/mojolearn-wt/nvidia-overnight-20261006/tools/runpod_usage_lease.py','release-hold',str(E/(route+'-owner/config.json'))],capture_output=True,timeout=90)
-  for route in ['specific','default']:
-   normalize(route)
-   queuefile=E/(route+'-repair-queue.json')
-   if queuefile.exists():
-    cfg=json.loads((E/(route+'-owner/config.json')).read_text());cmd(['ssh',*cfg['ssh'],queue_install_command()],input=queuefile.read_bytes())
-  atom(E/'stream-status.json',dict(status='WATCHING',pid=os.getpid(),time=time.time(),discovered=len(metas),newly_staged=staged))
+  route_errors=publish_queues()
+  atom(E/'stream-status.json',dict(status='WATCHING_WITH_ROUTE_ERRORS' if route_errors else 'WATCHING',pid=os.getpid(),time=time.time(),discovered=len(metas),newly_staged=staged,route_errors=route_errors))
  except Exception as e:
+  route_errors=publish_queues()
   (E/'stream-error.log').write_text(traceback.format_exc());atom(E/'stream-status.json',dict(status='ERROR',pid=os.getpid(),time=time.time(),error=repr(e)));notify('stream-error-'+type(e).__name__,'NVIDIA ready-artifact stager failed; inspect '+str(E/'stream-error.log')+' and GPU idle deadlines. Repair actual infrastructure only.')
  time.sleep(30)
