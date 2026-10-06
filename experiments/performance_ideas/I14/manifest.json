@@ -11,13 +11,21 @@
   ],
   "status": "source_ready",
   "implementation_paths": [
-    "experiments/performance_ideas/I14/check.mojo"
+    "experiments/performance_ideas/I14/check.mojo",
+    "experiments/performance_ideas/I14/hdbscan_stages.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_IDN_DBSCAN_CC_CHUNK16=1"
   ],
   "baseline_defines": [
-    "MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1"
+    "MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1",
+    "MOJOLEARN_IDN_HDB_ONE_SYNC_OFF=1",
+    "MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF=1",
+    "MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF=1",
+    "MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF=1",
+    "MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF=1",
+    "MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF=1",
+    "MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF=1"
   ],
   "build_argv": [
     "mojo",
@@ -57,6 +65,20 @@
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
     "-D",
     "MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1",
+    "-D",
+    "MOJOLEARN_IDN_HDB_ONE_SYNC_OFF=1",
+    "-D",
+    "MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF=1",
+    "-D",
+    "MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF=1",
+    "-D",
+    "MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF=1",
+    "-D",
+    "MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF=1",
+    "-D",
+    "MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF=1",
+    "-D",
+    "MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF=1",
     "experiments/performance_ideas/I14/check.mojo",
     "-o",
     "{output}"

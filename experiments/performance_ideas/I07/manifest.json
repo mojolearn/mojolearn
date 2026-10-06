@@ -11,7 +11,8 @@
   ],
   "status": "source_ready",
   "implementation_paths": [
-    "experiments/performance_ideas/I07/check.mojo"
+    "experiments/performance_ideas/I07/check.mojo",
+    "experiments/performance_ideas/I07/state_cost.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_ATTN_ARM_TRIAL=1"

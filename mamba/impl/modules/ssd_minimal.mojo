@@ -677,7 +677,35 @@ comptime M2_CS_PT = 8
 comptime M2_CS_IC = 32
 
 
-def m2_ydiag_tile_kernel(
+comptime M2_RETAIN_GL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_M2_RETAIN_GL"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not SSD_ANY_SABOTAGE
+)
+comptime M2_RETAIN_GL_MAX_CELLS = 1<<22
+
+def m2_retained_gl_kernel(retained: MutPointer[Float32,MutAnyOrigin],
+    cb_g: MutPointer[Float32,MutAnyOrigin],seg_l: MutPointer[Float32,MutAnyOrigin],
+    b_in: Int32,t_in: Int32,nh_in: Int32,nc_in: Int32,q_in: Int32):
+    var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    var qv = Int(q_in)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    if cell>=Int(b_in)*nc*nh*qv*qv:
+        return
+    var j = cell%qv
+    var i = (cell//qv)%qv
+    var h = (cell//(qv*qv))%nh
+    var c = (cell//(qv*qv*nh))%nc
+    var bb = cell//(qv*qv*nh*nc)
+    var value = Float32(0)
+    if c*qv+i<Int(t_in) and j<=i:
+        value = ftz(identical_mul(ftz(cb_g[((bb*nc+c)*qv+i)*qv+j]),ftz(seg_l[cell])))
+    retained[cell] = value
+
+
+def m2_ydiag_tile_kernel[RETAIN_M: Bool = False](
     ydiag: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
     cb_g: MutPointer[Float32, MutAnyOrigin],  # [B, C, Q, Q]
     seg_l: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, Q, Q]
@@ -726,16 +754,19 @@ def m2_ydiag_tile_kernel(
         var ii = it * M2_YD_ROWS + rr
         var mv = Float32(0.0)
         if ii < real and jj <= ii:
-            mv = ftz(
-                identical_mul(
-                    ftz(cb_g.unsafe_load(((bb * nc + c) * qv + ii) * qv + jj)),
-                    ftz(
-                        seg_l.unsafe_load(
-                            (((bb * nc + c) * nh + hh) * qv + ii) * qv + jj
-                        )
-                    ),
+            comptime if RETAIN_M:
+                mv = cb_g.unsafe_load((((bb*nc+c)*nh+hh)*qv+ii)*qv+jj)
+            else:
+                mv = ftz(
+                    identical_mul(
+                        ftz(cb_g.unsafe_load(((bb * nc + c) * qv + ii) * qv + jj)),
+                        ftz(
+                            seg_l.unsafe_load(
+                                (((bb * nc + c) * nh + hh) * qv + ii) * qv + jj
+                            )
+                        ),
+                    )
                 )
-            )
         m_s[rr * M2_YD_QMAX + jj] = mv
         e += M2_YD_THREADS
     var ri = tid // M2_HEADDIM
@@ -1121,6 +1152,8 @@ def ssd_forward(
     var qv = m2_q_eff()
     var nc = m2_n_chunks(t_work)
     var n_completed = t_work // qv
+    # Candidate owns temporary retained words until its explicit drain.
+    var retained = List[DeviceBuffer[DType.float32]]()
 
     ctx.enqueue_function[m2_discretize_kernel](
         xd.unsafe_ptr(),
@@ -1177,19 +1210,28 @@ def ssd_forward(
         )
         comptime if M2_SSD_TILED:
             var n_it = (qv + M2_YD_ROWS - 1) // M2_YD_ROWS
-            ctx.enqueue_function[m2_ydiag_tile_kernel](
-                ydiag.unsafe_ptr(),
-                cb_g.unsafe_ptr(),
-                seg_l.unsafe_ptr(),
-                xd.unsafe_ptr(),
-                Int32(b),
-                Int32(t_work),
-                Int32(nh),
-                Int32(nc),
-                Int32(qv),
-                grid_dim=(b * nc * nh * n_it, 1, 1),
-                block_dim=(M2_YD_THREADS, 1, 1),
-            )
+            var use_retained = False
+            comptime if M2_RETAIN_GL:
+                use_retained = b*nc*nh*qv*qv<=M2_RETAIN_GL_MAX_CELLS
+            if use_retained:
+                var cells = b*nc*nh*qv*qv
+                retained.append(ctx.enqueue_create_buffer[DType.float32](cells))
+                ctx.enqueue_function[m2_retained_gl_kernel](retained[0].unsafe_ptr(),cb_g.unsafe_ptr(),seg_l.unsafe_ptr(),Int32(b),Int32(t_work),Int32(nh),Int32(nc),Int32(qv),grid_dim=(_grid(cells),1,1),block_dim=(MAMBA2_TPB,1,1))
+                ctx.enqueue_function[m2_ydiag_tile_kernel[True]](ydiag.unsafe_ptr(),retained[0].unsafe_ptr(),seg_l.unsafe_ptr(),xd.unsafe_ptr(),Int32(b),Int32(t_work),Int32(nh),Int32(nc),Int32(qv),grid_dim=(b*nc*nh*n_it,1,1),block_dim=(M2_YD_THREADS,1,1))
+            else:
+                ctx.enqueue_function[m2_ydiag_tile_kernel[False]](
+                    ydiag.unsafe_ptr(),
+                    cb_g.unsafe_ptr(),
+                    seg_l.unsafe_ptr(),
+                    xd.unsafe_ptr(),
+                    Int32(b),
+                    Int32(t_work),
+                    Int32(nh),
+                    Int32(nc),
+                    Int32(qv),
+                    grid_dim=(b * nc * nh * n_it, 1, 1),
+                    block_dim=(M2_YD_THREADS, 1, 1),
+                )
         else:
             ctx.enqueue_function[m2_ydiag_kernel](
                 ydiag.unsafe_ptr(),
@@ -1282,5 +1324,9 @@ def ssd_forward(
         grid_dim=(_grid(b * t_work * nh * M2_HEADDIM), 1, 1),
         block_dim=(MAMBA2_TPB, 1, 1),
     )
-    if drain:
+    # Materialization is a lifetime experiment: its buffer cannot be
+    # released before the consumer drains, even on the otherwise async
+    # production block path. Count this additional wait in whole-op timing.
+    if drain or len(retained)>0:
         ctx.synchronize()
+    _ = retained^

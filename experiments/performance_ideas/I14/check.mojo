@@ -5,6 +5,7 @@ checks fresh-state behavior, exact minimal labels and convergence limits.
 Build chunk and edge-split arms independently; inactive gated rounds must
 leave the first fixed point untouched."""
 from max.gpu.host import DeviceContext
+from experiments.performance_ideas.I14.hdbscan_stages import check_hdbscan_stages
 from dbscan.impl.sparse.detail.csr import weak_cc_batched, DBSCAN_CC_FLAG_CELLS
 
 def check(ctx: DeviceContext, n: Int, topology: Int) raises:
@@ -54,4 +55,5 @@ def main() raises:
     for n in [31, 129, 259]:
         for topology in range(4):
             check(ctx,n,topology)
-    print("I14 PASS topologies=12 fresh_calls=24")
+    check_hdbscan_stages(ctx)
+    print("I14 PASS topologies=12 fresh_calls=24 HDBSCAN_MST_condensation_prediction_soft")

@@ -1913,6 +1913,8 @@ struct GLMWithData(Movable):
     var w_weights: DeviceBuffer[DType.float32]
     var scalar: DeviceBuffer[DType.float32]
     var n_evals: Int
+    # Diagnostic physical pricing count; logical n_evals retains line-search semantics.
+    var speculative_evals: Int
     # lane/linear-apple: `evaluate` enqueues every scalar it and its caller
     # need into `slots` (0 loss, 1 regularizer, 2 the raw gradient norm,
     # 3 the OWL-QN l1 norm of w) and brings them home behind ONE
@@ -1977,6 +1979,7 @@ struct GLMWithData(Movable):
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
         self.n_evals = 0
+        self.speculative_evals = 0
         var n_slots = 4
         comptime if QN_FAST_LS_BATCH:
             n_slots = QNF_SLOTS  # words 4.. carry the batch candidates' objectives
@@ -2101,6 +2104,7 @@ struct GLMWithData(Movable):
         mut w: DeviceBuffer[DType.float32],
         mut g: DeviceBuffer[DType.float32],
         pen_len: Int,
+        drain: Bool = True,
     ) raises -> Float32:
         """`evaluate`, and when `pen_len > 0` also `nrm1(w[0:pen_len])` into
         `last_pen` (OWL-QN's `f_wrap` term, `qn_linesearch.owlqn_objective`).
@@ -2118,6 +2122,9 @@ struct GLMWithData(Movable):
         words of `slots` and come home behind ONE synchronize, where there
         were two (three with `grad_norm`, four under OWL-QN). The host
         arithmetic on them is unchanged."""
+        if not drain:
+            comptime if not (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]()):
+                raise Error("qn: deferred exact evaluation requires IDENTICAL trial experiment")
         self.n_evals += 1
         self.gnorm_at = 0
         var s1 = self.slots.create_sub_buffer[DType.float32](1, 1)
@@ -2201,10 +2208,15 @@ struct GLMWithData(Movable):
                 s3.unsafe_ptr(), w.unsafe_ptr(), Int32(pen_len),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
-        read_scalars(ctx, self.slots, self.stage, 4 if pen_len > 0 else 3)
+        if drain:
+            read_scalars(ctx, self.slots, self.stage, 4 if pen_len > 0 else 3)
         _ = s1^
         _ = s2^
         _ = s3^
+        if not drain:
+            # Caller copies slots before the next evaluation reuses them,
+            # then performs the same host scalar finish after one wait.
+            return Float32(0)
         var loss_host = self.stage.unsafe_ptr().unsafe_load(0)
         self.gnorm_raw = self.stage.unsafe_ptr().unsafe_load(2)
         self.gnorm_at = Int(g.unsafe_ptr())
