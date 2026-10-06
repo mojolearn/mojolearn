@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "id": "F13",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "core/forest_inference.mojo",
+    "xtrees/shap_device.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": null,
+  "variants": [
+    {
+      "name": "default",
+      "binding": "rf",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_FOREST_FAST_SHARED_ROWS"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "shap",
+      "binding": "trees",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_SHAP_FAST_ROW_PAIR"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core",
+        "rf"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [
+    "Compact forest-layout conversion is not supplied by shared-row prediction or SHAP pairing."
+  ],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}
