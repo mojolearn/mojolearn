@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "id": "I06",
+  "title": "qualify attention KV grid reuse across GQA tails",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/I06/check.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_ATTN_ARM_TRIAL=1"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "mojo",
+    "build",
+    "-j1",
+    "-I",
+    "{repo}",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_ATTN_ARM_TRIAL=1",
+    "experiments/performance_ideas/I06/check.mojo",
+    "-o",
+    "{output}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/I06/check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "public semantics and canonical tie order retained",
+    "NVIDIA+AMD combined faster and neither materially slower"
+  ],
+  "timing_contract": "Frozen source; compile once on cheap boxes; device runs only; full public-operation timing includes all scratch/preparation/readback. Apple IDENTICAL bit check only.",
+  "blocker": null
+}
