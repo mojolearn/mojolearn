@@ -1,0 +1,2740 @@
+{
+  "schema": "mojolearn.forest-experiment-board/1",
+  "promotion": false,
+  "rows": [
+    {
+      "vendor": "amd",
+      "family": "rf",
+      "dataset": "istella",
+      "profile": "rf-k4",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-consolidated-v3/rf-istella-rf-k4",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/amd/packet.json",
+      "packet_sha256": "6889704567622d9f98664e5d4a3b563e318faad3371108d1ca8d82fe6b0664e9",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 44244.218,
+      "warmup_ms": 45099.026,
+      "state": {
+        "input_hash": "e2b40280da702b6ae62f94701ff7726adf4950581a5adfef7f4681882c61b23d",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              2043304,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "ede1e209046596315f3ade11f017c3539c4ce4c0e69c26cc96ad437130eb5cb5"
+          },
+          "y_train": {
+            "shape": [
+              2043304
+            ],
+            "dtype": "<f4",
+            "sha256": "12520b25ad7d4e473e324aa71a405ae7a0eadc493ec0210788ee5c9a5a7091bc"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "00c23955b8eef89ee8d927606f1825702a7371a47484f9873dde43341bba2b91"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "0def89d665e26d32e325657f4d16d5cedceca34b86649b8b43ddb04e97c48dac"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 500,
+            "criterion": "gini",
+            "max_depth": 8,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": "sqrt",
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": true,
+            "oob_score": false,
+            "random_state": 7,
+            "class_weight": null,
+            "ccp_alpha": 0.0,
+            "max_samples": 1.0,
+            "monotonic_cst": null,
+            "max_leaves": -1,
+            "n_bins": 128,
+            "n_streams": 4,
+            "max_batch_size": 4096,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "criterion": 0,
+          "n_estimators": 500,
+          "max_depth": 8,
+          "max_leaves": -1,
+          "max_features": "sqrt",
+          "n_bins": 128,
+          "min_samples_leaf": 1,
+          "min_samples_split": 2,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": true,
+          "max_samples": 1.0,
+          "random_state": 7,
+          "n_streams": 4,
+          "max_batch_size": 4096
+        },
+        "model_state_hash": "b5e859fbbc4bd6e276b58739e0d0d4a3a2d7dbc66ba52138e32a38bb026bc3f3",
+        "prediction_hash": "a2ecdcde8008de6e0bf5f74041494b4810d19aba62d7dc7f95ceda714f01e25c",
+        "model_file_sha256": "54a67e8007f63fb00ec5cf1c7d5481e0a2562d515303493e5c7872557ab8c3f8",
+        "metrics": [
+          {
+            "metric": "logloss",
+            "value": 0.18201746131119265
+          },
+          {
+            "metric": "auc",
+            "value": 0.9453854345076503
+          }
+        ],
+        "state_members": {
+          "classes": {
+            "shape": [
+              2
+            ],
+            "dtype": "<f8"
+          },
+          "colid": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U24"
+          },
+          "leaves": {
+            "shape": [
+              501768
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              3
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              501
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_rf.so": "ef9becac6800ee3da32e19e4cca43ca80fd1b2eeedc02c179192260b48818857",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/rf-k4/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "ce9c2e90ba7cc5d9f665ac259f68c58ca30b6fec450797d83ed7fbde4b303d91",
+      "prediction_digest": "46ef5c27f84cf904"
+    },
+    {
+      "vendor": "amd",
+      "family": "rf",
+      "dataset": "istella",
+      "profile": "rf-k1",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-consolidated-v3/rf-istella-rf-k1",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/amd/packet.json",
+      "packet_sha256": "6889704567622d9f98664e5d4a3b563e318faad3371108d1ca8d82fe6b0664e9",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 44305.355,
+      "warmup_ms": 44877.136,
+      "state": {
+        "input_hash": "e2b40280da702b6ae62f94701ff7726adf4950581a5adfef7f4681882c61b23d",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              2043304,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "ede1e209046596315f3ade11f017c3539c4ce4c0e69c26cc96ad437130eb5cb5"
+          },
+          "y_train": {
+            "shape": [
+              2043304
+            ],
+            "dtype": "<f4",
+            "sha256": "12520b25ad7d4e473e324aa71a405ae7a0eadc493ec0210788ee5c9a5a7091bc"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "00c23955b8eef89ee8d927606f1825702a7371a47484f9873dde43341bba2b91"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "0def89d665e26d32e325657f4d16d5cedceca34b86649b8b43ddb04e97c48dac"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 500,
+            "criterion": "gini",
+            "max_depth": 8,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": "sqrt",
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": true,
+            "oob_score": false,
+            "random_state": 7,
+            "class_weight": null,
+            "ccp_alpha": 0.0,
+            "max_samples": 1.0,
+            "monotonic_cst": null,
+            "max_leaves": -1,
+            "n_bins": 128,
+            "n_streams": 4,
+            "max_batch_size": 4096,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "criterion": 0,
+          "n_estimators": 500,
+          "max_depth": 8,
+          "max_leaves": -1,
+          "max_features": "sqrt",
+          "n_bins": 128,
+          "min_samples_leaf": 1,
+          "min_samples_split": 2,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": true,
+          "max_samples": 1.0,
+          "random_state": 7,
+          "n_streams": 4,
+          "max_batch_size": 4096
+        },
+        "model_state_hash": "b5e859fbbc4bd6e276b58739e0d0d4a3a2d7dbc66ba52138e32a38bb026bc3f3",
+        "prediction_hash": "a2ecdcde8008de6e0bf5f74041494b4810d19aba62d7dc7f95ceda714f01e25c",
+        "model_file_sha256": "54a67e8007f63fb00ec5cf1c7d5481e0a2562d515303493e5c7872557ab8c3f8",
+        "metrics": [
+          {
+            "metric": "logloss",
+            "value": 0.18201746131119265
+          },
+          {
+            "metric": "auc",
+            "value": 0.9453854345076503
+          }
+        ],
+        "state_members": {
+          "classes": {
+            "shape": [
+              2
+            ],
+            "dtype": "<f8"
+          },
+          "colid": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U24"
+          },
+          "leaves": {
+            "shape": [
+              501768
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              3
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              501
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_rf.so": "8abdcc93a97ee54632984dd9d09c34d3fb39db204c44e176bb35b6b33fde88bb",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/rf-k1/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "4c8007d2985b09bc3c50221d0605019cf0d7e03c9fb156739fdf3e969d6c92e6",
+      "prediction_digest": "46ef5c27f84cf904"
+    },
+    {
+      "vendor": "amd",
+      "family": "rf",
+      "dataset": "istella",
+      "profile": "rf-k2",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-consolidated-v3/rf-istella-rf-k2",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/amd/packet.json",
+      "packet_sha256": "6889704567622d9f98664e5d4a3b563e318faad3371108d1ca8d82fe6b0664e9",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 44360.828,
+      "warmup_ms": 44696.309,
+      "state": {
+        "input_hash": "e2b40280da702b6ae62f94701ff7726adf4950581a5adfef7f4681882c61b23d",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              2043304,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "ede1e209046596315f3ade11f017c3539c4ce4c0e69c26cc96ad437130eb5cb5"
+          },
+          "y_train": {
+            "shape": [
+              2043304
+            ],
+            "dtype": "<f4",
+            "sha256": "12520b25ad7d4e473e324aa71a405ae7a0eadc493ec0210788ee5c9a5a7091bc"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "00c23955b8eef89ee8d927606f1825702a7371a47484f9873dde43341bba2b91"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "0def89d665e26d32e325657f4d16d5cedceca34b86649b8b43ddb04e97c48dac"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 500,
+            "criterion": "gini",
+            "max_depth": 8,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": "sqrt",
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": true,
+            "oob_score": false,
+            "random_state": 7,
+            "class_weight": null,
+            "ccp_alpha": 0.0,
+            "max_samples": 1.0,
+            "monotonic_cst": null,
+            "max_leaves": -1,
+            "n_bins": 128,
+            "n_streams": 4,
+            "max_batch_size": 4096,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "criterion": 0,
+          "n_estimators": 500,
+          "max_depth": 8,
+          "max_leaves": -1,
+          "max_features": "sqrt",
+          "n_bins": 128,
+          "min_samples_leaf": 1,
+          "min_samples_split": 2,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": true,
+          "max_samples": 1.0,
+          "random_state": 7,
+          "n_streams": 4,
+          "max_batch_size": 4096
+        },
+        "model_state_hash": "b5e859fbbc4bd6e276b58739e0d0d4a3a2d7dbc66ba52138e32a38bb026bc3f3",
+        "prediction_hash": "a2ecdcde8008de6e0bf5f74041494b4810d19aba62d7dc7f95ceda714f01e25c",
+        "model_file_sha256": "54a67e8007f63fb00ec5cf1c7d5481e0a2562d515303493e5c7872557ab8c3f8",
+        "metrics": [
+          {
+            "metric": "logloss",
+            "value": 0.18201746131119265
+          },
+          {
+            "metric": "auc",
+            "value": 0.9453854345076503
+          }
+        ],
+        "state_members": {
+          "classes": {
+            "shape": [
+              2
+            ],
+            "dtype": "<f8"
+          },
+          "colid": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U24"
+          },
+          "leaves": {
+            "shape": [
+              501768
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              3
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              501
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_rf.so": "dec36e14409276555fa8c3097d26f41045db5872f28275564755c844743e085d",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/rf-k2/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "f32f08b002c20d7ad4f365edad5f23172351642737d67585d88e363e56e87c54",
+      "prediction_digest": "46ef5c27f84cf904"
+    },
+    {
+      "vendor": "amd",
+      "family": "rf",
+      "dataset": "istella",
+      "profile": "rf-k8",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-consolidated-v3/rf-istella-rf-k8",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/amd/packet.json",
+      "packet_sha256": "6889704567622d9f98664e5d4a3b563e318faad3371108d1ca8d82fe6b0664e9",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 44600.162,
+      "warmup_ms": 44514.58,
+      "state": {
+        "input_hash": "e2b40280da702b6ae62f94701ff7726adf4950581a5adfef7f4681882c61b23d",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              2043304,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "ede1e209046596315f3ade11f017c3539c4ce4c0e69c26cc96ad437130eb5cb5"
+          },
+          "y_train": {
+            "shape": [
+              2043304
+            ],
+            "dtype": "<f4",
+            "sha256": "12520b25ad7d4e473e324aa71a405ae7a0eadc493ec0210788ee5c9a5a7091bc"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "00c23955b8eef89ee8d927606f1825702a7371a47484f9873dde43341bba2b91"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "0def89d665e26d32e325657f4d16d5cedceca34b86649b8b43ddb04e97c48dac"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 500,
+            "criterion": "gini",
+            "max_depth": 8,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": "sqrt",
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": true,
+            "oob_score": false,
+            "random_state": 7,
+            "class_weight": null,
+            "ccp_alpha": 0.0,
+            "max_samples": 1.0,
+            "monotonic_cst": null,
+            "max_leaves": -1,
+            "n_bins": 128,
+            "n_streams": 4,
+            "max_batch_size": 4096,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "criterion": 0,
+          "n_estimators": 500,
+          "max_depth": 8,
+          "max_leaves": -1,
+          "max_features": "sqrt",
+          "n_bins": 128,
+          "min_samples_leaf": 1,
+          "min_samples_split": 2,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": true,
+          "max_samples": 1.0,
+          "random_state": 7,
+          "n_streams": 4,
+          "max_batch_size": 4096
+        },
+        "model_state_hash": "b5e859fbbc4bd6e276b58739e0d0d4a3a2d7dbc66ba52138e32a38bb026bc3f3",
+        "prediction_hash": "a2ecdcde8008de6e0bf5f74041494b4810d19aba62d7dc7f95ceda714f01e25c",
+        "model_file_sha256": "54a67e8007f63fb00ec5cf1c7d5481e0a2562d515303493e5c7872557ab8c3f8",
+        "metrics": [
+          {
+            "metric": "logloss",
+            "value": 0.18201746131119265
+          },
+          {
+            "metric": "auc",
+            "value": 0.9453854345076503
+          }
+        ],
+        "state_members": {
+          "classes": {
+            "shape": [
+              2
+            ],
+            "dtype": "<f8"
+          },
+          "colid": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U24"
+          },
+          "leaves": {
+            "shape": [
+              501768
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              3
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              501
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              250884
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_rf.so": "8c17879fa88e5b17687bfaac4a0e926a26242b4f8e190fe3290af59a934a3e1c",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/rf-k8/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "75994b65a89c12fbe9db18efe403ce207a79ca9a10c517751f976a369e769b17",
+      "prediction_digest": "46ef5c27f84cf904"
+    },
+    {
+      "vendor": "amd",
+      "family": "et",
+      "dataset": "istellareg",
+      "profile": "et-float",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-consolidated-v3/et-istellareg-et-float",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/amd/packet.json",
+      "packet_sha256": "6889704567622d9f98664e5d4a3b563e318faad3371108d1ca8d82fe6b0664e9",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 20698.697,
+      "warmup_ms": 20847.058,
+      "state": {
+        "input_hash": "9de72e6b5983532a6e46e14253488d140f83eb44812e1e01da4092fb1472710a",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              2043304,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "ede1e209046596315f3ade11f017c3539c4ce4c0e69c26cc96ad437130eb5cb5"
+          },
+          "y_train": {
+            "shape": [
+              2043304
+            ],
+            "dtype": "<f4",
+            "sha256": "a044facecf84e9d071304f02133569f54316faa98e1767b7f372b997e4746afa"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "00c23955b8eef89ee8d927606f1825702a7371a47484f9873dde43341bba2b91"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "b03e9910aa421133f2dc9b2ad52da50a16c96dca876453d2abd8d5936adfef99"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 100,
+            "criterion": "squared_error",
+            "max_depth": 16,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": 1.0,
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": false,
+            "oob_score": false,
+            "random_state": 7,
+            "ccp_alpha": 0.0,
+            "max_samples": null,
+            "monotonic_cst": null,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "n_estimators": 100,
+          "max_depth": 16,
+          "min_samples_split": 2,
+          "min_samples_leaf": 1,
+          "min_weight_fraction_leaf": 0.0,
+          "max_features": null,
+          "max_leaf_nodes": null,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": false,
+          "oob_score": false,
+          "random_state": 7,
+          "warm_start": false,
+          "class_weight": null,
+          "ccp_alpha": 0.0,
+          "max_samples": null,
+          "monotonic_cst": null
+        },
+        "model_state_hash": "2533d94a8395e1b4b8421e22d06a1a84c3a2dac55226a46432d6993ff9b027cb",
+        "prediction_hash": "cf992db5f4d7c1803eca466d50061261c9c17adc71e0cd1d3930107b1b05b65c",
+        "model_file_sha256": "93180e0df085dce3957046728429cc3d2c86c19e354d3306b161bf7cfb2249df",
+        "metrics": [
+          {
+            "metric": "rmse",
+            "value": 0.564524922497428
+          }
+        ],
+        "state_members": {
+          "colid": {
+            "shape": [
+              4742526
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U19"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "leaves": {
+            "shape": [
+              4742526
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              4742526
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              6
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              101
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              4742526
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_trees.so": "3ee7bad4832f533825060eb431a9fd1da7fb8f9a355bc2107784ba437eb9479d",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/et-float/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "3266bfe69734b33efc0e60e1b7edfb7e94a214fb1b268c1dcf94aee06724a451",
+      "prediction_digest": "81b2c8e31bb2e9ff"
+    },
+    {
+      "vendor": "amd",
+      "family": "et",
+      "dataset": "istellareg",
+      "profile": "et-u16",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-consolidated-v3/et-istellareg-et-u16",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/amd/packet.json",
+      "packet_sha256": "6889704567622d9f98664e5d4a3b563e318faad3371108d1ca8d82fe6b0664e9",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 21401.863,
+      "warmup_ms": 21667.272,
+      "state": {
+        "input_hash": "9de72e6b5983532a6e46e14253488d140f83eb44812e1e01da4092fb1472710a",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              2043304,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "ede1e209046596315f3ade11f017c3539c4ce4c0e69c26cc96ad437130eb5cb5"
+          },
+          "y_train": {
+            "shape": [
+              2043304
+            ],
+            "dtype": "<f4",
+            "sha256": "a044facecf84e9d071304f02133569f54316faa98e1767b7f372b997e4746afa"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              220
+            ],
+            "dtype": "<f4",
+            "sha256": "00c23955b8eef89ee8d927606f1825702a7371a47484f9873dde43341bba2b91"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "b03e9910aa421133f2dc9b2ad52da50a16c96dca876453d2abd8d5936adfef99"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 100,
+            "criterion": "squared_error",
+            "max_depth": 16,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": 1.0,
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": false,
+            "oob_score": false,
+            "random_state": 7,
+            "ccp_alpha": 0.0,
+            "max_samples": null,
+            "monotonic_cst": null,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "n_estimators": 100,
+          "max_depth": 16,
+          "min_samples_split": 2,
+          "min_samples_leaf": 1,
+          "min_weight_fraction_leaf": 0.0,
+          "max_features": null,
+          "max_leaf_nodes": null,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": false,
+          "oob_score": false,
+          "random_state": 7,
+          "warm_start": false,
+          "class_weight": null,
+          "ccp_alpha": 0.0,
+          "max_samples": null,
+          "monotonic_cst": null
+        },
+        "model_state_hash": "a450b446c1eac95164dfec64ff861f2f204c730410aa4460573a7592af3c8802",
+        "prediction_hash": "570f9c3a24031f46f97d924ce3862eed65ab4b40f0a216b0ca54b7826bb434e9",
+        "model_file_sha256": "625cc7973ad9fb967f9d7551c1c6e8fec94361afa1aff6e5670aa4f5c64bd025",
+        "metrics": [
+          {
+            "metric": "rmse",
+            "value": 0.5649949312706893
+          }
+        ],
+        "state_members": {
+          "colid": {
+            "shape": [
+              4736418
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U19"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "leaves": {
+            "shape": [
+              4736418
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              4736418
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              6
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              101
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              4736418
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_trees.so": "6f05d9cc3e06959b3bcb8578566fd686ca9077afb56850b39bace44aca92580f",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/et-u16/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "56f545572a3d9ac2aa6022a7cff264d16b7aeb7cdc40f92ae7c6d98e8ef18f0f",
+      "prediction_digest": "d7b28dbc282068eb"
+    },
+    {
+      "vendor": "amd",
+      "family": "et",
+      "dataset": "year",
+      "profile": "et-float",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-consolidated-v3/et-year-et-float",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/amd/packet.json",
+      "packet_sha256": "6889704567622d9f98664e5d4a3b563e318faad3371108d1ca8d82fe6b0664e9",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 4554.551,
+      "warmup_ms": 4886.572,
+      "state": {
+        "input_hash": "0a57c5cf9c9597646a8012496f750442a9710ff8459036f925e1988eb987e315",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              463715,
+              90
+            ],
+            "dtype": "<f4",
+            "sha256": "5beeba27bbcdc754a4e66b45f6c346a81142d577a0d73d6f269f3721cd9646e1"
+          },
+          "y_train": {
+            "shape": [
+              463715
+            ],
+            "dtype": "<f4",
+            "sha256": "ab44e4786be92bef062bdae3ea01d0defa0cfec8295ab7d234817ad776137db2"
+          },
+          "X_test": {
+            "shape": [
+              51630,
+              90
+            ],
+            "dtype": "<f4",
+            "sha256": "9381f866d9683d65940847de04e2126024a21b1842f025b07a9eab4e42a39329"
+          },
+          "y_test": {
+            "shape": [
+              51630
+            ],
+            "dtype": "<f4",
+            "sha256": "acb755e9d0229919f8b5783a8b1343579bfc5bce67e68262aaa275484ead238f"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 100,
+            "criterion": "squared_error",
+            "max_depth": 16,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": 1.0,
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": false,
+            "oob_score": false,
+            "random_state": 7,
+            "ccp_alpha": 0.0,
+            "max_samples": null,
+            "monotonic_cst": null,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "n_estimators": 100,
+          "max_depth": 16,
+          "min_samples_split": 2,
+          "min_samples_leaf": 1,
+          "min_weight_fraction_leaf": 0.0,
+          "max_features": null,
+          "max_leaf_nodes": null,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": false,
+          "oob_score": false,
+          "random_state": 7,
+          "warm_start": false,
+          "class_weight": null,
+          "ccp_alpha": 0.0,
+          "max_samples": null,
+          "monotonic_cst": null
+        },
+        "model_state_hash": "f04dbc5f3a0acb8122e412f0bb57fee5a2012469e4ddf4f17593aae0f956ee85",
+        "prediction_hash": "cc238bbff4fad970bc588fbbb47cf46e171173487978a31436340656a65593b0",
+        "model_file_sha256": "d4e293efa46cb485bce4300e7b08f43c39c53a6e17a586c7e5c4448bb3c4e692",
+        "metrics": [
+          {
+            "metric": "rmse",
+            "value": 9.323387009681644
+          }
+        ],
+        "state_members": {
+          "colid": {
+            "shape": [
+              3813782
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U19"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "leaves": {
+            "shape": [
+              3813782
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              3813782
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              6
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              101
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              3813782
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_trees.so": "3ee7bad4832f533825060eb431a9fd1da7fb8f9a355bc2107784ba437eb9479d",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/et-float/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "77037af0fa61d763be4eaa84c5182c4b887207bbf864b9c078e290800cb15faf",
+      "prediction_digest": "8b0d254f516ba163"
+    },
+    {
+      "vendor": "amd",
+      "family": "et",
+      "dataset": "year",
+      "profile": "et-u16",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-consolidated-v3/et-year-et-u16",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v3/amd/packet.json",
+      "packet_sha256": "6889704567622d9f98664e5d4a3b563e318faad3371108d1ca8d82fe6b0664e9",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 4629.698,
+      "warmup_ms": 4982.602,
+      "state": {
+        "input_hash": "0a57c5cf9c9597646a8012496f750442a9710ff8459036f925e1988eb987e315",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              463715,
+              90
+            ],
+            "dtype": "<f4",
+            "sha256": "5beeba27bbcdc754a4e66b45f6c346a81142d577a0d73d6f269f3721cd9646e1"
+          },
+          "y_train": {
+            "shape": [
+              463715
+            ],
+            "dtype": "<f4",
+            "sha256": "ab44e4786be92bef062bdae3ea01d0defa0cfec8295ab7d234817ad776137db2"
+          },
+          "X_test": {
+            "shape": [
+              51630,
+              90
+            ],
+            "dtype": "<f4",
+            "sha256": "9381f866d9683d65940847de04e2126024a21b1842f025b07a9eab4e42a39329"
+          },
+          "y_test": {
+            "shape": [
+              51630
+            ],
+            "dtype": "<f4",
+            "sha256": "acb755e9d0229919f8b5783a8b1343579bfc5bce67e68262aaa275484ead238f"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 100,
+            "criterion": "squared_error",
+            "max_depth": 16,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": 1.0,
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": false,
+            "oob_score": false,
+            "random_state": 7,
+            "ccp_alpha": 0.0,
+            "max_samples": null,
+            "monotonic_cst": null,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "n_estimators": 100,
+          "max_depth": 16,
+          "min_samples_split": 2,
+          "min_samples_leaf": 1,
+          "min_weight_fraction_leaf": 0.0,
+          "max_features": null,
+          "max_leaf_nodes": null,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": false,
+          "oob_score": false,
+          "random_state": 7,
+          "warm_start": false,
+          "class_weight": null,
+          "ccp_alpha": 0.0,
+          "max_samples": null,
+          "monotonic_cst": null
+        },
+        "model_state_hash": "3250048561808b79d8cf06c526da9836eb65a0aa143ba9b28ff56b7fa3d51c36",
+        "prediction_hash": "cc377c394b673134cae959085a8da9bdb3a4c1ef27b3c39e852420515f75d213",
+        "model_file_sha256": "aefd403c5370aa2288675963ac66a498ac9713db03e639c1b15e4b8c0f6df5d0",
+        "metrics": [
+          {
+            "metric": "rmse",
+            "value": 9.323469898551933
+          }
+        ],
+        "state_members": {
+          "colid": {
+            "shape": [
+              3873104
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U19"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "leaves": {
+            "shape": [
+              3873104
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              3873104
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              6
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              101
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              3873104
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_trees.so": "6f05d9cc3e06959b3bcb8578566fd686ca9077afb56850b39bace44aca92580f",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-consolidated-v3/et-u16/source",
+        "runtime_files": {
+          "/root/forest-ab-consolidated-v3/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-consolidated-v3/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-consolidated-v3/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-consolidated-v3/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-consolidated-v3/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-consolidated-v3/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "bebf5e6083df847c88196f1fe8bcf71f7e6748d7879e3e280c5d36b0f931c378",
+      "prediction_digest": "52201680d0355a45"
+    },
+    {
+      "vendor": "amd",
+      "family": "rf",
+      "dataset": "taxi",
+      "profile": "rf-k4",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-taxi-evidence-repair/rf-taxi-rf-k4",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/amd-taxi-evidence-repair/amd/packet.json",
+      "packet_sha256": "373c826d50b455a00427435221380feeedab79de1329b95dff14ce7b1294f020",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 16390.002,
+      "warmup_ms": 16686.138,
+      "state": {
+        "input_hash": "a61da52b84119a10e6611f00bd06b1601abb21296a8748de1c8bdd67b6e6330b",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              4110786,
+              16
+            ],
+            "dtype": "<f4",
+            "sha256": "e2a34f862730b1f5f31fbaf586e204bfdd87d19a92013e9fc2b69badc00013fb"
+          },
+          "y_train": {
+            "shape": [
+              4110786
+            ],
+            "dtype": "<f4",
+            "sha256": "c3ceb654c2457a620d6f58a10d5d272cf0591cd485c5d3e90ddfc3fca787a70e"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              16
+            ],
+            "dtype": "<f4",
+            "sha256": "d68cfbd2fef18801b218e356d1fd240baddf4622f815657898ce7b8fc9cfa54f"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "9a0d1fd743a67e4f585abbf8ce8b9fb59886d8c2ee65e69acf0133aed0bfd3b0"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 500,
+            "criterion": "gini",
+            "max_depth": 8,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": "sqrt",
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": true,
+            "oob_score": false,
+            "random_state": 7,
+            "class_weight": null,
+            "ccp_alpha": 0.0,
+            "max_samples": 1.0,
+            "monotonic_cst": null,
+            "max_leaves": -1,
+            "n_bins": 128,
+            "n_streams": 4,
+            "max_batch_size": 4096,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "criterion": 0,
+          "n_estimators": 500,
+          "max_depth": 8,
+          "max_leaves": -1,
+          "max_features": "sqrt",
+          "n_bins": 128,
+          "min_samples_leaf": 1,
+          "min_samples_split": 2,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": true,
+          "max_samples": 1.0,
+          "random_state": 7,
+          "n_streams": 4,
+          "max_batch_size": 4096
+        },
+        "model_state_hash": "22e73dd222e6d6686bebb70a1d8ee2c46cf1cdc24d9887fe4cad899c1e0b77c2",
+        "prediction_hash": "30b7b7ea9c82d35f8e17d8b37edfdf672f5f9fe98aed6531d9c7b6221175ba2e",
+        "model_file_sha256": "76e349cde947ad99487ae6a5dfb33e9ae93822ee5aa63e0de52b67de3c5aa752",
+        "metrics": [
+          {
+            "metric": "logloss",
+            "value": 0.5259534267268446
+          },
+          {
+            "metric": "auc",
+            "value": 0.617837822527572
+          }
+        ],
+        "state_members": {
+          "classes": {
+            "shape": [
+              2
+            ],
+            "dtype": "<f8"
+          },
+          "colid": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U24"
+          },
+          "leaves": {
+            "shape": [
+              491924
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              3
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              501
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_rf.so": "ef9becac6800ee3da32e19e4cca43ca80fd1b2eeedc02c179192260b48818857",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-taxi-evidence-repair/rf-k4/source",
+        "runtime_files": {
+          "/root/forest-ab-taxi-evidence-repair/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "911f0aea3b692a3d78a018f185d8bc33aaf46550777b6798a6e03a9fb2ced79c",
+      "prediction_digest": "a660fbfbad84ade8"
+    },
+    {
+      "vendor": "amd",
+      "family": "rf",
+      "dataset": "taxi",
+      "profile": "rf-k1",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-taxi-evidence-repair/rf-taxi-rf-k1",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/amd-taxi-evidence-repair/amd/packet.json",
+      "packet_sha256": "373c826d50b455a00427435221380feeedab79de1329b95dff14ce7b1294f020",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 16398.556,
+      "warmup_ms": 16731.84,
+      "state": {
+        "input_hash": "a61da52b84119a10e6611f00bd06b1601abb21296a8748de1c8bdd67b6e6330b",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              4110786,
+              16
+            ],
+            "dtype": "<f4",
+            "sha256": "e2a34f862730b1f5f31fbaf586e204bfdd87d19a92013e9fc2b69badc00013fb"
+          },
+          "y_train": {
+            "shape": [
+              4110786
+            ],
+            "dtype": "<f4",
+            "sha256": "c3ceb654c2457a620d6f58a10d5d272cf0591cd485c5d3e90ddfc3fca787a70e"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              16
+            ],
+            "dtype": "<f4",
+            "sha256": "d68cfbd2fef18801b218e356d1fd240baddf4622f815657898ce7b8fc9cfa54f"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "9a0d1fd743a67e4f585abbf8ce8b9fb59886d8c2ee65e69acf0133aed0bfd3b0"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 500,
+            "criterion": "gini",
+            "max_depth": 8,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": "sqrt",
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": true,
+            "oob_score": false,
+            "random_state": 7,
+            "class_weight": null,
+            "ccp_alpha": 0.0,
+            "max_samples": 1.0,
+            "monotonic_cst": null,
+            "max_leaves": -1,
+            "n_bins": 128,
+            "n_streams": 4,
+            "max_batch_size": 4096,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "criterion": 0,
+          "n_estimators": 500,
+          "max_depth": 8,
+          "max_leaves": -1,
+          "max_features": "sqrt",
+          "n_bins": 128,
+          "min_samples_leaf": 1,
+          "min_samples_split": 2,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": true,
+          "max_samples": 1.0,
+          "random_state": 7,
+          "n_streams": 4,
+          "max_batch_size": 4096
+        },
+        "model_state_hash": "22e73dd222e6d6686bebb70a1d8ee2c46cf1cdc24d9887fe4cad899c1e0b77c2",
+        "prediction_hash": "30b7b7ea9c82d35f8e17d8b37edfdf672f5f9fe98aed6531d9c7b6221175ba2e",
+        "model_file_sha256": "76e349cde947ad99487ae6a5dfb33e9ae93822ee5aa63e0de52b67de3c5aa752",
+        "metrics": [
+          {
+            "metric": "logloss",
+            "value": 0.5259534267268446
+          },
+          {
+            "metric": "auc",
+            "value": 0.617837822527572
+          }
+        ],
+        "state_members": {
+          "classes": {
+            "shape": [
+              2
+            ],
+            "dtype": "<f8"
+          },
+          "colid": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U24"
+          },
+          "leaves": {
+            "shape": [
+              491924
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              3
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              501
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_rf.so": "8abdcc93a97ee54632984dd9d09c34d3fb39db204c44e176bb35b6b33fde88bb",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-taxi-evidence-repair/rf-k1/source",
+        "runtime_files": {
+          "/root/forest-ab-taxi-evidence-repair/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "1d6408ea3dc15cd8d06571dd19589ed0b305580d994ad28ba447ab72bf58fb87",
+      "prediction_digest": "a660fbfbad84ade8"
+    },
+    {
+      "vendor": "amd",
+      "family": "rf",
+      "dataset": "taxi",
+      "profile": "rf-k2",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-taxi-evidence-repair/rf-taxi-rf-k2",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/amd-taxi-evidence-repair/amd/packet.json",
+      "packet_sha256": "373c826d50b455a00427435221380feeedab79de1329b95dff14ce7b1294f020",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 16377.838,
+      "warmup_ms": 16699.628,
+      "state": {
+        "input_hash": "a61da52b84119a10e6611f00bd06b1601abb21296a8748de1c8bdd67b6e6330b",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              4110786,
+              16
+            ],
+            "dtype": "<f4",
+            "sha256": "e2a34f862730b1f5f31fbaf586e204bfdd87d19a92013e9fc2b69badc00013fb"
+          },
+          "y_train": {
+            "shape": [
+              4110786
+            ],
+            "dtype": "<f4",
+            "sha256": "c3ceb654c2457a620d6f58a10d5d272cf0591cd485c5d3e90ddfc3fca787a70e"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              16
+            ],
+            "dtype": "<f4",
+            "sha256": "d68cfbd2fef18801b218e356d1fd240baddf4622f815657898ce7b8fc9cfa54f"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "9a0d1fd743a67e4f585abbf8ce8b9fb59886d8c2ee65e69acf0133aed0bfd3b0"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 500,
+            "criterion": "gini",
+            "max_depth": 8,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": "sqrt",
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": true,
+            "oob_score": false,
+            "random_state": 7,
+            "class_weight": null,
+            "ccp_alpha": 0.0,
+            "max_samples": 1.0,
+            "monotonic_cst": null,
+            "max_leaves": -1,
+            "n_bins": 128,
+            "n_streams": 4,
+            "max_batch_size": 4096,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "criterion": 0,
+          "n_estimators": 500,
+          "max_depth": 8,
+          "max_leaves": -1,
+          "max_features": "sqrt",
+          "n_bins": 128,
+          "min_samples_leaf": 1,
+          "min_samples_split": 2,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": true,
+          "max_samples": 1.0,
+          "random_state": 7,
+          "n_streams": 4,
+          "max_batch_size": 4096
+        },
+        "model_state_hash": "22e73dd222e6d6686bebb70a1d8ee2c46cf1cdc24d9887fe4cad899c1e0b77c2",
+        "prediction_hash": "30b7b7ea9c82d35f8e17d8b37edfdf672f5f9fe98aed6531d9c7b6221175ba2e",
+        "model_file_sha256": "76e349cde947ad99487ae6a5dfb33e9ae93822ee5aa63e0de52b67de3c5aa752",
+        "metrics": [
+          {
+            "metric": "logloss",
+            "value": 0.5259534267268446
+          },
+          {
+            "metric": "auc",
+            "value": 0.617837822527572
+          }
+        ],
+        "state_members": {
+          "classes": {
+            "shape": [
+              2
+            ],
+            "dtype": "<f8"
+          },
+          "colid": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U24"
+          },
+          "leaves": {
+            "shape": [
+              491924
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              3
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              501
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_rf.so": "dec36e14409276555fa8c3097d26f41045db5872f28275564755c844743e085d",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-taxi-evidence-repair/rf-k2/source",
+        "runtime_files": {
+          "/root/forest-ab-taxi-evidence-repair/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "e10a50be066301f997091098cf84e656d8a1bf894cd6cdaab96c3db82b904762",
+      "prediction_digest": "a660fbfbad84ade8"
+    },
+    {
+      "vendor": "amd",
+      "family": "rf",
+      "dataset": "taxi",
+      "profile": "rf-k8",
+      "root": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/incremental-board/snapshots/amd/forest-ab-taxi-evidence-repair/rf-taxi-rf-k8",
+      "packet": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/amd-taxi-evidence-repair/amd/packet.json",
+      "packet_sha256": "373c826d50b455a00427435221380feeedab79de1329b95dff14ce7b1294f020",
+      "status": "CAPTURED_PENDING_COMPARISON",
+      "scored_ms": 16370.723,
+      "warmup_ms": 16681.832,
+      "state": {
+        "input_hash": "a61da52b84119a10e6611f00bd06b1601abb21296a8748de1c8bdd67b6e6330b",
+        "inputs": {
+          "X_train": {
+            "shape": [
+              4110786,
+              16
+            ],
+            "dtype": "<f4",
+            "sha256": "e2a34f862730b1f5f31fbaf586e204bfdd87d19a92013e9fc2b69badc00013fb"
+          },
+          "y_train": {
+            "shape": [
+              4110786
+            ],
+            "dtype": "<f4",
+            "sha256": "c3ceb654c2457a620d6f58a10d5d272cf0591cd485c5d3e90ddfc3fca787a70e"
+          },
+          "X_test": {
+            "shape": [
+              500000,
+              16
+            ],
+            "dtype": "<f4",
+            "sha256": "d68cfbd2fef18801b218e356d1fd240baddf4622f815657898ce7b8fc9cfa54f"
+          },
+          "y_test": {
+            "shape": [
+              500000
+            ],
+            "dtype": "<f4",
+            "sha256": "9a0d1fd743a67e4f585abbf8ce8b9fb59886d8c2ee65e69acf0133aed0bfd3b0"
+          }
+        },
+        "model_params_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "n_estimators": 500,
+            "criterion": "gini",
+            "max_depth": 8,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "min_weight_fraction_leaf": 0.0,
+            "max_features": "sqrt",
+            "max_leaf_nodes": null,
+            "min_impurity_decrease": 0.0,
+            "bootstrap": true,
+            "oob_score": false,
+            "random_state": 7,
+            "class_weight": null,
+            "ccp_alpha": 0.0,
+            "max_samples": 1.0,
+            "monotonic_cst": null,
+            "max_leaves": -1,
+            "n_bins": 128,
+            "n_streams": 4,
+            "max_batch_size": 4096,
+            "inference_engine": "auto"
+          }
+        },
+        "model_native_config": {
+          "criterion": 0,
+          "n_estimators": 500,
+          "max_depth": 8,
+          "max_leaves": -1,
+          "max_features": "sqrt",
+          "n_bins": 128,
+          "min_samples_leaf": 1,
+          "min_samples_split": 2,
+          "min_impurity_decrease": 0.0,
+          "bootstrap": true,
+          "max_samples": 1.0,
+          "random_state": 7,
+          "n_streams": 4,
+          "max_batch_size": 4096
+        },
+        "model_state_hash": "22e73dd222e6d6686bebb70a1d8ee2c46cf1cdc24d9887fe4cad899c1e0b77c2",
+        "prediction_hash": "30b7b7ea9c82d35f8e17d8b37edfdf672f5f9fe98aed6531d9c7b6221175ba2e",
+        "model_file_sha256": "76e349cde947ad99487ae6a5dfb33e9ae93822ee5aa63e0de52b67de3c5aa752",
+        "metrics": [
+          {
+            "metric": "logloss",
+            "value": 0.5259534267268446
+          },
+          {
+            "metric": "auc",
+            "value": 0.617837822527572
+          }
+        ],
+        "state_members": {
+          "classes": {
+            "shape": [
+              2
+            ],
+            "dtype": "<f8"
+          },
+          "colid": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<i4"
+          },
+          "estimator": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U22"
+          },
+          "format": {
+            "shape": [
+              1
+            ],
+            "dtype": "<U24"
+          },
+          "leaves": {
+            "shape": [
+              491924
+            ],
+            "dtype": "<f4"
+          },
+          "left_child": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<i4"
+          },
+          "meta": {
+            "shape": [
+              3
+            ],
+            "dtype": "<i8"
+          },
+          "offsets": {
+            "shape": [
+              501
+            ],
+            "dtype": "<i4"
+          },
+          "quesval": {
+            "shape": [
+              245962
+            ],
+            "dtype": "<f4"
+          }
+        }
+      },
+      "settings": {
+        "warmups": 1,
+        "scored_samples": 1,
+        "rows": "full",
+        "opponents": false
+      },
+      "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "harness_sha": "e5f3b578b19ace845af88f073a6b22b2307cfc3f",
+      "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+      "artifact_identity": {
+        "schema": "mojolearn-board-artifacts/1",
+        "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+        "code_path": "native",
+        "numeric_mode": "identical",
+        "files": {
+          "identical/_mojolearn_rf.so": "8c17879fa88e5b17687bfaac4a0e926a26242b4f8e190fe3290af59a934a3e1c",
+          "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+        },
+        "vendor": "hip",
+        "installation": "source",
+        "source_root": "/root/forest-ab-taxi-evidence-repair/rf-k8/source",
+        "runtime_files": {
+          "/root/forest-ab-taxi-evidence-repair/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c",
+          "/root/forest-ab-taxi-evidence-repair/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5"
+        }
+      },
+      "snapshot_sha256": "0882a8ccb88bb5e058b61e33fbb91a34d1f74e47108ff6e03b1d38111db5a88e",
+      "prediction_digest": "a660fbfbad84ade8"
+    }
+  ],
+  "decisions": [
+    {
+      "family": "rf",
+      "profile": "rf-k1",
+      "baseline": "rf-k4",
+      "status": "REJECTED_KEEP_DEFAULT",
+      "promoted": false,
+      "ratios": {
+        "nvidia/taxi": 1.0069157995883447,
+        "amd/taxi": 1.0005219035360704,
+        "nvidia/istella": 1.0031638814070807,
+        "amd/istella": 1.001381807674847
+      },
+      "checks": [
+        {
+          "vendor": "nvidia",
+          "dataset": "taxi",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268445
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268445
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        },
+        {
+          "vendor": "amd",
+          "dataset": "taxi",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268446
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268446
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        },
+        {
+          "vendor": "nvidia",
+          "dataset": "istella",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.1820174613111927
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.1820174613111927
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        },
+        {
+          "vendor": "amd",
+          "dataset": "istella",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.18201746131119265
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.18201746131119265
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        }
+      ],
+      "missing": [],
+      "combined_ratio": 1.0029928454586738,
+      "vendor_ratios": {
+        "nvidia": 1.0050380897086229,
+        "amd": 1.0009517632639593
+      },
+      "limitations": "One warmup/sample; Apple/host identity and ET quality decision must be linked before promotion; no automatic material-regression threshold.",
+      "reason": "No measured combined improvement; retain K4."
+    },
+    {
+      "family": "rf",
+      "profile": "rf-k2",
+      "baseline": "rf-k4",
+      "status": "REJECTED_KEEP_DEFAULT",
+      "promoted": false,
+      "ratios": {
+        "nvidia/taxi": 1.004538547716798,
+        "amd/taxi": 0.9992578402369933,
+        "nvidia/istella": 1.0017756785852174,
+        "amd/istella": 1.0026355986221749
+      },
+      "checks": [
+        {
+          "vendor": "nvidia",
+          "dataset": "taxi",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268445
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268445
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        },
+        {
+          "vendor": "amd",
+          "dataset": "taxi",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268446
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268446
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        },
+        {
+          "vendor": "nvidia",
+          "dataset": "istella",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.1820174613111927
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.1820174613111927
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        },
+        {
+          "vendor": "amd",
+          "dataset": "istella",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.18201746131119265
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.18201746131119265
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        }
+      ],
+      "missing": [],
+      "combined_ratio": 1.0020501185553237,
+      "vendor_ratios": {
+        "nvidia": 1.0031561619728029,
+        "amd": 1.0009452946209993
+      },
+      "limitations": "One warmup/sample; Apple/host identity and ET quality decision must be linked before promotion; no automatic material-regression threshold.",
+      "reason": "No measured combined improvement; retain K4."
+    },
+    {
+      "family": "rf",
+      "profile": "rf-k8",
+      "baseline": "rf-k4",
+      "status": "REJECTED_KEEP_DEFAULT",
+      "promoted": false,
+      "ratios": {
+        "nvidia/taxi": 1.0023746484980953,
+        "amd/taxi": 0.9988237341276712,
+        "nvidia/istella": 1.000626205293993,
+        "amd/istella": 1.008044983414556
+      },
+      "checks": [
+        {
+          "vendor": "nvidia",
+          "dataset": "taxi",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268445
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268445
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        },
+        {
+          "vendor": "amd",
+          "dataset": "taxi",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268446
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.5259534267268446
+            },
+            {
+              "metric": "auc",
+              "value": 0.617837822527572
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        },
+        {
+          "vendor": "nvidia",
+          "dataset": "istella",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.1820174613111927
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.1820174613111927
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        },
+        {
+          "vendor": "amd",
+          "dataset": "istella",
+          "baseline_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.18201746131119265
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "logloss",
+              "value": 0.18201746131119265
+            },
+            {
+              "metric": "auc",
+              "value": 0.9453854345076503
+            }
+          ],
+          "baseline_candidate_bits_equal": true
+        }
+      ],
+      "missing": [],
+      "combined_ratio": 1.0024614442986126,
+      "vendor_ratios": {
+        "nvidia": 1.0015000453367684,
+        "amd": 1.0034237661640237
+      },
+      "limitations": "One warmup/sample; Apple/host identity and ET quality decision must be linked before promotion; no automatic material-regression threshold.",
+      "reason": "No measured combined improvement; retain K4."
+    },
+    {
+      "family": "et",
+      "profile": "et-u16",
+      "baseline": "et-float",
+      "status": "REJECTED_KEEP_DEFAULT",
+      "promoted": false,
+      "ratios": {
+        "nvidia/istellareg": 0.9699012893044714,
+        "amd/istellareg": 1.033971510380581,
+        "nvidia/year": 1.1673345920982994,
+        "amd/year": 1.0164993212283713
+      },
+      "checks": [
+        {
+          "vendor": "nvidia",
+          "dataset": "istellareg",
+          "baseline_metrics": [
+            {
+              "metric": "rmse",
+              "value": 0.5645249224974281
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "rmse",
+              "value": 0.5649949312706894
+            }
+          ],
+          "baseline_candidate_bits_equal": false
+        },
+        {
+          "vendor": "amd",
+          "dataset": "istellareg",
+          "baseline_metrics": [
+            {
+              "metric": "rmse",
+              "value": 0.564524922497428
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "rmse",
+              "value": 0.5649949312706893
+            }
+          ],
+          "baseline_candidate_bits_equal": false
+        },
+        {
+          "vendor": "nvidia",
+          "dataset": "year",
+          "baseline_metrics": [
+            {
+              "metric": "rmse",
+              "value": 9.323387009681644
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "rmse",
+              "value": 9.323469898551933
+            }
+          ],
+          "baseline_candidate_bits_equal": false
+        },
+        {
+          "vendor": "amd",
+          "dataset": "year",
+          "baseline_metrics": [
+            {
+              "metric": "rmse",
+              "value": 9.323387009681644
+            }
+          ],
+          "candidate_metrics": [
+            {
+              "metric": "rmse",
+              "value": 9.323469898551933
+            }
+          ],
+          "baseline_candidate_bits_equal": false
+        }
+      ],
+      "missing": [],
+      "combined_ratio": 1.0444427494979254,
+      "vendor_ratios": {
+        "nvidia": 1.0640485543084253,
+        "amd": 1.0251981947269193
+      },
+      "limitations": "One warmup/sample; Apple/host identity and ET quality decision must be linked before promotion; no automatic material-regression threshold.",
+      "reason": "Slower combined and on both vendors overall; slightly worse RMSE; retain float."
+    }
+  ],
+  "failures": [],
+  "pending": [],
+  "historical_attempts": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/full-identical-20261005/non-gemm-backlog/full-harness/consolidated-v2",
+      "status": "FOUR_AMD_TAXI_TIMINGS_RETAINED_BUT_FINAL_EVIDENCE_FAILED; scoped repairs queued"
+    }
+  ]
+}
