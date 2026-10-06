@@ -28,6 +28,13 @@ def tick(config, state):
         row = {'name': lane['name'], 'evidence': lane['status_path']}
         try:
             path = Path(lane['status_path'])
+            if lane.get('fetch_status_argv'):
+                capture = state / (lane['name'] + '-status-capture.json')
+                with capture.open('w') as out, (state / (lane['name'] + '-fetch.log')).open('a') as log:
+                    fetched = subprocess.run(lane['fetch_status_argv'], stdout=out, stderr=log, timeout=45)
+                if fetched.returncode:
+                    raise OSError('Remote status fetch failed, exit=' + str(fetched.returncode))
+                atomic(path, json.loads(capture.read_text()))
             value = json.loads(path.read_text())
             row['status'] = value.get('status', value.get('phase', 'UNKNOWN'))
             row['detail'] = value
