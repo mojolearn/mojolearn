@@ -374,9 +374,9 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 0, "version": 2} | component | MEASURED | 0.9216 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 1, "version": 2} | component | MEASURED | 1.0700 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 2, "version": 2} | component | MEASURED | 0.9696 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
-| N06 | amd/gfx942 | {}/{"heads": 4, "length": 512}/1 | public_caller_component | MEASURED | 0.7114 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N06 | amd/gfx942 | {}/{"heads": 4, "length": 512}/1 | component | MEASURED | 0.7114 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | N07 | amd/gfx942 | {}/{}/candidate | public_caller_component | MEASURED | 1.0340 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
-| N08 | amd/gfx942 | {}/{"columns": 4096, "features": 8, "rows": 1024}/1 | public_caller_component | MEASURED | 0.9636 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N08 | amd/gfx942 | {}/{"columns": 4096, "features": 8, "rows": 1024}/1 | component | MEASURED | 0.9636 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 
 ## Campaign notes
 
