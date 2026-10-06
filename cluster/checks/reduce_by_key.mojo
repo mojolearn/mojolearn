@@ -767,17 +767,23 @@ def finish_sum_kernel(
 #: candidate for wide data and wins over the default. The old opt-in
 #: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1` is now a no-op. Int32 totals: no
 #: bit moves at any block size (the banner's associativity argument).
+# A08 AMD LOSERS, 2026-10-06:1024/current256=1.205,1.210,1.426;
+# 4096/current256=2.853,2.843,4.447 on generated fits100000x32,100001x33,65537x17.
+# Full production KMeans, one in-process warmup+score, MI325X, timing source
+# 4252d8155; identity assumed prevalidated. No default change: NVIDIA and
+# named-dataset full harness still pending. Evidence:
+# mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json.
 comptime BLOCK_ACC_ROWS = (
     4096
     if (
-        # A08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+        # A08 AMD loser on stated fits; retained as an explicit experimental arm.
         is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096"]()
         and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
     else (
         1024
         if (
-            # A08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+            # A08 AMD loser on stated fits; retained as an explicit experimental arm.
             is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF"]()
             or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
         )
