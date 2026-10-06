@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# F15: qualification pending. Build every independent variant; device quality,
+# complete-call speed, peak scratch and opponent admission remain separate gates.
+# New experiment mechanisms remain opt-in; existing promoted defaults are retained.
 """Separate mini-batch label, stopping and retained scratch A/B fit fixtures."""
 import sys
 from pathlib import Path

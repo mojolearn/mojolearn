@@ -1,0 +1,132 @@
+{
+  "schema": 1,
+  "id": "F15",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "x_cluster/minibatch_fast.mojo",
+    "dbscan/estimator.mojo",
+    "hdbscan/impl/detail/fast_apple.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": null,
+  "variants": [
+    {
+      "name": "dbscan-outputs",
+      "binding": "estimators",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "default",
+      "binding": "x_cluster",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "hdbscan-core",
+      "binding": "hdbscan",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_HDB_CORE_TILE"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "hdbscan-downloads",
+      "binding": "hdbscan",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_HDB_ONE_SYNC"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "hdbscan-linkage",
+      "binding": "hdbscan",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_HDB_LINKAGE_DEVICE"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "hdbscan-selection",
+      "binding": "hdbscan",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_HDB_SELECT_DEVICE"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "stopping",
+      "binding": "x_cluster",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_CLUSTER_FAST_STOP_GROUP8"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [
+    "Independent seeded starts, center accumulation and scratch reuse need separate candidate integrations."
+  ],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}
