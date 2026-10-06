@@ -6,6 +6,7 @@ canonical optimizer cell, not a new mathematical transcription. This explicit
 component does not commit parameters or advance counters: its owner must run
 the existing admission and finish/rollback policy before publishing outputs.
 """
+from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
@@ -146,13 +147,27 @@ def nn_grouped_adam_kernel[STATUS: Bool](
 
 
 def nn_adam_status_fold_kernel(dst: _IP, parts: _IP, blocks_in: Int32, n_in: Int32):
-    # Four independent canonical field results, with integer selection only.
-    var field = Int(thread_idx.x)
-    if field < 4:
-        var first = n_in
-        for block in range(Int(blocks_in)):
-            first = min(first, parts[4 * block + field])
-        dst[field] = first
+    # Each block reduces at most NN_ADAM_TPB partial rows, then publishes
+    # four integer minima. Integer min is associative and order independent;
+    # Atomic.min selects the same first failing indices across all blocks.
+    # The tile uses the existing optimizer block width, for neighboring
+    # partial counts alike, rather than serializing an unbounded status walk.
+    var tid = Int(thread_idx.x)
+    var row = Int(block_idx.x) * NN_ADAM_TPB + tid
+    var red = stack_allocation[4 * NN_ADAM_TPB, Int32, address_space=AddressSpace.SHARED]()
+    comptime for field in range(4):
+        red[field * NN_ADAM_TPB + tid] = parts[4 * row + field] if row < Int(blocks_in) else n_in
+    barrier()
+    var step = NN_ADAM_TPB // 2
+    while step > 0:
+        if tid < step:
+            comptime for field in range(4):
+                var at = field * NN_ADAM_TPB + tid
+                red[at] = min(red[at], red[at + step])
+        barrier()
+        step //= 2
+    if tid < 4:
+        _ = Atomic.min(dst.unsafe_offset(tid), red[tid * NN_ADAM_TPB])
 
 
 def nn_grouped_adam_into[STATUS: Bool](
@@ -183,4 +198,9 @@ def nn_grouped_adam_into[STATUS: Bool](
         raise Error("NN56 status workspace exceeds native bounds")
     ctx.enqueue_function[nn_grouped_adam_kernel[STATUS]](p_out.unsafe_ptr(), m_out.unsafe_ptr(), v_out.unsafe_ptr(), param.unsafe_ptr(), grad.unsafe_ptr(), m_state.unsafe_ptr(), v_state.unsafe_ptr(), offsets.unsafe_ptr(), kinds.unsafe_ptr(), scalars.unsafe_ptr(), parts.unsafe_ptr(), Int32(tiles), Int32(n), grid_dim=(tiles, groups, 1), block_dim=(NN_ADAM_TPB, 1, 1))
     comptime if STATUS:
-        ctx.enqueue_function[nn_adam_status_fold_kernel](status.unsafe_ptr(), parts.unsafe_ptr(), Int32(groups * tiles), Int32(n), grid_dim=(1, 1, 1), block_dim=(32, 1, 1))
+        # The caller-owned status buffer has four fields; enqueue its sentinel
+        # before the reduction on the same context. No temporary device owner
+        # or extra host synchronization is introduced.
+        status.enqueue_fill(Int32(n))
+        var blocks = groups * tiles
+        ctx.enqueue_function[nn_adam_status_fold_kernel](status.unsafe_ptr(), parts.unsafe_ptr(), Int32(blocks), Int32(n), grid_dim=((blocks + NN_ADAM_TPB - 1) // NN_ADAM_TPB, 1, 1), block_dim=(NN_ADAM_TPB, 1, 1))

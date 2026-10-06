@@ -22,6 +22,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
+from core.fast_radix_sort import frs_exclusive_scan, frs_scan_blocks
 
 from x_cluster.bodies import (
     FPtr,
@@ -1452,13 +1453,35 @@ def _c42_pack(source: FPtr,dst: FPtr,n: Int32):
             dst[_c42_slot(i,j,Int(n))]=source[i*Int(n)+j]
 
 
-def _c42_active(live: IPtr,active: IPtr,n: Int32):
-    # Stable logical row order is independent of task scheduling.
-    var count=0
-    for row in range(Int(n)):
-        if live[row]!=0:
-            active[count]=Int32(row)
-            count+=1
+def _c42_active_flags(live: IPtr, offsets: IPtr, n: Int32):
+    var row = Int(block_idx.x) * TPB + Int(thread_idx.x)
+    if row < Int(n):
+        offsets[row] = Int32(1) if live[row] != 0 else Int32(0)
+
+
+def _c42_active_scatter(live: IPtr, offsets: IPtr, active: IPtr, n: Int32):
+    var row = Int(block_idx.x) * TPB + Int(thread_idx.x)
+    if row < Int(n) and live[row] != 0:
+        # Exclusive counts give each live row its unique rank in original
+        # row order. No schedule-dependent atomic append changes tie order.
+        active[Int(offsets[row])] = Int32(row)
+
+
+struct _C42ActiveScratch(Movable):
+    var offsets: DeviceBuffer[DType.int32]
+    var sums: DeviceBuffer[DType.int32]
+
+    def __init__(out self, ctx: DeviceContext, n: Int) raises:
+        self.offsets = ctx.enqueue_create_buffer[DType.int32](n)
+        self.sums = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n))
+
+    def gather(mut self, ctx: DeviceContext, live: IPtr, active: IPtr, n: Int) raises:
+        # Reuse the existing cross-block integer scan, with O(n) reusable
+        # workspace. The launch covers any row count; it has no dataset or
+        # benchmark-shape threshold. All work stays on the device.
+        ctx.enqueue_function[_c42_active_flags](live, self.offsets.unsafe_ptr(), Int32(n), grid_dim=_grid(n), block_dim=TPB)
+        frs_exclusive_scan(ctx, self.offsets, n, self.sums)
+        ctx.enqueue_function[_c42_active_scatter](live, self.offsets.unsafe_ptr(), active, Int32(n), grid_dim=_grid(n), block_dim=TPB)
 
 
 def _c42_argmin(md: FPtr,nn: IPtr,active: IPtr,count: Int32,part: MutPointer[UInt64,MutAnyOrigin]):
@@ -2594,7 +2617,9 @@ struct DeviceOps(ClusterOps):
         var p_dm = self._fp(dm)
         var packed = ctx.enqueue_create_buffer[DType.float32](n*(n+1)//2 if C42_ACTIVE_TRIANGLE else 1)
         var active = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
+        var active_scan = List[_C42ActiveScratch]()
         comptime if C42_ACTIVE_TRIANGLE:
+            active_scan.append(_C42ActiveScratch(ctx, n))
             ctx.enqueue_function[_c42_pack](p_dm,packed.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
             ctx.synchronize()
             self.shrink(dm)
@@ -2613,7 +2638,7 @@ struct DeviceOps(ClusterOps):
             var partial_count=nb
             comptime if C42_ACTIVE_TRIANGLE:
                 partial_count=(n-step+AGG_PER-1)//AGG_PER
-                ctx.enqueue_function[_c42_active](p_live,active.unsafe_ptr(),Int32(n),grid_dim=1,block_dim=1)
+                active_scan[0].gather(ctx, p_live, active.unsafe_ptr(), n)
                 ctx.enqueue_function[_c42_argmin](p_md,p_nn,active.unsafe_ptr(),Int32(n-step),p_part,grid_dim=partial_count,block_dim=AGG_TPB)
             else:
                 ctx.enqueue_function[_agg_argmin_part_kernel](
@@ -2637,6 +2662,7 @@ struct DeviceOps(ClusterOps):
         ctx.enqueue_copy(dst_ptr=children.unsafe_ptr(), src_buf=ch)
         ctx.enqueue_copy(dst_ptr=dist.unsafe_ptr(), src_buf=dv)
         self._sync()
+        _ = active_scan^
         _ = packed^
         _ = active^
         _ = live^

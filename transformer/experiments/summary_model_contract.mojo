@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared scalar attention layout, admission and trace operations; no GPU imports."""
 from std.memory import bitcast
-from core.host_lanes import host_f32_uninit
 from checks.numerics import ftz, identical_exp, identical_div, identical_mul
 from transformer.experiments.attention_summary_contract import (NN20_BALANCED_SUMMARY_TREE, summary_scratch_elements, summary_attention_forward_row, summary_attention_rowdot, summary_attention_dq_cell, summary_attention_dkdv_cell, _score, _dyv)
 
