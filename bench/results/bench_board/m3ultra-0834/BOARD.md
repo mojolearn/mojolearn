@@ -6,7 +6,7 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 > Stored historical opponent cells keep their original resource provenance. Fresh measurements use one excluded warmup and one scored sample; failures remain failures.
 
-> At the user-directed transition to missing-only opponents, the active LinearSVR/Istella attempt was interrupted without admitting a timing. Completed measurements were preserved; the replacement missing-only sweep remains active.
+> User-directed suspension for candidate A/B measurements: bench_board: [35/402] algos/gamma/istella/rows=full arms=sklearn-cpu. No interrupted timing admitted; completed cells preserved. Missing GPU opponents follow candidates.
 
 ## Box
 
@@ -42,9 +42,9 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 1 planned, 415 done, 29 failed, 0 unsupported, 0 pending. Cells: 1533 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 70, ok 1457).
+Races: 1 planned, 422 done, 29 failed, 0 unsupported, 0 pending. Cells: 1540 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 70, ok 1464).
 
-Inference cells: 913 (REFUSED 102, ok 811).
+Inference cells: 920 (REFUSED 102, ok 818).
 
 ## Quality at a glance
 
@@ -213,6 +213,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | gamma | taxi | r2 (higher is better) | -231.912000 | -231.912000 | sklearn-cpu - |
 | algos | gamma | taxi | rmse (lower is better) | 243.071000 | 243.071000 | sklearn-cpu - |
 | algos | gamma | taxi | finite | - | 1.000000 | sklearn-cpu - |
+| algos | gamma | taxi | r2 (higher is better) | - | - | sklearn-cpu -232.959247 |
+| algos | gamma | taxi | rmse (lower is better) | - | - | sklearn-cpu 243.616612 |
 | algos | garch | synthetic | mean_llf (higher is better) | -1938.220000 | -1938.222656 | arch-cpu -1938.221004 |
 | algos | garch | taxi-hourly | mean_llf (higher is better) | -1131.910000 | -1131.723763 | arch-cpu -1129.806866 |
 | algos | gaussian-nb | istella | accuracy (higher is better) | 0.876570 | 0.876570 | sklearn-cpu 0.876530 |
@@ -432,9 +434,13 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | poisson | istella | r2 (higher is better) | 0.243601 | 0.243602 | sklearn-cpu - |
 | algos | poisson | istella | rmse (lower is better) | 0.726500 | 0.726500 | sklearn-cpu - |
 | algos | poisson | istella | finite | - | 1.000000 | sklearn-cpu - |
+| algos | poisson | istella | r2 (higher is better) | - | - | sklearn-cpu 0.251336 |
+| algos | poisson | istella | rmse (lower is better) | - | - | sklearn-cpu 0.722776 |
 | algos | poisson | taxi | r2 (higher is better) | 0.035748 | 0.035757 | sklearn-cpu - |
 | algos | poisson | taxi | rmse (lower is better) | 15.639800 | 15.639800 | sklearn-cpu - |
 | algos | poisson | taxi | finite | - | 1.000000 | sklearn-cpu - |
+| algos | poisson | taxi | r2 (higher is better) | - | - | sklearn-cpu 0.036205 |
+| algos | poisson | taxi | rmse (lower is better) | - | - | sklearn-cpu 15.636127 |
 | algos | poly-count-sketch | istella | kernel_rel_error (lower is better) | 0.040849 | 0.332130 | sklearn-cpu 0.040849 |
 | algos | poly-count-sketch | taxi | kernel_rel_error (lower is better) | 0.096596 | 0.093442 | sklearn-cpu 0.096596 |
 | algos | prophet | synthetic | forecast_rmse (lower is better) | 1.014910 | 1.015149 | prophet-cpu 1.015319 |
@@ -512,15 +518,21 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | select-r-regression | taxi | n_selected | 5.000000 | 5 | sklearn-cpu 5 |
 | algos | select-r-regression | taxi | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
 | algos | sgd-clf | istella | accuracy (higher is better) | 0.920350 | - | sklearn-cpu - |
+| algos | sgd-clf | istella | accuracy (higher is better) | - | - | sklearn-cpu 0.910200 |
 | algos | sgd-clf | taxi | accuracy (higher is better) | 0.755330 | - | sklearn-cpu - |
+| algos | sgd-clf | taxi | accuracy (higher is better) | - | - | sklearn-cpu 0.752520 |
 | algos | sgd-ocsvm | istella | fraction_flagged | 0.040420 | 0.00044 | sklearn-cpu 0.093340 |
 | algos | sgd-ocsvm | istella | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
 | algos | sgd-ocsvm | taxi | fraction_flagged | 0.055570 | 0.027950 | sklearn-cpu 0.007020 |
 | algos | sgd-ocsvm | taxi | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
 | algos | sgd-reg | istella | r2 (higher is better) | 0.327829 | - | sklearn-cpu - |
 | algos | sgd-reg | istella | rmse (lower is better) | 0.684858 | - | sklearn-cpu - |
+| algos | sgd-reg | istella | r2 (higher is better) | - | - | sklearn-cpu -2.197e+24 |
+| algos | sgd-reg | istella | rmse (lower is better) | - | - | sklearn-cpu 1.238e+12 |
 | algos | sgd-reg | taxi | r2 (higher is better) | 0.908969 | - | sklearn-cpu - |
 | algos | sgd-reg | taxi | rmse (lower is better) | 4.805410 | - | sklearn-cpu - |
+| algos | sgd-reg | taxi | r2 (higher is better) | - | - | sklearn-cpu 0.880681 |
+| algos | sgd-reg | taxi | rmse (lower is better) | - | - | sklearn-cpu 5.501638 |
 | algos | sgd | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-compile-fp32 0.000000; torch-eager-fp32 - |
 | algos | simple-imputer | istella | masked_rmse | 346849.000000 | 346849.129968 | sklearn-cpu 346849.129968 |
 | algos | simple-imputer | taxi | masked_rmse | 5.985180 | 5.985180 | sklearn-cpu 5.985180 |
@@ -656,8 +668,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | lasso | taxi | rmse (lower is better) | 4.804740 | 4.804745 | sklearn-cpu 4.804745 |
 | classical2 | linearsvc | istella | accuracy (higher is better) | 0.923120 | 0.923470 | sklearn-cpu 0.923540 |
 | classical2 | linearsvc | taxi | accuracy (higher is better) | 0.763330 | 0.763330 | sklearn-cpu 0.763570 |
-| classical2 | linearsvr | istella | r2 (higher is better) | -0.106761 | -0.106761 | sklearn-cpu -0.025730 |
-| classical2 | linearsvr | istella | rmse (lower is better) | 0.878794 | 0.878794 | sklearn-cpu - |
+| classical2 | linearsvr | istella | r2 (higher is better) | -0.106761 | -0.106761 | sklearn-cpu -0.025729 |
+| classical2 | linearsvr | istella | rmse (lower is better) | 0.878794 | 0.878794 | sklearn-cpu 0.846012 |
 | classical2 | linearsvr | taxi | r2 (higher is better) | 0.899807 | 0.899814 | sklearn-cpu 0.899803 |
 | classical2 | linearsvr | taxi | rmse (lower is better) | 5.041440 | 5.041273 | sklearn-cpu 5.041552 |
 | classical2 | logreg | istella | accuracy (higher is better) | 0.924560 | 0.924590 | sklearn-cpu 0.924470 |
@@ -882,6 +894,7 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | factor-analysis | taxi | Xq | - | 3.5 | 3.4 | - | sklearn-cpu 3.7 ms (IDENTICAL/arm 1.263) |
 | algos | fastica | istella | Xq | - | 35.7 | 36.8 | - | sklearn-cpu 11.0 ms (IDENTICAL/arm 2.978) |
 | algos | fastica | taxi | Xq | - | 2.1 | 2.2 | - | sklearn-cpu 2.1 ms (IDENTICAL/arm 1.614) |
+| algos | gamma | taxi | Xq | - | - | - | - | sklearn-cpu 3.6 ms (IDENTICAL/arm -) |
 | algos | gaussian-nb | istella | Xq | - | 35.9 | 36.9 | - | sklearn-cpu 183.8 ms (IDENTICAL/arm 0.170) |
 | algos | gaussian-nb | taxi | Xq | - | 6.8 | 5.0 | - | sklearn-cpu 12.2 ms (IDENTICAL/arm 0.390) |
 | algos | gaussian-rp | istella | Xq | - | 18.2 | 18.1 | - | sklearn-cpu 4.0 ms (IDENTICAL/arm 5.895) |
@@ -999,6 +1012,8 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | pls-canonical | taxi | Xq | - | 6.9 | 5.0 | - | sklearn-cpu 7.2 ms (IDENTICAL/arm 0.806) |
 | algos | pls | istella | Xq | - | 32.4 | 34.3 | - | sklearn-cpu 33.4 ms (IDENTICAL/arm 0.657) |
 | algos | pls | taxi | Xq | - | 1.8 | 1.8 | - | sklearn-cpu 2.4 ms (IDENTICAL/arm 0.935) |
+| algos | poisson | istella | Xq | - | - | - | - | sklearn-cpu 23.6 ms (IDENTICAL/arm -) |
+| algos | poisson | taxi | Xq | - | - | - | - | sklearn-cpu 3.6 ms (IDENTICAL/arm -) |
 | algos | poly-count-sketch | istella | Xq | - | 6.2 | 2.8 | - | sklearn-cpu 4.9 ms (IDENTICAL/arm 0.454) |
 | algos | poly-count-sketch | taxi | Xq | - | 4.0 | 3.7 | - | sklearn-cpu 2.7 ms (IDENTICAL/arm 0.702) |
 | algos | poly-features | istella | Xq | - | 29.5 | 29.6 | - | sklearn-cpu 30.5 ms (IDENTICAL/arm 0.925) |
@@ -1025,8 +1040,12 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | rnn-reg | taxi-hourly | Xq | - | 11.2 | 12.1 | - | torch-compile-bf16 - ms (IDENTICAL/arm -); torch-compile-fp32 - ms (IDENTICAL/arm -); torch-eager-bf16 - ms (IDENTICAL/arm -); torch-eager-fp32 - ms (IDENTICAL/arm -) |
 | algos | robust-scaler | istella | Xq | - | 80.3 | 64.2 | - | sklearn-cpu 19.7 ms (IDENTICAL/arm 3.261) |
 | algos | robust-scaler | taxi | Xq | - | 3.0 | 3.0 | - | sklearn-cpu 1.9 ms (IDENTICAL/arm 2.360) |
+| algos | sgd-clf | istella | Xq | - | - | - | - | sklearn-cpu 4.9 ms (IDENTICAL/arm -) |
+| algos | sgd-clf | taxi | Xq | - | - | - | - | sklearn-cpu 1.0 ms (IDENTICAL/arm -) |
 | algos | sgd-ocsvm | istella | Xq | - | 17.6 | 16.7 | - | sklearn-cpu 4.2 ms (IDENTICAL/arm 3.937) |
 | algos | sgd-ocsvm | taxi | Xq | - | 8.9 | 11.3 | - | sklearn-cpu 0.6 ms (IDENTICAL/arm 19.362) |
+| algos | sgd-reg | istella | Xq | - | - | - | - | sklearn-cpu 4.3 ms (IDENTICAL/arm -) |
+| algos | sgd-reg | taxi | Xq | - | - | - | - | sklearn-cpu 0.7 ms (IDENTICAL/arm -) |
 | algos | simple-imputer | istella | Xq | - | 65.6 | 59.0 | - | sklearn-cpu 94.2 ms (IDENTICAL/arm 0.646) |
 | algos | simple-imputer | taxi | Xq | - | 2.8 | 2.8 | - | sklearn-cpu 4.3 ms (IDENTICAL/arm 0.740) |
 | algos | skewed-chi2 | istella | Xq | - | 5.3 | 2.4 | - | sklearn-cpu 1.1 ms (IDENTICAL/arm 2.947) |
@@ -1125,8 +1144,8 @@ race: done, driver rc 0, log `raw/trees/et.istella.rows-full.log`, ran on ip-172
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sklearn-et-cpu | scikit-learn | cpu | opponent | 29942.7 | 29942.7..29942.7 | 1 | - | - | 3780.1 | - | auc=0.937904, logloss=0.190078 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:12:48Z', 'original_source': 'measured this run'}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 522607.2 | 522607.2..522607.2 | 1 | - | - | 24530.6 | - | auc=0.948128, logloss=0.197270 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:12:48Z', 'original_source': 'measured this run'}) |
+| sklearn-et-cpu | scikit-learn | cpu | opponent | 29942.7 | 29942.7..29942.7 | 1 | - | - | 3780.1 | - | auc=0.937904, logloss=0.190078 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:12:48Z', 'original_source': 'measured this run'}) |
+| lightgbm-cpu | lightgbm | cpu | opponent | 522607.2 | 522607.2..522607.2 | 1 | - | - | 24530.6 | - | auc=0.948128, logloss=0.197270 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:12:48Z', 'original_source': 'measured this run'}) |
 
 memory, sklearn-et-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1194,8 +1213,8 @@ race: done, driver rc 0, log `raw/trees/et.taxi.rows-full.log`, ran on ip-172-31
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sklearn-et-cpu | scikit-learn | cpu | opponent | 20451.3 | 20451.3..20451.3 | 1 | - | - | 3538.8 | - | auc=0.618972, logloss=0.525976 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:54:07Z', 'original_source': 'measured this run'}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 51865.2 | 51865.2..51865.2 | 1 | - | - | 2156.9 | - | auc=0.611172, logloss=0.529303 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:54:07Z', 'original_source': 'measured this run'}) |
+| sklearn-et-cpu | scikit-learn | cpu | opponent | 20451.3 | 20451.3..20451.3 | 1 | - | - | 3538.8 | - | auc=0.618972, logloss=0.525976 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:54:07Z', 'original_source': 'measured this run'}) |
+| lightgbm-cpu | lightgbm | cpu | opponent | 51865.2 | 51865.2..51865.2 | 1 | - | - | 2156.9 | - | auc=0.611172, logloss=0.529303 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:54:07Z', 'original_source': 'measured this run'}) |
 
 memory, sklearn-et-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1263,9 +1282,9 @@ race: done, driver rc 0, log `raw/trees/gbdt-categorical.taxi.rows-full.log`, ra
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 96930.1 | 96930.1..96930.1 | 1 | - | - | 6908.4 | - | auc=0.628462, logloss=0.529047 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:16:47Z', 'original_source': 'measured this run'}) |
-| xgboost-cpu | xgboost | cpu | opponent | 69825.8 | 69825.8..69825.8 | 1 | - | - | 4931.7 | - | auc=0.631472, logloss=0.528686 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:16:47Z', 'original_source': 'measured this run'}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 59629.3 | 59629.3..59629.3 | 1 | - | - | 4924.6 | - | auc=0.632665, logloss=0.528094 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:16:47Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 96930.1 | 96930.1..96930.1 | 1 | - | - | 6908.4 | - | auc=0.628462, logloss=0.529047 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:16:47Z', 'original_source': 'measured this run'}) |
+| xgboost-cpu | xgboost | cpu | opponent | 69825.8 | 69825.8..69825.8 | 1 | - | - | 4931.7 | - | auc=0.631472, logloss=0.528686 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:16:47Z', 'original_source': 'measured this run'}) |
+| lightgbm-cpu | lightgbm | cpu | opponent | 59629.3 | 59629.3..59629.3 | 1 | - | - | 4924.6 | - | auc=0.632665, logloss=0.528094 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:16:47Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu, xgboost-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1359,8 +1378,8 @@ race: done, driver rc 0, log `raw/trees/gbdt-depthwise.istella.rows-full.log`, r
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 84314.6 | 84314.6..84314.6 | 1 | - | - | 6690.7 | - | auc=0.983136, logloss=0.157685 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:27:07Z', 'original_source': 'measured this run'}) |
-| xgboost-cpu | xgboost | cpu | opponent | 22718.4 | 22718.4..22718.4 | 1 | - | - | 6989.4 | - | auc=0.983622, logloss=0.149263 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:27:07Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 84314.6 | 84314.6..84314.6 | 1 | - | - | 6690.7 | - | auc=0.983136, logloss=0.157685 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:27:07Z', 'original_source': 'measured this run'}) |
+| xgboost-cpu | xgboost | cpu | opponent | 22718.4 | 22718.4..22718.4 | 1 | - | - | 6989.4 | - | auc=0.983622, logloss=0.149263 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:27:07Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu, xgboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1433,8 +1452,8 @@ race: done, driver rc 0, log `raw/trees/gbdt-depthwise.taxi.rows-full.log`, ran 
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 46467.5 | 46467.5..46467.5 | 1 | - | - | 3614.3 | - | auc=0.632459, logloss=0.527789 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:23:29Z', 'original_source': 'measured this run'}) |
-| xgboost-cpu | xgboost | cpu | opponent | 10444.5 | 10444.5..10444.5 | 1 | - | - | 3690.3 | - | auc=0.630969, logloss=0.528677 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:23:29Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 46467.5 | 46467.5..46467.5 | 1 | - | - | 3614.3 | - | auc=0.632459, logloss=0.527789 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:23:29Z', 'original_source': 'measured this run'}) |
+| xgboost-cpu | xgboost | cpu | opponent | 10444.5 | 10444.5..10444.5 | 1 | - | - | 3690.3 | - | auc=0.630969, logloss=0.528677 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:23:29Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu, xgboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1507,9 +1526,9 @@ race: done, driver rc 0, log `raw/trees/gbdt-lossguide.istella.rows-full.log`, r
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 104733.8 | 104733.8..104733.8 | 1 | - | - | 6001.8 | - | auc=0.983136, logloss=0.157685 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:41:25Z', 'original_source': 'measured this run'}) |
-| xgboost-cpu | xgboost | cpu | opponent | 73723.1 | 73723.1..73723.1 | 1 | - | - | 6306.7 | - | auc=0.983622, logloss=0.149263 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:41:25Z', 'original_source': 'measured this run'}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 54930.1 | 54930.1..54930.1 | 1 | - | - | 6571.9 | - | auc=0.983778, logloss=0.149653 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:41:25Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 104733.8 | 104733.8..104733.8 | 1 | - | - | 6001.8 | - | auc=0.983136, logloss=0.157685 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:41:25Z', 'original_source': 'measured this run'}) |
+| xgboost-cpu | xgboost | cpu | opponent | 73723.1 | 73723.1..73723.1 | 1 | - | - | 6306.7 | - | auc=0.983622, logloss=0.149263 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:41:25Z', 'original_source': 'measured this run'}) |
+| lightgbm-cpu | lightgbm | cpu | opponent | 54930.1 | 54930.1..54930.1 | 1 | - | - | 6571.9 | - | auc=0.983778, logloss=0.149653 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:41:25Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu, xgboost-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1593,9 +1612,9 @@ race: done, driver rc 0, log `raw/trees/gbdt-lossguide.taxi.rows-full.log`, ran 
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 70310.2 | 70310.2..70310.2 | 1 | - | - | 2765.3 | - | auc=0.632459, logloss=0.527789 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:33:27Z', 'original_source': 'measured this run'}) |
-| xgboost-cpu | xgboost | cpu | opponent | 60147.4 | 60147.4..60147.4 | 1 | - | - | 2805.5 | - | auc=0.630969, logloss=0.528677 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:33:27Z', 'original_source': 'measured this run'}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 51688.7 | 51688.7..51688.7 | 1 | - | - | 2724.4 | - | auc=0.632243, logloss=0.528067 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:33:27Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 70310.2 | 70310.2..70310.2 | 1 | - | - | 2765.3 | - | auc=0.632459, logloss=0.527789 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:33:27Z', 'original_source': 'measured this run'}) |
+| xgboost-cpu | xgboost | cpu | opponent | 60147.4 | 60147.4..60147.4 | 1 | - | - | 2805.5 | - | auc=0.630969, logloss=0.528677 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:33:27Z', 'original_source': 'measured this run'}) |
+| lightgbm-cpu | lightgbm | cpu | opponent | 51688.7 | 51688.7..51688.7 | 1 | - | - | 2724.4 | - | auc=0.632243, logloss=0.528067 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:33:27Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu, xgboost-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1679,9 +1698,9 @@ race: done, driver rc 0, log `raw/trees/gbdt-multiclass.istella.rows-full.log`, 
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 753931.7 | 753931.7..753931.7 | 1 | - | - | 7270.3 | - | accuracy=0.907768, mlogloss=0.258286 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:08:53Z', 'original_source': 'measured this run'}) |
-| xgboost-cpu | xgboost | cpu | opponent | 105268.8 | 105268.8..105268.8 | 1 | - | - | 7636.0 | - | accuracy=0.910140, mlogloss=0.246803 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:08:53Z', 'original_source': 'measured this run'}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 225674.0 | 225674.0..225674.0 | 1 | - | - | 7774.6 | - | accuracy=0.910058, mlogloss=0.245916 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:08:53Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 753931.7 | 753931.7..753931.7 | 1 | - | - | 7270.3 | - | accuracy=0.907768, mlogloss=0.258286 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:08:53Z', 'original_source': 'measured this run'}) |
+| xgboost-cpu | xgboost | cpu | opponent | 105268.8 | 105268.8..105268.8 | 1 | - | - | 7636.0 | - | accuracy=0.910140, mlogloss=0.246803 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:08:53Z', 'original_source': 'measured this run'}) |
+| lightgbm-cpu | lightgbm | cpu | opponent | 225674.0 | 225674.0..225674.0 | 1 | - | - | 7774.6 | - | accuracy=0.910058, mlogloss=0.245916 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:08:53Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu, xgboost-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1767,9 +1786,9 @@ race: done, driver rc 0, log `raw/trees/gbdt-multiclass.taxi.rows-full.log`, ran
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 223351.8 | 223351.8..223351.8 | 1 | - | - | 4197.4 | - | accuracy=0.599150, mlogloss=1.012734 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:32:00Z', 'original_source': 'measured this run'}) |
-| xgboost-cpu | xgboost | cpu | opponent | 45616.8 | 45616.8..45616.8 | 1 | - | - | 4267.0 | - | accuracy=0.601128, mlogloss=1.005128 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:32:00Z', 'original_source': 'measured this run'}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 184194.4 | 184194.4..184194.4 | 1 | - | - | 4250.2 | - | accuracy=0.601580, mlogloss=1.004282 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:32:00Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 223351.8 | 223351.8..223351.8 | 1 | - | - | 4197.4 | - | accuracy=0.599150, mlogloss=1.012734 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:32:00Z', 'original_source': 'measured this run'}) |
+| xgboost-cpu | xgboost | cpu | opponent | 45616.8 | 45616.8..45616.8 | 1 | - | - | 4267.0 | - | accuracy=0.601128, mlogloss=1.005128 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:32:00Z', 'original_source': 'measured this run'}) |
+| lightgbm-cpu | lightgbm | cpu | opponent | 184194.4 | 184194.4..184194.4 | 1 | - | - | 4250.2 | - | accuracy=0.601580, mlogloss=1.004282 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:32:00Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu, xgboost-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1855,7 +1874,7 @@ race: done, driver rc 0, log `raw/trees/gbdt-ordered.istella.rows-full.log`, ran
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 384494.9 | 384494.9..384494.9 | 1 | - | - | 7750.1 | - | auc=0.979274, logloss=0.191543 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:32:56Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 384494.9 | 384494.9..384494.9 | 1 | - | - | 7750.1 | - | auc=0.979274, logloss=0.191543 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:32:56Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1918,7 +1937,7 @@ race: done, driver rc 0, log `raw/trees/gbdt-ordered.taxi.rows-full.log`, ran on
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 98353.1 | 98353.1..98353.1 | 1 | - | - | 4872.8 | - | auc=0.627651, logloss=0.529495 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:20:05Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 98353.1 | 98353.1..98353.1 | 1 | - | - | 4872.8 | - | auc=0.627651, logloss=0.529495 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:20:05Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -1981,8 +2000,8 @@ race: done, driver rc 0, log `raw/trees/gbdt-rank-pairlogit.istella.rows-full.lo
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 41251.7 | 41251.7..41251.7 | 1 | - | - | 8085.7 | - | map=0.846328, ndcg10=0.713361, ndcg5=0.643611 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:16:17Z', 'original_source': 'measured this run'}) |
-| xgboost-cpu | xgboost | cpu | opponent | 8211.5 | 8211.5..8211.5 | 1 | - | - | 8351.0 | - | map=0.872796, ndcg10=0.738397, ndcg5=0.670093 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:16:17Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 41251.7 | 41251.7..41251.7 | 1 | - | - | 8085.7 | - | map=0.846328, ndcg10=0.713361, ndcg5=0.643611 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:16:17Z', 'original_source': 'measured this run'}) |
+| xgboost-cpu | xgboost | cpu | opponent | 8211.5 | 8211.5..8211.5 | 1 | - | - | 8351.0 | - | map=0.872796, ndcg10=0.738397, ndcg5=0.670093 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:16:17Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu, xgboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2057,9 +2076,9 @@ race: done, driver rc 0, log `raw/trees/gbdt-rank-yetirank.istella.rows-full.log
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 26684.5 | 26684.5..26684.5 | 1 | - | - | 6399.1 | - | map=0.851990, ndcg10=0.726111, ndcg5=0.660263 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:14:35Z', 'original_source': 'measured this run'}) |
-| xgboost-cpu | xgboost | cpu | opponent | 8219.8 | 8219.8..8219.8 | 1 | - | - | 6645.1 | - | map=0.842929, ndcg10=0.726256, ndcg5=0.664249 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:14:35Z', 'original_source': 'measured this run'}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 6997.1 | 6997.1..6997.1 | 1 | - | - | 6984.8 | - | map=0.858362, ndcg10=0.741515, ndcg5=0.680254 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:14:35Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 26684.5 | 26684.5..26684.5 | 1 | - | - | 6399.1 | - | map=0.851990, ndcg10=0.726111, ndcg5=0.660263 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:14:35Z', 'original_source': 'measured this run'}) |
+| xgboost-cpu | xgboost | cpu | opponent | 8219.8 | 8219.8..8219.8 | 1 | - | - | 6645.1 | - | map=0.842929, ndcg10=0.726256, ndcg5=0.664249 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:14:35Z', 'original_source': 'measured this run'}) |
+| lightgbm-cpu | lightgbm | cpu | opponent | 6997.1 | 6997.1..6997.1 | 1 | - | - | 6984.8 | - | map=0.858362, ndcg10=0.741515, ndcg5=0.680254 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:14:35Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu, xgboost-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2145,7 +2164,7 @@ race: done, driver rc 0, log `raw/trees/gbdt-symmetric-1000.istella.rows-full.lo
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 118950.9 | 118950.9..118950.9 | 1 | - | - | 5517.6 | - | auc=0.982309, logloss=0.171620 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:21:30Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 118950.9 | 118950.9..118950.9 | 1 | - | - | 5517.6 | - | auc=0.982309, logloss=0.171620 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:21:30Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2205,7 +2224,7 @@ race: done, driver rc 0, log `raw/trees/gbdt-symmetric-1000.taxi.rows-full.log`,
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 55078.9 | 55078.9..55078.9 | 1 | - | - | 2231.8 | - | auc=0.631642, logloss=0.528267 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:17:31Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 55078.9 | 55078.9..55078.9 | 1 | - | - | 2231.8 | - | auc=0.631642, logloss=0.528267 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:17:31Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2265,7 +2284,7 @@ race: done, driver rc 0, log `raw/trees/gbdt-symmetric.istella.rows-full.log`, r
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 59581.1 | 59581.1..59581.1 | 1 | - | - | 5493.0 | - | auc=0.979899, logloss=0.188093 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:15:40Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 59581.1 | 59581.1..59581.1 | 1 | - | - | 5493.0 | - | auc=0.979899, logloss=0.188093 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:15:40Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2325,7 +2344,7 @@ race: done, driver rc 0, log `raw/trees/gbdt-symmetric.taxi.rows-full.log`, ran 
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| catboost-cpu | catboost | cpu | opponent | 28135.0 | 28135.0..28135.0 | 1 | - | - | 2216.1 | - | auc=0.630269, logloss=0.528650 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:13:38Z', 'original_source': 'measured this run'}) |
+| catboost-cpu | catboost | cpu | opponent | 28135.0 | 28135.0..28135.0 | 1 | - | - | 2216.1 | - | auc=0.630269, logloss=0.528650 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:13:38Z', 'original_source': 'measured this run'}) |
 
 memory, catboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2385,7 +2404,7 @@ race: done, driver rc 0, log `raw/trees/iforest.istella.rows-full.log`, ran on i
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sklearn-iforest-cpu | scikit-learn | cpu | opponent | 310.1 | 310.1..310.1 | 1 | - | - | 2652.0 | - | auc=0.827914 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:13:07Z', 'original_source': 'measured this run'}) |
+| sklearn-iforest-cpu | scikit-learn | cpu | opponent | 310.1 | 310.1..310.1 | 1 | - | - | 2652.0 | - | auc=0.827914 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:13:07Z', 'original_source': 'measured this run'}) |
 
 memory, sklearn-iforest-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2431,7 +2450,7 @@ race: done, driver rc 0, log `raw/trees/iforest.taxi.rows-full.log`, ran on ip-1
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sklearn-iforest-cpu | scikit-learn | cpu | opponent | 588.7 | 588.7..588.7 | 1 | - | - | 636.8 | - | auc=0.552849 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T01:12:58Z', 'original_source': 'measured this run'}) |
+| sklearn-iforest-cpu | scikit-learn | cpu | opponent | 588.7 | 588.7..588.7 | 1 | - | - | 636.8 | - | auc=0.552849 | yes | UNKNOWN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T01:12:58Z', 'original_source': 'measured this run'}) |
 
 memory, sklearn-iforest-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2477,8 +2496,8 @@ race: done, driver rc 0, log `raw/trees/rf.istella.rows-full.log`, ran on ip-172
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sklearn-rf-cpu | scikit-learn | cpu | opponent | 93695.2 | 93695.2..93695.2 | 1 | - | - | 4387.9 | - | auc=0.945284, logloss=0.182344 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:51:36Z', 'original_source': 'measured this run'}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 67953.2 | 67953.2..67953.2 | 1 | - | - | 3052.8 | - | auc=0.945361, logloss=0.195422 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:51:36Z', 'original_source': 'measured this run'}) |
+| sklearn-rf-cpu | scikit-learn | cpu | opponent | 93695.2 | 93695.2..93695.2 | 1 | - | - | 4387.9 | - | auc=0.945284, logloss=0.182344 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:51:36Z', 'original_source': 'measured this run'}) |
+| lightgbm-cpu | lightgbm | cpu | opponent | 67953.2 | 67953.2..67953.2 | 1 | - | - | 3052.8 | - | auc=0.945361, logloss=0.195422 | yes | COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:51:36Z', 'original_source': 'measured this run'}) |
 
 memory, sklearn-rf-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2546,8 +2565,8 @@ race: done, driver rc 0, log `raw/trees/rf.taxi.rows-full.log`, ran on ip-172-31
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sklearn-rf-cpu | scikit-learn | cpu | opponent | 74182.0 | 74182.0..74182.0 | 1 | - | - | 4920.6 | - | auc=0.617678, logloss=0.525532 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:45:56Z', 'original_source': 'measured this run'}) |
-| lightgbm-cpu | lightgbm | cpu | opponent | 54951.7 | 54951.7..54951.7 | 1 | - | - | 587.8 | - | auc=0.617040, logloss=0.526421 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T00:45:56Z', 'original_source': 'measured this run'}) |
+| sklearn-rf-cpu | scikit-learn | cpu | opponent | 74182.0 | 74182.0..74182.0 | 1 | - | - | 4920.6 | - | auc=0.617678, logloss=0.525532 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:45:56Z', 'original_source': 'measured this run'}) |
+| lightgbm-cpu | lightgbm | cpu | opponent | 54951.7 | 54951.7..54951.7 | 1 | - | - | 587.8 | - | auc=0.617040, logloss=0.526421 | yes | NOT-COMPARABLE | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T00:45:56Z', 'original_source': 'measured this run'}) |
 
 memory, sklearn-rf-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2606,7 +2625,7 @@ race: done, driver rc 0, log `logs/classical.dbscan.istella.rows-full.log`, ran 
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sklearn-cpu | scikit-learn | cpu | opponent | 248709.0 | 248709.0..248709.0 | 1 | - | - | 5709.2 | - | n_clusters=40131, noise_fraction=0.219391, rows=1000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:44:31Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 248709.0 | 248709.0..248709.0 | 1 | - | - | 5709.2 | - | n_clusters=40131, noise_fraction=0.219391, rows=1000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:44:31Z', 'original_source': 'measured this run'}) |
 
 memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
@@ -2639,7 +2658,7 @@ race: failed, driver rc 0, log `logs/classical.dbscan.taxi.rows-full.log`, ran o
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sklearn-cpu | scikit-learn | cpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | HOST-MEMORY(killed at 236.4 GB: the driver's process tree held 253.9 GB, over 90% of the box's 274.9 GB) ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:36:11Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | HOST-MEMORY(killed at 236.4 GB: the driver's process tree held 253.9 GB, over 90% of the box's 274.9 GB) ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:36:11Z', 'original_source': 'measured this run'}) |
 
 settings: eps=3, min_samples=2 (the cuML benchmark's DBSCAN) on every arm; metric='euclidean'. Rows: dbscan block: 1,000,000 rows, standardized. Timed: fit.
 
@@ -2672,7 +2691,7 @@ race: done, driver rc 0, log `logs/classical.hdbscan.istella.rows-full.log`, ran
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 45732.1 | 45732.1..45732.1 | 1 | - | - | 1936.0 | - | n_clusters=47, noise_fraction=0.253810, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-hdbscan-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:01:59Z', 'previous_median_ms': 44987.852291960735, 'previous_hash': '533cb30501725362', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 3800.0 | 3800.0..3800.0 | 1 | - | - | 1868.3 | - | n_clusters=47.000000, noise_fraction=0.253810 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 56858.88716598856, 'previous_quality': {'ari_vs_ours': 1.0, 'n_clusters': 47, 'noise_agreement_vs_ours': 1.0, 'noise_fraction': 0.25381, 'rows': 100000}, 'previous_status': 'ok', 'previous_hash': '533cb30501725362', 'baseline_ms': 56858.88716598856, 'baseline_quality_text': 'ari_vs_ours=1, n_clusters=47, noise_agreement_vs_ours=1, noise_fraction=0.2538, rows=1e+05', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 699144.7 | 699144.7..699144.7 | 1 | 0.065 | 0.005 | 1399.4 | - | n_clusters=47, noise_fraction=0.253850, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:08:13Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 699144.7 | 699144.7..699144.7 | 1 | 0.065 | 0.005 | 1399.4 | - | n_clusters=47, noise_fraction=0.253850, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:08:13Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -2713,7 +2732,7 @@ race: done, driver rc 0, log `logs/classical.hdbscan.taxi.rows-full.log`, ran on
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 3845.6 | 3845.6..3845.6 | 1 | - | - | 630.7 | - | n_clusters=161, noise_fraction=0.140550, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-hdbscan-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:02:09Z', 'previous_median_ms': 3927.6366669801064, 'previous_hash': '19b2278391dfb347', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 434.0 | 434.0..434.0 | 1 | - | - | 517.4 | - | n_clusters=160.000000, noise_fraction=0.142220 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 980.4748749884311, 'previous_quality': {'ari_vs_ours': 0.9913635075189694, 'n_clusters': 160, 'noise_agreement_vs_ours': 0.99831, 'noise_fraction': 0.14222, 'rows': 100000}, 'previous_status': 'ok', 'previous_hash': 'd5a183bcd0430e1c', 'baseline_ms': 980.4748749884311, 'baseline_quality_text': 'ari_vs_ours=0.9914, n_clusters=160, noise_agreement_vs_ours=0.9983, noise_fraction=0.1422,', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 30752.7 | 30752.7..30752.7 | 1 | 0.125 | 0.014 | 264.9 | - | n_clusters=160, noise_fraction=0.142240, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:45:36Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 30752.7 | 30752.7..30752.7 | 1 | 0.125 | 0.014 | 264.9 | - | n_clusters=160, noise_fraction=0.142240, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:45:36Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -2754,7 +2773,7 @@ race: done, driver rc 0, log `logs/classical.kde.istella.rows-full.log`, ran on 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 91.9 | 91.9..91.9 | 1 | - | - | 1255.5 | - | mean_log_likelihood=-222.270583, rows_without_density=0 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-kde-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:07:06Z', 'previous_median_ms': 178.48954198416322, 'previous_hash': 'c2ac690fb91dcc07', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 69.2 | 69.2..69.2 | 1 | - | - | 488.4 | - | mean_log_likelihood=-222.271000, rows_without_density=0.000000 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 1538.6276670033112, 'previous_quality': {'mean_log_likelihood': -222.27058617401124, 'rows_without_density': 0}, 'previous_status': 'ok', 'previous_hash': 'dcb83489988082e0', 'baseline_ms': 1538.6276670033112, 'baseline_quality_text': 'mean_log_likelihood=-222.3, rows_without_density=0', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 54770.1 | 54770.1..54770.1 | 1 | 0.002 | 0.001 | 406.7 | - | mean_log_likelihood=-226.977403, rows_without_density=0 | yes | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:35:22Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 54770.1 | 54770.1..54770.1 | 1 | 0.002 | 0.001 | 406.7 | - | mean_log_likelihood=-226.977403, rows_without_density=0 | yes | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:35:22Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -2791,7 +2810,7 @@ race: done, driver rc 0, log `logs/classical.kde.taxi.rows-full.log`, ran on ip-
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 20.0 | 20.0..20.0 | 1 | - | - | 1088.5 | - | mean_log_likelihood=-14.826436, rows_without_density=0 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-kde-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:07:08Z', 'previous_median_ms': 133.90016596531495, 'previous_hash': '497497c374f1ec8e', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 8.8 | 8.8..8.8 | 1 | - | - | 324.6 | - | mean_log_likelihood=-14.826400, rows_without_density=0.000000 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 60.271124995779246, 'previous_quality': {'mean_log_likelihood': -14.82646031665802, 'rows_without_density': 0}, 'previous_status': 'ok', 'previous_hash': 'b05f0b50aa81ec28', 'baseline_ms': 60.271124995779246, 'baseline_quality_text': 'mean_log_likelihood=-14.83, rows_without_density=0', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 7000.9 | 7000.9..7000.9 | 1 | 0.003 | 0.001 | 150.8 | - | mean_log_likelihood=-14.826437, rows_without_density=0 | yes | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:33:30Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 7000.9 | 7000.9..7000.9 | 1 | 0.003 | 0.001 | 150.8 | - | mean_log_likelihood=-14.826437, rows_without_density=0 | yes | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:33:30Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -3021,7 +3040,7 @@ race: done, driver rc 0, log `logs/classical.ols.istella.rows-full.log`, ran on 
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1281.3 | 1281.3..1281.3 | 1 | - | - | 9339.2 | - | finite=True, r2=0.332506, rmse=0.681740 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-ols-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:01:35Z', 'previous_median_ms': 3069.8717909981497, 'previous_hash': '24dee7a17fe5e150', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 850.0 | 850.0..850.0 | 1 | - | - | 9339.6 | - | r2=0.331943, rmse=0.682027 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 1331.7015829961747, 'previous_quality': {'finite': True, 'r2': 0.3210922685130948, 'rmse': 0.6875441633718395}, 'previous_status': 'ok', 'previous_hash': '73dd4908dcb824b7', 'baseline_ms': 1331.7015829961747, 'baseline_quality_text': 'r2=0.3211, rmse=0.6875', 'display_rounded': True}) |
 | sklearn-cpu | scikit-learn | cpu | opponent | 3245.3 | 3245.3..3245.3 | 1 | 0.395 | 0.262 | 5746.6 | - | finite=True, r2=0.001881, rmse=0.833655 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-gpu | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "NotImplementedError(\"The operator 'aten::linalg_lstsq.out' is not currently implemented for the MPS device. If you want this op to be considered for addition please comment on https://gith) ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:33:11Z', 'original_source': 'measured this run'}) |
+| torch-gpu | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "NotImplementedError(\"The operator 'aten::linalg_lstsq.out' is not currently implemented for the MPS device. If you want this op to be considered for addition please comment on https://gith) ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:33:11Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -3075,7 +3094,7 @@ race: done, driver rc 0, log `logs/classical.ols.taxi.rows-full.log`, ran on ip-
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 121.2 | 121.2..121.2 | 1 | - | - | 1223.0 | - | finite=True, r2=0.908837, rmse=4.696477 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-ols-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:01:37Z', 'previous_median_ms': 302.5281250011176, 'previous_hash': 'c7b3de3418ea7a77', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 106.0 | 106.0..106.0 | 1 | - | - | 1225.2 | - | r2=0.908838, rmse=4.696440 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 87.32874999986961, 'previous_quality': {'finite': True, 'r2': 0.9088378158593475, 'rmse': 4.696444277790902}, 'previous_status': 'ok', 'previous_hash': '93ed960d4a9d2db4', 'baseline_ms': 87.32874999986961, 'baseline_quality_text': 'r2=0.9088, rmse=4.696', 'display_rounded': True}) |
 | sklearn-cpu | scikit-learn | cpu | opponent | 274.0 | 274.0..274.0 | 1 | 0.442 | 0.387 | 603.5 | - | finite=True, r2=0.724848, rmse=8.159214 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-gpu | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "NotImplementedError(\"The operator 'aten::linalg_lstsq.out' is not currently implemented for the MPS device. If you want this op to be considered for addition please comment on https://gith) ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:33:08Z', 'original_source': 'measured this run'}) |
+| torch-gpu | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "NotImplementedError(\"The operator 'aten::linalg_lstsq.out' is not currently implemented for the MPS device. If you want this op to be considered for addition please comment on https://gith) ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:33:08Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -3129,7 +3148,7 @@ race: done, driver rc 0, log `logs/classical.pca.istella.rows-full.log`, ran on 
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 725.1 | 725.1..725.1 | 1 | - | - | 7640.1 | - | explained_variance_ratio_sum=1.000000 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-pca-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:02:43Z', 'previous_median_ms': 819.3674579961225, 'previous_hash': '2fac585200315901', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 217.8 | 217.8..217.8 | 1 | - | - | 7638.6 | - | explained_variance_ratio_sum=1.000000 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 988.396708999062, 'previous_quality': {'explained_variance_ratio_sum': 1.0000000563033837}, 'previous_status': 'ok', 'previous_hash': '06fccbde84ce53dd', 'baseline_ms': 988.396708999062, 'baseline_quality_text': 'explained_variance_ratio_sum=1', 'display_rounded': True}) |
 | sklearn-cpu | scikit-learn | cpu | opponent | 205.2 | 205.2..205.2 | 1 | 3.533 | 1.061 | 2286.8 | - | explained_variance_ratio_sum=1.000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-gpu | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "NotImplementedError(\"The operator 'aten::_linalg_eigh.eigenvalues' is not currently implemented for the MPS device. If you want this op to be considered for addition please comment on http) ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:33:07Z', 'original_source': 'measured this run'}) |
+| torch-gpu | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "NotImplementedError(\"The operator 'aten::_linalg_eigh.eigenvalues' is not currently implemented for the MPS device. If you want this op to be considered for addition please comment on http) ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:33:07Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -3184,7 +3203,7 @@ race: done, driver rc 0, log `logs/classical.pca.taxi.rows-full.log`, ran on ip-
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 87.9 | 87.9..87.9 | 1 | - | - | 1055.4 | - | explained_variance_ratio_sum=0.999997 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-pca-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:02:45Z', 'previous_median_ms': 86.56029199482873, 'previous_hash': '28e1d54bf4853c8e', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 85.0 | 85.0..85.0 | 1 | - | - | 1055.7 | - | explained_variance_ratio_sum=0.999997 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'PCA_FAST_COLMEAN rab20 M3 A/B 2026-10-05', 'kind': 'A/B', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 57.88524998934008, 'previous_quality': {'explained_variance_ratio_sum': 0.9999966816329067}, 'previous_status': 'ok', 'previous_hash': '345f1180922cce6d', 'baseline_ms': 57.88524998934008, 'baseline_quality_text': 'explained_variance_ratio_sum=1', 'display_rounded': True}) |
 | sklearn-cpu | scikit-learn | cpu | opponent | 119.6 | 119.6..119.6 | 1 | 0.735 | 0.711 | 342.3 | - | explained_variance_ratio_sum=0.999996 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-gpu | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "NotImplementedError(\"The operator 'aten::_linalg_eigh.eigenvalues' is not currently implemented for the MPS device. If you want this op to be considered for addition please comment on http) ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:33:03Z', 'original_source': 'measured this run'}) |
+| torch-gpu | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "NotImplementedError(\"The operator 'aten::_linalg_eigh.eigenvalues' is not currently implemented for the MPS device. If you want this op to be considered for addition please comment on http) ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:33:03Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -3238,7 +3257,7 @@ race: done, driver rc 0, log `logs/classical.svc.istella.rows-full.log`, ran on 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 189.6 | 189.6..189.6 | 1 | - | - | 429.1 | - | accuracy=0.922200, n_support=2400 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-svc-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:12:10Z', 'previous_median_ms': 141.70070795807987, 'previous_hash': '8963cdc33da9ec9e', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 168.4 | 168.4..168.4 | 1 | - | - | 469.4 | - | accuracy=0.922200, n_support=2401 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| sklearn-cpu | scikit-learn | cpu | opponent | 1071.4 | 1071.4..1071.4 | 1 | 0.177 | 0.157 | 305.7 | - | accuracy=0.922200, n_support=2400 | yes | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:35:54Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 1071.4 | 1071.4..1071.4 | 1 | 0.177 | 0.157 | 305.7 | - | accuracy=0.922200, n_support=2400 | yes | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:35:54Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -3299,7 +3318,7 @@ race: done, driver rc 0, log `logs/classical.svc.taxi.rows-full.log`, ran on ip-
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 2546.3 | 2546.3..2546.3 | 1 | - | - | 572.7 | - | accuracy=0.767500, n_support=5527 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-svc-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:12:17Z', 'previous_median_ms': 2268.543167039752, 'previous_hash': '2d85d6008566c340', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 506.2 | 506.2..506.2 | 1 | - | - | 415.8 | - | accuracy=0.767500, n_support=5525 | yes | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| sklearn-cpu | scikit-learn | cpu | opponent | 2457.4 | 2457.4..2457.4 | 1 | 1.036 | 0.206 | 431.2 | - | accuracy=0.767500, n_support=5672 | yes | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T02:35:38Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 2457.4 | 2457.4..2457.4 | 1 | 1.036 | 0.206 | 431.2 | - | accuracy=0.767500, n_support=5672 | yes | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T02:35:38Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -3461,7 +3480,7 @@ race: done, driver rc 0, log `logs/classical2.elasticnet.istella.rows-full.log`,
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 2949.1 | 2949.1..2949.1 | 1 | - | - | 3062.5 | - | finite=True, r2=0.260922, rmse=0.718134 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 150.0 | 150.0..150.0 | 1 | - | - | 3865.6 | - | r2=0.260922, rmse=0.718134 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 392.47799999429844, 'previous_quality': {'finite': True, 'r2': 0.2615541322277686, 'rmse': 0.7178269509513873}, 'previous_status': 'ok', 'previous_hash': '1b4f2c8d27cfceda', 'baseline_ms': 392.47799999429844, 'baseline_quality_text': 'r2=0.2616, rmse=0.7178', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 1819.4 | 1819.4..1819.4 | 1 | 1.621 | 0.082 | 2760.7 | - | finite=True, r2=0.260922, rmse=0.718134 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:35:52Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 1819.4 | 1819.4..1819.4 | 1 | 1.621 | 0.082 | 2760.7 | - | finite=True, r2=0.260922, rmse=0.718134 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:35:52Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -3503,7 +3522,7 @@ race: done, driver rc 0, log `logs/classical2.elasticnet.taxi.rows-full.log`, ra
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 68.5 | 68.5..68.5 | 1 | - | - | 484.1 | - | finite=True, r2=0.907378, rmse=4.847224 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 13.7 | 13.7..13.7 | 1 | - | - | 514.3 | - | r2=0.907378, rmse=4.847240 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 61.08195800334215, 'previous_quality': {'finite': True, 'r2': 0.9073783309512724, 'rmse': 4.847224027690128}, 'previous_status': 'ok', 'previous_hash': 'd51c57b0ace0a9c9', 'baseline_ms': 61.08195800334215, 'baseline_quality_text': 'r2=0.9074, rmse=4.847', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 40.3 | 40.3..40.3 | 1 | 1.700 | 0.340 | 290.5 | - | finite=True, r2=0.907378, rmse=4.847223 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:35:46Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 40.3 | 40.3..40.3 | 1 | 1.700 | 0.340 | 290.5 | - | finite=True, r2=0.907378, rmse=4.847223 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:35:46Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -3585,7 +3604,7 @@ race: done, driver rc 0, log `logs/classical2.gmm.istella.rows-full.log`, ran on
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 8835.5 | 8835.5..8835.5 | 1 | - | - | 2654.0 | - | bic=-3.851e+07, mean_log_likelihood=200.794500, n_iter=24 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-gmm-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T06:59:42Z', 'previous_median_ms': 9154.614708037116, 'previous_hash': '45575cc9f5eddbcb', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 5858.0 | 5858.0..5858.0 | 1 | - | - | 2116.5 | - | bic=-3.851e+07, mean_log_likelihood=200.794000, n_iter=24.000000 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 6573.481125000399, 'previous_quality': {'bic': -38513914.270409934, 'mean_log_likelihood': 200.79446895952205, 'n_iter': 24}, 'previous_status': 'ok', 'previous_hash': 'fa5028c8ec1a5072', 'baseline_ms': 6573.481125000399, 'baseline_quality_text': 'bic=-3.851e+07, mean_log_likelihood=200.8, n_iter=24', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 7852.2 | 7852.2..7852.2 | 1 | 1.125 | 0.746 | 1252.0 | - | bic=-3.901e+07, mean_log_likelihood=200.776340, n_iter=30 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:13:08Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 7852.2 | 7852.2..7852.2 | 1 | 1.125 | 0.746 | 1252.0 | - | bic=-3.901e+07, mean_log_likelihood=200.776340, n_iter=30 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:13:08Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -3619,7 +3638,7 @@ race: done, driver rc 0, log `logs/classical2.gmm.taxi.rows-full.log`, ran on ip
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 604.5 | 604.5..604.5 | 1 | - | - | 482.8 | - | bic=-3.67e+06, mean_log_likelihood=12.861940, n_iter=32 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | wheel | REFUSED(error: {"error": "Exception(\"GaussianMixture: fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to d) |
-| sklearn-cpu | scikit-learn | cpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "ValueError('Fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the numbe) ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:12:47Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "ValueError('Fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the numbe) ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:12:47Z', 'original_source': 'measured this run'}) |
 
 memory, ours: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4051,7 +4070,7 @@ race: done, driver rc 0, log `logs/classical2.lasso.istella.rows-full.log`, ran 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 8495.5 | 8495.5..8495.5 | 1 | - | - | 3061.1 | - | finite=True, r2=0.310837, rmse=0.693460 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 143.0 | 143.0..143.0 | 1 | - | - | 3865.8 | - | r2=0.310839, rmse=0.693459 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 394.5728329999838, 'previous_quality': {'finite': True, 'r2': 0.3104723813346333, 'rmse': 0.6936434039864189}, 'previous_status': 'ok', 'previous_hash': 'e5e0e5805714ac9c', 'baseline_ms': 394.5728329999838, 'baseline_quality_text': 'r2=0.3105, rmse=0.6936', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 3878.7 | 3878.7..3878.7 | 1 | 2.190 | 0.037 | 2753.6 | - | finite=True, r2=0.310837, rmse=0.693460 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:35:43Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 3878.7 | 3878.7..3878.7 | 1 | 2.190 | 0.037 | 2753.6 | - | finite=True, r2=0.310837, rmse=0.693460 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:35:43Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4092,7 +4111,7 @@ race: done, driver rc 0, log `logs/classical2.lasso.taxi.rows-full.log`, ran on 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 76.1 | 76.1..76.1 | 1 | - | - | 476.3 | - | finite=True, r2=0.908995, rmse=4.804745 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
 | mojolearn FAST | mojolearn | gpu | fast | 12.8 | 12.8..12.8 | 1 | - | - | 513.9 | - | r2=0.908995, rmse=4.804740 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 63.849750004010275, 'previous_quality': {'finite': True, 'r2': 0.9089946218582251, 'rmse': 4.804744742175637}, 'previous_status': 'ok', 'previous_hash': '551cc3d68a1045fb', 'baseline_ms': 63.849750004010275, 'baseline_quality_text': 'r2=0.909, rmse=4.805', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 47.9 | 47.9..47.9 | 1 | 1.589 | 0.267 | 283.2 | - | finite=True, r2=0.908995, rmse=4.804745 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:35:32Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 47.9 | 47.9..47.9 | 1 | 1.589 | 0.267 | 283.2 | - | finite=True, r2=0.908995, rmse=4.804745 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:35:32Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4133,7 +4152,7 @@ race: done, driver rc 0, log `logs/classical2.linearsvc.istella.rows-full.log`, 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 725.7 | 725.7..725.7 | 1 | - | - | 2156.3 | - | accuracy=0.923470 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-linearsvc-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:16:04Z', 'previous_median_ms': 611.696416977793, 'previous_hash': '036a42d745ffd98f', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 740.0 | 740.0..740.0 | 1 | - | - | 2163.8 | - | accuracy=0.923120 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 771.9064999837428, 'previous_quality': {'accuracy': 0.92323}, 'previous_status': 'ok', 'previous_hash': '78baf19afd5b2b1f', 'baseline_ms': 771.9064999837428, 'baseline_quality_text': 'accuracy=0.9232', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 613917.3 | 613917.3..613917.3 | 1 | 0.001 | 0.001 | 6095.7 | - | accuracy=0.923540 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:35:11Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 613917.3 | 613917.3..613917.3 | 1 | 0.001 | 0.001 | 6095.7 | - | accuracy=0.923540 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:35:11Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4174,7 +4193,7 @@ race: done, driver rc 0, log `logs/classical2.linearsvc.taxi.rows-full.log`, ran
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 68.8 | 68.8..68.8 | 1 | - | - | 485.5 | - | accuracy=0.763330 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-linearsvc-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:16:05Z', 'previous_median_ms': 56.26254098024219, 'previous_hash': 'cc548e1a5181e762', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 104.0 | 104.0..104.0 | 1 | - | - | 478.1 | - | accuracy=0.763330 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 111.91920799319632, 'previous_quality': {'accuracy': 0.76333}, 'previous_status': 'ok', 'previous_hash': 'cc548e1a5181e762', 'baseline_ms': 111.91920799319632, 'baseline_quality_text': 'accuracy=0.7633', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 527.7 | 527.7..527.7 | 1 | 0.130 | 0.197 | 493.6 | - | accuracy=0.763570 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:14:24Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 527.7 | 527.7..527.7 | 1 | 0.130 | 0.197 | 493.6 | - | accuracy=0.763570 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:14:24Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4215,11 +4234,11 @@ race: done, driver rc 0, log `logs/classical2.linearsvr.istella.rows-full.log`, 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 198.1 | 198.1..198.1 | 1 | - | - | 2098.1 | - | finite=True, r2=-0.106761, rmse=0.878794 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-linearsvr-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:16:07Z', 'previous_median_ms': 186.09495903365314, 'previous_hash': '2f7f9222368a6c0e', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 217.0 | 217.0..217.0 | 1 | - | - | 2098.8 | - | r2=-0.106761, rmse=0.878794 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 939.5995420054533, 'previous_quality': {'finite': True, 'r2': -0.10675414731194754, 'rmse': 0.8787918219479569}, 'previous_status': 'ok', 'previous_hash': 'b38a64c6fc8b0c88', 'baseline_ms': 939.5995420054533, 'baseline_quality_text': 'r2=-0.1067, rmse=0.8788', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 704105.0 | 704105.0..704105.0 | 1 | 0.0002814 | 0.0003082 | - | - | r2=-0.025730 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True, 'replaced_status': 'REFUSED(timeout: null)'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 710262.0 | 710262.0..710262.0 | 1 | 0.0002789 | 0.0003055 | 6139.4 | - | finite=True, r2=-0.025729, rmse=0.846012 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T04:14:16Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, sklearn-cpu: host not sampled; GPU not sampled
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
 settings: penalty='l2', loss='epsilon_insensitive', epsilon=0.0, C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
 
@@ -4256,7 +4275,7 @@ race: done, driver rc 0, log `logs/classical2.linearsvr.taxi.rows-full.log`, ran
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 36.9 | 36.9..36.9 | 1 | - | - | 421.7 | - | finite=True, r2=0.899814, rmse=5.041273 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-linearsvr-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:16:08Z', 'previous_median_ms': 41.94733296753839, 'previous_hash': '3a2550562aad5ac9', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 113.0 | 113.0..113.0 | 1 | - | - | 423.0 | - | r2=0.899807, rmse=5.041440 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 182.90454099769704, 'previous_quality': {'finite': True, 'r2': 0.8998144728464655, 'rmse': 5.041262185375491}, 'previous_status': 'ok', 'previous_hash': '4f67ab22af36f3d9', 'baseline_ms': 182.90454099769704, 'baseline_quality_text': 'r2=0.8998, rmse=5.041', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 85770.4 | 85770.4..85770.4 | 1 | 0.0004305 | 0.001 | 532.8 | - | finite=True, r2=0.899803, rmse=5.041552 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:38:49Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 85770.4 | 85770.4..85770.4 | 1 | 0.0004305 | 0.001 | 532.8 | - | finite=True, r2=0.899803, rmse=5.041552 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:38:49Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4297,7 +4316,7 @@ race: done, driver rc 0, log `logs/classical2.logreg.istella.rows-full.log`, ran
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 2805.2 | 2805.2..2805.2 | 1 | - | - | 2110.9 | - | accuracy=0.924590, logloss=0.181249, nonfinite_proba_rows=0 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-logreg-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:16:57Z', 'previous_median_ms': 2532.822333043441, 'previous_hash': '6ce75858d9106601', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 3609.0 | 3609.0..3609.0 | 1 | - | - | 2114.2 | - | accuracy=0.924560, logloss=0.181239, nonfinite_proba_rows=0.000000 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 3906.244832993252, 'previous_quality': {'accuracy': 0.92456, 'logloss': 0.18124177262751226, 'nonfinite_proba_rows': 0}, 'previous_status': 'ok', 'previous_hash': 'bf93515e99fd6a7a', 'baseline_ms': 3906.244832993252, 'baseline_quality_text': 'accuracy=0.9246, logloss=0.1812, nonfinite_proba_rows=0', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 32177.4 | 32177.4..32177.4 | 1 | 0.087 | 0.112 | 2938.2 | - | accuracy=0.924470, logloss=0.181337, nonfinite_proba_rows=0 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:14:20Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 32177.4 | 32177.4..32177.4 | 1 | 0.087 | 0.112 | 2938.2 | - | accuracy=0.924470, logloss=0.181337, nonfinite_proba_rows=0 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:14:20Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4346,7 +4365,7 @@ race: done, driver rc 0, log `logs/classical2.logreg.taxi.rows-full.log`, ran on
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 25.9 | 25.9..25.9 | 1 | - | - | 431.0 | - | accuracy=0.763350, logloss=0.538985, nonfinite_proba_rows=0 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-logreg-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:16:58Z', 'previous_median_ms': 26.66674996726215, 'previous_hash': 'b3dcedb4d7da42c3', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 32.7 | 32.7..32.7 | 1 | - | - | 429.4 | - | accuracy=0.763350, logloss=0.538985, nonfinite_proba_rows=0.000000 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 119.25824999343604, 'previous_quality': {'accuracy': 0.76331, 'logloss': 0.5389869508389374, 'nonfinite_proba_rows': 0}, 'previous_status': 'ok', 'previous_hash': 'aafe657dc6071ee9', 'baseline_ms': 119.25824999343604, 'baseline_quality_text': 'accuracy=0.7633, logloss=0.539, nonfinite_proba_rows=0', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 342.3 | 342.3..342.3 | 1 | 0.076 | 0.096 | 331.1 | - | accuracy=0.763320, logloss=0.538980, nonfinite_proba_rows=0 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:13:12Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 342.3 | 342.3..342.3 | 1 | 0.076 | 0.096 | 331.1 | - | accuracy=0.763320, logloss=0.538980, nonfinite_proba_rows=0 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:13:12Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4521,7 +4540,7 @@ race: done, driver rc 0, log `logs/classical2.ridge.istella.rows-full.log`, ran 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1443.5 | 1443.5..1443.5 | 1 | - | - | 5445.9 | - | finite=True, r2=0.328682, rmse=0.684423 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-ridge-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:06:05Z', 'previous_median_ms': 1447.3563330247998, 'previous_hash': '35a5a0b5f2c41264', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 538.0 | 538.0..538.0 | 1 | - | - | 5449.1 | - | r2=0.328693, rmse=0.684417 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 878.5937079810537, 'previous_quality': {'finite': True, 'r2': 0.3204506015326458, 'rmse': 0.6886062241382304}, 'previous_status': 'ok', 'previous_hash': 'd0f3853d8f2241cd', 'baseline_ms': 878.5937079810537, 'baseline_quality_text': 'r2=0.3205, rmse=0.6886', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 5981.0 | 5981.0..5981.0 | 1 | 0.241 | 0.090 | 8659.1 | - | finite=True, r2=0.328676, rmse=0.684426 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:35:30Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 5981.0 | 5981.0..5981.0 | 1 | 0.241 | 0.090 | 8659.1 | - | finite=True, r2=0.328676, rmse=0.684426 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:35:30Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4559,7 +4578,7 @@ race: done, driver rc 0, log `logs/classical2.ridge.taxi.rows-full.log`, ran on 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 49.7 | 49.7..49.7 | 1 | - | - | 582.9 | - | finite=True, r2=0.908983, rmse=4.805042 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-ridge-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:06:06Z', 'previous_median_ms': 53.33583301398903, 'previous_hash': '4355e8bf6f4ca0df', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 16.2 | 16.2..16.2 | 1 | - | - | 583.4 | - | r2=0.908983, rmse=4.805050 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 31.49316701455973, 'previous_quality': {'finite': True, 'r2': 0.9089831477984005, 'rmse': 4.805047626423458}, 'previous_status': 'ok', 'previous_hash': '22c626f9f55fa7be', 'baseline_ms': 31.49316701455973, 'baseline_quality_text': 'r2=0.909, rmse=4.805', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 36.1 | 36.1..36.1 | 1 | 1.378 | 0.449 | 245.7 | - | finite=True, r2=0.908988, rmse=4.804916 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:35:14Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 36.1 | 36.1..36.1 | 1 | 1.378 | 0.449 | 245.7 | - | finite=True, r2=0.908988, rmse=4.804916 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:35:14Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4597,7 +4616,7 @@ race: done, driver rc 0, log `logs/classical2.spectral-embedding.istella.rows-fu
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 569.7 | 569.7..569.7 | 1 | - | - | 482.3 | - | trustworthiness_k15=0.802215 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-spectral-embedding-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:09:08Z', 'previous_median_ms': 954.8257919959724, 'previous_hash': '7917eaf54942ff70', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 437.4 | 437.4..437.4 | 1 | - | - | 449.1 | - | trustworthiness_k15=0.823640 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| sklearn-cpu | scikit-learn | cpu | opponent | 8838.3 | 8838.3..8838.3 | 1 | 0.064 | 0.049 | 410.2 | - | trustworthiness_k15=0.812688 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:12:44Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 8838.3 | 8838.3..8838.3 | 1 | 0.064 | 0.049 | 410.2 | - | trustworthiness_k15=0.812688 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:12:44Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4632,7 +4651,7 @@ race: done, driver rc 0, log `logs/classical2.spectral-embedding.taxi.rows-full.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 283.9 | 283.9..283.9 | 1 | - | - | 408.0 | - | trustworthiness_k15=0.894165 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-spectral-embedding-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:09:31Z', 'previous_median_ms': 516.3331660442054, 'previous_hash': '2b5bc3d1c4ffc431', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 104.8 | 104.8..104.8 | 1 | - | - | 393.6 | - | trustworthiness_k15=0.895236 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| sklearn-cpu | scikit-learn | cpu | opponent | 2537.1 | 2537.1..2537.1 | 1 | 0.112 | 0.041 | 219.3 | - | trustworthiness_k15=0.898011 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:11:58Z', 'original_source': 'measured this run'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 2537.1 | 2537.1..2537.1 | 1 | 0.112 | 0.041 | 219.3 | - | trustworthiness_k15=0.898011 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:11:58Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4891,8 +4910,8 @@ race: done, driver rc 0, log `logs/classical2.umap.istella.rows-full.log`, ran o
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 1755.6 | 1755.6..1755.6 | 1 | - | - | 513.8 | - | trustworthiness_k15=0.979535 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-umap-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:15:26Z', 'previous_median_ms': 3349.254957982339, 'previous_hash': 'd0fb37d725167c0a', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 928.6 | 928.6..928.6 | 1 | - | - | 477.5 | - | trustworthiness_k15=0.982091 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| umap-learn-cpu | umap-learn | cpu | opponent | 9916.0 | 9916.0..9916.0 | 1 | 0.177 | 0.094 | 563.6 | - | trustworthiness_k15=0.978822 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:11:27Z', 'original_source': 'measured this run'}) |
-| umap-learn-cpu-unseeded | umap-learn | cpu | opponent | 1586.7 | 1586.7..1586.7 | 1 | 1.107 | 0.585 | 567.8 | - | trustworthiness_k15=0.977646 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:11:27Z', 'original_source': 'measured this run'}) |
+| umap-learn-cpu | umap-learn | cpu | opponent | 9916.0 | 9916.0..9916.0 | 1 | 0.177 | 0.094 | 563.6 | - | trustworthiness_k15=0.978822 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:11:27Z', 'original_source': 'measured this run'}) |
+| umap-learn-cpu-unseeded | umap-learn | cpu | opponent | 1586.7 | 1586.7..1586.7 | 1 | 1.107 | 0.585 | 567.8 | - | trustworthiness_k15=0.977646 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:11:27Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -4939,8 +4958,8 @@ race: done, driver rc 0, log `logs/classical2.umap.taxi.rows-full.log`, ran on i
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 776.6 | 776.6..776.6 | 1 | - | - | 420.9 | - | trustworthiness_k15=0.990403 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-umap-taxi', 'head': 'af93ebe0a', 'finished': '2026-10-05T08:15:50Z', 'previous_median_ms': 1320.009624992963, 'previous_hash': 'b965a8b274a12dd3', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 353.2 | 353.2..353.2 | 1 | - | - | 390.0 | - | trustworthiness_k15=0.991488 | - | LIKE-FOR-LIKE-SPAN | wheel | ok |
-| umap-learn-cpu | umap-learn | cpu | opponent | 8885.0 | 8885.0..8885.0 | 1 | 0.087 | 0.040 | 477.6 | - | trustworthiness_k15=0.989525 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:09:49Z', 'original_source': 'measured this run'}) |
-| umap-learn-cpu-unseeded | umap-learn | cpu | opponent | 1448.1 | 1448.1..1448.1 | 1 | 0.536 | 0.244 | 506.2 | - | trustworthiness_k15=0.989467 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '194e0392f34b44ae8e8e80dee0db2725ff2ea22ed8d956a20abb00b621a2dd12', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261005/snapshot.json', 'finished': '2026-10-06T03:09:49Z', 'original_source': 'measured this run'}) |
+| umap-learn-cpu | umap-learn | cpu | opponent | 8885.0 | 8885.0..8885.0 | 1 | 0.087 | 0.040 | 477.6 | - | trustworthiness_k15=0.989525 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:09:49Z', 'original_source': 'measured this run'}) |
+| umap-learn-cpu-unseeded | umap-learn | cpu | opponent | 1448.1 | 1448.1..1448.1 | 1 | 0.536 | 0.244 | 506.2 | - | trustworthiness_k15=0.989467 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T03:09:49Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
@@ -9166,6 +9185,40 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 52.7 | 52.7..52.7 | 1 | - | - | - | - | finite=1.000000, r2=-231.912000, rmse=243.071000 | - | None | - | ok ({'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
 
 parameters: NOT CHECKED
+
+### gamma / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.gamma.taxi.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 356.4 | 356.4..356.4 | 1 | - | - | 331.7 | - | finite=True, r2=-232.959247, rmse=243.616612 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T04:21:46Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'fit_intercept': True, 'max_iter': 100, 'solver': 'lbfgs', 'tol': 0.0001}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| fit_intercept | true |
+| max_iter | 100 |
+| seed | "none (deterministic)" |
+| solver | "lbfgs" |
+| tol | 0.0001 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 3.6 | 3.6..3.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
 
 ### garch / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
 
@@ -15530,6 +15583,40 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 
 parameters: NOT CHECKED
 
+### poisson / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.poisson.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 112431.6 | 112431.6..112431.6 | 1 | - | - | 3038.6 | - | finite=True, r2=0.251336, rmse=0.722776 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T04:21:43Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'fit_intercept': True, 'max_iter': 100, 'solver': 'lbfgs', 'tol': 0.0001}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| fit_intercept | true |
+| max_iter | 100 |
+| seed | "none (deterministic)" |
+| solver | "lbfgs" |
+| tol | 0.0001 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 23.6 | 23.6..23.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
+
 ### poisson / taxi (rows unrecorded, shape -)
 
 race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
@@ -15541,6 +15628,40 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 77.7 | 77.7..77.7 | 1 | - | - | - | - | finite=1.000000, r2=0.035757, rmse=15.639800 | - | None | - | ok ({'tag': 'M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': None, 'previous_quality': {}, 'previous_status': 'no IDENTICAL cell', 'previous_hash': None, 'baseline_ms': None, 'baseline_quality_text': '-', 'display_rounded': True}) |
 
 parameters: NOT CHECKED
+
+### poisson / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.poisson.taxi.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 429.8 | 429.8..429.8 | 1 | - | - | 315.3 | - | finite=True, r2=0.036205, rmse=15.636127 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T04:17:57Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'fit_intercept': True, 'max_iter': 100, 'solver': 'lbfgs', 'tol': 0.0001}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| fit_intercept | true |
+| max_iter | 100 |
+| seed | "none (deterministic)" |
+| solver | "lbfgs" |
+| tol | 0.0001 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 3.6 | 3.6..3.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
 
 ### poly-count-sketch / istella (rows full, shape X 100000x220; Xq 1000x220; y 100000; yq 1000)
 
@@ -17492,6 +17613,51 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 
 parameters: NOT CHECKED
 
+### sgd-clf / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.sgd-clf.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 28858.7 | 28858.7..28858.7 | 1 | - | - | 1097.7 | - | accuracy=0.910200 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T04:16:04Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'average': False, 'early_stopping': False, 'epsilon': 0.1, 'eta0': 0.005, 'fit_intercept': True, 'l1_ratio': 0.15, 'learning_rate': 'constant', 'loss': 'hinge', 'max_iter': 100, 'n_iter_no_change': 5, 'penalty': 'l2', 'power_t': 0.5, 'random_state': 7, 'shuffle': True, 'tol': None}. Rows: None. Timed: None.
+
+mismatch: cuML MBSGD is mini-batch SGD (batch_size 4096); scikit-learn and ours are per-sample SGD (the reference)
+
+mismatch: cuML reads epochs=100, the others max_iter=100
+
+config: cuML benchmark (RAPIDS), MBSGDClassifier (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| class_weight | null |
+| epsilon | 0.1 |
+| eta0 | 0.005 |
+| fit_intercept | true |
+| l1_ratio | 0.15 |
+| learning_rate | "constant" |
+| loss | "hinge" |
+| max_iter | 100 |
+| penalty | "l2" |
+| seed | 7 |
+| shuffle | true |
+| tol | null |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 4.9 | 4.9..4.9 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
+
 ### sgd-clf / taxi (rows unrecorded, shape -)
 
 race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
@@ -17502,6 +17668,51 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 | sklearn-cpu | scikit-learn | cpu | opponent | 5435.0 | 5435.0..5435.0 | 1 | - | - | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
 
 parameters: NOT CHECKED
+
+### sgd-clf / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.sgd-clf.taxi.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 5438.7 | 5438.7..5438.7 | 1 | - | - | 212.7 | - | accuracy=0.752520 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T04:15:04Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'average': False, 'early_stopping': False, 'epsilon': 0.1, 'eta0': 0.005, 'fit_intercept': True, 'l1_ratio': 0.15, 'learning_rate': 'constant', 'loss': 'hinge', 'max_iter': 100, 'n_iter_no_change': 5, 'penalty': 'l2', 'power_t': 0.5, 'random_state': 7, 'shuffle': True, 'tol': None}. Rows: None. Timed: None.
+
+mismatch: cuML MBSGD is mini-batch SGD (batch_size 4096); scikit-learn and ours are per-sample SGD (the reference)
+
+mismatch: cuML reads epochs=100, the others max_iter=100
+
+config: cuML benchmark (RAPIDS), MBSGDClassifier (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| class_weight | null |
+| epsilon | 0.1 |
+| eta0 | 0.005 |
+| fit_intercept | true |
+| l1_ratio | 0.15 |
+| learning_rate | "constant" |
+| loss | "hinge" |
+| max_iter | 100 |
+| penalty | "l2" |
+| seed | 7 |
+| shuffle | true |
+| tol | null |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 1.0 | 1.0..1.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
 
 ### sgd-ocsvm / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
@@ -17612,6 +17823,48 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 
 parameters: NOT CHECKED
 
+### sgd-reg / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.sgd-reg.istella.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 47955.0 | 47955.0..47955.0 | 1 | - | - | 1092.6 | - | finite=True, r2=-2.197e+24, rmse=1.238e+12 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T04:17:55Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'average': False, 'early_stopping': False, 'epsilon': 0.1, 'eta0': 0.005, 'fit_intercept': True, 'l1_ratio': 0.15, 'learning_rate': 'constant', 'loss': 'squared_error', 'max_iter': 100, 'n_iter_no_change': 5, 'penalty': 'l2', 'power_t': 0.25, 'random_state': 7, 'shuffle': True, 'tol': None}. Rows: None. Timed: None.
+
+mismatch: cuML MBSGD is mini-batch SGD (batch_size 4096)
+
+config: cuML benchmark (RAPIDS), MBSGDRegressor (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| epsilon | 0.1 |
+| eta0 | 0.005 |
+| fit_intercept | true |
+| l1_ratio | 0.15 |
+| learning_rate | "constant" |
+| loss | "squared_error" |
+| max_iter | 100 |
+| penalty | "l2" |
+| seed | 7 |
+| shuffle | true |
+| tol | null |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 4.3 | 4.3..4.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
+
 ### sgd-reg / taxi (rows unrecorded, shape -)
 
 race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
@@ -17622,6 +17875,48 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 | sklearn-cpu | scikit-learn | cpu | opponent | 5242.0 | 5242.0..5242.0 | 1 | - | - | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
 
 parameters: NOT CHECKED
+
+### sgd-reg / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.sgd-reg.taxi.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 5323.0 | 5323.0..5323.0 | 1 | - | - | 216.1 | - | finite=True, r2=0.880681, rmse=5.501638 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': 'daa3e7ee9c6e29954fcbb64af563352b67d53756e6e16619bae250bf8e2db8ef', 'evidence': '/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/pre-interrupt/board/board.json', 'finished': '2026-10-06T04:16:16Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'average': False, 'early_stopping': False, 'epsilon': 0.1, 'eta0': 0.005, 'fit_intercept': True, 'l1_ratio': 0.15, 'learning_rate': 'constant', 'loss': 'squared_error', 'max_iter': 100, 'n_iter_no_change': 5, 'penalty': 'l2', 'power_t': 0.25, 'random_state': 7, 'shuffle': True, 'tol': None}. Rows: None. Timed: None.
+
+mismatch: cuML MBSGD is mini-batch SGD (batch_size 4096)
+
+config: cuML benchmark (RAPIDS), MBSGDRegressor (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| epsilon | 0.1 |
+| eta0 | 0.005 |
+| fit_intercept | true |
+| l1_ratio | 0.15 |
+| learning_rate | "constant" |
+| loss | "squared_error" |
+| max_iter | 100 |
+| penalty | "l2" |
+| seed | 7 |
+| shuffle | true |
+| tol | null |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 0.7 | 0.7..0.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
 
 ### sgd / synthetic (rows full, shape -)
 

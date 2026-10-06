@@ -51,9 +51,18 @@ def merge(board, snapshot, resources, digest, evidence):
     return result,counts
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--snapshot',required=True);p.add_argument('--resources',required=True);p.add_argument('--board-dir',default=render.BOARD_DIR);p.add_argument('--docs-dir',default=render.DOCS);a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--snapshot',required=True);p.add_argument('--resources',required=True);p.add_argument('--board-dir',default=render.BOARD_DIR);p.add_argument('--docs-dir',default=render.DOCS);p.add_argument('--interruption-receipt');a=p.parse_args()
     raw=pathlib.Path(a.snapshot).read_bytes();digest=hashlib.sha256(raw).hexdigest();path=pathlib.Path(a.board_dir)/'board.json'
     board,counts=merge(json.loads(path.read_text()),json.loads(raw),json.loads(pathlib.Path(a.resources).read_text()),digest,a.snapshot)
+    if a.interruption_receipt:
+        interruption=json.loads(pathlib.Path(a.interruption_receipt).read_text())
+        assert interruption['status']=='INTERRUPTED_BY_USER' and interruption['timing_admitted'] is False
+        note='User-directed suspension for candidate A/B measurements: '+interruption['active_race']+'. No interrupted timing admitted; completed cells preserved. Missing GPU opponents follow candidates.'
+        board['opponent_resource_notes'][-1]=note
+        board.setdefault('opponent_interruptions',[]).append(interruption)
+        for mode in ['fast','identical']:
+            notes=board[mode+'_page']['notes_md']
+            board[mode+'_page']['notes_md']=[x for x in notes if not x.startswith('- CPU resource policy: At the user-directed')]+['- CPU resource policy: '+note]
     path.write_text(json.dumps(board,indent=1)+'\n');render.write_all(a.board_dir,a.docs_dir,board)
     errors=render.check(a.board_dir,a.docs_dir);assert not errors,errors
     print(json.dumps(counts))
