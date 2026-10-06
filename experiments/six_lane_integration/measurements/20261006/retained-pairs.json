@@ -1,5 +1,5 @@
 {
-  "updated_at": 1791316668.7596831,
+  "updated_at": 1791316761.211746,
   "pairs": [
     {
       "configuration": "AF.X.complete-proposed",
@@ -15379,6 +15379,17 @@
     },
     {
       "configuration": "I.X.complete-proposed",
+      "workload": "expanded:ridge-cv@dataset=taxi",
+      "vendor": "amd",
+      "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+      "execution_status": "IN_PROGRESS",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/6f17d61eca45e425c931/attempt-0001/receipt.json",
+      "returncodes": [
+        0
+      ]
+    },
+    {
+      "configuration": "I.X.complete-proposed",
       "workload": "expanded:pa-reg@dataset=istella",
       "vendor": "amd",
       "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
@@ -15616,13 +15627,76 @@
       "workload": "expanded:bayesian-ridge@dataset=istella",
       "vendor": "amd",
       "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
-      "execution_status": "IN_PROGRESS",
+      "execution_status": "MEASURED_FULL",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/e9ae4554feb91d89971f/attempt-0001/receipt.json",
       "returncodes": [
         0,
         0,
+        0,
         0
-      ]
+      ],
+      "candidate_seconds": 3.624318393000067,
+      "baseline_seconds": 3.604751411000052,
+      "observed_candidate_over_baseline": 1.005428108562578,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality(bayesian-ridge); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours": {
+              "finite": true,
+              "r2": 0.31281216192955474,
+              "rmse": 0.6917241761047224
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality(bayesian-ridge); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+          "metrics": {
+            "ours": {
+              "finite": true,
+              "r2": 0.31281216192955474,
+              "rmse": 0.6917241761047224
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "66c0bbefc099064a8aa1bf4dfc89b2150eb01fcae6e0c6a0707461b92bdf72e3",
+        "B": "66c0bbefc099064a8aa1bf4dfc89b2150eb01fcae6e0c6a0707461b92bdf72e3"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "BayesianRidge",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "BayesianRidge",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage"
     },
     {
       "configuration": "I.X.complete-proposed",

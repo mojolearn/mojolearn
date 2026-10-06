@@ -38,6 +38,7 @@ SOURCES=[('apple',ROOT/'apple/captured/runs'),
          ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements-classical-dependency-repair'),
          ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements-tsvd-full-v1'),
          ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements-expanded-reg'),
+         ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements-next-reg'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements')]
 
 
