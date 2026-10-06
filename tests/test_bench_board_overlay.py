@@ -47,3 +47,11 @@ def test_changed_run_identity(tmp_path,field,value):
 def test_missing_original_settings_refused(tmp_path):
  x=fixture(tmp_path);p=Path(x['original']['path']);d=json.loads(p.read_text());del d['races']['x']['cells'][0]['settings'];p.write_text(json.dumps(d));x['original']['sha256']=m.digest(p)
  with pytest.raises(ValueError,match='settings'):m.apply(x)
+
+def test_normal_board_renderer_without_overlay():
+ import sys
+ sys.path.insert(0,str(Path(__file__).parents[1]/'tools'))
+ import bench_board
+ board={'races':{'classical/dbscan/taxi/rows=full':{'family':'classical','lane':'dbscan','dataset':'taxi','rows':None,'cells':[{'arm':'ours','mode':'identical','library':'mojolearn','device':'gpu','status':'ok','median_ms':1,'min_ms':1,'max_ms':1,'rounds':1,'quality':{},'verdict':'PASS'}]}}}
+ rendered=bench_board.render_board(board)
+ assert 'dbscan' in rendered and 'SCOPED REPAIR OVERLAY' not in rendered
