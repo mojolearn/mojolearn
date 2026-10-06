@@ -57,6 +57,31 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.
 5. Read logs with grep and short tails; never paste whole logs. Tell every subagent the same.
 
+## Incremental experiment delivery (owner, 2026-10-05)
+
+- Keep experiment code, the selectable runner, decisions and retained result summaries in `main`.
+  Experimental code may merge after existing compile evidence on one device, with untested targets and measurements
+  explicitly marked pending and unproven defaults disabled. Do not rebuild merely to merge already compiled code.
+  A compile pass on one target is not a claim that every target works.
+- Run selected A/B candidates through the actual full-size measurement harness in IDENTICAL mode on NVIDIA and AMD,
+  using one excluded warmup and one scored sample. Reuse verified frozen binaries when numerical source, flags,
+  compiler and target match. Run the vendors in parallel on separate owned boxes and cells serially within each GPU.
+  Capture correctness/identity evidence from the scored execution. Apple identity matters; Apple timing does not vote.
+- As each cell lands, retain its source, binary, hardware and harness provenance, timing, correctness and failure status.
+  Update the experiment board and applicable main/vendor boards through board tools immediately. Pending, unsupported,
+  failed or unqualified cells must remain visibly separate from admitted measurements; preserve the original evidence.
+  Do not invent opponent ratios from own-only A/B runs or overwrite incomparable historical opponent measurements.
+- Evaluate each candidate as soon as its required baseline/candidate measurements and correctness checks are available
+  on BOTH NVIDIA and AMD across the planned representative cases. Do not wait for unrelated candidates or the entire
+  campaign to finish. Apply the existing rule: combined improvement, neither vendor materially slower, required identity
+  and quality preserved. A single partial cell, compile pass or synthetic-only gain is not enough to flip a default.
+- When that evidence supports a change, flip the applicable switch promptly and commit/push it to `main`. Put the reason
+  INSIDE the source file beside the switch: experiment/source IDs, cases, timing ratios for both vendors, identity/quality
+  outcome, sample count and limitations. Record failed, neutral and rejected candidates there too, including why they stay
+  off. Also commit the corresponding machine-readable results and board-tool updates. Do this as decisions become ready.
+- A promoted source change starts a new freeze; never mutate binaries or settings inside an active frozen run. Repair and
+  rerun only affected cells, preserving valid completed evidence. Do not repeat already decided experiments unchanged.
+
 ## No Python in the runtime
 
 Python is good, and the right tool, for the glue layer: the public API, connecting to external code (NumPy, scikit-learn
