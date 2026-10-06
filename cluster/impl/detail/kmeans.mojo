@@ -199,8 +199,13 @@ comptime IDN_KMEANS_DEVICE_CONV = (
 #: Iterations enqueued per flag read. CANDIDATE ARMS (the default is 8):
 #: `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1=1` (gating alone, one read per
 #: iteration), `_2`, `_4`, `_16`, `_32`. No bit depends on the chunk.
+# A08 partial AMD WINNER,2026-10-06:poll1/current8=0.833,0.839,0.988 on
+# generated full fits100000x32,100001x33,65537x17 with32 clusters. One in-process
+# warmup+one score,MI325X,timing source4252d8155. NVIDIA/full named-dataset
+# evidence pending; keep OFF until the combined-vendor promotion contract holds.
+# Evidence:mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json.
 comptime KMEANS_CONV_CHUNK = (
-    # A08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+    # A08 partial AMD winner; no combined-vendor default admission yet.
     1 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1"]()
     else (
         2 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2"]()

@@ -195,12 +195,15 @@ comptime ALIGN_VALUE = 512
 # bench/results/trees_identical/h100_2026-09-10/).
 # `-D MOJOLEARN_2011_HIST_ITEMS1=1` restores the one-item mapping; the old
 # opt-in `MOJOLEARN_2011_HIST_ITEMS4` is accepted and is now the default.
-# A07 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-# A07 PENDING: independent real-node histogram tasks are bounded by256 rows.
+# A07 AMD measurement 2026-10-06: NEUTRAL (candidate/baseline 0.993, 0.995,
+# 0.998 for generated full fits 100000x32,100001x33,65537x17). One in-process
+# warmup + one score; frozen timing caller 4252d8155 on MI325X, quality retained.
+# NVIDIA and broader named-dataset work remain pending, so task256 stays OFF.
+# Evidence: mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json.
 # Explicit IDENTICAL opt-in only; promoted four-item/512-row default retained.
 # More descriptors trade launch/scan overhead for a shorter heavy-node tail.
 # Partition uses its unchanged TPB128 table; phase reuse remains disabled.
-# NEVER RUN — PENDING MEASUREMENT: new opt-in histogram task map.
+# A07 measured partial: independent real-node tasks bounded by256 rows.
 comptime IDN_RF_TASK_ROWS256 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_TASK_ROWS256"]()
 comptime HIST_ITEMS_PER_THREAD = 2 if IDN_RF_TASK_ROWS256 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4)
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
