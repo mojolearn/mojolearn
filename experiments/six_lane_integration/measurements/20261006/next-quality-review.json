@@ -1,6 +1,6 @@
 {
   "schema": "mojolearn.saved-quality-review/1",
-  "observed_at": "2026-10-06T18:04:07.512596+00:00",
+  "observed_at": "2026-10-06T18:55:18.218694+00:00",
   "scope": "Every captured native/Apple terminal new receipt including TSVD and selectors; saved taskmetrics only; original12classicalpairs reviewed separately",
   "discovery_roots": [
     {
@@ -11,6 +11,11 @@
     {
       "vendor": "apple",
       "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured",
+      "recursive": true
+    },
+    {
+      "vendor": "amd",
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/capture-attempt-01/artifacts",
       "recursive": true
     }
   ],
@@ -29,16 +34,16 @@
   ],
   "sample_policy": "One excludedwarmup and one scored execution perarm; no extra samples demanded",
   "counts": {
-    "PENDING": 67,
+    "PENDING": 79,
     "TASK_METRIC_GATE_PASSED": 10,
     "QUALITY_FAILED": 4
   },
-  "completed_pairs_reviewed": 81,
+  "completed_pairs_reviewed": 93,
   "baseline_comparison_counts": {
-    "SAME": 70,
+    "SAME": 81,
     "WORSE": 3,
     "BETTER": 2,
-    "UNKNOWN": 6
+    "UNKNOWN": 7
   },
   "unfinished_or_failed_receipts": [
     {
@@ -58,6 +63,18 @@
       "workload": "expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1",
       "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1/2e86e210874fc70e8089/attempts/attempt-0001/receipt.json",
       "status": "MEASUREMENT_FAILED"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "expanded:standard-scaler@dataset=istella@input=classification-full-v1",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/f032fb902df53bb60773/attempts/attempt-0001/receipt.json",
+      "status": "RUNNING"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/factor-analysis@dataset=istella@input=classification-full-v1",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/31a029c7a61734cee829/attempts/attempt-0001/receipt.json",
+      "status": "RUNNING"
     },
     {
       "vendor": "apple",
@@ -7533,6 +7550,198 @@
     },
     {
       "vendor": "nvidia",
+      "workload": "expanded:standard-scaler@dataset=taxi@input=classification-full-v1",
+      "mode": "identical",
+      "lane": "standard-scaler",
+      "dataset": "taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/37e8dac2dc36700f0a79/attempt-0001/receipt.json",
+      "receipt_sha256": "34879ee186e39adf2264d05af36ff64255f511651969924f015f408db24f8cbb",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "543d9e0d7dc9b13635c973ca4d8ac3029bdf987a9f3a05e65b7735a3abccd428",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "output_shape": "500000x11"
+        },
+        "B": {
+          "output_shape": "500000x11"
+        }
+      },
+      "output_sha256": {
+        "A": "b58cc382ed7ed18108199e189d1b0881d89295128eb19c5ccc75346cefc9166f",
+        "B": "b58cc382ed7ed18108199e189d1b0881d89295128eb19c5ccc75346cefc9166f"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+        "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+        "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+        "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+        "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed.",
+        "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route.",
+        "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+        "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+        "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists.",
+        "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending.",
+        "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization.",
+        "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+        "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending.",
+        "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+        "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+        "C13 is a numerical profile and its quality/selected model results remain unverified.",
+        "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+        "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+        "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed.",
+        "No new BayesianRidge inverse-elision arm where production already solves factors.",
+        "Gaussian-process inverse-materialization callers need independent integration by owning family.",
+        "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+        "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+        "OVR arm changes scheduling waves, not full model-state allocation.",
+        "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+        "Do not claim unchanged old I12 OVR/exact-trial experiments as new.",
+        "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+        "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated.",
+        "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+        "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter.",
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+        "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+        "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+        "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+        "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+        "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+        "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op.",
+        "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+        "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+        "IncrementalPCA centered incremental covariance caller remains unfinished source work.",
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified.",
+        "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+        "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+        "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite.",
+        "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+        "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+        "Nonnegative dictionary-learning callers not changed.",
+        "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+        "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted.",
+        "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+        "Descriptor scans and radix scratch belong to whole-operation cost.",
+        "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling.",
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated.",
+        "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate.",
+        "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+        "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there.",
+        "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction.",
+        "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent.",
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+        "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach.",
+        "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired.",
+        "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced.",
+        "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded.",
+        "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending.",
+        "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers.",
+        "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced.",
+        "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+        "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B.",
+        "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+        "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion.",
+        "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+        "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated.",
+        "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+        "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it.",
+        "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter.",
+        "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+        "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending.",
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+        "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+        "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+        "Parent arena/CSS constructors retain their original allocation and input indexing.",
+        "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+        "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+        "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+        "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+      ],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "UNKNOWN",
+        "metrics": {
+          "output_shape": [
+            "INFO",
+            "500000x11",
+            "500000x11",
+            null
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "output_shape": "info"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/37e8dac2dc36700f0a79/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
       "workload": "expanded:pls@dataset=istella",
       "mode": "identical",
       "lane": "pls",
@@ -13822,6 +14031,1105 @@
     },
     {
       "vendor": "apple",
+      "workload": "algos/minibatch-kmeans@dataset=istella@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "minibatch-kmeans",
+      "dataset": "istella",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ad3d45e08cb8ab6c00e7/attempt-0001/receipt.json",
+      "receipt_sha256": "2052a91091070c3f83b3002b8343e05b9c7027fa4c60be162d0df4316a0b2de2",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "n_clusters": 8,
+          "silhouette": 0.07649299931207186
+        },
+        "B": {
+          "n_clusters": 8,
+          "silhouette": 0.07649299931207186
+        }
+      },
+      "output_sha256": {
+        "A": "8310adb35204f2ea1ab3720013e138bf66891c296bcc29e46845533f71760553",
+        "B": "8310adb35204f2ea1ab3720013e138bf66891c296bcc29e46845533f71760553"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cluster; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cluster; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "n_clusters": [
+            "INFO",
+            8.0,
+            8.0,
+            null
+          ],
+          "silhouette": [
+            "SAME",
+            0.07649299931207186,
+            0.07649299931207186,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "n_clusters": "info",
+        "silhouette": "higher"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/ad3d45e08cb8ab6c00e7/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/ridge-clf@dataset=taxi@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "ridge-clf",
+      "dataset": "taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/186156f500974335532d/attempt-0001/receipt.json",
+      "receipt_sha256": "c988405769526616827d005ce7a1a403610e5cbb993c928c15343bdab8bd5efa",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "accuracy": 0.764828
+        },
+        "B": {
+          "accuracy": 0.764828
+        }
+      },
+      "output_sha256": {
+        "A": "3a3387c0d050734798795a3cd474ef65facb8293852fe69e3ebe8899ff592465",
+        "B": "3a3387c0d050734798795a3cd474ef65facb8293852fe69e3ebe8899ff592465"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "accuracy": [
+            "SAME",
+            0.764828,
+            0.764828,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "accuracy": "higher"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/186156f500974335532d/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/minibatch-kmeans@dataset=taxi@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "minibatch-kmeans",
+      "dataset": "taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ba1006a727002dda6a90/attempt-0001/receipt.json",
+      "receipt_sha256": "1211217a98d619b911bb2b98b16debd6e1ec5fa639a6a5127031e21668e605c7",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "n_clusters": 8,
+          "silhouette": 0.17145988449367378
+        },
+        "B": {
+          "n_clusters": 8,
+          "silhouette": 0.17145988449367378
+        }
+      },
+      "output_sha256": {
+        "A": "0f4d907faa137083209ac1fa3a42fac00ffa94778a8e7da526a1d3e9c3b3118d",
+        "B": "0f4d907faa137083209ac1fa3a42fac00ffa94778a8e7da526a1d3e9c3b3118d"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cluster; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cluster; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "n_clusters": [
+            "INFO",
+            8.0,
+            8.0,
+            null
+          ],
+          "silhouette": [
+            "SAME",
+            0.17145988449367378,
+            0.17145988449367378,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "n_clusters": "info",
+        "silhouette": "higher"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/ba1006a727002dda6a90/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/nmf@dataset=istella@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "nmf",
+      "dataset": "istella",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/9c048f5b19f91cda3a34/attempt-0001/receipt.json",
+      "receipt_sha256": "3e567c271252df342b652777b4d149a376ae0904e44fa5eaf745d8bc5f59ceaf",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "relative_reconstruction_error": 0.32603817030763943
+        },
+        "B": {
+          "relative_reconstruction_error": 0.32603831370171243
+        }
+      },
+      "output_sha256": {
+        "A": "58436a4dfa8fa38e401c94b5356bf8dd845e455c1fd604b0c37e2fe188927472",
+        "B": "c6cff5c432a64b21e3da755fa9dbbdb0f19ade556fcd7c4ed79a7236c6b99552"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch nmf; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch nmf; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "relative_reconstruction_error": [
+            "SAME",
+            0.32603817030763943,
+            0.32603831370171243,
+            4.398074305329766e-07
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "relative_reconstruction_error": "lower"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/9c048f5b19f91cda3a34/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/nmf@dataset=taxi@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "nmf",
+      "dataset": "taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/1e141f7a4b0c299d303b/attempt-0001/receipt.json",
+      "receipt_sha256": "dd15974d3deb6fdf7e968314e3897b545b11c498f4eff1847c46902605864749",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "relative_reconstruction_error": 0.10123801123001107
+        },
+        "B": {
+          "relative_reconstruction_error": 0.10123802053308077
+        }
+      },
+      "output_sha256": {
+        "A": "c4f99ff0ea0b258678c24ab7d6724f9994b57224026760fd70ce38afa8fc8bf7",
+        "B": "2a3a72213b09111b303554e53efd0d2c4bab6a556f19536f14731a6dc70e2676"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch nmf; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch nmf; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "relative_reconstruction_error": [
+            "SAME",
+            0.10123801123001107,
+            0.10123802053308077,
+            9.18930423026335e-08
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "relative_reconstruction_error": "lower"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/1e141f7a4b0c299d303b/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/factor-analysis@dataset=taxi@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "factor-analysis",
+      "dataset": "taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/8aced037a81f1cc42846/attempt-0001/receipt.json",
+      "receipt_sha256": "d5a34285938a810ccd84b75661081d9bd6ae419cd5b6af48ad42ab26b39e6e0c",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "mean_log_likelihood": -14.835702629768983
+        },
+        "B": {
+          "mean_log_likelihood": -14.835702629768983
+        }
+      },
+      "output_sha256": {
+        "A": "816eeebdf8c40c83192c9a2977482a4f4a1af201c489101f58cfa07c77cd0e52",
+        "B": "816eeebdf8c40c83192c9a2977482a4f4a1af201c489101f58cfa07c77cd0e52"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch fa; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch fa; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "mean_log_likelihood": [
+            "SAME",
+            -14.835702629768983,
+            -14.835702629768983,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "mean_log_likelihood": "higher"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/8aced037a81f1cc42846/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qda@dataset=taxi@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "qda",
+      "dataset": "taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/83311ee493aec7159caa/attempt-0001/receipt.json",
+      "receipt_sha256": "74c42e440fbec45831fc5ccb904bdc1ccbcd324224c913326603c32a1729d0b5",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "accuracy": 0.727134,
+          "logloss": 1.069802155174614
+        },
+        "B": {
+          "accuracy": 0.727134,
+          "logloss": 1.069803487393698
+        }
+      },
+      "output_sha256": {
+        "A": "5fc2d49ee6a95af41874aa421c8f78a9b59832ec3893ced38e585c779984e231",
+        "B": "4df0c4de16dcdcbeaa13973d27d00ddc28f41ca3ba1cef7917b6e7db624acf92"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "accuracy": [
+            "SAME",
+            0.727134,
+            0.727134,
+            0.0
+          ],
+          "logloss": [
+            "SAME",
+            1.069802155174614,
+            1.069803487393698,
+            1.2452932708079158e-06
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/83311ee493aec7159caa/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/qda@dataset=istella@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "qda",
+      "dataset": "istella",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fa0b1575c2b165e284aa/attempt-0001/receipt.json",
+      "receipt_sha256": "bc6f0ee50c0374c42e75c5a3c3cf97a81be4074a8a9d4eec398b3eb438b24611",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "accuracy": 0.879716,
+          "logloss": 3.41997239311957
+        },
+        "B": {
+          "accuracy": 0.879682,
+          "logloss": 3.4196421677151796
+        }
+      },
+      "output_sha256": {
+        "A": "3bb28c36c58b906e01002cdc91419072ed27f7ff895094fbc3a4d97923d996e5",
+        "B": "99ce0dfee1bed8adbbf82f4dceb6cec050465e14b9f27bcfdb2fa66d4988be5d"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "accuracy": [
+            "SAME",
+            0.879716,
+            0.879682,
+            3.864883667011799e-05
+          ],
+          "logloss": [
+            "SAME",
+            3.41997239311957,
+            3.4196421677151796,
+            -9.655791522018286e-05
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/fa0b1575c2b165e284aa/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lda-clf@dataset=taxi@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "lda-clf",
+      "dataset": "taxi",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ac6458a148bfb4f9c011/attempt-0001/receipt.json",
+      "receipt_sha256": "24e46015d67eace811d61ce042af0db54dedec52c2e3f61356053d25a5de8aad",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "accuracy": 0.76362,
+          "logloss": 0.5382462521088273
+        },
+        "B": {
+          "accuracy": 0.763624,
+          "logloss": 0.5382462794010144
+        }
+      },
+      "output_sha256": {
+        "A": "f34a774897dc86f9333ce5743abe8683946ec3128e439cad7803ae541dc26f37",
+        "B": "1f9dad04912243eb7b8d9217b6397d87f930d2f7496802eb476fe5d50f2b386e"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "accuracy": [
+            "SAME",
+            0.76362,
+            0.763624,
+            -5.238180046729805e-06
+          ],
+          "logloss": [
+            "SAME",
+            0.5382462521088273,
+            0.5382462794010144,
+            5.070576095253126e-08
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/ac6458a148bfb4f9c011/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/lda-clf@dataset=istella@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "lda-clf",
+      "dataset": "istella",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/e9508d14d3370dfade6c/attempt-0001/receipt.json",
+      "receipt_sha256": "6485bd0e4cca736808dc3f2184642ed266ad4c7a49237031a1c9ab9ec1fac535",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "accuracy": 0.913552,
+          "logloss": 0.2332565092210709
+        },
+        "B": {
+          "accuracy": 0.913612,
+          "logloss": 0.23332692474017572
+        }
+      },
+      "output_sha256": {
+        "A": "1fbab82a63b61d7dc40f160be726b0cd4eacd138e681e0ae9a33bf3c1d134d69",
+        "B": "573f00a8465de263e3ef1fc83d43e8b85b1381ab875f8888244272e8509857f2"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "accuracy": [
+            "SAME",
+            0.913552,
+            0.913612,
+            -6.56733930814711e-05
+          ],
+          "logloss": [
+            "SAME",
+            0.2332565092210709,
+            0.23332692474017572,
+            0.0003017890849211559
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "accuracy": "higher",
+        "logloss": "lower"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/e9508d14d3370dfade6c/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/ridge-clf@dataset=istella@input=classification-full-v1",
+      "mode": "fast",
+      "lane": "ridge-clf",
+      "dataset": "istella",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/2da7ce7cebbe7ae16fd0/attempt-0001/receipt.json",
+      "receipt_sha256": "fde93e35f7aff0df9406cf78842a0df45b6e95a20b598153c087aa83383917fe",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "accuracy": 0.91056
+        },
+        "B": {
+          "accuracy": 0.91056
+        }
+      },
+      "output_sha256": {
+        "A": "39d6c2be0e8b17e4167bf109a2bee8b8418dd62dca22ddbb0558c4fe0a1b02d8",
+        "B": "39d6c2be0e8b17e4167bf109a2bee8b8418dd62dca22ddbb0558c4fe0a1b02d8"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 1,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 1,
+          "scored": 1
+        }
+      },
+      "source_coverage_pending": [],
+      "declared_timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "saved_task_quality_declarations": {
+        "A": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        },
+        "B": {
+          "status": "PENDING",
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone"
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "accuracy": [
+            "SAME",
+            0.91056,
+            0.91056,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "accuracy": "higher"
+      },
+      "historical_opponents": [],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/classification-full-v1/runs/2da7ce7cebbe7ae16fd0/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
       "workload": "classical2/linearsvr@dataset=taxi",
       "mode": "fast",
       "lane": "linearsvr",
@@ -15402,5 +16710,5 @@
     }
   ],
   "default_promotion": false,
-  "new_opponent_review_at": "2026-10-06T18:04:07.698078+00:00"
+  "new_opponent_review_at": "2026-10-06T18:55:18.385710+00:00"
 }

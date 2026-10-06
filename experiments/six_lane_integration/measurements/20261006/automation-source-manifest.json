@@ -1,11 +1,11 @@
 {
-  "observed_at": "2026-10-06T17:53:55.335249+00:00",
+  "observed_at": "2026-10-06T18:56:53.161238+00:00",
   "scope": "Byte-exact live external reviewer, alert, capture and continuation scripts; no numerical evidence embedded",
   "files": [
     {
       "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/review-next-reg-resample.py",
-      "sha256": "02b535993c16b6d2993ec36a562b91d139897031699dcacf61aade545c8cd6e8",
-      "bytes": 10917,
+      "sha256": "da6354bf9ed24c503c305f110dd0907f7b0ee3b0c6d263c6d0f1f8736b2a0387",
+      "bytes": 11034,
       "retained_source": "experiments/six_lane_integration/measurements/20261006/automation-source/quality-review/review-next-reg-resample.py"
     },
     {
@@ -69,5 +69,5 @@
     "failed_only_selector_repair": "970784c891b6f0854695a65f51b1eae9cf338708"
   },
   "active_daemon_pid": 10588,
-  "latest_change": "Parse @dataset value independently of newly appended @input= recipe-version tag; full workload ID and dataset hash retained unchanged."
+  "latest_change": "Retain live saved-quality review sources including AMD receipt discovery; frozen numerical runs unchanged."
 }

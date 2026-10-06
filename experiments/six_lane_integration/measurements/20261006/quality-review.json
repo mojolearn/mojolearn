@@ -1805,6 +1805,6 @@
     "required_fix": "Publish original failure and repaired success under distinct run-qualified paths and update each summary reference; preserve original captures.",
     "parent_notified": true
   },
-  "new_opponent_review_at": "2026-10-06T18:04:07.612834+00:00",
+  "new_opponent_review_at": "2026-10-06T18:55:18.301095+00:00",
   "publication_repair": "Original review retained externally; links relocated by exact receipt SHA256 into controller-qualified paths. Distinct failed and repaired attempts no longer collide."
 }

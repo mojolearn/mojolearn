@@ -1,5 +1,5 @@
 {
-  "updated_at": 1791311846.146569,
+  "updated_at": 1791313013.3743942,
   "pairs": [
     {
       "configuration": "AF.X.complete-proposed",
@@ -3266,6 +3266,987 @@
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
       "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/ridge-clf@dataset=taxi@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/186156f500974335532d/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 0.5944271250627935,
+      "baseline_seconds": 0.5979228341020644,
+      "observed_candidate_over_baseline": 0.9941535782882074,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.764828
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.764828
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "3a3387c0d050734798795a3cd474ef65facb8293852fe69e3ebe8899ff592465",
+        "B": "3a3387c0d050734798795a3cd474ef65facb8293852fe69e3ebe8899ff592465"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "RidgeClassifier",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "RidgeClassifier",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/nmf@dataset=taxi@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/1e141f7a4b0c299d303b/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 6.20225400000345,
+      "baseline_seconds": 3.994893666007556,
+      "observed_candidate_over_baseline": 1.5525454539073877,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch nmf; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "relative_reconstruction_error": 0.10123801123001107
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch nmf; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "relative_reconstruction_error": 0.10123802053308077
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "c4f99ff0ea0b258678c24ab7d6724f9994b57224026760fd70ce38afa8fc8bf7",
+        "B": "2a3a72213b09111b303554e53efd0d2c4bab6a556f19536f14731a6dc70e2676"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "NMF",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "NMF",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/ridge-clf@dataset=istella@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/2da7ce7cebbe7ae16fd0/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 4.917833624989726,
+      "baseline_seconds": 4.927551500033587,
+      "observed_candidate_over_baseline": 0.9980278491165855,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.91056
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.91056
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "39d6c2be0e8b17e4167bf109a2bee8b8418dd62dca22ddbb0558c4fe0a1b02d8",
+        "B": "39d6c2be0e8b17e4167bf109a2bee8b8418dd62dca22ddbb0558c4fe0a1b02d8"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "RidgeClassifier",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "RidgeClassifier",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/factor-analysis@dataset=istella@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/31a029c7a61734cee829/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 9.464645790983923,
+      "baseline_seconds": 9.445072249975055,
+      "observed_candidate_over_baseline": 1.0020723548206758,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch fa; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "mean_log_likelihood": 98.29477253771475
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch fa; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "mean_log_likelihood": 98.29477253771475
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "fb29d24c79278db9f8e4da6062834a89900fc3df7377e0f8c3d17f84b7589c78",
+        "B": "fb29d24c79278db9f8e4da6062834a89900fc3df7377e0f8c3d17f84b7589c78"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "FactorAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "FactorAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage"
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/pls-canonical@dataset=taxi@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/366d7ef45f2e1ab38840/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 1.2932769579347223,
+      "baseline_seconds": 1.0289566669380292,
+      "observed_candidate_over_baseline": 1.2568818488569182,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "mean_canonical_corr": 0.5572790084785727
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "mean_canonical_corr": 0.5572789925559
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "459c87c513621f580b688430b2a477dacb926bfafe8a5963dc6a20469d3107f4",
+        "B": "4211d7766e639622f7be34029de4d04c2b621496a0b68ed86b0f7d696fdf3336"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "PLSCanonical",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "PLSCanonical",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage"
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/qda@dataset=taxi@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/83311ee493aec7159caa/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 0.87055395799689,
+      "baseline_seconds": 0.876027874997817,
+      "observed_candidate_over_baseline": 0.9937514351344805,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.727134,
+              "logloss": 1.069802155174614
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.727134,
+              "logloss": 1.069803487393698
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "5fc2d49ee6a95af41874aa421c8f78a9b59832ec3893ced38e585c779984e231",
+        "B": "4df0c4de16dcdcbeaa13973d27d00ddc28f41ca3ba1cef7917b6e7db624acf92"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "QuadraticDiscriminantAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "QuadraticDiscriminantAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/factor-analysis@dataset=taxi@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/8aced037a81f1cc42846/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 0.7418258750112727,
+      "baseline_seconds": 0.7408203750383109,
+      "observed_candidate_over_baseline": 1.0013572790474476,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch fa; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "mean_log_likelihood": -14.835702629768983
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch fa; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "mean_log_likelihood": -14.835702629768983
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "816eeebdf8c40c83192c9a2977482a4f4a1af201c489101f58cfa07c77cd0e52",
+        "B": "816eeebdf8c40c83192c9a2977482a4f4a1af201c489101f58cfa07c77cd0e52"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "FactorAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "FactorAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/nmf@dataset=istella@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/9c048f5b19f91cda3a34/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 27.917224499979056,
+      "baseline_seconds": 22.648736208095215,
+      "observed_candidate_over_baseline": 1.2326173188418679,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch nmf; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "relative_reconstruction_error": 0.32603817030763943
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch nmf; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "relative_reconstruction_error": 0.32603831370171243
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "58436a4dfa8fa38e401c94b5356bf8dd845e455c1fd604b0c37e2fe188927472",
+        "B": "c6cff5c432a64b21e3da755fa9dbbdb0f19ade556fcd7c4ed79a7236c6b99552"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "NMF",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "NMF",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/lda-clf@dataset=taxi@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ac6458a148bfb4f9c011/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 0.6697097499854863,
+      "baseline_seconds": 0.6343664590967819,
+      "observed_candidate_over_baseline": 1.0557143121012837,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.76362,
+              "logloss": 0.5382462521088273
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.763624,
+              "logloss": 0.5382462794010144
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "f34a774897dc86f9333ce5743abe8683946ec3128e439cad7803ae541dc26f37",
+        "B": "1f9dad04912243eb7b8d9217b6397d87f930d2f7496802eb476fe5d50f2b386e"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "LinearDiscriminantAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "LinearDiscriminantAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/minibatch-kmeans@dataset=istella@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ad3d45e08cb8ab6c00e7/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 1.186901375069283,
+      "baseline_seconds": 1.1983942080987617,
+      "observed_candidate_over_baseline": 0.990409805928792,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cluster; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "n_clusters": 8,
+              "silhouette": 0.07649299931207186
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cluster; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "n_clusters": 8,
+              "silhouette": 0.07649299931207186
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "8310adb35204f2ea1ab3720013e138bf66891c296bcc29e46845533f71760553",
+        "B": "8310adb35204f2ea1ab3720013e138bf66891c296bcc29e46845533f71760553"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "MiniBatchKMeans",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "MiniBatchKMeans",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/pls-canonical@dataset=istella@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "IN_PROGRESS",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/b0667caada66668f51aa/attempt-0001/receipt.json",
+      "returncodes": [
+        0
+      ]
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/minibatch-kmeans@dataset=taxi@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/ba1006a727002dda6a90/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 0.6734981659101322,
+      "baseline_seconds": 0.6545286249602214,
+      "observed_candidate_over_baseline": 1.0289819882989284,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cluster; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "n_clusters": 8,
+              "silhouette": 0.17145988449367378
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cluster; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "n_clusters": 8,
+              "silhouette": 0.17145988449367378
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "0f4d907faa137083209ac1fa3a42fac00ffa94778a8e7da526a1d3e9c3b3118d",
+        "B": "0f4d907faa137083209ac1fa3a42fac00ffa94778a8e7da526a1d3e9c3b3118d"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "MiniBatchKMeans",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "MiniBatchKMeans",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/lda-clf@dataset=istella@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/e9508d14d3370dfade6c/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 1.949959292076528,
+      "baseline_seconds": 1.9105208329856396,
+      "observed_candidate_over_baseline": 1.0206427788747305,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.913552,
+              "logloss": 0.2332565092210709
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.913612,
+              "logloss": 0.23332692474017572
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "1fbab82a63b61d7dc40f160be726b0cd4eacd138e681e0ae9a33bf3c1d134d69",
+        "B": "573f00a8465de263e3ef1fc83d43e8b85b1381ab875f8888244272e8509857f2"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "LinearDiscriminantAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "LinearDiscriminantAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "AF.X.complete-proposed",
+      "workload": "algos/qda@dataset=istella@input=classification-full-v1",
+      "vendor": "apple",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fa0b1575c2b165e284aa/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 1.802077459054999,
+      "baseline_seconds": 1.7060410000849515,
+      "observed_candidate_over_baseline": 1.0562919994099,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.879716,
+              "logloss": 3.41997239311957
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "accuracy": 0.879682,
+              "logloss": 3.4196421677151796
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "3bb28c36c58b906e01002cdc91419072ed27f7ff895094fbc3a4d97923d996e5",
+        "B": "99ce0dfee1bed8adbbf82f4dceb6cec050465e14b9f27bcfdb2fa66d4988be5d"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "QuadraticDiscriminantAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "QuadraticDiscriminantAnalysis",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
     },
     {
       "configuration": "I.X.complete-proposed",
@@ -6752,6 +7733,98 @@
       "admission": "Pending independent quality, required identity and affected-workload coverage",
       "quality_assessment": "PENDING",
       "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify."
+    },
+    {
+      "configuration": "I.X.complete-proposed",
+      "workload": "expanded:standard-scaler@dataset=taxi@input=classification-full-v1",
+      "vendor": "nvidia",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "MEASURED_FULL",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/37e8dac2dc36700f0a79/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_seconds": 1.7974547780031571,
+      "baseline_seconds": 1.933896382994135,
+      "observed_candidate_over_baseline": 0.9294473032832641,
+      "quality": {
+        "A": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours": {
+              "output_shape": "500000x11"
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "B": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours": {
+              "output_shape": "500000x11"
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "output_sha256": {
+        "A": "b58cc382ed7ed18108199e189d1b0881d89295128eb19c5ccc75346cefc9166f",
+        "B": "b58cc382ed7ed18108199e189d1b0881d89295128eb19c5ccc75346cefc9166f"
+      },
+      "model_state": {
+        "A": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "StandardScaler",
+            "complete_export_sha256": "13d232a0a7b2fd12669d4fb6ff4da9ab764ae9653dfa0f18cdd6a26703af92c9",
+            "excluded_metadata": [],
+            "schema": "mojolearn-benchmark-state-v1",
+            "sha256": "13d232a0a7b2fd12669d4fb6ff4da9ab764ae9653dfa0f18cdd6a26703af92c9",
+            "source": "public save npz",
+            "status": "ok"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "B": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "StandardScaler",
+            "complete_export_sha256": "13d232a0a7b2fd12669d4fb6ff4da9ab764ae9653dfa0f18cdd6a26703af92c9",
+            "excluded_metadata": [],
+            "schema": "mojolearn-benchmark-state-v1",
+            "sha256": "13d232a0a7b2fd12669d4fb6ff4da9ab764ae9653dfa0f18cdd6a26703af92c9",
+            "source": "public save npz",
+            "status": "ok"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "admission": "Pending independent quality, required identity and affected-workload coverage",
+      "quality_assessment": "PENDING",
+      "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented."
+    },
+    {
+      "configuration": "I.X.complete-proposed",
+      "workload": "expanded:standard-scaler@dataset=istella@input=classification-full-v1",
+      "vendor": "nvidia",
+      "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "execution_status": "IN_PROGRESS",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/f032fb902df53bb60773/attempt-0001/receipt.json",
+      "returncodes": [
+        0,
+        0
+      ]
     },
     {
       "configuration": "I.X.complete-proposed",

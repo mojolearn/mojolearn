@@ -18,7 +18,7 @@ for section in ('races','extra_races'):
   if race.get('lane') not in ('ridge','lasso','elasticnet','linearsvr','gmm','resample','sgd-reg','pa-reg','bayesian-ridge','ridge-cv','lasso-cv','huber','lars','lasso-lars','enet-cv'):continue
   for cell in race.get('cells',[]):
    if cell.get('mode')=='opponent':old_refs.setdefault((race.get('lane'),race.get('dataset')),[]).append({'race':rid,'arm':cell.get('arm'),'status':cell.get('status'),'shape':cell.get('shape'),'quality':cell.get('quality')})
-roots=[('nvidia',BASE/'nvidia-native/capture-attempt-02/artifacts'),('apple',BASE/'apple/captured')]
+roots=[('nvidia',BASE/'nvidia-native/capture-attempt-02/artifacts'),('apple',BASE/'apple/captured'),('amd',BASE/'amd/capture-attempt-01/artifacts')]
 previous_path=OUT/'next-reg-resample-quality-review.json'
 previous_rows={r['receipt_sha256']:r for r in json.loads(previous_path.read_text()).get('rows',[])} if previous_path.exists() else {}
 rows=[];unfinished=[];read_errors=[];seen=set()
@@ -30,7 +30,7 @@ for vendor,root in roots:
   # Namespace names differ across native/Apple controllers; derive the lane
   # generically and exclude only the already-reviewed original classical cells.
   lane=wid.split('@',1)[0].replace(':','/').rsplit('/',1)[-1]
-  if lane in ('pca','ols','kmeans'):continue
+  if vendor != 'amd' and lane in ('pca','ols','kmeans'):continue
   sha=hashlib.sha256(raw).hexdigest()
   if sha in seen:continue
   seen.add(sha);dataset=wid.partition('@dataset=')[2].split('@',1)[0]
@@ -69,7 +69,7 @@ for vendor,root in roots:
     elif opp['verdict'] in ('SAME','BETTER'):row.update(quality_assessment='TASK_METRIC_GATE_PASSED',reason='Recorded candidate task metrics preserve baseline and meet same-input independent sklearn quality under existing tolerances.')
     else:row.update(quality_assessment='PENDING',reason='Independent GMM reference has no judged shared metric')
   else:row.update(quality_assessment='PENDING',reason='Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.')
-  if vendor=='nvidia':row['remaining_requirements']=['AMD timing and same-arm cross-column IDENTICAL identity','Complete affected estimator/configuration coverage']
+  if vendor in ('nvidia','amd'):row['remaining_requirements']=[('AMD' if vendor=='nvidia' else 'NVIDIA')+' timing and same-arm cross-column IDENTICAL identity','Complete affected estimator/configuration coverage']
   else:row['remaining_requirements']=['Independent same-full-workload opponent quality unless explicitly qualified above','Complete affected estimator/configuration coverage']
   previous=previous_rows.get(sha,{})
   prior=previous.get('quality_assessment','')
