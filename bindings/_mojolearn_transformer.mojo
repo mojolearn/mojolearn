@@ -217,7 +217,7 @@ from std.math import isfinite
 # lane afn-attn (2026-10-03): MOJOLEARN_AFN_ATTN_ARENA, FAST + Apple only
 # (AFN_ATTN_ARENA is False on every other build, so these are never called).
 from core.device_arena import arena_begin, arena_end, arena_release
-from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA
+from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA, afn_flash_call_count
 
 
 # ===========================================================================
@@ -420,6 +420,10 @@ def _btick(on: Bool, mut t: Int, name: String):
         "timing " + name + " " + String(Float64(now - t) / 1000000.0) + " ms"
     )
     t = now
+
+
+def transformer_flash_call_count_binding(grouped: PythonObject) raises -> PythonObject:
+    return PythonObject(afn_flash_call_count(Bool(py=grouped)))
 
 
 def transformer_numeric_mode_binding() raises -> PythonObject:
@@ -3083,6 +3087,7 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_transformer")
         m.def_function[transformer_vendor_binding]("transformer_vendor")
+        m.def_function[transformer_flash_call_count_binding]("transformer_flash_call_count")
         m.def_function[transformer_numeric_mode_binding](
             "transformer_numeric_mode"
         )
