@@ -495,6 +495,14 @@ def library_identity(info):
     device it ran on)."""
     info = info if isinstance(info, dict) else {}
     out = {}
+    if info.get("device") == "cpu" and info.get("library") != "mojolearn":
+        try:
+            from threadpoolctl import threadpool_info
+            pools = threadpool_info()
+        except Exception as exc:
+            pools = {"unavailable": repr(exc)}
+        out["cpu_resources"] = {"cpu_count": os.cpu_count(), "threadpools": pools,
+            "thread_env": {k: os.environ.get(k) for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")}}
     if not info.get("version"):
         out["version"] = library_version(info.get("library"))
     if info.get("device") == "gpu" and not info.get("device_name"):

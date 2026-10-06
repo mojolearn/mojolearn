@@ -822,7 +822,9 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
     _INFER_DATA[0] = data
     n_large = int(min(large_rows, data.X_train.shape[0]))
     xl = np.ascontiguousarray(data.X_train[:n_large], dtype=np.float32)
-    batches = [("test", data._ours_Xtest, data.X_test), ("large", xl, xl)]
+    has_ours = any(a.name in ("ours", "ours-ab") for a in arms)
+    x_own = data._ours_Xtest if has_ours else data.X_test
+    batches = [("test", x_own, data.X_test), ("large", xl, xl)]
     specs = {}
     # categorical frames (lane gbdt-categorical, criteo): CatBoost and XGBoost
     # predict from the frame kind their fit took, built inside the clock
@@ -1187,6 +1189,15 @@ def main(argv=None):
             "device": "gpu" if gpu else "cpu",
             "device_name": bench_board_probe.gpu_device_name() if gpu else None},
             sort_keys=True), flush=True)
+    if args.opponents_only:
+        from threadpoolctl import threadpool_info
+        for arm in arms:
+            model = records.get(arm.name)
+            params = model.get_params() if hasattr(model, "get_params") else {}
+            print("FSPEED-RESOURCE " + json.dumps({"arm": arm.name, "cpu_count": os.cpu_count(),
+                  "thread_env": {k: os.environ.get(k) for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")},
+                  "estimator_threads": {k: params.get(k, "library default") for k in ("n_jobs", "thread_count", "num_threads", "nthread")},
+                  "threadpools": threadpool_info()}, sort_keys=True), flush=True)
     if args.params_only:
         # the board's opponent-store lookup: constructed, read back, stopped
         BP.emit(BP.check(lane, records, family="trees"))

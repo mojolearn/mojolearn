@@ -11,6 +11,16 @@ class OpponentsOnly(unittest.TestCase):
  def test_cache_success(self):
   c=dict(status='ok',rounds=1,times_ms=[2.0],median_ms=2.,warmup_ms=3.,quality={'r2':.9});self.assertTrue(b.successful_opponent_cell(c));self.assertTrue(b.successful_opponent_cell(dict(c,rounds=2,times_ms=[2.,2.])))
   for override in [dict(status='REFUSED'),dict(times_ms=[]),dict(warmup_ms=None),dict(median_ms=float('nan')),dict(quality={'error':'bad'}),dict(quality={'r2':float('inf')}),dict(rounds=2)]:self.assertFalse(b.successful_opponent_cell(dict(c,**override)))
+ def test_expected_inference(self):
+  race=dict(family='trees',lane='gbdt',arms=['catboost-cpu'])
+  self.assertFalse(b.successful_opponent_inference(race,['catboost-cpu'],[]))
+  c=dict(arm='catboost-cpu',status='ok',rounds=1,times_ms=[2.],median_ms=2.,warmup_ms=3.,quality={})
+  self.assertTrue(b.successful_opponent_inference(race,['catboost-cpu'],[dict(c,batch='test'),dict(c,batch='large')]))
+ def test_opponent_inference_avoids_own_attribute(self):
+  tree=ast.parse((P/'bench/speed/forest_speed_arm.py').read_text());fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='run_inference')
+  statements=[n for n in fn.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id in ('has_ours','x_own','batches') for t in n.targets)]
+  data=types.SimpleNamespace(X_test=object());ns=dict(arms=[types.SimpleNamespace(name='catboost-cpu')],data=data,xl=object())
+  exec(compile(ast.Module(body=statements,type_ignores=[]),'infer','exec'),ns);self.assertIs(ns['x_own'],data.X_test)
  def test_forest_own_calls_guarded(self):
   tree=ast.parse((P/'bench/speed/forest_speed_arm.py').read_text());main=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='main')
   prep=next(n for n in main.body if isinstance(n,ast.If) and ast.unparse(n.test)=='not args.opponents_only')

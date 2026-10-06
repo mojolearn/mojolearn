@@ -2138,6 +2138,15 @@ def successful_opponent_cell(cell):
             and finite(cell.get("warmup_ms")) and quality_ok(cell.get("quality")))
 
 
+def successful_opponent_inference(race, arms, cells):
+    sub = dict(race, arms=list(arms))
+    expected = set(INFER.plan_cells(sub))
+    if race["family"] == "algos" and ALGOS.has_infer(race["lane"]):
+        expected = {(a, "Xq") for a in arms}
+    by_key = {(c.get("arm"), c.get("batch")): c for c in cells}
+    return all(k in by_key and successful_opponent_cell(by_key[k]) for k in expected)
+
+
 def stored_opponents(ctx, race):
     """{arm: stored record} for the race's opponents the store holds under the
     same key, read-back included: a candidate (the fields known before
@@ -2168,7 +2177,11 @@ def stored_opponents(ctx, race):
         hit = STORE.lookup(store, key)
         if hit is not None:
             cell = hit.get("cell") or {}
+            if ctx.get("retime_cpu_opponents") and cell.get("device") == "cpu" and hit.get("commit") != ctx["commit"]:
+                continue
             if ctx.get("opponents_only") and (not successful_opponent_cell(cell)):
+                continue
+            if ctx.get("opponents_only") and ctx.get("infer") and not successful_opponent_inference(race, [arm], hit.get("infer_cells") or []):
                 continue
             out[arm] = hit
     return out
@@ -2422,7 +2435,7 @@ def run_race(ctx, race):
     rec["cells"] = add_ratios(rec["cells"])
     if ctx.get("opponents_only"):
         cells = {c["arm"]: c for c in rec["cells"]}
-        rec["status"] = "done" if all(successful_opponent_cell(cells.get(a, {})) for a in full["opponents"]) else "failed"
+        rec["status"] = "done" if rec["rc"] == 0 and all(successful_opponent_cell(cells.get(a, {})) for a in full["opponents"]) and (not ctx.get("infer") or successful_opponent_inference(full, full["opponents"], rec.get("infer_cells") or [])) else "failed"
     rec["stored_now"] = store_opponents(ctx, full, rec)
     return rec
 
@@ -3195,6 +3208,7 @@ def build_parser():
     p.add_argument("--retime-opponents", action="store_true",
                    help="measure every opponent again (and store the new measurement); "
                         "implies --with-opponents")
+    p.add_argument("--retime-cpu-opponents", action="store_true", help="fresh CPU opponents for this harness; GPU opponents stay missing-only")
     p.add_argument("--opponents-only", action="store_true", help="run missing or failed opponent cells only; never run our arms")
     p.add_argument("--with-opponents", action="store_true",
                    help="also race the opponents the store does not hold (default: our GPU "
@@ -3575,6 +3589,7 @@ def main(argv=None):
         ctx["artifact_hardware"] = box["artifact_hardware"]
     ctx["box"] = box
     ctx["retime"] = args.retime_opponents
+    ctx["retime_cpu_opponents"] = args.retime_cpu_opponents
     ctx["opponents_only"] = args.opponents_only
     ctx["with_opponents"] = bool(args.with_opponents or args.retime_opponents or args.opponents_only)
     ctx["store_path"] = os.path.abspath(os.path.expanduser(
@@ -3610,6 +3625,7 @@ def main(argv=None):
                         "opponent_store": ctx["store_path"],
                         "retime_opponents": ctx["retime"],
                         "opponents_only": args.opponents_only,
+                        "retime_cpu_opponents": args.retime_cpu_opponents,
                         "smoke_check": bool(args.smoke), "shard": args.shard,
                         "smoke_gate": gate}
     result["plan"] = [r["id"] for r in races]
