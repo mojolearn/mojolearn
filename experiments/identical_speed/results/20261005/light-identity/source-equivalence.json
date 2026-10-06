@@ -1,0 +1,124 @@
+{
+  "status": "PASS",
+  "compiled_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+  "checked_base_main_commit": "14fd20e3485c8eaac4dde4e9e48e40c39ecc773c",
+  "scope": "Complete 17-file local Mojo import closure; only blank/full-line comment changes allowed. Toolchain lock and profile definitions identical.",
+  "files": [
+    {
+      "file": "bench/gemm_schedule_ab.mojo",
+      "build_source_sha256": "a51100aa46b8fc4e7cff95281480d99bfe2781608c7eb922e508d4df7d15d3f0",
+      "checked_source_sha256": "a51100aa46b8fc4e7cff95281480d99bfe2781608c7eb922e508d4df7d15d3f0",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "checks/__init__.mojo",
+      "build_source_sha256": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
+      "checked_source_sha256": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "checks/kernel_matrix.mojo",
+      "build_source_sha256": "3099adc79011132d897d13e958486984f0d8c901e643e59b3e5aaabde384a135",
+      "checked_source_sha256": "3099adc79011132d897d13e958486984f0d8c901e643e59b3e5aaabde384a135",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "checks/kernel_matrix_gemm.mojo",
+      "build_source_sha256": "379c143af199beb67dfb73b2f2246a90b5c328680f616618c54fb053506ee114",
+      "checked_source_sha256": "379c143af199beb67dfb73b2f2246a90b5c328680f616618c54fb053506ee114",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "checks/numerics.mojo",
+      "build_source_sha256": "8461ae2d6d21fb0e312959bf876e742ba0330b764f97604839e9de3e9424ee5f",
+      "checked_source_sha256": "8461ae2d6d21fb0e312959bf876e742ba0330b764f97604839e9de3e9424ee5f",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "checks/rtf_seam.mojo",
+      "build_source_sha256": "cbef549b95e2a1578cc893eb0841c52ed765564702311cd4188da9bc81aa9fe1",
+      "checked_source_sha256": "cbef549b95e2a1578cc893eb0841c52ed765564702311cd4188da9bc81aa9fe1",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "core/__init__.mojo",
+      "build_source_sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f",
+      "checked_source_sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "core/apple_air.mojo",
+      "build_source_sha256": "64328b11dba3cbbc2de085a51915534c47085abb5f3f7c1baf34684cbd9fbfd8",
+      "checked_source_sha256": "64328b11dba3cbbc2de085a51915534c47085abb5f3f7c1baf34684cbd9fbfd8",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "core/step_phase.mojo",
+      "build_source_sha256": "5272ba71eb2559b97c37c8af5f73614cc40cef8183982bf3a9c73e64b9d4c9cf",
+      "checked_source_sha256": "5272ba71eb2559b97c37c8af5f73614cc40cef8183982bf3a9c73e64b9d4c9cf",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "gemm/__init__.mojo",
+      "build_source_sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f",
+      "checked_source_sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "gemm/afn_apple_fast.mojo",
+      "build_source_sha256": "4a7c348ee4a2d3a1952808a4859af3613441551085eb1d9f7f9eee1e6dd9664b",
+      "checked_source_sha256": "4a7c348ee4a2d3a1952808a4859af3613441551085eb1d9f7f9eee1e6dd9664b",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "gemm/afn_apple_fast2.mojo",
+      "build_source_sha256": "a5cb91505b69de254cd51fe53085b8f8f6380cae23b70f364c6c5a9163e10929",
+      "checked_source_sha256": "a5cb91505b69de254cd51fe53085b8f8f6380cae23b70f364c6c5a9163e10929",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "gemm/checks/__init__.mojo",
+      "build_source_sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f",
+      "checked_source_sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "gemm/checks/gemm_backward.mojo",
+      "build_source_sha256": "b89a8c4b77e4e0615d14d40f78f975d88300fc3d96fd26aea640d0a5ced27d2a",
+      "checked_source_sha256": "b89a8c4b77e4e0615d14d40f78f975d88300fc3d96fd26aea640d0a5ced27d2a",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "gemm/checks/gemm_identical.mojo",
+      "build_source_sha256": "30a68b8e57140e6647e3f155718f19a4323bc0234a9518b14ec3edb280fea9d5",
+      "checked_source_sha256": "8f50dc7b2e616f22dc3437cc2c4bcf7c07d0c473928d2288d3c053fbeeacdad0",
+      "comment_only_changed_lines": 71
+    },
+    {
+      "file": "gemm/checks/gemm_step_arms.mojo",
+      "build_source_sha256": "a7ff8b3a12f7e18828d8012dbc90798dfc6d8edc2ad780fb0ba9ba183db18288",
+      "checked_source_sha256": "a7ff8b3a12f7e18828d8012dbc90798dfc6d8edc2ad780fb0ba9ba183db18288",
+      "comment_only_changed_lines": 0
+    },
+    {
+      "file": "gemm/contract.mojo",
+      "build_source_sha256": "c65a73c8371690121804d962ea3c03c30d4b7a641cdbe7fd7fc4b03dfee54d0f",
+      "checked_source_sha256": "c65a73c8371690121804d962ea3c03c30d4b7a641cdbe7fd7fc4b03dfee54d0f",
+      "comment_only_changed_lines": 0
+    }
+  ],
+  "unchanged_configuration": [
+    {
+      "file": "pixi.toml",
+      "sha256": "0b901e456c86dae43d37e12343d7890f796ab7e411c562b8aab5cca0f1c9a987"
+    },
+    {
+      "file": "pixi.lock",
+      "sha256": "408bd74117e33b874ebfb2327b05b2234617759ab299bb388b032cb509d1e7f9"
+    },
+    {
+      "file": "experiments/identical_speed/profiles.json",
+      "sha256": "a6300f58cb8556254048280305b39de94769cbb4691f75676c19a35ea7c9f53f"
+    }
+  ]
+}

@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Evidence admission tests; these do not execute a GPU or time CPU work."""
+import copy
 import unittest
-from identical_speed_ab import CHECKS, SCREENS, parse_record, compare_pair, selected, profiles
+from identical_speed_ab import CHECKS, SCREENS, parse_record, compare_pair, selected, profiles, identity_cases, compare_identity
 
 
 class EvidenceTests(unittest.TestCase):
@@ -61,6 +62,46 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(list(selected([name])), [name])
         with self.assertRaises(ValueError):
             selected(["one-page", "one-page"])
+
+    def test_light_identity_has_no_timed_cases(self):
+        cases = identity_cases("light")
+        self.assertEqual(len(cases), 27)
+        self.assertTrue(all(c["timed"] == 0 for c in cases))
+        self.assertEqual(sum(c["reference"] for c in cases), 18)
+        self.assertEqual({c["op"] for c in cases if not c["reference"]}, {0, 1, 2})
+
+    def identity_report(self, vendor):
+        pairs = []
+        for c in identity_cases("light"):
+            arms = {"baseline": dict(hash=123, ns=0, mask=0),
+                    "one-page": dict(hash=123, ns=0, mask=1)}
+            pairs.append(dict(profile="one-page", case=c, bits="MATCH", arms=arms))
+        return dict(status="PASS", scope="identity-only", identity_shapes="light",
+                    build=dict(commit="frozen", vendor=vendor, profiles={"one-page": {}}),
+                    expected_pairs=27, pairs=pairs)
+
+    def test_cross_vendor_identity_and_refusals(self):
+        left = self.identity_report("apple")
+        right = self.identity_report("nvidia")
+        result = compare_identity(left, right)
+        self.assertEqual(result["pairs"], 27)
+        self.assertEqual(result["timed_samples"], 0)
+        bad = copy.deepcopy(right)
+        bad["pairs"][0]["arms"]["one-page"]["hash"] += 1
+        with self.assertRaises(ValueError):
+            compare_identity(left, bad)
+        bad = copy.deepcopy(right)
+        bad["pairs"].pop()
+        with self.assertRaises(ValueError):
+            compare_identity(left, bad)
+        bad = copy.deepcopy(right)
+        bad["pairs"][0]["arms"]["baseline"]["ns"] = 1
+        with self.assertRaises(ValueError):
+            compare_identity(left, bad)
+        bad = copy.deepcopy(right)
+        bad["build"]["commit"] = "another-source"
+        with self.assertRaises(ValueError):
+            compare_identity(left, bad)
 
 
 if __name__ == "__main__":

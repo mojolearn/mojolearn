@@ -1,0 +1,23 @@
+{
+  "compiled_source": "a006da73d78634683cfc77a12dcb99666c55748c",
+  "method": "FNV-1a64 over every output byte; tiny cases also compare every word to flat plan",
+  "output_fingerprints_compared": 270,
+  "pairs": 135,
+  "reports": [
+    {
+      "path": "experiments/identical_speed/results/20261005/light-identity/apple.json",
+      "sha256": "af49de6108166cb9c1b9fe56381b2aa2f472eb2ff1a00c4e57c476d62a0ae6a3"
+    },
+    {
+      "path": "experiments/identical_speed/results/20261005/light-identity/nvidia.json",
+      "sha256": "60fa85bbcad466ffe0905be5c30e6c7308305711e4efab851e0475e0257c7da3"
+    }
+  ],
+  "scope": "lightweight GEMM identity only; not full model or arbitrary toggle combinations",
+  "status": "PASS",
+  "timed_samples": 0,
+  "vendors": [
+    "apple",
+    "nvidia"
+  ]
+}

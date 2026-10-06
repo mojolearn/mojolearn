@@ -1,0 +1,66 @@
+{
+  "status": "PASS",
+  "suite": "light",
+  "checked_base_main_commit": "14fd20e3485c8eaac4dde4e9e48e40c39ecc773c",
+  "compiled_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+  "runner_sha256": "b299687a7f25622cdb97afe9f49b636204ed99013fc9763c0b91a34969559630",
+  "devices": [
+    "Apple M4",
+    "NVIDIA GeForce RTX 4090"
+  ],
+  "profiles": [
+    "body-tiles",
+    "group-slack2",
+    "group-slack8",
+    "one-page",
+    "packed64"
+  ],
+  "cases_per_profile": 27,
+  "pairs_per_vendor": 135,
+  "cross_vendor_output_fingerprints": 270,
+  "timed_samples": 0,
+  "compile_evidence": {
+    "apple": {
+      "arms": 6,
+      "status": "COMPILE_PASS"
+    },
+    "nvidia": {
+      "arch": "sm_89",
+      "arms": 6,
+      "status": "COMPILE_PASS"
+    },
+    "amd": {
+      "arch": "gfx942",
+      "arms": 4,
+      "status": "COMPILE_PASS",
+      "scope": "baseline and three applicable profiles; no new AMD execution in this check"
+    }
+  },
+  "defaults": "All five experiment toggles OFF; baseline mask 0. No numerical code or default changed.",
+  "limitations": [
+    "Light GEMM fixtures only; not a full-model or all-shape guarantee.",
+    "Cross-vendor comparison uses FNV-1a64 of every output byte; 18 tiny fixtures also compare every word to the flat reference on each device.",
+    "Combined experiment defines have never been tested by this campaign.",
+    "Apple is an identity column; these scheduling experiments target NVIDIA/AMD.",
+    "Existing historical measurements are preserved; this run took no performance measurements."
+  ],
+  "setup_failures": [
+    {
+      "phase": "initial Apple launch",
+      "cause": "dyld could not resolve cached binary runtime after DYLD_LIBRARY_PATH was stripped at nice launch",
+      "gpu_pairs_completed": 0,
+      "resolution": "set runtime path inside Python after nice started; fresh complete retry passed",
+      "retained_log": "/Users/andrewhendel/mojolearn-evidence/identical-light-identity-20261005/apple.log"
+    }
+  ],
+  "raw_evidence": "/Users/andrewhendel/mojolearn-evidence/identical-light-identity-20261005",
+  "nvidia_capture": {
+    "verified_files": 277,
+    "hold_released": true,
+    "pod_reused": true
+  },
+  "harness_tests": {
+    "status": "PASS",
+    "tests": 11
+  }
+}
