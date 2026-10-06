@@ -3,7 +3,7 @@
   "id": "A07",
   "mode": "identical",
   "qualification": "pending_device_validation",
-  "default_policy": "Explicit integer node-task adapter only; complete production forest integration owed.",
+  "default_policy": "Production 256-row tasks require IDENTICAL + MOJOLEARN_IDN_RF_TASK_ROWS256. Incumbent512-row histogram map and TPB128 partition map remain defaults; graph buckets require separate define.",
   "entrance": "experiments/performance_ideas/A07/histogram_tasks.mojo",
   "source_scope": "Implemented real production histogram WorkloadInfo granularity256 through hostqueue and device-loop histogram maps, preserving partition table and existing exact integer/fixed-point weighted bins. Graph buckets and standalone node histograms remain separately instantiated. Full device/host identity/fit quality pending.",
   "supported_vendors": [
@@ -58,6 +58,25 @@
       "defines": [
         "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
       ]
+    },
+    {
+      "name": "histogram_tasks256",
+      "source": "experiments/performance_ideas/A07/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
+      ]
+    },
+    {
+      "name": "degree_histogram_tasks256",
+      "source": "experiments/performance_ideas/A07/check.mojo",
+      "defines": [
+        "MOJOLEARN_RBC_CANON_DEGREE_BUCKETS=1",
+        "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
+      ]
     }
+  ],
+  "production_entrances": [
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:HIST_ITEMS_PER_THREAD",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:HIST_WORKLOAD_GRANULARITY"
   ]
 }

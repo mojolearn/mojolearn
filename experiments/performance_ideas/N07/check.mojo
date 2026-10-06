@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Exact signed weighted histogram arms, skew, tails and invalid addends."""
+from experiments.performance_ideas.N07.production_check import run_checks as check_production
 from max.gpu.host import DeviceContext
 from experiments.performance_ideas.N07.streamed_histogram import streamed_histogram
 
 
 def main() raises:
+    check_production()
     var ctx=DeviceContext()
     var rows=769;var features=11
     comptime BINS=32

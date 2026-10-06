@@ -17,6 +17,19 @@
       "defines": [
         "MOJOLEARN_RBC_CANON_DEGREE_BUCKETS=1"
       ]
+    },
+    {
+      "name": "histogram_tasks256",
+      "defines": [
+        "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
+      ]
+    },
+    {
+      "name": "degree_histogram_tasks256",
+      "defines": [
+        "MOJOLEARN_RBC_CANON_DEGREE_BUCKETS=1",
+        "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
+      ]
     }
   ],
   "fixtures": [

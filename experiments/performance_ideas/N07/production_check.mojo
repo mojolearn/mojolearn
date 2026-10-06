@@ -9,7 +9,7 @@ from ensemble.checks.sample_weight_check import arm_a_zero_weight_drop, arm_b_va
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import IDN_RF_STREAM_REPLICAS, forest_stream_replica_count
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var fx = Fixture(ctx)
     var expected = expected_histogram(fx)
@@ -35,3 +35,7 @@ def main() raises:
             raise Error("N07 baseline unexpectedly enabled stream route")
     _ = fx^
     print("N07_PRODUCTION_PASS exact_histograms weighted_fits failure_contract route_hits", after - before)
+
+
+def main() raises:
+    run_checks()

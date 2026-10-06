@@ -47,7 +47,8 @@
   "validation_paths": [
     "neighbors/checks/rbc_canonical_merge_check.mojo",
     "experiments/performance_ideas/A07/histogram_check.mojo",
-    "experiments/performance_ideas/N07/check.mojo"
+    "experiments/performance_ideas/N07/check.mojo",
+    "experiments/performance_ideas/A07/production_check.mojo"
   ],
   "depends_on": [
     "I13",
