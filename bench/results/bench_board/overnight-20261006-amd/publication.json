@@ -46,11 +46,30 @@
       "scope": "Only selected failed neural races after cutoff; earlier cells retain their original b0f harness and raw history",
       "source_sha": "3e55ba47e581fa75dffba286327d023f96801831",
       "status": "ACTIVE_RESOURCE_RETRY"
+    },
+    {
+      "adapter_commit": "eef36a327",
+      "archive_sha256": "045cf48bc0f56da12704b400107ef683c3da197cdfefa3279557b26ba727c99b",
+      "arms_by_race": {
+        "neural/lm-forward/bytes/shape=full": [
+          "torch-compile-fp32",
+          "torch-compile-bf16"
+        ]
+      },
+      "before": "2026-10-06T07:35:13Z",
+      "races": [
+        "neural/lm-forward/bytes/shape=full"
+      ],
+      "reason": "Register frozen dynamic twin modules for Torch Dynamo import by name",
+      "remote_harness": "/root/opponent-harness-neural-59fd136091",
+      "scope": "Applies only to fresh LM compile receipts carrying isolated_neural_repair.source selection; earlier successful arms retain original provenance",
+      "source_sha": "59fd136091514ddbbca6e75ba7493684a048e9b2",
+      "status": "DEFERRED_SELECTIVE_RETRY"
     }
   ],
   "harness_source_sha": "3e55ba47e581fa75dffba286327d023f96801831",
   "policy": "Exact opponent-only source files, hardware and failures retained. No A/B component ratios are derived.",
-  "published_at": 1791272027.915245,
+  "published_at": 1791272208.278246,
   "schema": "mojolearn-opponent-publication/1",
   "source_directory": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/opponents/board",
   "source_sha256": {
