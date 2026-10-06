@@ -18,6 +18,7 @@ subprocess.run([*ssh,'rm -f /root/overnight-nvidia/CANDIDATES_SEALED'],capture_o
 while time.time()-started<1800:
  p=subprocess.run([*ssh,"cat /root/campaign-results/status.json"],capture_output=True,text=True,timeout=45)
  if p.returncode==0 and json.loads(p.stdout)['phase']!='GPU_OPPONENTS_RUNNING':
+  subprocess.run([*ssh,'rm -f /root/campaign-results/repairs/OPPONENTS_DONE'],capture_output=True,timeout=45,check=True)
   claim.unlink(missing_ok=True);(E/'implicit-rerun-boundary.json').write_text(json.dumps(dict(status='RELEASED',time=time.time(),worker=json.loads(p.stdout)),indent=2)+'\n');break
  time.sleep(10)
 else:
