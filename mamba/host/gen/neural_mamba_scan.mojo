@@ -24,8 +24,9 @@ comptime NT = 128
 
 
 @always_inline
-def nn34_factors(t: Int, d: Int, n: Int, dim: Int,
-    u: NN34FP, delta: NN34FP, a: NN34FP, b: NN34FP) -> Tuple[Float32, Float32]:
+def nn34_factors[mutable: Bool, input_origin: Origin[mutable], //](t: Int, d: Int, n: Int, dim: Int,
+    u: Pointer[Float32, input_origin], delta: Pointer[Float32, input_origin],
+    a: Pointer[Float32, input_origin], b: Pointer[Float32, input_origin]) -> Tuple[Float32, Float32]:
     var dl = ftz(delta.unsafe_load(t * dim + d))
     var av = ftz(a.unsafe_load(d * NS + n))
     var bv = ftz(b.unsafe_load(t * NS + n))
