@@ -55,9 +55,14 @@ def feature_grad_kernel[DK: Bool,TILE: Int](queries: MutPointer[Float32,MutAnyOr
             output.unsafe_store(owner*dims+base+d,acc[d])
 
 
-# N06 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-# N06 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
-# Explicit attention-v2 backward adapter; full training/GQA quality and resource gates owed.
+# N06 2026-10-06 scoped WIN, source cbcc8dcd3303: compact vs original
+# attention-v2 backward, H=4/L=512/HD=64. AMD 50.013095 -> 35.579508 ms
+# (candidate/baseline 0.711); NVIDIA L40S 17.198174 -> 12.389213 ms (0.720).
+# The explicit candidate launches feature_grad_kernel[True/False,4]; this is
+# distinct on both vendors. One excluded same-context warmup and one score, rc=0.
+# Existing identity evidence reused; no new identity/quality claim. This synthetic
+# backward component leaves full training/GQA/resource qualification pending;
+# incumbent defaults retained. Evidence: measurements/20261006/index.json.
 def compact_backward(ctx: DeviceContext,mut queries: DeviceBuffer[DType.float32],
     mut key_vectors: DeviceBuffer[DType.float32],mut values: DeviceBuffer[DType.float32],
     mut dy: DeviceBuffer[DType.float32],mut visible_lo: DeviceBuffer[DType.int32],

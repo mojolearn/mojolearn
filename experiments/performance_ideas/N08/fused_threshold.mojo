@@ -42,9 +42,17 @@ def fill_kernel(flags: MutPointer[Int32,MutAnyOrigin],positions: MutPointer[Int3
         indices.unsafe_store(Int(positions.unsafe_load(cell)),Int32(cell%Int(cols)))
 
 
-# N08 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-# N08 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
-# Explicit threshold-CSR adapter only; complete caller device/host bits owed.
+# N08 2026-10-06 marginal component WIN, source cbcc8dcd3303. FUSED=True
+# skips the distance-plane kernel and computes distances in decision_kernel:
+# an actual distinct route on AMD/NVIDIA, followed by the same CSR scan/fill.
+# rows/columns/features=1024/4096/8 including CSR readback: AMD
+# 0.570030 -> 0.549260 ms (candidate/baseline 0.964), NVIDIA L40S
+# 0.812585 -> 0.784554 ms (0.966). NVIDIA neighbor 1023/4097/17 is
+# 0.853796 -> 0.849876 ms (0.995); matching AMD neighbor remains pending.
+# One excluded same-context warmup and one score, rc=0; prior identity evidence
+# reused without retesting. Synthetic threshold-CSR adapter coverage does not
+# qualify a full clustering caller or a default change; incumbent retained.
+# Evidence: measurements/20261006/index.json.
 def threshold_graph[FUSED: Bool](ctx: DeviceContext,mut q: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],mut distances: DeviceBuffer[DType.float32],
     mut flags: DeviceBuffer[DType.int32],mut positions: DeviceBuffer[DType.int32],
