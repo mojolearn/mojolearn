@@ -55,6 +55,7 @@ def feature_grad_kernel[DK: Bool,TILE: Int](queries: MutPointer[Float32,MutAnyOr
             output.unsafe_store(owner*dims+base+d,acc[d])
 
 
+# N06 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
 # N06 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Explicit attention-v2 backward adapter; full training/GQA quality and resource gates owed.
 def compact_backward(ctx: DeviceContext,mut queries: DeviceBuffer[DType.float32],
