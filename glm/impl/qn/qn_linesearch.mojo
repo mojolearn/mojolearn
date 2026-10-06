@@ -223,7 +223,9 @@ def ls_backtrack_exact_trials(ctx: DeviceContext,param: LBFGSParam,mut f: GLMWit
     var results = ctx.enqueue_create_buffer[DType.float32](count*3)
     var host = ctx.enqueue_create_host_buffer[DType.float32](count*3)
     var next = step
-    for c in range(count):
+    for c in range(4):  # four admitted independent trial descriptors
+        if c>=count:
+            continue
         trial_x.append(ctx.enqueue_create_buffer[DType.float32](n))
         trial_g.append(ctx.enqueue_create_buffer[DType.float32](n))
         steps.append(next)
@@ -249,7 +251,9 @@ def ls_backtrack_exact_trials(ctx: DeviceContext,param: LBFGSParam,mut f: GLMWit
     var ret = LS_MAX_ITERS_REACHED
     var decided = False
     ls_iters=0
-    for c in range(count):
+    for c in range(4):  # four admitted independent trial descriptors
+        if c>=count:
+            continue
         step=steps[c]
         fx=host[c*3] if f.l2==Float32(0) else ftz(host[c*3]+host[c*3+1])
         ls_iters+=1

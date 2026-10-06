@@ -707,10 +707,10 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
         ts_free_device()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
     if keep:
-        comptime if not is_defined["MOJOLEARN_IDN_TSQR_REUSE"]():
+        comptime if not (_TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_REUSE"]()):
             raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
         var retained_bytes = 0
-        for i in range(len(st[].bufs)):
+        for i in range(4):  # admitted factor, panel, R tiles and tau buffers
             retained_bytes += len(st[].bufs[i])*4
         if retained_bytes>16*1024*1024:
             raise Error("x_decomp tsqr: retained factor state exceeds16 MiB experiment budget")
