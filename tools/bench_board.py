@@ -3542,7 +3542,7 @@ def main(argv=None):
 
     python, wheel = setup_python(args, vendor, out, os.path.join(out, "logs", "setup.log"))
     arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
-    why = gpu_set_refusal(python, vendor)
+    why = None if getattr(args, "opponents_only", False) else gpu_set_refusal(python, vendor)
     if why:
         raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "
                          "so every race would refuse our arm:\n%s" % (vendor, why))
@@ -3650,9 +3650,13 @@ def main(argv=None):
             print("bench_board: RERUN %s (done %s, before --rerun-before %s)"
                   % (r["id"], prev.get("finished"), args.rerun_before), flush=True)
             result.setdefault("superseded", []).append(prev)
-        if prev and prev.get("status") == "failed" and args.skip_failed:
-            print("bench_board: skip %s (failed earlier; --skip-failed)" % r["id"], flush=True)
-            continue
+        if prev and prev.get("status") == "failed":
+            if args.skip_failed and not _rerun_wanted(args, r["id"], prev):
+                print("bench_board: skip %s (failed earlier; --skip-failed)" % r["id"], flush=True)
+                continue
+            # An explicitly selected repair retries only its failed race and
+            # preserves the refusal/failure receipt beside the replacement.
+            result.setdefault("superseded", []).append(prev)
         todo.append(r)
     if any(r["family"] == "classical2" for r in todo):
         ensure_more_prep(ctx, todo)
