@@ -14,6 +14,9 @@ def exercise(args):
         return shap(args)
     from mojolearn import RandomForestClassifier
     from mojolearn import _mojolearn_rf as binding
+    layout=str(binding.forest_resident_layout())
+    if args.variant=='packed-layout':
+        assert layout==('separate_arrays' if args.arm=='A' else 'packed_siblings'),layout
     cases={}
     for depth,classes,skew in ((4,2,False),(11,4,False),(9,3,True)):
         rng=np.random.default_rng(456);x=rng.normal(size=(1019,19)).astype('float32');q=rng.normal(size=(263,19)).astype('float32')
@@ -22,10 +25,20 @@ def exercise(args):
         y=np.searchsorted(edges,x[:,0]).astype('int32');qy=np.searchsorted(edges,q[:,0])
         model=RandomForestClassifier(n_estimators=37,max_depth=depth,random_state=7,inference_engine='parallel_groves',numeric_mode='fast')
         model.fit(x,y)
-        cold,cold_ms=consumed(lambda:model.predict(q));repeat,repeated_ms=consumed(lambda:model.predict(q))
+        cold,cold_ms=consumed(lambda:model.predict(q))
+        saved=np.asarray(cold).copy()
+        repeat,repeated_ms=consumed(lambda:model.predict(q))
+        assert np.array_equal(cold,saved),'cold output overwritten by retained prediction'
+        assert np.array_equal(cold,repeat),'retained prediction differs'
+        # Fitting invalidates the resident conversion; old outputs must survive.
+        if args.variant=='packed-layout':
+            refit,refit_ms=consumed(lambda:model.fit(x,y).predict(q))
+            assert np.array_equal(cold,saved),'resident refit invalidated caller output'
+            assert np.array_equal(refit,repeat),'fixed-seed refit changed prediction'
+        else:refit_ms=None
         error=float(np.mean(np.asarray(repeat).reshape(-1)!=qy))
         cases[f'depth{depth}-c{classes}-skew{skew}']=dict(contract=dict(depth=depth,classes=classes,skew=skew,trees=37,seed=7),
-            metrics=dict(misclassification=dict(value=error,rtol=0,atol=.002)),cold_predict_ms=cold_ms,repeated_predict_ms=repeated_ms)
+            metrics=dict(misclassification=dict(value=error,rtol=0,atol=.002)),cold_predict_ms=cold_ms,repeated_predict_ms=repeated_ms,refit_and_conversion_ms=refit_ms,resident_layout=layout,retained_output_bytes=int(saved.nbytes))
     return dict(binding=binding_check(binding,'rf'),cases=cases)
 def shap(args):
     import numpy as np

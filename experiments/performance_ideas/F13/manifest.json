@@ -46,7 +46,8 @@
     "shallow/deep/multiclass/skewed traversal coverage",
     "misclassification no material loss",
     "TreeSHAP separate mechanism and attribution gate owed",
-    "Separate SHAP paired-row scheduling, actual attribution additivity and output lifetime, preparation counted"
+    "Separate SHAP paired-row scheduling, actual attribution additivity and output lifetime, preparation counted",
+    "Packed resident conversion: separately report cold conversion and retained query, require actual binding layout, output survival across reuse and refit"
   ],
   "timing_contract": "Cold and retained public prediction through first read; model fit excluded and reported as prerequisite",
   "blocker": null,
@@ -59,7 +60,8 @@
   "variants": {
     "shap": [
       "MOJOLEARN_SHAP_FAST_ROW_PAIR"
-    ]
+    ],
+    "packed-layout": []
   },
   "variant_bindings": {
     "shap": "trees"
@@ -80,5 +82,10 @@
     "{output}/arms",
     "--output",
     "{output}/run"
-  ]
+  ],
+  "variant_baseline_defines": {
+    "packed-layout": [
+      "MOJOLEARN_FOREST_SEPARATE_NODES"
+    ]
+  }
 }
