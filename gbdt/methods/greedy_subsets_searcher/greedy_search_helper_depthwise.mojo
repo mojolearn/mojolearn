@@ -2218,6 +2218,7 @@ def fit_non_symmetric_tree[
     var lg_resident_snapshots = 0
     # I17 new candidate remains default off. Qualification is pending: native
     # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
+    # NEVER RUN — PENDING VALIDATION
     comptime if LG_EXACT_ID and is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]():
         if lg_exact and max_leaves>0 and stat_count>0 and max_leaves<=(1<<22)//(3*stat_count):
             lg_resident_stats.append(ctx.enqueue_create_buffer[DType.float32]((2*max_leaves-1)*stat_count))
@@ -4101,6 +4102,7 @@ def fit_non_symmetric_tree[
     comptime if REPORT_PART_STATS_WORK:
         print("part_stats_work", options.policy, n_rows,
               part_stats_leaves_reduced, part_stats_rows_reduced)
+    # NEVER RUN — PENDING VALIDATION
     comptime if LG_EXACT_ID and is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]():
         print("I17 frontier_resident_snapshots",lg_resident_snapshots,"retained_nodes",len(lg_node_stats)//stat_count)
     _ = lg_resident_stats^
