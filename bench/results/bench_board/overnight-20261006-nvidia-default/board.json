@@ -47135,8 +47135,712 @@
       "stored_arms": [],
       "stored_now": 0,
       "wall_s": 8.3
+    },
+    "neural/mamba3-forward/gaussian/shape=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-eager-tf32",
+        "torch-compile-fp32",
+        "torch-compile-tf32",
+        "torch-eager-bf16",
+        "torch-compile-bf16"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "neural",
+          "hash": "e772be432799d16c",
+          "hash_stable": null,
+          "lane": "mamba3-forward",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 84.04086343944073,
+          "median_ms": 84.04086343944073,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 219.7,
+            "peak_host_mb": 1191.2,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 219.7,
+            "warmup_host_mb": 1190.8
+          },
+          "min_ms": 84.04086343944073,
+          "mode": "opponent",
+          "neural_shape": "full",
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 219.7,
+          "peak_host_mb": 1191.2,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {},
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "ours_call": "mojolearn.Mamba3Block(weights).forward(x)",
+            "ours_device": "gpu",
+            "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "B1 L2048 DM384",
+            "torch_call": "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "B1 L2048 DM384",
+          "source": "measured this run",
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            84.04086343944073
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 394.4377526640892
+        },
+        {
+          "arm": "torch-eager-tf32",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "neural",
+          "hash": "53a72e28468b6d58",
+          "hash_stable": null,
+          "lane": "mamba3-forward",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 83.39114300906658,
+          "median_ms": 83.39114300906658,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 219.7,
+            "peak_host_mb": 1186.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 219.7,
+            "warmup_host_mb": 1186.1
+          },
+          "min_ms": 83.39114300906658,
+          "mode": "opponent",
+          "neural_shape": "full",
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 219.7,
+          "peak_host_mb": 1186.5,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {},
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "ours_call": "mojolearn.Mamba3Block(weights).forward(x)",
+            "ours_device": "gpu",
+            "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "B1 L2048 DM384",
+            "torch_call": "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "B1 L2048 DM384",
+          "source": "measured this run",
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            83.39114300906658
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 359.9261958152056
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "neural",
+          "hash": "3a73c3686b2e14a4",
+          "hash_stable": null,
+          "lane": "mamba3-forward",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 12.383831664919853,
+          "median_ms": 12.383831664919853,
+          "memory": {
+            "children_mb": 721.4,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 83.6,
+            "peak_host_mb": 3464.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 179.6,
+            "warmup_host_mb": 3461.6
+          },
+          "min_ms": 12.383831664919853,
+          "mode": "opponent",
+          "neural_shape": "full",
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 83.6,
+          "peak_host_mb": 3464.6,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {},
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "ours_call": "mojolearn.Mamba3Block(weights).forward(x)",
+            "ours_device": "gpu",
+            "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "B1 L2048 DM384",
+            "torch_call": "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "B1 L2048 DM384",
+          "source": "measured this run",
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            12.383831664919853
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 339501.26852467656
+        },
+        {
+          "arm": "torch-compile-tf32",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "neural",
+          "hash": "50479bdedbb8ef48",
+          "hash_stable": null,
+          "lane": "mamba3-forward",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 16.48249849677086,
+          "median_ms": 16.48249849677086,
+          "memory": {
+            "children_mb": 676.7,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 83.6,
+            "peak_host_mb": 3072.8,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 83.6,
+            "warmup_host_mb": 3069.8
+          },
+          "min_ms": 16.48249849677086,
+          "mode": "opponent",
+          "neural_shape": "full",
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 83.6,
+          "peak_host_mb": 3072.8,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {},
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "ours_call": "mojolearn.Mamba3Block(weights).forward(x)",
+            "ours_device": "gpu",
+            "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "B1 L2048 DM384",
+            "torch_call": "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "B1 L2048 DM384",
+          "source": "measured this run",
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            16.48249849677086
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 280330.0019297749
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "neural",
+          "hash": "ae38dbfef52d57b6",
+          "hash_stable": null,
+          "lane": "mamba3-forward",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 83.94909277558327,
+          "median_ms": 83.94909277558327,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 212.6,
+            "peak_host_mb": 1313.3,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 211.7,
+            "warmup_host_mb": 1312.9
+          },
+          "min_ms": 83.94909277558327,
+          "mode": "opponent",
+          "neural_shape": "full",
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 212.6,
+          "peak_host_mb": 1313.3,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {},
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "ours_call": "mojolearn.Mamba3Block(weights).forward(x)",
+            "ours_device": "gpu",
+            "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "B1 L2048 DM384",
+            "torch_call": "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "B1 L2048 DM384",
+          "source": "measured this run",
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            83.94909277558327
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 245.91353721916676
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "neural",
+          "hash": "6a95097559935acc",
+          "hash_stable": null,
+          "lane": "mamba3-forward",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 16.33116602897644,
+          "median_ms": 16.33116602897644,
+          "memory": {
+            "children_mb": 16762.5,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 90.5,
+            "peak_host_mb": 3813.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 186.5,
+            "warmup_host_mb": 3816.9
+          },
+          "min_ms": 16.33116602897644,
+          "mode": "opponent",
+          "neural_shape": "full",
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 90.5,
+          "peak_host_mb": 3813.6,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {},
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "ours_call": "mojolearn.Mamba3Block(weights).forward(x)",
+            "ours_device": "gpu",
+            "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "B1 L2048 DM384",
+            "torch_call": "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "B1 L2048 DM384",
+          "source": "measured this run",
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            16.33116602897644
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 354479.07632030547
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_neural.py",
+        "race",
+        "--lane",
+        "mamba3-forward",
+        "--shape",
+        "full",
+        "--arms",
+        "torch-eager-fp32,torch-eager-tf32,torch-compile-fp32,torch-compile-tf32,torch-eager-bf16,torch-compile-bf16",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/neural/shape-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "1800",
+        "--warmup-seconds",
+        "1800",
+        "--round-seconds",
+        "1800"
+      ],
+      "dataset": "gaussian",
+      "env": {},
+      "family": "neural",
+      "finished": "2026-10-06T08:30:57Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "neural/mamba3-forward/gaussian/shape=full",
+      "infer_cells": [],
+      "inputs": {
+        "inputs": "every tensor default_rng(7).uniform over mamba/corpus/gen_corpus.py's default range for it",
+        "lane": "mamba3-forward",
+        "ranges": {
+          "B_bias": [
+            0.5,
+            1.5
+          ],
+          "B_norm.weight": [
+            0.5,
+            1.5
+          ],
+          "C_bias": [
+            0.5,
+            1.5
+          ],
+          "C_norm.weight": [
+            0.5,
+            1.5
+          ],
+          "D": [
+            0.5,
+            1.5
+          ],
+          "block_norm.weight": [
+            0.5,
+            1.5
+          ],
+          "dt_bias": [
+            -7.0,
+            -2.0
+          ],
+          "in_proj.weight": [
+            -0.015625,
+            0.015625
+          ],
+          "out_proj.weight": [
+            -0.015625,
+            0.015625
+          ]
+        },
+        "seed": 7,
+        "sha256": {
+          "w:B_bias": "a9a8b062450ae62b",
+          "w:B_norm.weight": "55dfd3959b1522d0",
+          "w:C_bias": "0ca29b45b693f9ff",
+          "w:C_norm.weight": "63ee77435d78b3ce",
+          "w:D": "9109c3392c57e588",
+          "w:block_norm.weight": "cb75423c968fcd4f",
+          "w:dt_bias": "503ad1ebfc1aea36",
+          "w:in_proj.weight": "0bd52bf63f4c3018",
+          "w:out_proj.weight": "7806c30fb277c3d2",
+          "x": "b9981515a14b0823"
+        },
+        "shape": {
+          "batch": 1,
+          "d_model": 384,
+          "label": "B1 L2048 DM384",
+          "length": 2048,
+          "name": "full"
+        },
+        "steps": 2
+      },
+      "lane": "mamba3-forward",
+      "log": "logs/neural.mamba3-forward.gaussian.shape-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-bf16": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-compile-tf32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-eager-bf16": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-eager-tf32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "neural",
+        "lane": "neural/mamba3-forward",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/neural/shape-full/mamba3-forward-gaussian.json",
+      "rc": 0,
+      "rows": null,
+      "shape": "full",
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:14:04Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 1013.0
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T08:14:04Z"
+  "updated": "2026-10-06T08:30:57Z"
 }
