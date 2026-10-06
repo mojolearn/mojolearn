@@ -281,9 +281,15 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
     environment["MOJOLEARN_VENDOR"] = vendor
     if stage == "build":
         defines = record["baseline_defines" if arm == "baseline" else "candidate_defines"]
-        environment["MOJOLEARN_BUILD_EXTRA_DEFINES"] = " ".join(
+        flags = " ".join(
             shlex.quote(value) for flag in defines for value in ("-D", flag)
         )
+        # The existing binding builders use either of these public inputs.
+        environment["MOJOLEARN_BUILD_EXTRA_DEFINES"] = flags
+        environment["MOJOLEARN_MOJO_BUILD_FLAGS"] = flags
+        # Build-only execution must not invoke a builder's device smoke gate.
+        # Those checks belong to the explicit queued validation stage.
+        environment["MOJOLEARN_SKIP_BUILD_GATE"] = "1"
     compiler = Path(mojo_path(root))
     if compiler.is_file() and (compiler.parent.parent / "share/max/modular.cfg").is_file():
         environment["MODULAR_HOME"] = str(compiler.parent.parent / "share/max")

@@ -63,6 +63,8 @@ argument substitutions are `{repo}`, `{python}`, `{mojo}`, `{compile_slot}`,
 file. Builds use the existing compile-slot semaphore unless the recipe sets
 `build_uses_compile_slot: true` and manages it itself. Recipes must actually
 apply their declared defines; listing a define does not enable an experiment.
+Both existing binding-builder flag inputs receive the arm's defines. Build-only
+execution suppresses builder device smoke gates; run those as queued validation.
 
 ## Execute and preserve evidence
 
