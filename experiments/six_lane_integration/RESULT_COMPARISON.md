@@ -36,6 +36,9 @@ saved recipe. `dimensions` and `estimator_settings` use the exact worker record
 formats. Do not learn expected values from whichever column happens to finish
 first. All compared columns must use the pinned source and scope. This tool does
 not decide whether differing source commits have equivalent numerical closures.
+`dataset_split` retains the worker's exact JSON value: either a split label or a
+nonempty structured declaration such as `{"fit": [0, 5250086], "evaluation_rows":
+500000}`. It is compared without coercion or dropping fields.
 
 Also include `expected.configurations.A` and `.B`, each containing exactly
 `defines` (list), `environment` (object), and `runtime` (object). B is the saved

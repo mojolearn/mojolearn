@@ -92,8 +92,11 @@ def expected_scope(case):
     require(sha(expected['source_sha'], 40), 'source_sha must be a full commit')
     for key in ('dataset_sha256', 'harness_sha256'):
         require(sha(expected[key]), 'invalid ' + key)
-    for key in ('workload_id', 'dataset_version', 'dataset_split', 'timed_boundary'):
+    for key in ('workload_id', 'dataset_version', 'timed_boundary'):
         require(nonempty(expected[key]), 'missing ' + key)
+    split = expected['dataset_split']
+    require(nonempty(split) or (isinstance(split, dict) and bool(split)),
+            'missing dataset_split label or structured split declaration')
     require(expected['mode'] in ('identical', 'fast'), 'unsupported mode')
     require(isinstance(expected['dimensions'], dict) and bool(expected['dimensions']), 'missing shapes')
     require(all(isinstance(shape, list) and all(type(n) is int and n >= 0 for n in shape)

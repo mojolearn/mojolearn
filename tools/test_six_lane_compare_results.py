@@ -95,6 +95,18 @@ class ComparisonMetadataTest(unittest.TestCase):
         self.assertEqual(self.pair(case, left='nvidia-ptx')['status'], 'MATCH')
         self.assertEqual(case['missing_columns'], ['apple', 'host'])
 
+    def test_structured_saved_split_is_pinned_without_string_coercion(self):
+        split = {'fit': [0, 3], 'evaluation_rows': 2}
+        self.expected['dataset_split'] = split
+        for column in COLUMNS:
+            for arm in ('A', 'B'):
+                self.result(column, arm)['dataset_split'] = copy.deepcopy(split)
+        self.assertEqual(self.compare()['cases'][0]['status'], 'MATCH')
+        self.result()['dataset_split']['evaluation_rows'] = 1
+        case = self.compare()['cases'][0]
+        self.assertEqual(case['status'], 'INCOMPLETE')
+        self.assertIn('scope differs: dataset_split', case['columns']['amd']['arms']['A']['issues'])
+
     def test_output_match_does_not_replace_missing_model_state(self):
         self.result()['model_state'] = dict(status='UNAVAILABLE', reason='no public complete state')
         case = self.compare()['cases'][0]
