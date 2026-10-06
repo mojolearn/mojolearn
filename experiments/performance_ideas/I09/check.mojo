@@ -10,6 +10,7 @@ from max.gpu.host import DeviceContext
 from mamba.checks.mamba_check import planted_weights, clause_d
 from mamba.checks.mamba_fixture import corpus_case_seed, corpus_x, MambaDims
 
+# NEVER RUN — PENDING VALIDATION
 def main() raises:
     var ctx = DeviceContext()
     var widths: List[Int] = [8, 17]
