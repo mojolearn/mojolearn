@@ -69,5 +69,8 @@
     "MOJOLEARN_IDN_M2_SSD_TILES_OFF=1",
     "--define",
     "MOJOLEARN_IDN_M2_CB_LOWER_OFF=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
