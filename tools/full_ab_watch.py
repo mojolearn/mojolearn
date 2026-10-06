@@ -5,6 +5,7 @@ This observer never launches a benchmark or a build. Lane controllers own their
 serial workers. Repair notifications explicitly preserve completed attempts.
 """
 import argparse
+from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
@@ -22,8 +23,42 @@ def atomic(path, value):
     temp.replace(path)
 
 
+
+ROUTINE_PHASES = {'MEASURING', 'RUNNING', 'CELL_FINISHED'}
+
+
+def actionable_failure(row):
+    detail = row.get('detail', {})
+    return (any(term in row['status'] for term in ('FAIL', 'ERROR', 'BLOCK', 'HEARTBEAT_', 'WAITING_FOR'))
+            or bool(row.get('error'))
+            or any(detail.get(field) for field in ('error', 'errors', 'failed', 'blockers', 'freeze_error')))
+
+
+def notification_event(row, old, notified, pending):
+    """Filter routine progress while retaining completion and recovery edges."""
+    if notified == row['alert_key']:
+        return None
+    if pending and pending.get('alert_key') == row['alert_key']:
+        return pending['event']
+    if actionable_failure(row):
+        return 'ACTION_REQUIRED'
+    if old and actionable_failure(old):
+        return 'RECOVERED'
+    if row['status'] in ROUTINE_PHASES:
+        return None
+    if row['status'] in ('COMPLETE', 'COMPLETED'):
+        # Existing terminal state on observer startup is not a new completion.
+        # Failed delivery is retried above using its persisted pending edge.
+        if not old or old.get('alert_key') == row['alert_key']:
+            return None
+        return 'COMPLETED'
+    return 'STATUS_CHANGED'
+
+
 def tick(config, state):
     previous = json.loads((state / 'status.json').read_text()) if (state / 'status.json').exists() else {}
+    old_lanes = {row['name']: row for row in previous.get('lanes', [])}
+    observed_utc = datetime.now(timezone.utc).isoformat(timespec='seconds')
     lanes = []
     for lane in config['lanes']:
         row = {'name': lane['name'], 'evidence': lane['status_path']}
@@ -78,27 +113,52 @@ def tick(config, state):
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
             row.update(status='STATUS_READ_FAILED', error=str(exc))
             row['alert_key'] = hashlib.sha256(str(exc).encode()).hexdigest()
+        row['observed_at_utc'] = observed_utc
+        row['source_freeze'] = (row.get('detail', {}).get('source_sha')
+                                or old_lanes.get(row['name'], {}).get('detail', {}).get('source_sha')
+                                or 'unknown')
         lanes.append(row)
     notified = previous.get('notified', {})
+    pending = previous.get('pending_notifications', {})
     if config.get('notifications_enabled', True):
-        changed = [row for row in lanes if notified.get(row['name']) != row['alert_key']]
+        changed = []
+        for row in lanes:
+            name = row['name']
+            event = notification_event(row, old_lanes.get(name), notified.get(name), pending.get(name))
+            if event:
+                row['notification_event'] = event
+                pending[name] = dict(alert_key=row['alert_key'], event=event)
+                changed.append(row)
+            else:
+                # Consume quiet progress without queueing it. Its live status
+                # remains in lanes so a later failure/completion is still seen.
+                notified[name] = row['alert_key']
+                pending.pop(name, None)
         if changed:
-            message = ('Full dataset A/B campaign update: ' + ', '.join(
-                row['name'] + '=' + row['status'] for row in changed) + '. Inspect ' + str(state / 'status.json') +
+            message = ('Full dataset A/B campaign update observed at ' + observed_utc + ': ' + ', '.join(
+                row['name'] + '=' + row['status'] + ' [' + row['notification_event']
+                + ', freeze=' + row['source_freeze'] + ']' for row in changed) + '. Inspect ' + str(state / 'status.json') +
                 '. Keep the recorded main freeze; run IDENTICAL on NVIDIA/AMD and Apple FAST independently. '
                 'Repair actual failures with scoped subagents and resume only affected cells; preserve original evidence. '
                 'Do not compile or rerun verification; never substitute component fixtures for full workloads. '
                 'Keep logs out of context: save complete output to files, use targeted rg/grep with bounded '
                 'surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. '
                 'Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output.')
-            with (state / 'notifications.log').open('a') as log:
-                result = subprocess.run([config['codex'], 'queue', '--thread', config['thread'], '--message', message],
-                                        stdout=log, stderr=subprocess.STDOUT, timeout=45)
-            if result.returncode == 0:
-                notified.update({row['name']: row['alert_key'] for row in changed})
-            atomic(state / 'notification.json', {'at': time.time(), 'returncode': result.returncode})
+            delivery = {'at': time.time(), 'observed_at_utc': observed_utc}
+            try:
+                with (state / 'notifications.log').open('a') as log:
+                    result = subprocess.run([config['codex'], 'queue', '--thread', config['thread'], '--message', message],
+                                            stdout=log, stderr=subprocess.STDOUT, timeout=45)
+                delivery['returncode'] = result.returncode
+                if result.returncode == 0:
+                    notified.update({row['name']: row['alert_key'] for row in changed})
+                    for row in changed:
+                        pending.pop(row['name'], None)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                delivery.update(returncode=None, error=str(exc))
+            atomic(state / 'notification.json', delivery)
     atomic(state / 'status.json', {'status': 'WATCHING', 'pid': os.getpid(), 'at': time.time(),
-                                  'lanes': lanes, 'notified': notified})
+                                  'lanes': lanes, 'notified': notified, 'pending_notifications': pending})
 
 
 def main():
