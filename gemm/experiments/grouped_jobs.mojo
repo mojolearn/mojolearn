@@ -22,8 +22,11 @@ def grouped_flat_kernel(c: MutPointer[Float32, MutAnyOrigin],
                               Int32(Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)))
 
 
-# I03 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-# I03 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# I03/N05 2026-10-06 L40S grouped component mixed WIN/LOSS: small shapes
+# improve two layouts (~1.24x-1.31x), but middle layout loses (~0.25x);
+# large shapes near parity (0.988x-1.029x), including rebound N05 versions.
+# One same-process warmup/score; no full-workload default promotion. Evidence:
+# overnight-ab-20261006/nvidia/{default,specific}-repair-normalized-measurements.json.
 # Explicit grouped adapter only; the shared FLAT arithmetic body is unchanged.
 def grouped_gemm(mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
