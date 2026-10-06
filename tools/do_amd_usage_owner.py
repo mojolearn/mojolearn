@@ -90,6 +90,11 @@ print(json.dumps(result))
     return doc
 
 
+def active_hold(local):
+    path = local / "HOLD"
+    return path.exists() and time.time() - path.stat().st_mtime < 1800
+
+
 def next_idle(previous,now,done,queue_busy,capture,hold):
     if not done or queue_busy or hold or not capture:return None
     if previous.get('capture_digest') != capture or previous.get('idle_since') is None:return now
@@ -141,7 +146,7 @@ def manage(c,once=False):
                 steward(c,'extend','90')
             now=time.time();captured=None
             if observed['progress']!=last_progress:last_progress=observed['progress'];progress_at=now
-            hold=(local/'HOLD').exists()
+            hold=active_hold(local)
             if not observed['done'] or observed['shared_queue_busy'] or hold:
                 state.update(idle_since=None,capture_digest=None)
             if observed.get('command_exit') not in (None,'0'):
@@ -158,7 +163,7 @@ def manage(c,once=False):
                 captured=verify_capture(before['rows'],dest)
                 after=probe(c,full=True)
                 if digest(after['rows'])!=captured:raise ValueError('remote changed during capture')
-                if (local/'HOLD').exists():captured=None
+                if active_hold(local):captured=None
                 else:
                     atomic(local/'capture-receipt.json',dict(droplet_id=c['droplet_id'],owner_id=c['owner_id'],rows=before['rows'],manifest_sha256=captured,verified_at=time.time()))
                     notify(c,local,'DONE_CAPTURED','Verified capture '+captured+'; idle clock eligible')
@@ -168,7 +173,7 @@ def manage(c,once=False):
             if idle is not None and time.time()-idle>=c.get('idle_seconds',2700):
                 # Recheck work, hold, inventory, and identity at deletion time.
                 final=probe(c,full=True)
-                if not (local/'HOLD').exists() and digest(final['rows'])==captured:
+                if not active_hold(local) and digest(final['rows'])==captured:
                     steward(c,'down',timeout=600)
                     state.update(status='TERMINATED_VERIFIED',updated_at=time.time())
                     atomic(statusfile,state);notify(c,local,'TERMINATED','Idle policy elapsed; steward down verified provider404');return
