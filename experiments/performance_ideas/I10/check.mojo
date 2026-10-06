@@ -75,6 +75,7 @@ def check_live_reach(ctx: DeviceContext) raises:
         for step in range(2):
             _ = byte_train_step_resident(ctx,tr,_ids(config,step))
         var expected = 0
+        # NEVER RUN — PENDING VALIDATION
         comptime if is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]():
             if arm==String("noshadow"):
                 expected = 2
@@ -82,6 +83,7 @@ def check_live_reach(ctx: DeviceContext) raises:
             raise Error("I10 live-status candidate did not reach expected full steps")
     _set_arm(String(""),False)
 
+# NEVER RUN — PENDING VALIDATION
 def main() raises:
     var ctx = DeviceContext()
     for n in [31, 33, 4099]:
