@@ -9,7 +9,7 @@
     "apple",
     "host"
   ],
-  "status": "source_ready",
+  "status": "build_passed",
   "implementation_paths": [
     "experiments/performance_ideas/A08/check.mojo",
     "gemm/experiments/profile_campaign.py",
