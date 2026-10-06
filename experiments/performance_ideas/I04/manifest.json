@@ -9,11 +9,15 @@
     "apple",
     "host"
   ],
-  "status": "blocked_prerequisite",
+  "status": "source_ready",
   "implementation_paths": [
-    "gemm/experiments/fold_profile_probe.mojo"
+    "gemm/contract.mojo",
+    "gemm/experiments/fold_profile_probe.mojo",
+    "gemm/experiments/profile_check.mojo"
   ],
-  "candidate_defines": [],
+  "candidate_defines": [
+    "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64=1"
+  ],
   "baseline_defines": [],
   "build_argv": [
     "pixi",
@@ -23,9 +27,11 @@
     "-j1",
     "-D",
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64=1",
     "-I",
     "{repo}",
-    "{repo}/gemm/experiments/fold_profile_probe.mojo",
+    "{repo}/gemm/experiments/profile_check.mojo",
     "-o",
     "{output}"
   ],
@@ -44,8 +50,10 @@
   "quality_gates": [
     "same-version NVIDIA/AMD/Apple/host output bits",
     "exact intermediate outputs and poison control",
-    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower"
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Research candidate only: I01-I03 must prove fold/leaf bottleneck before timing admission",
+    "Adversarial conditioning and all caller quality required before profile promotion"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
-  "blocker": "I01-I03 have no device attribution establishing leaf dependency or fold traffic as limiting; scalar adversarial probe exists but no new device profile is admitted."
+  "blocker": null
 }
