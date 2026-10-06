@@ -911,6 +911,11 @@ def ivf_flat_search_prepared(
                             # Remains opt-in/default OFF; these synthetic caller results
                             # do not qualify a full-workload cross-vendor promotion. Evidence:
                             # overnight-ab-20261006/amd/normalized-measurements.json, I16.
+                            # I16 NVIDIA L40S 2026-10-06 representative caller LOSS across
+                            # rows100000,queries128,features7/33/65 and three occupancy cases:
+                            # balanced candidate/baseline1.20x-4.17x time. One warmup/score;
+                            # IDENTICAL opt-in remains off. Evidence: overnight-ab-20261006/
+                            # nvidia/default-repair-normalized-measurements.json.
                             if IVF_APPLE_FAST_BALANCED or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
                                 comptime if IVF_APPLE_FAST_BALANCED and is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
                                     _BALANCED_AUDIT.get_or_create_ptr()[].hits += 1

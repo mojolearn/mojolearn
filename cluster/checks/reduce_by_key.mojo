@@ -773,6 +773,11 @@ def finish_sum_kernel(
 # 4252d8155; identity assumed prevalidated. No default change: NVIDIA and
 # named-dataset full harness still pending. Evidence:
 # mojolearn-evidence/overnight-ab-20261006/amd/live/repair-summary.json.
+# A08 NVIDIA L40S 2026-10-06 representative kmeans caller LOSS for4096
+# rows: candidate3.267/3.637/6.730 ms vs default256 1.086/1.272/1.503 ms.
+# Old1024 also loses(1.413/1.639/2.416 ms). Cases100000x32,100001x33,
+# 65537x17,k32; one warmup/score. Existing256 default retained.
+# Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 comptime BLOCK_ACC_ROWS = (
     4096
     if (

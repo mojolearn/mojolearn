@@ -9325,6 +9325,10 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
 
 # I06 new candidate remains default off. Qualification is pending: native
 # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
+# I06 NVIDIA L40S 2026-10-06 component WIN: candidate1.567/3.263 ms
+# versus baseline1.860/3.549 ms, length1024/1536, heads12,kvheads4.
+# One warmup/score; paired-vendor full-workload qualification still pending.
+# Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 comptime ATTN_GQA_HEAD_REUSE = (
     GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL
     # NEVER RUN — PENDING MEASUREMENT

@@ -112,6 +112,10 @@ def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
 # Component scope and pending full-caller qualification: retain leaf128 default.
 # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I04.
 # Leaf64 requires IDENTICAL + MOJOLEARN_IDN_GEMM_FOLD_LEAF_64; otherwise leaf128.
+# I04 NVIDIA L40S 2026-10-06 component LOSS: leaf64 0.304/0.281 ms
+# versus leaf128 0.280/0.255 ms, M,N,K=1024,1024,2048 and1023,1025,2049.
+# One warmup/score; no full-workload promotion.
+# Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 comptime CONTRACT_K_LEAF_MIN = (
     64 if (is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
            and is_defined["MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"]()) else 128
