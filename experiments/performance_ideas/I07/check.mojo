@@ -3,6 +3,7 @@
 recomputed state, and clean wrapper replay; repeated shape changes stress
 scratch aliasing. Existing rejected packed/alias paths remain controls."""
 from max.gpu.host import DeviceContext
+from experiments.performance_ideas.I07.state_cost import state_cost
 from transformer.checks.transformer_fused_check import FusedCase, run_case
 from transformer.impl.llama.fused_attention import FUSED_RAN, fused_attention_arm_parse
 
@@ -16,6 +17,17 @@ def main() raises:
     for i in range(len(lengths)):
         var l = lengths[i]
         var c = FusedCase("I07_lifetime" + String(i), 1, l, 4, 1, 64, 0, 0, -1.0, 1.0, -1, 1.0, 1.0, FUSED_RAN, FUSED_RAN)
+        # Explicit experiments cover memory-starved recomputation and a
+        # retained-state budget; the model chooses actual canonical arms.
+        for budget in [UInt64(0),UInt64(1<<30)]:
+            var estimate = state_cost(1,4,l,l,64,budget,UInt64(1),UInt64(1),UInt64(8))
+            var retain = estimate[2]
+            if retain!=(budget!=0):
+                raise Error("I07 byte budget policy witness failed")
+            var selected = 1 if retain else 0
+            if run_case(ctx,c,fused_attention_arm_parse(arms[selected]),launched,backward,kv)!=0:
+                raise Error("I07 model-selected retained/recompute state moved bits")
+            print("I07 model bytes=",estimate[0]," recompute_units=",estimate[1]," retain=",retain)
         for a in range(len(arms)):
             if run_case(ctx, c, fused_attention_arm_parse(arms[a]), launched, backward, kv) != 0:
                 raise Error("I07 stored/recomputed state changed bits")
