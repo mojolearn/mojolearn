@@ -44,6 +44,18 @@
         "MOJOLEARN_IDN_M2_SSD_TILES_OFF=1",
         "MOJOLEARN_IDN_M2_CB_LOWER_OFF=1"
       ]
+    },
+    {
+      "name": "backward_control",
+      "source": "experiments/performance_ideas/I08/backward_check.mojo",
+      "defines": []
+    },
+    {
+      "name": "backward_retained_gl",
+      "source": "experiments/performance_ideas/I08/backward_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_M2_RETAIN_GL=1"
+      ]
     }
   ]
 }

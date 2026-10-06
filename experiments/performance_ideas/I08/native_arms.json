@@ -148,6 +148,58 @@
         "{output}"
       ],
       "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "backward_control",
+      "source": "experiments/performance_ideas/I08/backward_check.mojo",
+      "defines": [],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I08/backward_check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native compile and frozen fullgradient pairing plus independent oracle"
+    },
+    {
+      "name": "backward_retained_gl",
+      "source": "experiments/performance_ideas/I08/backward_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_M2_RETAIN_GL=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I08/backward_check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_M2_RETAIN_GL=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native compile and frozen fullgradient pairing plus independent oracle"
     }
   ]
 }
