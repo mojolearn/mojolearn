@@ -90,7 +90,13 @@ from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import Re
 # PENDING qualification; default OFF. Explicit IDENTICAL opt-in only.
 # No feature resampling or weighted/fixed-point algebra is admitted. The
 # cache's byte cap is a resource bound; it never selects benchmark shapes.
-# I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment, default OFF.
+# I18 AMD MI325X small scoped LOSER (2026-10-06, source5b467815b):
+# candidate/base1.016/1.016/1.035 at rows/features100000/32,100001/33,65537/17.
+# Complete unweighted all-feature RF fits admit the bounded retained-count
+# caller; reuse counters were not exported, so no per-kernel reuse claim.
+# One same-process warmup/score, identity evidence reused. Full-workload
+# NVIDIA+AMD qualification remains pending; default OFF. Evidence:
+# overnight-ab-20261006/amd/normalized-measurements.json, I18.
 comptime RETAINED_COUNT_HIST = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST"]()
 comptime RETAINED_COUNT_HIST_BYTES = get_defined_int["MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES", 8*1024*1024]()
 

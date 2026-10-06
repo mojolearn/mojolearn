@@ -42,7 +42,8 @@ def enqueue_joint_classification_counts(ctx: DeviceContext,mut truth: DeviceBuff
     # overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
     # I24 AMD MI325X scoped WINNER (2026-10-06, source f32549d28):
     # candidate/base 0.858, 0.873, 0.859 for 1000000/1000001/1048577 rows,
-    # 33 classes; complete report plus readback, one same-process warmup/score.
+    # 33 classes; added1048573 rows/classes17 also wins at0.936.
+    # Complete report plus readback, one same-process warmup/score.
     # Existing identity evidence reused, not rerun. NVIDIA result above is mixed;
     # generated fixtures alone do not qualify promotion. Default stays OFF.
     # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I24.

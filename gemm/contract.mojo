@@ -107,7 +107,8 @@ def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
 # this constant. The profile cap/fold remain unchanged; partitions still
 # depend only on k. Requires an explicit IDENTICAL build and is default off.
 # I04 AMD MI325X component LOSER (2026-10-06, source cbcc8dcd3303):
-# leaf64 / leaf128 1.268 (0.231 / 0.182 ms), retained GEMM m1024/n1024/k2048.
+# leaf64 / leaf128 1.268 (0.231 / 0.182 ms), retained GEMM m1024/n1024/k2048;
+# neighboring m1023/n1025/k2049 also loses at 1.157.
 # One same-process warmup and score; existing identity evidence reused, not rerun.
 # Component scope and pending full-caller qualification: retain leaf128 default.
 # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I04.

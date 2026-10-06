@@ -9329,9 +9329,16 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
 # versus baseline1.860/3.549 ms, length1024/1536, heads12,kvheads4.
 # One warmup/score; paired-vendor full-workload qualification still pending.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
+# I06 AMD MI325X cbcc8dcd3303 bundle ratios0.1164/0.1157 on the same
+# length1024/1536, heads12/kv4/hd64 fixtures. The driver also selected
+# kvgrid_r32 only for the candidate: this conflates GQA reuse with the
+# backward schedule. Retain both vendors' raw component timings as bundled
+# measurements, not isolated toggle evidence. Measurement repair must hold
+# the schedule constant. Existing identity reused; default remains OFF.
+# Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I06.
 comptime ATTN_GQA_HEAD_REUSE = (
     GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL
-    # NEVER RUN — PENDING MEASUREMENT
+    # The original bundled timing does not qualify this switch.
     and is_defined["MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and lib_smem_page_fits_for[TARGET_COLUMN,_fwd_r2_page_bytes(64,True)]()

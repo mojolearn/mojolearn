@@ -18,6 +18,8 @@ from std.atomic import Atomic,Ordering
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 # I20 AMD MI325X scoped LOSER (2026-10-06, source f32549d28): candidate/base
 # 1.392, 1.160, 1.070 at 100000 rows, 1024 queries, features8/9/17.
+# Expanded union case131071 rows/513 queries/features17 wins at0.934:
+# the broader scoped result is MIXED, not a universally slower/faster pool.
 # One same-process warmup and score on the resident public caller; existing
 # identity evidence reused, not rerun. Synthetic scope; no default promotion.
 # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I20.

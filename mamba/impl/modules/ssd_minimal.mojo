@@ -678,11 +678,15 @@ comptime M2_CS_PT = 8
 comptime M2_CS_IC = 32
 
 
-# I08 new candidate remains default off. Qualification is pending: native
-# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
+# I08 AMD MI325X NEUTRAL/MIXED (2026-10-06, sourcecbcc8dcd3303):
+# retained/base0.995/1.025 for B2,length513/1025,d_model32,d_inner64,heads1.
+# The admitted retained G*L path is distinct (393216/655360 cells below cap);
+# one same-process warmup/score of prefill forward/backward, identity reused.
+# Generated caller scope only; no full-workload promotion. Evidence:
+# overnight-ab-20261006/amd/normalized-measurements.json, I08.
 comptime M2_RETAIN_GL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # NEVER RUN — PENDING MEASUREMENT
+    # Scoped near-neutral measurements retain the default OFF.
     and is_defined["MOJOLEARN_IDN_M2_RETAIN_GL"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not SSD_ANY_SABOTAGE
