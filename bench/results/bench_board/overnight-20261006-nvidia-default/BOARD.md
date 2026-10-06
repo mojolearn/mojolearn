@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T08:10:19Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T08:11:32Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T08:10:19Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 80 done, 2 failed, 0 unsupported, 31 pending. Cells: 177 (REFUSED 2, ok 175).
+Races: 113 planned, 90 done, 3 failed, 0 unsupported, 20 pending. Cells: 188 (REFUSED 3, ok 185).
 
 Inference cells: 140 (REFUSED 2, ok 138).
 
@@ -152,6 +152,25 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical | svc | taxi | n_support | - | - | cuml-gpu 5541 |
 | classical2 | agglomerative | taxi | n_clusters | - | - | cuml-gpu 8 |
 | classical2 | agglomerative | taxi | silhouette (higher is better) | - | - | cuml-gpu 0.685524 |
+| classical2 | elasticnet | istella | r2 (higher is better) | - | - | cuml-gpu 0.260922 |
+| classical2 | elasticnet | istella | rmse (lower is better) | - | - | cuml-gpu 0.718134 |
+| classical2 | ivf | taxi | recall_at_k (higher is better) | - | - | cuvs-gpu 0.999450 |
+| classical2 | ivf | taxi | rows_with_repeated_ids | - | - | cuvs-gpu 0 |
+| classical2 | kernel-ridge | taxi | r2 (higher is better) | - | - | cuml-gpu 0.726543 |
+| classical2 | kernel-ridge | taxi | rmse (lower is better) | - | - | cuml-gpu 8.330375 |
+| classical2 | knn-clf | taxi | accuracy (higher is better) | - | - | cuml-gpu 0.741750 |
+| classical2 | knn-reg | taxi | r2 (higher is better) | - | - | cuml-gpu 0.937323 |
+| classical2 | knn-reg | taxi | rmse (lower is better) | - | - | cuml-gpu 3.842028 |
+| classical2 | lasso | taxi | r2 (higher is better) | - | - | cuml-gpu 0.908995 |
+| classical2 | lasso | taxi | rmse (lower is better) | - | - | cuml-gpu 4.804745 |
+| classical2 | linearsvc | taxi | accuracy (higher is better) | - | - | cuml-gpu 0.762990 |
+| classical2 | linearsvr | taxi | r2 (higher is better) | - | - | cuml-gpu 0.899818 |
+| classical2 | linearsvr | taxi | rmse (lower is better) | - | - | cuml-gpu 5.041184 |
+| classical2 | logreg | taxi | accuracy (higher is better) | - | - | cuml-gpu 0.763350 |
+| classical2 | logreg | taxi | logloss (lower is better) | - | - | cuml-gpu 0.538986 |
+| classical2 | logreg | taxi | nonfinite_proba_rows | - | - | cuml-gpu 0 |
+| classical2 | ridge | taxi | r2 (higher is better) | - | - | cuml-gpu 0.908983 |
+| classical2 | ridge | taxi | rmse (lower is better) | - | - | cuml-gpu 4.805051 |
 
 ## Inference at a glance
 
@@ -559,6 +578,350 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | metric | "euclidean" |
 | n_clusters | 8 |
 | seed | "none (deterministic)" |
+
+### elasticnet / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.elasticnet.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 319.5 | 319.5..319.5 | 1 | - | - | 2918.9 | 1374.0 | finite=True, r2=0.260922, rmse=0.718134 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=0.1, l1_ratio=0.5 (the cuML benchmark's ElasticNet), fit_intercept=True, max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; ours and cuML solver='cd'. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: seed: ours refuses random_state (it selects nothing with selection='cyclic'), cuML has none; scikit-learn random_state=7
+
+mismatch: tol: each library's own stopping rule reads it
+
+config: cuML benchmark (RAPIDS), ElasticNet (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 0.1 |
+| fit_intercept | true |
+| l1_ratio | 0.5 |
+| max_iter | 1000 |
+| seed | "none (deterministic)" |
+| selection | "cyclic" |
+| solver | "cd" |
+| tol | 0.0001 |
+
+### ets / synthetic (rows full, shape Yfit 64x1440; Yhold 64x48)
+
+race: failed, driver rc 1, log `logs/classical2.ets.synthetic.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "TypeError('Implicit conversion to a host NumPy array via __array__ is not allowed, To explicitly construct a GPU matrix, consider using .to_cupy()\\nTo explicitly construct a host matrix, c) (measured this run) |
+
+settings: trend additive, seasonal additive, seasonal_periods=24, initialization_method='estimated'; ours and cuML start_periods=2, eps=2.24e-3; statsmodels damped_trend=False, use_boxcox=False. Rows: 64 synthetic hourly series, period 24, 1440 fit points, 48 held out. Timed: construct + fit of every series.
+
+mismatch: initialization: ours 'estimated' (its default, statsmodels' definition), statsmodels 'estimated'; cuML has only its heuristic start (start_periods=2), so its row fits the older initialization
+
+mismatch: cuML returns no in-sample predictions; that quality cell is empty
+
+mismatch: trend: ours and cuML are additive-trend with no parameter; statsmodels trend='additive'. eps is ours' and cuML's only; statsmodels fit() uses its own optimizer
+
+mismatch: seed: no arm has a seed argument
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| eps | 0.00224 |
+| seasonal | "additive" |
+| seasonal_periods | 24 |
+| seed | "none (deterministic)" |
+| start_periods | 2 |
+
+### ivf / taxi (rows full, shape index 400000x11; queries 4000x11)
+
+race: done, driver rc 0, log `logs/classical2.ivf.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuvs-gpu | cuvs | gpu | opponent | 297.5 | 297.5..297.5 | 1 | - | - | 933.3 | 450.0 | recall_at_k=0.999450, rows_with_repeated_ids=0 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: IVF-Flat, n_lists=1024, n_probes=32, k=10, squared L2, k-means 20 iterations, seed 7. Rows: the classical knn lane's block (tools/knn_datasets.real_block): 400000 index rows, 4000 queries, raw. Timed: build + search of every query.
+
+mismatch: quantizer training set: each library's own (FAISS subsamples to 256 rows per list; cuVS kmeans_trainset_fraction 0.5; ours its own)
+
+mismatch: seed: ours random_state=7, faiss cp.seed=7; cuVS IndexParams takes none
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuvs-gpu`, seed 7): MATCHED
+
+| parameter | cuvs-gpu |
+|---|---|
+| library (source) | cuvs (declared) |
+| metric | "sqeuclidean" |
+| n_neighbors | 10 |
+| nlist | 1024 |
+| nprobe | 32 |
+| seed | "none (no argument; draws random numbers, see exceptions)" |
+
+accepted difference: cuvs-gpu seed: cuVS ivf_flat IndexParams takes no seed and its k-means training samples rows; ours and faiss get 7
+
+### kernel-ridge / taxi (rows full, shape X 10000x11; Xq 10000x11; y 10000; yq 10000)
+
+race: done, driver rc 0, log `logs/classical2.kernel-ridge.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 325.9 | 325.9..325.9 | 1 | - | - | 1048.8 | 474.0 | finite=True, r2=0.726543, rmse=8.330375 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=1.0, kernel='rbf', gamma=1/d, degree=3, coef0=1.0. Rows: 10000 fit and 10000 held-out stride rows of the reg block (standardized by the fit rows). Timed: fit.
+
+mismatch: seed: no arm has a seed argument (closed-form fit)
+
+config: cuML benchmark (RAPIDS), KernelRidge (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 1.0 |
+| coef0 | 1.0 |
+| degree | 3 |
+| gamma | 0.09090909090909091 |
+| kernel | "rbf" |
+| seed | "none (deterministic)" |
+
+### knn-clf / taxi (rows full, shape X 200000x11; Xq 4000x11; y 200000; yq 4000)
+
+race: done, driver rc 0, log `logs/classical2.knn-clf.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 8.8 | 8.8..8.8 | 1 | - | - | 974.1 | 440.0 | accuracy=0.741750 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_neighbors=10, weights='uniform', metric='euclidean', algorithm='brute'. Rows: 200000 fit rows, 4000 queries (stride subsets of the cls block, standardized by the fit rows). Timed: fit + predict of the queries.
+
+mismatch: seed: no arm has a seed argument (exact search)
+
+config: cuML benchmark (RAPIDS), KNeighborsClassifier (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| algorithm | "brute" |
+| metric | "euclidean" |
+| n_neighbors | 10 |
+| p | 2 |
+| seed | "none (deterministic)" |
+| weights | "uniform" |
+
+### knn-reg / taxi (rows full, shape X 200000x11; Xq 4000x11; y 200000; yq 4000)
+
+race: done, driver rc 0, log `logs/classical2.knn-reg.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 5.4 | 5.4..5.4 | 1 | - | - | 847.5 | 440.0 | finite=True, r2=0.937323, rmse=3.842028 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_neighbors=10, weights='uniform', metric='euclidean', algorithm='brute'. Rows: 200000 fit rows, 4000 queries (stride subsets of the reg block, standardized by the fit rows). Timed: fit + predict of the queries.
+
+mismatch: seed: no arm has a seed argument (exact search)
+
+config: cuML benchmark (RAPIDS), KNeighborsRegressor (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| algorithm | "brute" |
+| metric | "euclidean" |
+| n_neighbors | 10 |
+| p | 2 |
+| seed | "none (deterministic)" |
+| weights | "uniform" |
+
+### lasso / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.lasso.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 10.2 | 10.2..10.2 | 1 | - | - | 968.5 | 498.0 | finite=True, r2=0.908995, rmse=4.804745 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; ours and cuML solver='cd'. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: seed: ours refuses random_state (it selects nothing with selection='cyclic'), cuML has none; scikit-learn random_state=7
+
+mismatch: tol: each library's own stopping rule reads it
+
+config: cuML benchmark (RAPIDS), Lasso (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 0.01 |
+| fit_intercept | true |
+| max_iter | 1000 |
+| seed | "none (deterministic)" |
+| selection | "cyclic" |
+| solver | "cd" |
+| tol | 0.0001 |
+
+### linearsvc / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.linearsvc.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 39.7 | 39.7..39.7 | 1 | - | - | 1087.0 | 490.0 | accuracy=0.762990 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: penalty='l2', loss='squared_hinge', C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True, class_weight=None; ours and cuML penalized_intercept=False; scikit-learn intercept_scaling=1.0, random_state=7. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: solver: ours and cuML L-BFGS on the primal with an unpenalized intercept; scikit-learn liblinear (dual='auto'), which penalizes the intercept
+
+mismatch: seed: ours and cuML LinearSVC have no seed argument
+
+config: cuML benchmark (RAPIDS), LinearSVC (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| C | 1.0 |
+| class_weight | null |
+| fit_intercept | true |
+| loss | "squared_hinge" |
+| max_iter | 1000 |
+| penalized_intercept | false |
+| penalty | "l2" |
+| seed | "none (deterministic)" |
+| tol | 0.0001 |
+
+### linearsvr / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.linearsvr.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 21.6 | 21.6..21.6 | 1 | - | - | 996.5 | 498.0 | finite=True, r2=0.899818, rmse=5.041184 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: penalty='l2', loss='epsilon_insensitive', epsilon=0.0, C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: penalty='l2' set on ours and cuML (their default is 'l1'); scikit-learn has only l2
+
+mismatch: solver: ours and cuML L-BFGS on the primal; scikit-learn liblinear dual coordinate descent (dual=True, the only form for this loss)
+
+mismatch: intercept: ours and cuML penalized_intercept=False; scikit-learn intercept_scaling=1.0 (liblinear penalizes it)
+
+mismatch: seed: ours and cuML LinearSVR have no seed argument; scikit-learn 7
+
+config: cuML benchmark (RAPIDS), LinearSVR (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| C | 1.0 |
+| epsilon | 0.0 |
+| fit_intercept | true |
+| loss | "epsilon_insensitive" |
+| max_iter | 1000 |
+| penalized_intercept | false |
+| penalty | "l2" |
+| seed | "none (deterministic)" |
+| tol | 0.0001 |
+
+### logreg / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.logreg.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 9.7 | 9.7..9.7 | 1 | - | - | 1084.8 | 498.0 | accuracy=0.763350, logloss=0.538986, nonfinite_proba_rows=0 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: penalty='l2', C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True, class_weight=None; scikit-learn random_state=7. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: solver: ours 'qn' (L-BFGS, cuML's), scikit-learn 'lbfgs', cuML 'qn'; each library's own stopping rule reads tol
+
+mismatch: seed: ours and cuML LogisticRegression have no seed argument
+
+mismatch: l1_ratio: ours None, scikit-learn None or 0.0 (its l2 spelling from 1.8)
+
+config: cuML benchmark (RAPIDS), LogisticRegression (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| C | 1.0 |
+| class_weight | null |
+| fit_intercept | true |
+| l1_ratio | null |
+| max_iter | 1000 |
+| penalty | "l2" |
+| seed | "none (deterministic)" |
+| solver | "qn" |
+| tol | 0.0001 |
+
+### ridge / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/classical2.ridge.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 15.2 | 15.2..15.2 | 1 | - | - | 1000.4 | 534.0 | finite=True, r2=0.908983, rmse=4.805051 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: alpha=1.0, fit_intercept=True; scikit-learn positive=False, random_state=7. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
+
+mismatch: solver, named on every arm: ours and cuML 'eig' (eigendecomposition of the normal equations), scikit-learn 'cholesky' (it has no 'eig')
+
+mismatch: seed: ours and cuML Ridge have no seed argument
+
+config: cuML benchmark (RAPIDS), Ridge (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 1.0 |
+| fit_intercept | true |
+| max_iter | null |
+| seed | "none (deterministic)" |
+| solver | "eig" |
+| tol | 0.0001 |
 
 ## Algorithm expansion
 
