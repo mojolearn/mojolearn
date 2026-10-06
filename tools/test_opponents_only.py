@@ -11,6 +11,15 @@ class OpponentsOnly(unittest.TestCase):
  def test_cache_success(self):
   c=dict(status='ok',rounds=1,times_ms=[2.0],median_ms=2.,warmup_ms=3.,quality={'r2':.9});self.assertTrue(b.successful_opponent_cell(c));self.assertTrue(b.successful_opponent_cell(dict(c,rounds=2,times_ms=[2.,2.])))
   for override in [dict(status='REFUSED'),dict(times_ms=[]),dict(warmup_ms=None),dict(median_ms=float('nan')),dict(quality={'error':'bad'}),dict(quality={'r2':float('inf')}),dict(rounds=2)]:self.assertFalse(b.successful_opponent_cell(dict(c,**override)))
+ def test_all_cached_preserves_inference(self):
+  from unittest.mock import patch
+  c=dict(arm='catboost-cpu',library='catboost',device='cpu',status='ok',rounds=1,times_ms=[2.],median_ms=2.,warmup_ms=3.,quality={})
+  hit={'cell':c,'infer_cells':[dict(c,batch='test'),dict(c,batch='large')]}
+  race=dict(id='trees/gbdt/taxi/rows=full',family='trees',lane='gbdt',dataset='taxi',rows=None,our_arms={},arms=['catboost-cpu'],opponents=['catboost-cpu'])
+  ctx=dict(opponents_only=True,with_opponents=True,infer=True)
+  with patch.object(b,'stored_opponents',return_value={'catboost-cpu':hit}),patch.object(b.STORE,'stored_cell',return_value=dict(c)),patch.object(b.STORE,'source_text',return_value='stored'),patch.object(b,'store_opponents',return_value=0),patch.object(b,'_run_race',side_effect=AssertionError('must not rerun')):
+   rec=b.run_race(ctx,race)
+  self.assertEqual(rec['status'],'done');self.assertEqual(len(rec['infer_cells']),2)
  def test_expected_inference(self):
   race=dict(family='trees',lane='gbdt',arms=['catboost-cpu'])
   self.assertFalse(b.successful_opponent_inference(race,['catboost-cpu'],[]))

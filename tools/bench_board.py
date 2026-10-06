@@ -2426,6 +2426,8 @@ def run_race(ctx, race):
     for c in rec["cells"]:
         if c.get("library") != "mojolearn":
             c["source"] = "measured this run"
+    if ctx.get("infer"):
+        rec.setdefault("infer_cells", [])
     for arm, r in sorted(stored.items()):
         rec["cells"].append(STORE.stored_cell(r))
         if r.get("infer_cells") and rec.get("infer_cells") is not None:
