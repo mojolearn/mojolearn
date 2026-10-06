@@ -100,6 +100,7 @@ comptime MCD_ORDERED_COV = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 # Bound the queued candidate plane independently of features/datasets. This
 # scheduling experiment preserves inactive-candidate gates and input strides;
 # it changes neither support selection nor candidate count.
+# NEVER RUN — PENDING VALIDATION: bounded MCD candidate batches.
 comptime MCD_FAST_BOUND_BATCH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_MCD_FAST_BOUND_BATCH"]())
