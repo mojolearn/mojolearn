@@ -22,7 +22,7 @@ dense item stays the device kernel's body and the reference;
 step count, on rings, directed random graphs and graphs with isolated nodes.
 """
 
-from core.host_lanes import host_row_tasks
+from core.host_tasks import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_neighbors.items import FP, IP
 

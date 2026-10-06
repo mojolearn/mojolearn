@@ -13,7 +13,8 @@ device thread's: the same operands, rows ascending, from 0. The norms, the
 trees, the reflector and the updates are the shared cells.
 """
 from checks.numerics import ftz, identical_mul_add, identical_mul_add_simd
-from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks
+from core.host_lanes import F32V, HOST_FW, ftz_lanes
+from core.host_tasks import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_decomp.cells import F32Ptr, geqrf_scale_elem, geqrf_update_elem, orgqr_update_elem
 from x_decomp.qr_sliced import QS_ROWS, qs_dot_finish, qs_head, qs_slice_hi, qs_slice_lo, qs_slice_ssq, qs_slices

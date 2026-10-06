@@ -132,7 +132,8 @@ from std.time import perf_counter_ns
 
 from std.os import getenv
 from core.host_predict_threads import host_predict_task_count
-from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_row_tasks, host_tick
+from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_tick
+from core.host_tasks import host_row_tasks
 from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_host
 from core.host_parallel import host_parallelize
 from gemm.host.gemm_host_rows import gemm_host_rows_into, GhrPtr, GHR_SERIAL_FMAS, gemm_host_rows, gemm_host_rows_right_zero_padded

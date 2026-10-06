@@ -5,7 +5,7 @@ from core.classical_host_predict import (
     host_qn_sigmoid_into,
     host_qn_softmax_into,
 )
-from core.host_predict_threads import HostF32Ptr, HostF64Ptr
+from core.host_storage import HostF32Ptr, HostF64Ptr
 
 
 def check_sigmoid_parallel_bits() raises:

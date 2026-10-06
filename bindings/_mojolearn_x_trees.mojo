@@ -10,6 +10,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.api import register
+from xtrees.shap_cache_device_api import register_shap_cache
 from xtrees.shap_device import shap_prepare, tree_shap_values, shap_pair_count
 from xtrees.dart_device import DART_DEVICE, dart_open, dart_step, dart_add, dart_close, dart_predict
 from xtrees.dart_units import IDN_DART_DEVICE
@@ -189,6 +190,7 @@ def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObj
 def PyInit__mojolearn_x_trees() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_trees")
+        register_shap_cache(m)
         register(m)
         m.def_function[x_trees_shap_pair_count_binding]("x_trees_shap_pair_count")
         m.def_function[tree_shap_prepare_binding]("x_trees_tree_shap_prepare")

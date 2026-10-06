@@ -175,7 +175,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from core.classical_host_predict import host_gemm_nt
-from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_list_ptr_u32
+from core.host_storage import HostF32Ptr, host_list_ptr, host_list_ptr_u32
 from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
 from cluster.impl.kmeans_params import weighted_sum_scale_cap
 from cluster.impl.sum_scale_plan import (

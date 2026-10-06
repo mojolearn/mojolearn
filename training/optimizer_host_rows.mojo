@@ -41,11 +41,11 @@ from core.host_lanes import (
     HOST_FW,
     div_lanes,
     ftz_lanes,
-    host_row_tasks,
     lanes_are_identical,
     pinned_mul_lanes,
     sqrt_lanes,
 )
+from core.host_tasks import host_row_tasks
 from core.host_parallel import host_parallelize
 from training.checks.optimizer_contract import (
     OPT_ADAMW,

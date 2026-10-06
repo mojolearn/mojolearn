@@ -18,15 +18,14 @@ arithmetic. A caller compiled in another tier must keep the scalar seam
 """
 
 from std.math import abs, floor, fma, max, min
-from std.memory import bitcast, unsafe_memcpy
+from std.memory import bitcast
 from std.sys.info import simd_width_of
 
 from std.os import getenv
 from std.sys import llvm_intrinsic
 from std.time import perf_counter_ns
 
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
+from core.host_storage import HostF32Ptr, host_f32_uninit
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -363,47 +362,6 @@ def span_add(a: List[Float32], ab: Int, b: List[Float32], bb: Int, n: Int, mut d
         j += 1
 
 
-def host_f32_uninit(n: Int) -> List[Float32]:
-    """A float32 list of `n` elements whose every element the caller writes
-    before reading (lane neural-pass8): no fill, so the page-touching memset
-    of a `List(length=n, fill=0.0)` is paid once by the writes instead of
-    twice. Not for a list any element of which could be read unwritten."""
-    var out = List[Float32]()
-    if n > 0:
-        out.resize(unsafe_uninit_length=n)
-    return out^
-
-
-#: Floats below which a copy is one memcpy on the calling thread.
-comptime HOST_COPY_TASK_MIN = 1 << 20
-
-
-#: The pointer the copy below takes; a list's pointer is `rebind`ed to it.
-comptime HostF32Ptr = MutPointer[Float32, MutUntrackedOrigin]
-
-
-def host_f32_copy(dst: HostF32Ptr, src: HostF32Ptr, n: Int):
-    """`memcpy` of `n` floats, in chunks over host tasks when `n` is large
-    (lane neural-pass8): a copy moves no bit, so the task count is a
-    schedule knob. The 80 MB registry copies of the byte LM host step took
-    a fifth of its wall on one thread of a 64-core host."""
-    if n <= 0:
-        return
-    var tasks = 1
-    if n >= 2 * HOST_COPY_TASK_MIN:
-        tasks = max(1, min(host_predict_task_count(n // HOST_COPY_TASK_MIN), n // HOST_COPY_TASK_MIN))
-    if tasks <= 1:
-        unsafe_memcpy(dest=dst, src=src, count=n)
-        return
-    var chunk = (n + tasks - 1) // tasks
-    def _copy(t: Int) {imm dst, imm src, imm n, imm chunk}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, n)
-        if hi > lo:
-            unsafe_memcpy(dest=dst.unsafe_offset(lo), src=src.unsafe_offset(lo), count=hi - lo)
-    host_parallelize(_copy, tasks)
-
-
 def host_block_timing_on() -> Bool:
     """MOJOLEARN_HOST_BLOCK_TIMING set: the block oracles print a wall per
     stage (`timing hblk.<stage> <ms> ms`, lane neural-pass8), the host twin
@@ -419,21 +377,6 @@ def host_tick(on: Bool, mut t: Int, name: StaticString):
     var now = Int(perf_counter_ns())
     print("timing hblk." + String(name) + " " + String(Float64(now - t) / 1000000.0) + " ms")
     t = now
-
-
-#: Scalar operations below which a row split is not worth a thread fork.
-comptime HOST_ROW_TASK_MIN_WORK = 1 << 16
-
-
-def host_row_tasks(rows: Int, work_per_row: Int) -> Int:
-    """Tasks for a split of `rows` independent rows of about `work_per_row`
-    operations each: the host thread policy (`core/host_predict_threads.mojo`)
-    capped so every task gets at least HOST_ROW_TASK_MIN_WORK operations. A
-    schedule knob: it moves no bit."""
-    var work = rows * max(work_per_row, 1)
-    if rows <= 1 or work < 2 * HOST_ROW_TASK_MIN_WORK:
-        return 1
-    return max(1, min(host_predict_task_count(rows), work // HOST_ROW_TASK_MIN_WORK))
 
 
 def all_finite(values: List[Float32]) -> Bool:

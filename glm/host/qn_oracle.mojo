@@ -142,7 +142,7 @@ from core.classical_host_predict import (
 )
 from decomposition.host.pca_oracle import STATS_TPB, host_halving_sum
 from glm.host.glm_oracle import host_xty, host_fma_row_into
-from core.host_predict_threads import host_list_ptr
+from core.host_storage import host_list_ptr
 from glm.impl.qn.qn_tiled_rule import qn_tiled_multi_shape
 
 

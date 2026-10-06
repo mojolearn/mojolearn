@@ -14,6 +14,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.api import register
+from xtrees.shap_cache_host_api import register_shap_cache
 from xtrees.shap_host import shap_prepare, tree_shap_values
 from xtrees.ops import XTREES_HOST_SABOTAGE
 from xtrees.dart_host import DART_HOST, dart_open, dart_step, dart_add, dart_close, dart_predict
@@ -205,6 +206,7 @@ def PyInit__mojolearn_x_trees_host() abi("C") -> PythonObject:
         m.def_function[x_trees_host_numeric_mode_binding]("x_trees_numeric_mode")
         m.def_function[x_trees_host_vendor_binding]("x_trees_vendor")
         # Every GPU-binding name, from the one registration both bindings call.
+        register_shap_cache(m)
         register(m)
         m.def_function[tree_shap_prepare_binding]("x_trees_tree_shap_prepare")
         m.def_function[tree_shap_binding]("x_trees_tree_shap")

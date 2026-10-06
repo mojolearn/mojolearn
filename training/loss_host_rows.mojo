@@ -49,9 +49,9 @@ from core.host_lanes import (
     expf_lanes,
     ftz_lanes,
     host_f32_uninit,
-    host_row_tasks,
     lanes_are_identical,
 )
+from core.host_tasks import host_row_tasks
 from core.host_parallel import host_parallelize
 from gemm.contract import OP_NN
 from gemm.host.neural_gemm import gemm_host_rows

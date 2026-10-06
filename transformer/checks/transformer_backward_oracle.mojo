@@ -137,7 +137,8 @@ from transformer.experiments.norm_profile_contract import (
 from std.math import min
 from std.memory import bitcast
 
-from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks, lanes_are_identical
+from core.host_lanes import F32V, HOST_FW, ftz_lanes, lanes_are_identical
+from core.host_tasks import host_row_tasks
 from std.time import perf_counter_ns
 
 from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_tick

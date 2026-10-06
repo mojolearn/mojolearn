@@ -39,6 +39,9 @@ count and at 1.
 """
 from std.os import getenv
 from std.sys.info import num_physical_cores
+from core.host_storage import (
+    HostF32Ptr, HostF64Ptr, HostU32Ptr, HostI64Ptr, host_list_ptr, host_list_ptr_u32,
+)
 
 #: The most tasks one call splits into, whatever the box reports; the byte
 #: LM host's `BYTE_HOST_MAX_THREADS` bound, kept so a misread environment
@@ -92,27 +95,3 @@ def host_predict_chunk(rows: Int, tasks: Int) -> Int:
     if tasks < 1:
         return rows
     return (rows + tasks - 1) // tasks
-
-
-#: The pointer every `_into` entry takes: the host bindings' own type
-#: (`bindings/hostptr.mojo::f32_ptr`), so a binding hands the caller's
-#: address straight through and a List door rebinds its storage to it.
-comptime HostF32Ptr = MutPointer[Float32, MutUntrackedOrigin]
-comptime HostF64Ptr = MutPointer[Float64, MutUntrackedOrigin]
-comptime HostU32Ptr = MutPointer[UInt32, MutUntrackedOrigin]
-comptime HostI64Ptr = MutPointer[Int64, MutUntrackedOrigin]
-
-
-@always_inline
-def host_list_ptr(x: List[Float32]) -> HostF32Ptr:
-    """A List's storage as `HostF32Ptr`, the `rebind` `core/gram_multi_gpu.
-    mojo` performs on its shard list. The List must outlive every read
-    and write through the result; the callers here keep it in a local
-    until after the join."""
-    return rebind[HostF32Ptr](x.unsafe_ptr())
-
-
-@always_inline
-def host_list_ptr_u32(x: List[UInt32]) -> HostU32Ptr:
-    """`host_list_ptr` for the k-NN index output."""
-    return rebind[HostU32Ptr](x.unsafe_ptr())

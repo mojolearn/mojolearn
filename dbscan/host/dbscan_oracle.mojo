@@ -137,9 +137,9 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from core.cosine_rows import cosine_unit_rows
-from core.host_predict_threads import host_list_ptr
+from core.host_storage import host_list_ptr
 from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
-from core.host_predict_threads import HostF32Ptr
+from core.host_storage import HostF32Ptr
 
 
 comptime DBSCAN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()

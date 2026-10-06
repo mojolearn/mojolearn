@@ -122,7 +122,6 @@ from std.time import perf_counter_ns
 from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_tick
 from core.host_parallel import host_parallelize
 from core.host_lanes import (
-    host_row_tasks,
     span_add,
     span_div,
     span_exp_shift,
@@ -131,6 +130,7 @@ from core.host_lanes import (
     span_scale,
     span_silu,
 )
+from core.host_tasks import host_row_tasks
 from gemm.host.gemm_host_rows import (
     GHR_FW,
     GHR_G,

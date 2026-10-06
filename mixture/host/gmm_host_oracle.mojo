@@ -77,7 +77,7 @@ from cluster.host.kmeans_oracle import (
     host_kmeans_fit,
 )
 from core.philox import philox4x32_10
-from core.host_predict_threads import host_list_ptr
+from core.host_storage import host_list_ptr
 from gemm.host.identical_gemm import OP_NN, OP_TN, gemm_oracle
 from cluster.host.host_cells import host_cells
 from cluster.host.host_gemm_cells import host_gemm_oracle

@@ -86,7 +86,7 @@ from checks.numerics import ftz, identical_mul_add, identical_mul_add_simd, iden
 from core.classical_host_predict import host_gemm_nt
 from x_decomp.eigh_scale import host_es_scale, host_es_unscale
 from decomposition.spectrum_order_device import spectrum_rank_desc
-from core.host_predict_threads import HostF32Ptr, host_list_ptr
+from core.host_storage import HostF32Ptr, host_list_ptr
 from core.host_tile_fold import IDN_XTY_TILED, host_xty_tiled
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,

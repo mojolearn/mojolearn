@@ -73,7 +73,7 @@ from x_decomp.cells import (
     rand_cell,
     pdist_cell,
 )
-from core.host_lanes import host_row_tasks
+from core.host_tasks import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host

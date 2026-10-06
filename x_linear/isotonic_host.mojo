@@ -12,7 +12,7 @@ order (x, y, row) is total) and then run the same statements
 """
 from x_linear.ops import FP, IP, ld, st, ldi, sti
 from x_linear.isotonic import iso_merge_passes, iso_fit_sorted
-from core.host_lanes import host_row_tasks
+from core.host_tasks import host_row_tasks
 from core.host_parallel import host_parallelize
 
 

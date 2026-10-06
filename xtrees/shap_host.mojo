@@ -7,7 +7,7 @@ The unit loops are split over host tasks; every unit writes its own cells
 (the integer atomics of the cover and the meta words are order free), so the
 task count moves no bit. GPU installs never import this file."""
 from std.ffi import _Global
-from core.host_lanes import host_row_tasks
+from core.host_tasks import host_row_tasks
 from core.host_parallel import host_parallelize
 from xtrees.shap import (
     F32P, I32P, SHAP_META_BAD, SHAP_META_WORDS,

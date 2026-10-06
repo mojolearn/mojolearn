@@ -41,7 +41,7 @@ from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
-from core.host_predict_threads import host_list_ptr
+from core.host_storage import host_list_ptr
 from hierarchy.checks.edge_order import pack_edge_key, unpack_edge_hi, unpack_edge_lo, weight_order_key
 from hierarchy.checks.linkage_oracle import host_row_norms_pinned
 from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host

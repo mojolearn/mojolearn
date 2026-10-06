@@ -36,7 +36,7 @@ from gemm.host.gemm_oracle import (
 from checks.numerics import ftz, identical_mul_add
 
 from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
-from core.host_predict_threads import host_list_ptr
+from core.host_storage import host_list_ptr
 
 #: Output columns per vector.
 comptime GEMM_W = 8

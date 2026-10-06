@@ -31,7 +31,7 @@ from std.memory import bitcast
 from checks.fixture_rng import u01_row
 from checks.numerics import identical_exp64
 from core.classical_host_predict import host_qn_sigmoid_into, host_qn_softmax_into
-from core.host_predict_threads import HostF64Ptr, host_list_ptr
+from core.host_storage import HostF64Ptr, host_list_ptr
 from glm.estimator import qn_sigmoid_host, qn_softmax_host
 
 
