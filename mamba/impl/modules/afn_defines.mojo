@@ -120,6 +120,7 @@ comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
 #: bias-seeded four-tap fma chain over the same inputs (no recurrence), so no
 #: bit moves; the host column keeps the walking kernel (same cells, same bits).
 comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
+    # I09 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF"
 ]()
 #: lane nr-mamba (2026-10-04, roadmap B1) IDN_M2_SSD_TILES (default ON where
