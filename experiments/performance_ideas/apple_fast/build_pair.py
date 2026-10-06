@@ -33,7 +33,7 @@ def main():
     if card['status'].startswith('blocked_'):raise RuntimeError(card['blocker'])
     a.output.mkdir(parents=True,exist_ok=False)
     binding=card.get('variant_bindings',{}).get(a.variant,card['binding']);candidate=card.get('variants',{}).get(a.variant,card['candidate_defines'])
-    env=dict(os.environ,MOJOLEARN_NUMERIC_MODE='fast',MOJOLEARN_COMPILE_JOBS='1',MOJOLEARN_SKIP_BUILD_GATE='1')
+    env=dict(os.environ,MOJOLEARN_NUMERIC_MODE='fast',MOJOLEARN_VENDOR='apple',MOJOLEARN_TARGET_COLUMN='apple',MOJOLEARN_COMPILE_JOBS='1',MOJOLEARN_SKIP_BUILD_GATE='1')
     slot=Path.home()/'mojolearn-evidence/compile_slot.sh'
     if not slot.is_file():raise RuntimeError('existing M2 compile-slot script missing: '+str(slot))
     dependencies={}
@@ -53,7 +53,7 @@ def main():
         name='_mojolearn.so' if prerequisite=='core' else '_mojolearn_'+prerequisite+'.so'
         destination=a.output/'dependencies'/name
         digest=build(prerequisite,[],destination)
-        dependencies[name]=dict(source_sha=source,numeric_mode='fast',vendor='apple',defines=[],sha256=digest)
+        dependencies[name]=dict(source_sha=source,numeric_mode='fast',vendor='apple',target_column='apple',defines=[],sha256=digest)
     hashes={}
     baseline=card.get('variant_baseline_defines',{}).get(a.variant,card['baseline_defines'])
     for arm,defines in (('A',baseline),('B',candidate)):
@@ -71,7 +71,7 @@ def main():
             sha256=hashlib.sha256(destination.read_bytes()).hexdigest(),source=check['source'])
     manifest=dict(source_sha=source,binding=binding,numeric_mode='fast',vendor='apple',
         defines_A=flags(baseline),defines_B=flags(candidate),hashes=hashes,
-        dependencies=dependencies,native_checks=native_checks,builder='existing M2 Pro',status='OK')
+        dependencies=dependencies,native_checks=native_checks,target_column='apple',builder='existing M2 Pro',status='OK')
     (a.output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print('APPLE_FAST_BUILD status=OK source='+source+' binding='+binding+' artifacts='+str(a.output))
 if __name__=='__main__':main()
