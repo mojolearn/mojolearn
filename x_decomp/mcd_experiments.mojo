@@ -20,7 +20,9 @@ from neighbors.impl.ball_cover.scan import (rbc_exclusive_scan_kernel, rbc_pscan
 from x_decomp.cells import F32Ptr, I32Ptr
 
 # F06 PENDING: default off. Source builds do not qualify fit quality/speed.
+# NEVER RUN — PENDING VALIDATION: active-candidate compaction.
 comptime MCD_FAST_ACTIVE_COMPACT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_MCD_FAST_ACTIVE_COMPACT"]()
+# NEVER RUN — PENDING VALIDATION: phase-local covariance reuse.
 comptime MCD_FAST_COV_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_MCD_FAST_COV_REUSE"]()
 # Three Int32 candidate planes occupy at most768KiB; larger phases retain
 # the incumbent route. This resource limit is independent of dataset shapes.
@@ -80,19 +82,25 @@ struct McdCompactWorkspace(Movable):
         self.total = ctx.enqueue_create_buffer[DType.int32](1)
         self.chunks = ctx.enqueue_create_buffer[DType.int32]((nc + RBC_PSCAN_CHUNK - 1) // RBC_PSCAN_CHUNK + 1)
 
+def _device_i32(buf: DeviceBuffer[DType.int32]) -> I32Ptr:
+    # Match mcd_fast._i: kernels mutate phase-owned device allocations,
+    # while the host borrow leaves the buffer owner/metadata unchanged.
+    # Preserve the owner through its phase completion; no allocation/copy.
+    return I32Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))
+
 def compact_candidate_count(ctx: DeviceContext, ws: McdCompactWorkspace, gate: I32Ptr, nc: Int) raises -> Int:
     if nc <= 0 or nc > ws.capacity: raise Error("MCD compact source capacity refused")
-    ctx.enqueue_function[compact_flags_kernel](gate, ws.flags.unsafe_ptr(), Int32(nc), grid_dim=(nc+255)//256, block_dim=256)
+    ctx.enqueue_function[compact_flags_kernel](gate, _device_i32(ws.flags), Int32(nc), grid_dim=(nc+255)//256, block_dim=256)
     # Stock integer scan kernels; chunk sums are phase-owned, eliminating
     # a temporary-allocation drain before the mandatory count read.
     if nc <= RBC_PSCAN_CHUNK:
-        ctx.enqueue_function[rbc_exclusive_scan_kernel](ws.prefix.unsafe_ptr(), ws.flags.unsafe_ptr(), Int32(nc), grid_dim=1, block_dim=RBC_SCAN_TPB)
+        ctx.enqueue_function[rbc_exclusive_scan_kernel](_device_i32(ws.prefix), _device_i32(ws.flags), Int32(nc), grid_dim=1, block_dim=RBC_SCAN_TPB)
     else:
         var chunks = (nc + RBC_PSCAN_CHUNK - 1) // RBC_PSCAN_CHUNK
-        ctx.enqueue_function[rbc_pscan_local_kernel](ws.prefix.unsafe_ptr(), ws.chunks.unsafe_ptr(), ws.flags.unsafe_ptr(), Int32(nc), grid_dim=chunks, block_dim=RBC_SCAN_TPB)
-        ctx.enqueue_function[rbc_pscan_chunks_kernel](ws.chunks.unsafe_ptr(), Int32(chunks), grid_dim=1, block_dim=RBC_SCAN_TPB)
-        ctx.enqueue_function[rbc_pscan_add_kernel](ws.prefix.unsafe_ptr(), ws.chunks.unsafe_ptr(), Int32(nc), Int32(chunks), grid_dim=(nc + 1 + RBC_SCAN_TPB - 1)//RBC_SCAN_TPB, block_dim=RBC_SCAN_TPB)
-    ctx.enqueue_function[compact_ids_kernel](ws.flags.unsafe_ptr(), ws.prefix.unsafe_ptr(), ws.ids.unsafe_ptr(), ws.total.unsafe_ptr(), Int32(nc), grid_dim=(nc+255)//256, block_dim=256)
+        ctx.enqueue_function[rbc_pscan_local_kernel](_device_i32(ws.prefix), _device_i32(ws.chunks), _device_i32(ws.flags), Int32(nc), grid_dim=chunks, block_dim=RBC_SCAN_TPB)
+        ctx.enqueue_function[rbc_pscan_chunks_kernel](_device_i32(ws.chunks), Int32(chunks), grid_dim=1, block_dim=RBC_SCAN_TPB)
+        ctx.enqueue_function[rbc_pscan_add_kernel](_device_i32(ws.prefix), _device_i32(ws.chunks), Int32(nc), Int32(chunks), grid_dim=(nc + 1 + RBC_SCAN_TPB - 1)//RBC_SCAN_TPB, block_dim=RBC_SCAN_TPB)
+    ctx.enqueue_function[compact_ids_kernel](_device_i32(ws.flags), _device_i32(ws.prefix), _device_i32(ws.ids), _device_i32(ws.total), Int32(nc), grid_dim=(nc+255)//256, block_dim=256)
     var count = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_ptr=count.unsafe_ptr(), src_buf=ws.total)
     ctx.synchronize()
