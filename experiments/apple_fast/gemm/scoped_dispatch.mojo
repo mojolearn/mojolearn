@@ -47,10 +47,12 @@ comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
 # F01 A=717.265 ms, B=710.393 ms, B/A=0.99042. All 2,043,304 train and
 # 500,000 query rows; preparation, fit, transform, inverse and output reads.
 # One excluded warmup and one score; reconstruction passed, hashes retained.
-# A single approximately 1% difference does not qualify a default. Keep OFF;
-# full taxi, other affected workloads and interactions remain pending.
+# Full taxi also measured all 5,250,086 training/500,000 query rows:
+# A=102.607 ms, B=97.052 ms, B/A=0.94587; reconstruction gate passed.
+# One sample on each dataset does not establish broad adapter admission.
+# Keep OFF; other affected workloads and interactions remain pending.
 # Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
-# pca-istella-summary.json. F02/pca shares this exact artifact pair/workload;
+# pca-full-summary.json. F02/pca shares this exact artifact pair/workload;
 # its other adapters remain separately pending.
 comptime PCA = is_defined["MOJOLEARN_SCOPED_GEMM_PCA"]()
 comptime AUDIT = is_defined["MOJOLEARN_SCOPED_GEMM_AUDIT"]()

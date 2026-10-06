@@ -341,9 +341,466 @@
           "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
+        },
+        {
+          "id": "F01",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F01-default-pca-istella-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-pca-da7fc8e52b70/F01-default-pca-istella-full/attempts/attempt-0001",
+          "source_sha": "da7fc8e52b70a9b8779c7740b9ed91c4bb58dee0",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/da7fc8e52b70/F01-default-pca-istella-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/da7fc8e52b70/runs/F01-default-pca-istella-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASUREMENT_FAILED",
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "dimensions": {
+            "train": [
+              2043304,
+              220
+            ],
+            "query": [
+              500000,
+              220
+            ]
+          },
+          "estimator_settings": {
+            "n_components": 10,
+            "svd_solver": "covariance_eigh",
+            "whiten": false,
+            "random_state": 7
+          },
+          "timed_boundary": "host input preparation + public fit + full query transform + inverse + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/da7fc8e52b70/A/package/mojolearn/_mojolearn_estimators.so",
+                "sha256": "c99cad1315ae28b80d997b2395d26b7928db15f837c8d32a85916ece5fd0744a",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_SCOPED_GEMM_AUDIT"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/da7fc8e52b70/B/package/mojolearn/_mojolearn_estimators.so",
+                "sha256": "2d2ec2cf9a01a977ad2cfd3b26fbfb485e9e0e36d119f428ddd3eeb9d022eef4",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_SCOPED_GEMM_AUDIT",
+                  "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+                  "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+                  "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+                  "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+                  "MOJOLEARN_SCOPED_GEMM_PCA",
+                  "MOJOLEARN_SCOPED_GEMM_SPLIT"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "FAST hashes are reported separately; equality is not required",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 1,
+              "error": "Workload failed or did not write result JSON",
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/da7fc8e52b70/runs/F01-default-pca-istella-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/da7fc8e52b70/runs/F01-default-pca-istella-full/attempts/attempt-0001/warmup-A.json"
+            }
+          ],
+          "scored_arm_timings": {},
+          "model_states": {},
+          "output_hashes": {},
+          "repeated_output_hashes": {},
+          "producer": "full-pca-collector"
+        },
+        {
+          "id": "F01",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F01-default-pca-istella-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-pca-ec3c8c8504e5/F01-default-pca-istella-full/attempts/attempt-0001",
+          "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/ec3c8c8504e5/F01-default-pca-istella-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASURED",
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "dimensions": {
+            "train": [
+              2043304,
+              220
+            ],
+            "query": [
+              500000,
+              220
+            ]
+          },
+          "estimator_settings": {
+            "n_components": 10,
+            "svd_solver": "covariance_eigh",
+            "whiten": false,
+            "random_state": 7
+          },
+          "timed_boundary": "host input preparation + public fit + full query transform + inverse + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn_estimators.so",
+                "sha256": "c99cad1315ae28b80d997b2395d26b7928db15f837c8d32a85916ece5fd0744a",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_SCOPED_GEMM_AUDIT"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn_estimators.so",
+                "sha256": "2d2ec2cf9a01a977ad2cfd3b26fbfb485e9e0e36d119f428ddd3eeb9d022eef4",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_SCOPED_GEMM_AUDIT",
+                  "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+                  "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+                  "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+                  "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+                  "MOJOLEARN_SCOPED_GEMM_PCA",
+                  "MOJOLEARN_SCOPED_GEMM_SPLIT"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "FAST hashes are reported separately; equality is not required",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/warmup-A.json"
+            },
+            {
+              "phase": "warmup",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/warmup-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/warmup-B.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/scored-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/scored-A.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/scored-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/scored-B.json"
+            }
+          ],
+          "scored_arm_timings": {
+            "A": {
+              "full_operation_seconds": 0.71726475,
+              "preparation_seconds": 1.175e-05,
+              "fit_seconds": 0.366676666,
+              "cold_transform_seconds": 0.080383625,
+              "cold_inverse_seconds": 0.270192709,
+              "repeated_transform_seconds": 0.08220225,
+              "repeated_inverse_seconds": 0.285382791
+            },
+            "B": {
+              "full_operation_seconds": 0.71039325,
+              "preparation_seconds": 1.1e-05,
+              "fit_seconds": 0.364826625,
+              "cold_transform_seconds": 0.078053042,
+              "cold_inverse_seconds": 0.267502583,
+              "repeated_transform_seconds": 0.078743625,
+              "repeated_inverse_seconds": 0.280932167
+            }
+          },
+          "model_states": {
+            "A": {
+              "status": "CAPTURED",
+              "sha256": "f78c2636247a690c6e7865ea0bbc390e910754041b7a7db7b09fc1cdbe991a56",
+              "scope": "public numerical PCA fitted arrays and noise variance"
+            },
+            "B": {
+              "status": "CAPTURED",
+              "sha256": "50008f580ddc60fac5a0bc02e219e335a6d92f805de4b12ef4b6c406eaf35d26",
+              "scope": "public numerical PCA fitted arrays and noise variance"
+            }
+          },
+          "output_hashes": {
+            "A": "22a464215f7b39c246ecd82f6ecb65c76522d0e73c9106db4d0758713046d593",
+            "B": "fca771be10f70ba5b1d5e619832ddee057cd19ab776a26cec363635ed2ffaa0b"
+          },
+          "repeated_output_hashes": {
+            "A": "22a464215f7b39c246ecd82f6ecb65c76522d0e73c9106db4d0758713046d593",
+            "B": "fca771be10f70ba5b1d5e619832ddee057cd19ab776a26cec363635ed2ffaa0b"
+          },
+          "quality": {
+            "reconstruction": {
+              "A": 0.00013548110504827944,
+              "B": 0.0001354802260970955,
+              "allowed": 0.00013648110504827944,
+              "rtol": 0.001,
+              "atol": 1e-06,
+              "ok": true,
+              "strict_le_info": true
+            },
+            "finite": true,
+            "candidate_reached": true,
+            "scope": "full query relative L2 reconstruction; other oracle metrics pending"
+          },
+          "model_hashes_equal": false,
+          "output_hashes_equal": false,
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 717.26475,
+          "candidate_ms": 710.39325,
+          "baseline_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "candidate_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "baseline_source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "candidate_source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "artifact_hashes": {
+            "baseline": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn_estimators.so": "c99cad1315ae28b80d997b2395d26b7928db15f837c8d32a85916ece5fd0744a"
+            },
+            "candidate": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn_estimators.so": "2d2ec2cf9a01a977ad2cfd3b26fbfb485e9e0e36d119f428ddd3eeb9d022eef4"
+            }
+          },
+          "pending_coverage": [
+            "all affected estimator workloads and interacting configurations",
+            "full-data singular/noise oracle quality"
+          ],
+          "variant": "default",
+          "equivalent_candidate_mapping": {
+            "id": "F02",
+            "variant": "pca",
+            "reason": "Same corrected job001/job011 pair and PCA workload; reuse evidence, no additional execution"
+          },
+          "producer": "full-pca-collector",
+          "candidate_over_baseline": 0.9904198554299509
+        },
+        {
+          "id": "F01",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F01-default-pca-taxi-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-pca-ec3c8c8504e5/F01-default-pca-taxi-full/attempts/attempt-0001",
+          "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/ec3c8c8504e5/F01-default-pca-taxi-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASURED",
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "dimensions": {
+            "train": [
+              5250086,
+              11
+            ],
+            "query": [
+              500000,
+              11
+            ]
+          },
+          "estimator_settings": {
+            "n_components": 10,
+            "svd_solver": "covariance_eigh",
+            "whiten": false,
+            "random_state": 7
+          },
+          "timed_boundary": "host input preparation + public fit + full query transform + inverse + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn_estimators.so",
+                "sha256": "c99cad1315ae28b80d997b2395d26b7928db15f837c8d32a85916ece5fd0744a",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_SCOPED_GEMM_AUDIT"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn_estimators.so",
+                "sha256": "2d2ec2cf9a01a977ad2cfd3b26fbfb485e9e0e36d119f428ddd3eeb9d022eef4",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_SCOPED_GEMM_AUDIT",
+                  "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+                  "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+                  "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+                  "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+                  "MOJOLEARN_SCOPED_GEMM_PCA",
+                  "MOJOLEARN_SCOPED_GEMM_SPLIT"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "FAST hashes are reported separately; equality is not required",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/warmup-A.json"
+            },
+            {
+              "phase": "warmup",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/warmup-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/warmup-B.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/scored-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/scored-A.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/scored-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/scored-B.json"
+            }
+          ],
+          "scored_arm_timings": {
+            "A": {
+              "full_operation_seconds": 0.102606916,
+              "preparation_seconds": 1.075e-05,
+              "fit_seconds": 0.077687166,
+              "cold_transform_seconds": 0.013249959,
+              "cold_inverse_seconds": 0.011659041,
+              "repeated_transform_seconds": 0.009710125,
+              "repeated_inverse_seconds": 0.011376458
+            },
+            "B": {
+              "full_operation_seconds": 0.097052375,
+              "preparation_seconds": 9.625e-06,
+              "fit_seconds": 0.073777084,
+              "cold_transform_seconds": 0.011871666,
+              "cold_inverse_seconds": 0.011394,
+              "repeated_transform_seconds": 0.00973125,
+              "repeated_inverse_seconds": 0.011238042
+            }
+          },
+          "model_states": {
+            "A": {
+              "status": "CAPTURED",
+              "sha256": "ab49fbc8bab08fcd88f416648bb043d823f45f924c43aaf880e7208d7ff2c571",
+              "scope": "public numerical PCA fitted arrays and noise variance"
+            },
+            "B": {
+              "status": "CAPTURED",
+              "sha256": "ab49fbc8bab08fcd88f416648bb043d823f45f924c43aaf880e7208d7ff2c571",
+              "scope": "public numerical PCA fitted arrays and noise variance"
+            }
+          },
+          "output_hashes": {
+            "A": "c046a57f402d6c3d84aaa59f8c86314f9c21dcb7f699dfeb058624a7d060344d",
+            "B": "c046a57f402d6c3d84aaa59f8c86314f9c21dcb7f699dfeb058624a7d060344d"
+          },
+          "repeated_output_hashes": {
+            "A": "c046a57f402d6c3d84aaa59f8c86314f9c21dcb7f699dfeb058624a7d060344d",
+            "B": "c046a57f402d6c3d84aaa59f8c86314f9c21dcb7f699dfeb058624a7d060344d"
+          },
+          "quality": {
+            "reconstruction": {
+              "A": 0.0009422838411205666,
+              "B": 0.0009422838411205666,
+              "allowed": 0.0009432838411205666,
+              "rtol": 0.001,
+              "atol": 1e-06,
+              "ok": true,
+              "strict_le_info": true
+            },
+            "finite": true,
+            "candidate_reached": true,
+            "scope": "full query relative L2 reconstruction; other oracle metrics pending"
+          },
+          "model_hashes_equal": true,
+          "output_hashes_equal": true,
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 102.60691600000001,
+          "candidate_ms": 97.052375,
+          "baseline_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "candidate_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "baseline_source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "candidate_source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "artifact_hashes": {
+            "baseline": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn_estimators.so": "c99cad1315ae28b80d997b2395d26b7928db15f837c8d32a85916ece5fd0744a"
+            },
+            "candidate": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn_estimators.so": "2d2ec2cf9a01a977ad2cfd3b26fbfb485e9e0e36d119f428ddd3eeb9d022eef4"
+            }
+          },
+          "pending_coverage": [
+            "all affected estimator workloads and interacting configurations",
+            "full-data singular/noise oracle quality"
+          ],
+          "variant": "default",
+          "equivalent_candidate_mapping": {
+            "id": "F02",
+            "variant": "pca",
+            "reason": "Same corrected job001/job011 pair and PCA workload; reuse evidence, no additional execution"
+          },
+          "producer": "full-pca-collector",
+          "candidate_over_baseline": 0.9458658225338338
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "F02",
@@ -541,9 +998,359 @@
           "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
+        },
+        {
+          "id": "F11",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F11-compensated-pca-istella-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-pca-ec3c8c8504e5/F11-compensated-pca-istella-full/attempts/attempt-0001",
+          "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/ec3c8c8504e5/F11-compensated-pca-istella-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASURED",
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "dimensions": {
+            "train": [
+              2043304,
+              220
+            ],
+            "query": [
+              500000,
+              220
+            ]
+          },
+          "estimator_settings": {
+            "n_components": 10,
+            "svd_solver": "covariance_eigh",
+            "whiten": false,
+            "random_state": 7
+          },
+          "timed_boundary": "host input preparation + public fit + full query transform + inverse + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn_estimators.so",
+                "sha256": "013617c3243a594acddeeccae69ec01df30d203607543b42f556a977f3f208c2",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn_estimators.so",
+                "sha256": "ef4d3348650a07792c40253ecb5608f101a89043b8b86d29afe46a2dfe0d7834",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_PCA_FAST_COMPENSATED_COV"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "FAST hashes are reported separately; equality is not required",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/warmup-A.json"
+            },
+            {
+              "phase": "warmup",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/warmup-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/warmup-B.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/scored-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/scored-A.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/scored-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/scored-B.json"
+            }
+          ],
+          "scored_arm_timings": {
+            "A": {
+              "full_operation_seconds": 0.716472708,
+              "preparation_seconds": 1.1208e-05,
+              "fit_seconds": 0.363548333,
+              "cold_transform_seconds": 0.081965709,
+              "cold_inverse_seconds": 0.270947458,
+              "repeated_transform_seconds": 0.088978625,
+              "repeated_inverse_seconds": 0.285026291
+            },
+            "B": {
+              "full_operation_seconds": 1.955868625,
+              "preparation_seconds": 1.0958e-05,
+              "fit_seconds": 1.601214042,
+              "cold_transform_seconds": 0.0843475,
+              "cold_inverse_seconds": 0.270296125,
+              "repeated_transform_seconds": 0.081073875,
+              "repeated_inverse_seconds": 0.283764834
+            }
+          },
+          "model_states": {
+            "A": {
+              "status": "CAPTURED",
+              "sha256": "bb712945e1865507cfa94579caf297ddebe3dcc1f4bd2fce5a7e07959bd8b8bb",
+              "scope": "public numerical PCA fitted arrays and noise variance"
+            },
+            "B": {
+              "status": "CAPTURED",
+              "sha256": "1556d062c7c90c3988b0ab9ca629361d6e5d11ab714b5da47fd536f303be71d5",
+              "scope": "public numerical PCA fitted arrays and noise variance"
+            }
+          },
+          "output_hashes": {
+            "A": "c126619d0c99dde97ace628fb1215334d972a6f259fd312ce936cc3c1b36b749",
+            "B": "c3062c8dcec343e712c110b205d071e085a5e78cc09bcc4ca9ba68ae77280324"
+          },
+          "repeated_output_hashes": {
+            "A": "c126619d0c99dde97ace628fb1215334d972a6f259fd312ce936cc3c1b36b749",
+            "B": "c3062c8dcec343e712c110b205d071e085a5e78cc09bcc4ca9ba68ae77280324"
+          },
+          "quality": {
+            "reconstruction": {
+              "A": 0.00013548076753591536,
+              "B": 0.00013074743124813544,
+              "allowed": 0.00013648076753591535,
+              "rtol": 0.001,
+              "atol": 1e-06,
+              "ok": true,
+              "strict_le_info": true
+            },
+            "finite": true,
+            "candidate_reached": true,
+            "scope": "full query relative L2 reconstruction; other oracle metrics pending"
+          },
+          "model_hashes_equal": false,
+          "output_hashes_equal": false,
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 716.472708,
+          "candidate_ms": 1955.8686249999998,
+          "baseline_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "candidate_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "baseline_source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "candidate_source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "artifact_hashes": {
+            "baseline": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn_estimators.so": "013617c3243a594acddeeccae69ec01df30d203607543b42f556a977f3f208c2"
+            },
+            "candidate": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn_estimators.so": "ef4d3348650a07792c40253ecb5608f101a89043b8b86d29afe46a2dfe0d7834"
+            }
+          },
+          "pending_coverage": [
+            "all affected estimator workloads and interacting configurations",
+            "full-data singular/noise oracle quality",
+            "downstream LLE full-workload mapping and quality"
+          ],
+          "variant": "compensated-pca",
+          "producer": "full-pca-collector",
+          "candidate_over_baseline": 2.7298578203484056
+        },
+        {
+          "id": "F11",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F11-compensated-pca-taxi-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-pca-ec3c8c8504e5/F11-compensated-pca-taxi-full/attempts/attempt-0001",
+          "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/ec3c8c8504e5/F11-compensated-pca-taxi-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASURED",
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "dimensions": {
+            "train": [
+              5250086,
+              11
+            ],
+            "query": [
+              500000,
+              11
+            ]
+          },
+          "estimator_settings": {
+            "n_components": 10,
+            "svd_solver": "covariance_eigh",
+            "whiten": false,
+            "random_state": 7
+          },
+          "timed_boundary": "host input preparation + public fit + full query transform + inverse + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn_estimators.so",
+                "sha256": "013617c3243a594acddeeccae69ec01df30d203607543b42f556a977f3f208c2",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn_estimators.so",
+                "sha256": "ef4d3348650a07792c40253ecb5608f101a89043b8b86d29afe46a2dfe0d7834",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_PCA_FAST_COMPENSATED_COV"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "FAST hashes are reported separately; equality is not required",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/warmup-A.json"
+            },
+            {
+              "phase": "warmup",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/warmup-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/warmup-B.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/scored-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/scored-A.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/scored-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/scored-B.json"
+            }
+          ],
+          "scored_arm_timings": {
+            "A": {
+              "full_operation_seconds": 0.10786375,
+              "preparation_seconds": 1.0208e-05,
+              "fit_seconds": 0.084457167,
+              "cold_transform_seconds": 0.012030666,
+              "cold_inverse_seconds": 0.011365709,
+              "repeated_transform_seconds": 0.009756041,
+              "repeated_inverse_seconds": 0.011089917
+            },
+            "B": {
+              "full_operation_seconds": 1.777204041,
+              "preparation_seconds": 9.541e-06,
+              "fit_seconds": 1.753145084,
+              "cold_transform_seconds": 0.011939041,
+              "cold_inverse_seconds": 0.012110375,
+              "repeated_transform_seconds": 0.009906791,
+              "repeated_inverse_seconds": 0.012411042
+            }
+          },
+          "model_states": {
+            "A": {
+              "status": "CAPTURED",
+              "sha256": "ab49fbc8bab08fcd88f416648bb043d823f45f924c43aaf880e7208d7ff2c571",
+              "scope": "public numerical PCA fitted arrays and noise variance"
+            },
+            "B": {
+              "status": "CAPTURED",
+              "sha256": "28f1a71927c9f6afebb95ef57bf1a020389b41188b1baa71269dee33cc28aed0",
+              "scope": "public numerical PCA fitted arrays and noise variance"
+            }
+          },
+          "output_hashes": {
+            "A": "c046a57f402d6c3d84aaa59f8c86314f9c21dcb7f699dfeb058624a7d060344d",
+            "B": "3ea689d43293d2f830b772914d469115431d66d5ca2e49b6e6770aceb682aa91"
+          },
+          "repeated_output_hashes": {
+            "A": "c046a57f402d6c3d84aaa59f8c86314f9c21dcb7f699dfeb058624a7d060344d",
+            "B": "3ea689d43293d2f830b772914d469115431d66d5ca2e49b6e6770aceb682aa91"
+          },
+          "quality": {
+            "reconstruction": {
+              "A": 0.0009422838411205666,
+              "B": 0.0009422834693014894,
+              "allowed": 0.0009432838411205666,
+              "rtol": 0.001,
+              "atol": 1e-06,
+              "ok": true,
+              "strict_le_info": true
+            },
+            "finite": true,
+            "candidate_reached": true,
+            "scope": "full query relative L2 reconstruction; other oracle metrics pending"
+          },
+          "model_hashes_equal": false,
+          "output_hashes_equal": false,
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 107.86375,
+          "candidate_ms": 1777.204041,
+          "baseline_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "candidate_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "baseline_source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "candidate_source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "artifact_hashes": {
+            "baseline": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn_estimators.so": "013617c3243a594acddeeccae69ec01df30d203607543b42f556a977f3f208c2"
+            },
+            "candidate": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn_estimators.so": "ef4d3348650a07792c40253ecb5608f101a89043b8b86d29afe46a2dfe0d7834"
+            }
+          },
+          "pending_coverage": [
+            "all affected estimator workloads and interacting configurations",
+            "full-data singular/noise oracle quality",
+            "downstream LLE full-workload mapping and quality"
+          ],
+          "variant": "compensated-pca",
+          "producer": "full-pca-collector",
+          "candidate_over_baseline": 16.47637914498615
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "F12",
@@ -1987,11 +2794,12 @@
     }
   ],
   "notes": [
-    "No full-dataset candidate measurements launched. Prior component/public-caller results are not full-workload evidence.",
     "All 87 retained Apple FAST build jobs recovered and staged on M3; current IDENTICAL full-workload paired artifacts and full recipe mappings have not been located.",
     "NVIDIA/AMD prior campaign resources retired; no new rental started without a runnable full-workload pair.",
     "Model/output SHA256 capture added to actual workload drivers; unavailable model exports remain explicit. No compilation or separate identity validation run.",
-    "Final frozen main SHA is retained in /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/freeze.json after push."
+    "Final frozen main SHA is retained in /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/freeze.json after push.",
+    "Four full Apple FAST PCA A/B pairs completed on uncapped Istella and taxi under ec3c8c850; first da7 receipt failure retained. NVIDIA/AMD full-workload artifact coverage remains pending.",
+    "Apple FAST now proceeds independently. Current measured PCA subsets do not close downstream LLE, other adapters or interaction coverage."
   ],
   "decisions": []
 }

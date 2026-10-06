@@ -1,0 +1,246 @@
+[
+  {
+    "cell": "F01-default-pca-istella-full",
+    "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+    "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+    "dimensions": {
+      "train": [
+        2043304,
+        220
+      ],
+      "query": [
+        500000,
+        220
+      ]
+    },
+    "A_ms": 717.26475,
+    "B_ms": 710.39325,
+    "B_over_A": 0.9904198554299509,
+    "timing_A": {
+      "full_operation_seconds": 0.71726475,
+      "preparation_seconds": 1.175e-05,
+      "fit_seconds": 0.366676666,
+      "cold_transform_seconds": 0.080383625,
+      "cold_inverse_seconds": 0.270192709,
+      "repeated_transform_seconds": 0.08220225,
+      "repeated_inverse_seconds": 0.285382791
+    },
+    "timing_B": {
+      "full_operation_seconds": 0.71039325,
+      "preparation_seconds": 1.1e-05,
+      "fit_seconds": 0.364826625,
+      "cold_transform_seconds": 0.078053042,
+      "cold_inverse_seconds": 0.267502583,
+      "repeated_transform_seconds": 0.078743625,
+      "repeated_inverse_seconds": 0.280932167
+    },
+    "quality": {
+      "reconstruction_A": 0.00013548110504827944,
+      "reconstruction_B": 0.0001354802260970955,
+      "criterion": "B <= A*(1+rtol)+atol",
+      "rtol": 0.001,
+      "atol": 1e-06,
+      "maximum_allowed": 0.0001366165861533277,
+      "reconstruction_gate": true,
+      "finite_A": true,
+      "finite_B": true,
+      "candidate_reached": true
+    },
+    "model_hash_A": "f78c2636247a690c6e7865ea0bbc390e910754041b7a7db7b09fc1cdbe991a56",
+    "model_hash_B": "50008f580ddc60fac5a0bc02e219e335a6d92f805de4b12ef4b6c406eaf35d26",
+    "model_hash_scope": "public numerical PCA fitted arrays and noise variance",
+    "output_hash_A": "22a464215f7b39c246ecd82f6ecb65c76522d0e73c9106db4d0758713046d593",
+    "output_hash_B": "fca771be10f70ba5b1d5e619832ddee057cd19ab776a26cec363635ed2ffaa0b",
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "evidence": {
+      "A": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/scored-A.json",
+      "B": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-istella-full/attempts/attempt-0001/scored-B.json"
+    },
+    "promotion": false,
+    "pending": "Affected nonPCA workloads and interacting candidate configurations; FAST predecessor accepted quality evidence retained"
+  },
+  {
+    "cell": "F01-default-pca-taxi-full",
+    "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+    "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+    "dimensions": {
+      "train": [
+        5250086,
+        11
+      ],
+      "query": [
+        500000,
+        11
+      ]
+    },
+    "A_ms": 102.606916,
+    "B_ms": 97.052375,
+    "B_over_A": 0.9458658225338339,
+    "timing_A": {
+      "full_operation_seconds": 0.102606916,
+      "preparation_seconds": 1.075e-05,
+      "fit_seconds": 0.077687166,
+      "cold_transform_seconds": 0.013249959,
+      "cold_inverse_seconds": 0.011659041,
+      "repeated_transform_seconds": 0.009710125,
+      "repeated_inverse_seconds": 0.011376458
+    },
+    "timing_B": {
+      "full_operation_seconds": 0.097052375,
+      "preparation_seconds": 9.625e-06,
+      "fit_seconds": 0.073777084,
+      "cold_transform_seconds": 0.011871666,
+      "cold_inverse_seconds": 0.011394,
+      "repeated_transform_seconds": 0.00973125,
+      "repeated_inverse_seconds": 0.011238042
+    },
+    "quality": {
+      "reconstruction_A": 0.0009422838411205666,
+      "reconstruction_B": 0.0009422838411205666,
+      "criterion": "B <= A*(1+rtol)+atol",
+      "rtol": 0.001,
+      "atol": 1e-06,
+      "maximum_allowed": 0.0009442261249616871,
+      "reconstruction_gate": true,
+      "finite_A": true,
+      "finite_B": true,
+      "candidate_reached": true
+    },
+    "model_hash_A": "ab49fbc8bab08fcd88f416648bb043d823f45f924c43aaf880e7208d7ff2c571",
+    "model_hash_B": "ab49fbc8bab08fcd88f416648bb043d823f45f924c43aaf880e7208d7ff2c571",
+    "model_hash_scope": "public numerical PCA fitted arrays and noise variance",
+    "output_hash_A": "c046a57f402d6c3d84aaa59f8c86314f9c21dcb7f699dfeb058624a7d060344d",
+    "output_hash_B": "c046a57f402d6c3d84aaa59f8c86314f9c21dcb7f699dfeb058624a7d060344d",
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "evidence": {
+      "A": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/scored-A.json",
+      "B": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F01-default-pca-taxi-full/attempts/attempt-0001/scored-B.json"
+    },
+    "promotion": false,
+    "pending": "Affected nonPCA workloads and interacting candidate configurations; FAST predecessor accepted quality evidence retained"
+  },
+  {
+    "cell": "F11-compensated-pca-istella-full",
+    "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+    "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+    "dimensions": {
+      "train": [
+        2043304,
+        220
+      ],
+      "query": [
+        500000,
+        220
+      ]
+    },
+    "A_ms": 716.472708,
+    "B_ms": 1955.868625,
+    "B_over_A": 2.729857820348406,
+    "timing_A": {
+      "full_operation_seconds": 0.716472708,
+      "preparation_seconds": 1.1208e-05,
+      "fit_seconds": 0.363548333,
+      "cold_transform_seconds": 0.081965709,
+      "cold_inverse_seconds": 0.270947458,
+      "repeated_transform_seconds": 0.088978625,
+      "repeated_inverse_seconds": 0.285026291
+    },
+    "timing_B": {
+      "full_operation_seconds": 1.955868625,
+      "preparation_seconds": 1.0958e-05,
+      "fit_seconds": 1.601214042,
+      "cold_transform_seconds": 0.0843475,
+      "cold_inverse_seconds": 0.270296125,
+      "repeated_transform_seconds": 0.081073875,
+      "repeated_inverse_seconds": 0.283764834
+    },
+    "quality": {
+      "reconstruction_A": 0.00013548076753591536,
+      "reconstruction_B": 0.00013074743124813544,
+      "criterion": "B <= A*(1+rtol)+atol",
+      "rtol": 0.001,
+      "atol": 1e-06,
+      "maximum_allowed": 0.00013661624830345125,
+      "reconstruction_gate": true,
+      "finite_A": true,
+      "finite_B": true,
+      "candidate_reached": true
+    },
+    "model_hash_A": "bb712945e1865507cfa94579caf297ddebe3dcc1f4bd2fce5a7e07959bd8b8bb",
+    "model_hash_B": "1556d062c7c90c3988b0ab9ca629361d6e5d11ab714b5da47fd536f303be71d5",
+    "model_hash_scope": "public numerical PCA fitted arrays and noise variance",
+    "output_hash_A": "c126619d0c99dde97ace628fb1215334d972a6f259fd312ce936cc3c1b36b749",
+    "output_hash_B": "c3062c8dcec343e712c110b205d071e085a5e78cc09bcc4ca9ba68ae77280324",
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "evidence": {
+      "A": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/scored-A.json",
+      "B": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-istella-full/attempts/attempt-0001/scored-B.json"
+    },
+    "promotion": false,
+    "pending": "Affected nonPCA workloads and interacting candidate configurations; FAST predecessor accepted quality evidence retained"
+  },
+  {
+    "cell": "F11-compensated-pca-taxi-full",
+    "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+    "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+    "dimensions": {
+      "train": [
+        5250086,
+        11
+      ],
+      "query": [
+        500000,
+        11
+      ]
+    },
+    "A_ms": 107.86375,
+    "B_ms": 1777.204041,
+    "B_over_A": 16.47637914498615,
+    "timing_A": {
+      "full_operation_seconds": 0.10786375,
+      "preparation_seconds": 1.0208e-05,
+      "fit_seconds": 0.084457167,
+      "cold_transform_seconds": 0.012030666,
+      "cold_inverse_seconds": 0.011365709,
+      "repeated_transform_seconds": 0.009756041,
+      "repeated_inverse_seconds": 0.011089917
+    },
+    "timing_B": {
+      "full_operation_seconds": 1.777204041,
+      "preparation_seconds": 9.541e-06,
+      "fit_seconds": 1.753145084,
+      "cold_transform_seconds": 0.011939041,
+      "cold_inverse_seconds": 0.012110375,
+      "repeated_transform_seconds": 0.009906791,
+      "repeated_inverse_seconds": 0.012411042
+    },
+    "quality": {
+      "reconstruction_A": 0.0009422838411205666,
+      "reconstruction_B": 0.0009422834693014894,
+      "criterion": "B <= A*(1+rtol)+atol",
+      "rtol": 0.001,
+      "atol": 1e-06,
+      "maximum_allowed": 0.0009442261249616871,
+      "reconstruction_gate": true,
+      "finite_A": true,
+      "finite_B": true,
+      "candidate_reached": true
+    },
+    "model_hash_A": "ab49fbc8bab08fcd88f416648bb043d823f45f924c43aaf880e7208d7ff2c571",
+    "model_hash_B": "28f1a71927c9f6afebb95ef57bf1a020389b41188b1baa71269dee33cc28aed0",
+    "model_hash_scope": "public numerical PCA fitted arrays and noise variance",
+    "output_hash_A": "c046a57f402d6c3d84aaa59f8c86314f9c21dcb7f699dfeb058624a7d060344d",
+    "output_hash_B": "3ea689d43293d2f830b772914d469115431d66d5ca2e49b6e6770aceb682aa91",
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "evidence": {
+      "A": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/scored-A.json",
+      "B": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/runs/F11-compensated-pca-taxi-full/attempts/attempt-0001/scored-B.json"
+    },
+    "promotion": false,
+    "pending": "Affected nonPCA workloads and interacting candidate configurations; FAST predecessor accepted quality evidence retained"
+  }
+]

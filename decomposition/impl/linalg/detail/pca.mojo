@@ -90,10 +90,12 @@ from decomposition.checks.jacobi_eigh_device import (
 # All 2,043,304 training rows and 500,000 query rows; preparation, fit,
 # transform, inverse and consumed outputs included. One excluded warmup and
 # one scored sample per arm; reconstruction gate passed, model/output hashes
-# retained. This full-workload regression keeps the switch OFF. Full taxi,
-# downstream LLE and interactions remain pending; no campaign-wide claim.
+# retained. Full taxi also measured all 5,250,086 training/500,000 query rows:
+# A=107.864 ms, B=1777.204 ms, B/A=16.47638; reconstruction gate passed.
+# These full-workload regressions keep the switch OFF. Downstream LLE and
+# interactions remain pending; no campaign-wide claim.
 # Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
-# pca-istella-summary.json (full receipts linked by the measurement board).
+# pca-full-summary.json (full receipts linked by the measurement board).
 comptime PCA_COMPENSATED_COV = AFN_GEMM_APPLE and is_defined["MOJOLEARN_PCA_FAST_COMPENSATED_COV"]()
 
 struct PcaCovAudit(Defaultable, Movable):
