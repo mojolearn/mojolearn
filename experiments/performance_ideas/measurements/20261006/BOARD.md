@@ -34,13 +34,13 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F19 | fast | PARTIAL_MEASUREMENTS_RETAINED | 9 |
 | F20 | fast | PARTIAL_MEASUREMENTS_RETAINED | 11 |
 | I01 | identical | PENDING_MEASUREMENT | 0 |
-| I02 | identical | PARTIAL_MEASUREMENTS_RETAINED | 3 |
-| I03 | identical | PARTIAL_MEASUREMENTS_RETAINED | 15 |
-| I04 | identical | PARTIAL_MEASUREMENTS_RETAINED | 3 |
-| I05 | identical | PARTIAL_MEASUREMENTS_RETAINED | 12 |
-| I06 | identical | PARTIAL_MEASUREMENTS_RETAINED | 3 |
+| I02 | identical | PARTIAL_MEASUREMENTS_RETAINED | 4 |
+| I03 | identical | PARTIAL_MEASUREMENTS_RETAINED | 21 |
+| I04 | identical | PARTIAL_MEASUREMENTS_RETAINED | 4 |
+| I05 | identical | PARTIAL_MEASUREMENTS_RETAINED | 18 |
+| I06 | identical | PARTIAL_MEASUREMENTS_RETAINED | 4 |
 | I07 | identical | NO_DISTINCT_RUNTIME_ARM | 0 |
-| I08 | identical | PARTIAL_MEASUREMENTS_RETAINED | 2 |
+| I08 | identical | PARTIAL_MEASUREMENTS_RETAINED | 4 |
 | I09 | identical | PENDING_MEASUREMENT | 0 |
 | I10 | identical | PENDING_MEASUREMENT | 0 |
 | I11 | identical | PENDING_MEASUREMENT | 0 |
@@ -50,18 +50,18 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I15 | identical | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 | I16 | identical | PARTIAL_MEASUREMENTS_RETAINED | 27 |
 | I17 | identical | PARTIAL_MEASUREMENTS_RETAINED | 6 |
-| I18 | identical | PENDING_MEASUREMENT | 0 |
+| I18 | identical | PARTIAL_MEASUREMENTS_RETAINED | 3 |
 | I19 | identical | PENDING_MEASUREMENT | 0 |
-| I20 | identical | PARTIAL_MEASUREMENTS_RETAINED | 7 |
+| I20 | identical | PARTIAL_MEASUREMENTS_RETAINED | 8 |
 | I21 | identical | PENDING_MEASUREMENT | 0 |
 | I22 | identical | PENDING_MEASUREMENT | 0 |
 | I23 | identical | PENDING_MEASUREMENT | 0 |
-| I24 | identical | PARTIAL_MEASUREMENTS_RETAINED | 7 |
+| I24 | identical | PARTIAL_MEASUREMENTS_RETAINED | 8 |
 | N01 | identical | PARTIAL_MEASUREMENTS_RETAINED | 288 |
 | N02 | identical | PARTIAL_MEASUREMENTS_RETAINED | 240 |
 | N03 | identical | PARTIAL_MEASUREMENTS_RETAINED | 6 |
 | N04 | identical | PARTIAL_MEASUREMENTS_RETAINED | 72 |
-| N05 | identical | PARTIAL_MEASUREMENTS_RETAINED | 45 |
+| N05 | identical | PARTIAL_MEASUREMENTS_RETAINED | 63 |
 | N06 | identical | PARTIAL_MEASUREMENTS_RETAINED | 1 |
 | N07 | identical | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 | N08 | identical | PARTIAL_MEASUREMENTS_RETAINED | 2 |
@@ -1349,11 +1349,18 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F20 | apple/normalization | normalization | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F20/normalization/result.json |
 | F20 | apple/status | status | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F20/status/result.json |
 | I02 | amd/gfx942 | {}/{"k": 2048, "m": 1024, "n": 1024}/1 | component | MEASURED | 0.3582 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I02 | amd/gfx942 | {"AB_K": "2049", "AB_M": "1023", "AB_N": "1025"}/{"k": 2049, "m": 1023, "n": 1025}/1 | component | MEASURED | 0.3993 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I02 | nvidia/default | I02-paired-cbcc8dcd33-f0/runtime0 | component | MEASURED | 0.9224 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I02 | nvidia/default | I02-paired-cbcc8dcd33-f1/runtime0 | component | MEASURED | 0.9227 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I03 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "2", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 2, "m": 1025, "n": 513, "op": 0, "version": 0} | component | MEASURED | 0.9876 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I03 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "2", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 2, "m": 1025, "n": 513, "op": 1, "version": 0} | component | MEASURED | 0.9805 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I03 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "2", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 2, "m": 1025, "n": 513, "op": 2, "version": 0} | component | MEASURED | 0.9676 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I03 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "2", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 2, "m": 257, "n": 259, "op": 0, "version": 0} | component | MEASURED | 0.3523 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I03 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "2", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 2, "m": 257, "n": 259, "op": 1, "version": 0} | component | MEASURED | 1.5606 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I03 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "2", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 2, "m": 257, "n": 259, "op": 2, "version": 0} | component | MEASURED | 0.4003 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I03 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "2", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 2, "m": 1023, "n": 1025, "op": 0, "version": 0} | component | MEASURED | 0.9309 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I03 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "2", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 2, "m": 1023, "n": 1025, "op": 1, "version": 0} | component | MEASURED | 1.0717 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I03 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "2", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 2, "m": 1023, "n": 1025, "op": 2, "version": 0} | component | MEASURED | 0.9754 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I03 | nvidia/default | grouped/jobs=3,op=0 | component | MEASURED | 0.4909 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
 | I03 | nvidia/default | grouped/jobs=3,op=1 | component | MEASURED | 0.3683 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
 | I03 | nvidia/default | grouped/jobs=3,op=2 | component | MEASURED | 0.3794 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-snapshots/08cfd6952e269f989ede71c6291e3ef3291a9334a19b8e94d50d132b1cf2b1e4.json |
@@ -1367,11 +1374,18 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I03 | nvidia/default | I03-paired-f32549d28-shape8c774a34b9/paired1 | component | MEASURED | 1.0802 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I03 | nvidia/default | I03-paired-f32549d28-shape8c774a34b9/paired2 | component | MEASURED | 0.9769 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I04 | amd/gfx942 | {}/{"k": 2048, "m": 1024, "n": 1024}/candidate | component | MEASURED | 1.2681 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I04 | amd/gfx942 | {"AB_K": "2049", "AB_M": "1023", "AB_N": "1025"}/{"k": 2049, "m": 1023, "n": 1025}/candidate | component | MEASURED | 1.1568 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I04 | nvidia/default | I04-candidate-cbcc8dcd33-f0/case0 | component | MEASURED | 1.0883 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I04 | nvidia/default | I04-candidate-cbcc8dcd33-f1/case0 | component | MEASURED | 1.1034 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "0", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 0, "m": 1025, "n": 513, "op": 0, "version": 0} | component | MEASURED | 0.9580 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "0", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 0, "m": 1025, "n": 513, "op": 1, "version": 0} | component | MEASURED | 1.0256 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "0", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 0, "m": 1025, "n": 513, "op": 2, "version": 0} | component | MEASURED | 0.9840 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "0", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 0, "m": 257, "n": 259, "op": 0, "version": 0} | component | MEASURED | 0.6908 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "0", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 0, "m": 257, "n": 259, "op": 1, "version": 0} | component | MEASURED | 0.9902 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "0", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 0, "m": 257, "n": 259, "op": 2, "version": 0} | component | MEASURED | 0.9673 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "0", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 0, "m": 1023, "n": 1025, "op": 0, "version": 0} | component | MEASURED | 0.9844 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "0", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 0, "m": 1023, "n": 1025, "op": 1, "version": 0} | component | MEASURED | 1.0668 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "0", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 0, "m": 1023, "n": 1025, "op": 2, "version": 0} | component | MEASURED | 0.9941 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I05 | nvidia/default | I05-paired-f32549d28-f0/paired0 | component | MEASURED | 1.7968 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I05 | nvidia/default | I05-paired-f32549d28-f0/paired1 | component | MEASURED | 1.7490 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I05 | nvidia/default | I05-paired-f32549d28-f0/paired2 | component | MEASURED | 2.4665 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
@@ -1382,6 +1396,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I05 | nvidia/default | I05-paired-f32549d28-shape4ea03addf5/paired1 | component | MEASURED | 1.4984 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I05 | nvidia/default | I05-paired-f32549d28-shape4ea03addf5/paired2 | component | MEASURED | 1.3530 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I06 | amd/gfx942 | {}/{"heads": 12, "kv_heads": 4, "length": 1024}/candidate | component | MEASURED | 0.1164 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I06 | amd/gfx942 | {"AB_HEADS": "12", "AB_KV_HEADS": "4", "AB_LENGTH": "1536"}/{"heads": 12, "kv_heads": 4, "length": 1536}/candidate | component | MEASURED | 0.1157 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I06 | nvidia/default | I06-candidate-cbcc8dcd33-f0/case0 | public_caller_component | MEASURED | 0.8425 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I06 | nvidia/default | I06-candidate-cbcc8dcd33-f1/case0 | public_caller_component | MEASURED | 0.9194 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I07 | amd/gfx942 | amd-I07-candidate-I07-0 | component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
@@ -1392,6 +1407,8 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I07 | nvidia/default | I07-candidate-cbcc8dcd33-f1 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I07 | nvidia/default | I07-baseline-cbcc8dcd33-f0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I07 | nvidia/default | I07-baseline-cbcc8dcd33-f1 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
+| I08 | amd/gfx942 | {"AB_CASE": "1", "AB_LENGTH": "513"}/{"features": 32, "length": 513}/candidate | public_caller_component | MEASURED | 0.9945 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I08 | amd/gfx942 | {"AB_CASE": "1", "AB_LENGTH": "1025"}/{"features": 32, "length": 1025}/candidate | public_caller_component | MEASURED | 1.0250 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I08 | nvidia/default | I08-candidate-cbcc8dcd33-shape9a8585cc2b/case0 | public_caller_component | MEASURED | 0.9786 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I08 | nvidia/default | I08-candidate-cbcc8dcd33-shape2f0e577fa6/case0 | public_caller_component | MEASURED | 1.0123 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I15 | amd/gfx942 | amd-I15-baseline-I15-0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
@@ -1445,9 +1462,13 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I17 | nvidia/default | I17-candidate-5b467815b5-shape819eba2f1c/case1 | public_caller_component | MEASURED | 1.1107 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I17 | nvidia/default | I17-candidate-5b467815b5-shape2f5eb1267c/case0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I17 | nvidia/default | I17-candidate-5b467815b5-shape2f5eb1267c/case1 | public_caller_component | MEASURED | 1.1162 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
+| I18 | amd/gfx942 | {"AB_FEATURES": "32", "AB_ROWS": "100000"}/{}/candidate | public_caller_component | MEASURED | 1.0158 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I18 | amd/gfx942 | {"AB_FEATURES": "33", "AB_ROWS": "100001"}/{}/candidate | public_caller_component | MEASURED | 1.0164 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I18 | amd/gfx942 | {"AB_FEATURES": "17", "AB_ROWS": "65537"}/{}/candidate | public_caller_component | MEASURED | 1.0347 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I20 | amd/gfx942 | {"AB_FEATURES": "8", "AB_ROWS": "100000"}/{"features": 8, "queries": 1024, "rows": 100000}/candidate | public_caller_component | MEASURED | 1.3915 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I20 | amd/gfx942 | {"AB_FEATURES": "9", "AB_ROWS": "100000"}/{"features": 9, "queries": 1024, "rows": 100000}/candidate | public_caller_component | MEASURED | 1.1601 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I20 | amd/gfx942 | {"AB_FEATURES": "17", "AB_ROWS": "100000"}/{"features": 17, "queries": 1024, "rows": 100000}/candidate | public_caller_component | MEASURED | 1.0696 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I20 | amd/gfx942 | {"AB_FEATURES": "17", "AB_QUERIES": "513", "AB_ROWS": "131071"}/{"features": 17, "queries": 513, "rows": 131071}/candidate | public_caller_component | MEASURED | 0.9339 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I20 | nvidia/default | I20-candidate-f32549d28-f0/case0 | public_caller_component | MEASURED | 0.9928 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I20 | nvidia/default | I20-candidate-f32549d28-f1/case0 | public_caller_component | MEASURED | 0.9916 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I20 | nvidia/default | I20-candidate-f32549d28-shape26473e75c6/case0 | public_caller_component | MEASURED | 0.9975 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
@@ -1455,6 +1476,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I24 | amd/gfx942 | {"AB_ROWS": "1000000"}/{"classes": 33, "rows": 1000000}/candidate | public_caller_component | MEASURED | 0.8580 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I24 | amd/gfx942 | {"AB_ROWS": "1000001"}/{"classes": 33, "rows": 1000001}/candidate | public_caller_component | MEASURED | 0.8728 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I24 | amd/gfx942 | {"AB_ROWS": "1048577"}/{"classes": 33, "rows": 1048577}/candidate | public_caller_component | MEASURED | 0.8588 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I24 | amd/gfx942 | {"AB_CLASSES": "17", "AB_ROWS": "1048573"}/{"classes": 17, "rows": 1048573}/candidate | public_caller_component | MEASURED | 0.9355 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I24 | nvidia/default | I24-candidate-f32549d28-f0/case0 | public_caller_component | MEASURED | 0.5189 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I24 | nvidia/default | I24-candidate-f32549d28-f1/case0 | public_caller_component | MEASURED | 1.2556 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
 | I24 | nvidia/default | I24-candidate-f32549d28-shapeffedad467b/case0 | public_caller_component | MEASURED | 1.2639 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/6a17d2104cb3804159bf0b09dff2e2e974a2e21c193fc66e65b821b290ed42cd.json |
@@ -2074,6 +2096,24 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 1025, "n": 513, "op": 0, "version": 2} | component | MEASURED | 0.9816 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 1025, "n": 513, "op": 1, "version": 2} | component | MEASURED | 0.9840 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "1025", "AB_N": "513"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 1025, "n": 513, "op": 2, "version": 2} | component | MEASURED | 0.9752 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 257, "n": 259, "op": 0, "version": 0} | component | MEASURED | 0.3591 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 257, "n": 259, "op": 1, "version": 0} | component | MEASURED | 1.5720 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 257, "n": 259, "op": 2, "version": 0} | component | MEASURED | 0.3902 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 257, "n": 259, "op": 0, "version": 1} | component | MEASURED | 0.3544 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 257, "n": 259, "op": 1, "version": 1} | component | MEASURED | 1.5554 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 257, "n": 259, "op": 2, "version": 1} | component | MEASURED | 0.3947 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 257, "n": 259, "op": 0, "version": 2} | component | MEASURED | 0.3523 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 257, "n": 259, "op": 1, "version": 2} | component | MEASURED | 1.5437 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "1025", "AB_KIND": "3", "AB_M": "257", "AB_N": "259"}/{"jobs": 3, "k": 1025, "kind": 3, "m": 257, "n": 259, "op": 2, "version": 2} | component | MEASURED | 0.3878 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 0, "version": 0} | component | MEASURED | 0.9263 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 1, "version": 0} | component | MEASURED | 1.0585 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 2, "version": 0} | component | MEASURED | 0.9797 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 0, "version": 1} | component | MEASURED | 0.9243 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 1, "version": 1} | component | MEASURED | 1.0551 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 2, "version": 1} | component | MEASURED | 0.9796 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 0, "version": 2} | component | MEASURED | 0.9216 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 1, "version": 2} | component | MEASURED | 1.0700 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| N05 | amd/gfx942 | {"AB_K": "2049", "AB_KIND": "3", "AB_M": "1023", "AB_N": "1025"}/{"jobs": 3, "k": 2049, "kind": 3, "m": 1023, "n": 1025, "op": 2, "version": 2} | component | MEASURED | 0.9696 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | N05 | nvidia/specific | grouped/jobs=3,op=0,version=0 | component | MEASURED | 0.5127 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
 | N05 | nvidia/specific | grouped/jobs=3,op=1,version=0 | component | MEASURED | 0.3640 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
 | N05 | nvidia/specific | grouped/jobs=3,op=2,version=0 | component | MEASURED | 0.3673 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-snapshots/bc7e81aa49eeece905d3be098e9d014505898c36f4cf17ed654c9c1928fbab77.json |
