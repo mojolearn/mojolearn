@@ -120,6 +120,7 @@ comptime SYM_ITER_ALL = (
 #: pooled fold dummies now sit in front of main's ORD_ALL observation
 #: scratch.
 comptime SYM_BUF_ARENA = SYM_ITER_FAST_APPLE and (
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_SYM_BUF_ARENA"]() or SYM_ITER_ALL
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
@@ -128,6 +129,7 @@ comptime SYM_BUF_ARENA = SYM_ITER_FAST_APPLE and (
 #: apple-fast LEDGER 2026-10-03: DROP sym-iter leaf-1000 (-0.2%, noise), old base;
 #: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
 comptime SYM_LEAF_FROM_STATS = SYM_ITER_FAST_APPLE and (
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_SYM_LEAF_FROM_STATS"]()
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
@@ -136,6 +138,7 @@ comptime SYM_LEAF_FROM_STATS = SYM_ITER_FAST_APPLE and (
 #: apple-fast LEDGER 2026-10-03: DROP sym-iter reuse-1000 (+0.3%, noise), old base;
 #: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
 comptime SYM_REUSE_PARTITION = SYM_ITER_FAST_APPLE and (
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     is_defined["MOJOLEARN_SYM_REUSE_PARTITION"]() or SYM_LEAF_FROM_STATS
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source

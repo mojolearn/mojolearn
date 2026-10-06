@@ -75,6 +75,7 @@ comptime TABLE_BYTES = 256 * 1024 * 1024
 comptime SHAP_TREE_TAB = SHAP_TABLE and not is_defined["MOJOLEARN_SHAP_TREE_TAB_OFF"]()
 # Bounded adjacent rows in one thread reuse the same tree metadata; no new
 # pipeline/state overlap or attribution fold. Full SHAP caller decides speed.
+# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
 comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
 struct ShapPairAudit(Defaultable, Movable):
     var calls: Int

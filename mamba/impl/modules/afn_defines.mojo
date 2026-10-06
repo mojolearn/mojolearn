@@ -140,18 +140,23 @@ comptime IDN_M2_SSD_TILES = (
 )
 
 comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"]()
 )
 comptime AFN_MAMBA1_FUSE_IN = AFN_MAMBA_ALL or (
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_FUSE_IN"]()
 )
 comptime AFN_MAMBA2_SSD_MMA = AFN_MAMBA_ALL or (
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA2_SSD_MMA"]()
 )
 comptime AFN_MAMBA3_SISO_FUSED = AFN_MAMBA_ALL or (
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA3_SISO_FUSED"]()
 )
 comptime AFN_MAMBA_ARENA = AFN_MAMBA_ALL or (
+    # NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_ARENA"]()
 ) or IDN_MAMBA_ARENA
 #: cpu3-seq (2026-10-04): the device refusal is THE refusal on every device

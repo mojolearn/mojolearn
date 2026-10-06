@@ -94,6 +94,7 @@ comptime TS_SMEM_BYTES = 4 * (TS_PART + 3 * _TT + TS_TPB + TS_P)
 # IDENTICAL builds only: a FAST build keeps its launches as they were.
 comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+# NEVER RUN — PENDING VALIDATION. New candidate remains opt-in/default OFF.
 comptime TS_GRID_UPDATE = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_GRID"]())
 comptime TS_NORM_FUSED = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"]())
 # I22 new candidate remains default off. Qualification is pending: native
