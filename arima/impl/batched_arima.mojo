@@ -710,6 +710,14 @@ def batched_loglike_grad(
 # F17 M3 2026-10-06: n129/257/509 complete search/forecast B/A
 # 1.7453/0.9778/0.9918, quality equal, one warmup+score. Mixed scoped result;
 # retain established default, no new promotion. Evidence ab-20261006/repairs-54c1f35a5/F17.
+# I23 source5b467815b (2026-10-06): NO DISTINCT RUNTIME ARM on AMD/NVIDIA.
+# The has_apple_gpu_accelerator guard below makes both IDENTICAL macro arms
+# use sequential gradients there. Nine planted AR1/MA1/ARMA11 cases, batch6,
+# observations4096/4097/8193, were timed with one same-process warmup/score;
+# their raw ratios (AMD0.956-1.044,NVIDIA0.988-1.000) are same-route controls,
+# not evidence for the batch-gradient schedule. Apple timing is separately
+# pending; retain all established defaults and the Apple-only guard.
+# Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurements, I23.
 comptime ARIMA_FAST_BATCH_GRAD = has_apple_gpu_accelerator() and (
     (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -717,7 +725,7 @@ comptime ARIMA_FAST_BATCH_GRAD = has_apple_gpu_accelerator() and (
     )
     or (
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        # I23 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+        # I23 batch-gradient measurement belongs on Apple; Linux controls excluded.
         and not is_defined["MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF"]()
     )
 )
