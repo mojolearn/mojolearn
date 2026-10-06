@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T05:27:41Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T05:31:22Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T05:27:41Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 114 planned, 41 done, 2 failed, 0 unsupported, 71 pending. Cells: 103 (REFUSED 1, ok 102).
+Races: 114 planned, 63 done, 3 failed, 0 unsupported, 48 pending. Cells: 149 (REFUSED 2, ok 147).
 
-Inference cells: 86 (ok 86).
+Inference cells: 122 (REFUSED 1, ok 121).
 
 ## Quality at a glance
 
@@ -102,6 +102,27 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | lstm-reg | synthetic | rmse (lower is better) | - | - | torch-eager-fp32 0.159641; torch-compile-fp32 0.159641; torch-eager-tf32 0.159642; torch-compile-tf32 0.159642; torch-eager-bf16 0.159706; torch-compile-bf16 0.159706 |
 | algos | lstsq | istella | relative_residual | - | - | torch-gpu nan; cupy-gpu 0.849957 |
 | algos | lu-factor | synthetic | relative_residual | - | - | torch-gpu 3.386e-07; cupy-gpu 3.386e-07 |
+| algos | maxpool1d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000; torch-eager-tf32 0.000000; torch-compile-tf32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | maxpool1d | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000; torch-eager-tf32 0.000000; torch-compile-tf32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | moe | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.026193; torch-eager-tf32 1004.691291; torch-compile-tf32 1004.691291; torch-eager-bf16 22834.612745; torch-compile-bf16 22851.987745 |
+| algos | moe | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 1.548e-07; torch-eager-tf32 0.017534; torch-compile-tf32 0.017534; torch-eager-bf16 0.055222; torch-compile-bf16 0.055199 |
+| algos | multinomial-nb | taxi | accuracy (higher is better) | - | - | cuml-gpu 0.723160 |
+| algos | multinomial-nb | taxi | logloss (lower is better) | - | - | cuml-gpu 0.590750 |
+| algos | nadam | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 1.498e-07 |
+| algos | pagerank | taxi | sum | - | - | cugraph-gpu 1.000000 |
+| algos | permutation-shap | taxi | rel_error_vs_exact | - | - | cuml-gpu 1.701e-07 |
+| algos | qn-reg | taxi | r2 (higher is better) | - | - | cuml-gpu 0.908983 |
+| algos | qn-reg | taxi | rmse (lower is better) | - | - | cuml-gpu 4.805040 |
+| algos | qr | taxi | relative_gram_difference | - | - | torch-gpu 5.971e-06; cupy-gpu 5.971e-06 |
+| algos | randomized-svd | taxi | relative_reconstruction_error (lower is better) | - | - | torch-gpu 0.027197 |
+| algos | rmsprop | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000 |
+| algos | rnn-clf | taxi-hourly | accuracy (higher is better) | - | - | torch-eager-fp32 0.868056; torch-compile-fp32 0.868056; torch-eager-tf32 0.868056; torch-compile-tf32 0.868056; torch-eager-bf16 0.868001; torch-compile-bf16 0.868001 |
+| algos | rnn-reg | taxi-hourly | r2 (higher is better) | - | - | torch-eager-fp32 0.738796; torch-compile-fp32 0.738796; torch-eager-tf32 0.738800; torch-compile-tf32 0.738800; torch-eager-bf16 0.738906; torch-compile-bf16 0.738906 |
+| algos | rnn-reg | taxi-hourly | rmse (lower is better) | - | - | torch-eager-fp32 0.554271; torch-compile-fp32 0.554271; torch-eager-tf32 0.554267; torch-compile-tf32 0.554267; torch-eager-bf16 0.554155; torch-compile-bf16 0.554155 |
+| algos | sgd-clf | taxi | accuracy (higher is better) | - | - | cuml-gpu 0.703120 |
+| algos | sgd-reg | taxi | r2 (higher is better) | - | - | cuml-gpu 0.908979 |
+| algos | sgd-reg | taxi | rmse (lower is better) | - | - | cuml-gpu 4.805168 |
+| algos | simple-imputer | istella | masked_rmse | - | - | cuml-gpu 346849.129968 |
 
 ## Inference at a glance
 
@@ -141,6 +162,22 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | lars | taxi | Xq | - | - | - | - | cuml-gpu 0.6 ms (IDENTICAL/arm -) |
 | algos | lstm-clf | synthetic | Xq | - | - | - | - | torch-eager-fp32 2.8 ms (IDENTICAL/arm -); torch-compile-fp32 2.8 ms (IDENTICAL/arm -); torch-eager-tf32 2.8 ms (IDENTICAL/arm -); torch-compile-tf32 2.8 ms (IDENTICAL/arm -); torch-eager-bf16 2.3 ms (IDENTICAL/arm -); torch-compile-bf16 2.5 ms (IDENTICAL/arm -) |
 | algos | lstm-reg | synthetic | Xq | - | - | - | - | torch-eager-fp32 2.8 ms (IDENTICAL/arm -); torch-compile-fp32 2.8 ms (IDENTICAL/arm -); torch-eager-tf32 2.8 ms (IDENTICAL/arm -); torch-compile-tf32 3.3 ms (IDENTICAL/arm -); torch-eager-bf16 4.2 ms (IDENTICAL/arm -); torch-compile-bf16 2.8 ms (IDENTICAL/arm -) |
+| algos | maxabs-scaler | istella | Xq | - | - | - | - | cuml-gpu 6.1 ms (IDENTICAL/arm -) |
+| algos | maxpool1d | synthetic | Xq | - | - | - | - | torch-eager-fp32 0.3 ms (IDENTICAL/arm -); torch-compile-fp32 0.3 ms (IDENTICAL/arm -); torch-eager-tf32 0.3 ms (IDENTICAL/arm -); torch-compile-tf32 0.3 ms (IDENTICAL/arm -); torch-eager-bf16 0.3 ms (IDENTICAL/arm -); torch-compile-bf16 0.3 ms (IDENTICAL/arm -) |
+| algos | minmax-scaler | istella | Xq | - | - | - | - | cuml-gpu - ms (IDENTICAL/arm -) |
+| algos | moe | synthetic | Xq | - | - | - | - | torch-eager-fp32 11.2 ms (IDENTICAL/arm -); torch-compile-fp32 12.5 ms (IDENTICAL/arm -); torch-eager-tf32 4.4 ms (IDENTICAL/arm -); torch-compile-tf32 4.5 ms (IDENTICAL/arm -); torch-eager-bf16 3.4 ms (IDENTICAL/arm -); torch-compile-bf16 3.7 ms (IDENTICAL/arm -) |
+| algos | multinomial-nb | taxi | Xq | - | - | - | - | cuml-gpu 3.5 ms (IDENTICAL/arm -) |
+| algos | normalizer | taxi | Xq | - | - | - | - | cuml-gpu 1.4 ms (IDENTICAL/arm -) |
+| algos | onehot | taxi | Xq | - | - | - | - | cuml-gpu 44.8 ms (IDENTICAL/arm -) |
+| algos | poly-features | taxi | Xq | - | - | - | - | cuml-gpu 4.6 ms (IDENTICAL/arm -) |
+| algos | power-transformer | taxi | Xq | - | - | - | - | cuml-gpu 13.7 ms (IDENTICAL/arm -) |
+| algos | quantile-transformer | taxi | Xq | - | - | - | - | cuml-gpu 122.2 ms (IDENTICAL/arm -) |
+| algos | rnn-clf | taxi-hourly | Xq | - | - | - | - | torch-eager-fp32 1.1 ms (IDENTICAL/arm -); torch-compile-fp32 1.3 ms (IDENTICAL/arm -); torch-eager-tf32 1.2 ms (IDENTICAL/arm -); torch-compile-tf32 1.3 ms (IDENTICAL/arm -); torch-eager-bf16 1.8 ms (IDENTICAL/arm -); torch-compile-bf16 1.9 ms (IDENTICAL/arm -) |
+| algos | rnn-reg | taxi-hourly | Xq | - | - | - | - | torch-eager-fp32 1.1 ms (IDENTICAL/arm -); torch-compile-fp32 1.3 ms (IDENTICAL/arm -); torch-eager-tf32 2.0 ms (IDENTICAL/arm -); torch-compile-tf32 1.3 ms (IDENTICAL/arm -); torch-eager-bf16 1.8 ms (IDENTICAL/arm -); torch-compile-bf16 3.1 ms (IDENTICAL/arm -) |
+| algos | robust-scaler | taxi | Xq | - | - | - | - | cuml-gpu 0.7 ms (IDENTICAL/arm -) |
+| algos | sgd-clf | taxi | Xq | - | - | - | - | cuml-gpu 0.9 ms (IDENTICAL/arm -) |
+| algos | sgd-reg | taxi | Xq | - | - | - | - | cuml-gpu 0.7 ms (IDENTICAL/arm -) |
+| algos | simple-imputer | istella | Xq | - | - | - | - | cuml-gpu 38.2 ms (IDENTICAL/arm -) |
 
 ## Algorithm expansion
 
@@ -229,7 +266,7 @@ race: failed, driver rc 1, log `logs/algos.als.text.rows-full.log`, ran on 24a11
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| implicit-gpu | implicit | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "RuntimeError('REFUSED: the pinned implicit wheel was built without CUDA (implicit.gpu.HAS_CUDA is False)')", "event": "error", "stage": "ready"}) (measured this run) |
+| implicit-gpu | implicit | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "KeyError('implicit-gpu')", "event": "error", "stage": "ready"}) (measured this run) |
 
 settings: {'alpha': 1.0, 'calculate_training_loss': False, 'cg_steps': 3, 'factors': 64, 'iterations': 15, 'random_state': 7, 'regularization': 0.01, 'use_cg': False}. Rows: None. Timed: None.
 
@@ -1694,6 +1731,772 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 |---|---||---|---|
 | library (source) | cupy (declared) | torch (declared) |
 | seed | "none (deterministic)" | "none (deterministic)" |
+
+### maxabs-scaler / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.maxabs-scaler.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 32.4 | 32.4..32.4 | 1 | - | - | 3171.9 | 1442.0 | output_shape=100000x220 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), MaxAbsScaler (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 6.1 | 6.1..6.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### maxpool1d / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.maxpool1d.synthetic.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 1.4 | 1.4..1.4 | 1 | - | - | 703.9 | 288.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 1.6 | 1.6..1.6 | 1 | - | - | 946.1 | 232.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 1.3 | 1.3..1.3 | 1 | - | - | 703.6 | 288.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 2.7 | 2.7..2.7 | 1 | - | - | 894.9 | 232.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 3.8 | 3.8..3.8 | 1 | - | - | 703.6 | 288.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 1.7 | 1.7..1.7 | 1 | - | - | 890.2 | 232.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-tf32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'ceil_mode': False, 'dilation': 1, 'kernel_size': 2, 'padding': 0, 'stride': 2}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 0.3 | 0.3..0.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 0.3 | 0.3..0.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-tf32 | Xq | - | 0.3 | 0.3..0.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-tf32 | Xq | - | 0.3 | 0.3..0.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 0.3 | 0.3..0.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 0.3 | 0.3..0.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-tf32: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-tf32: forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-bf16: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-bf16: forward(x) (no autograd)(Xq)
+
+### minmax-scaler / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: failed, driver rc 1, log `logs/algos.minmax-scaler.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(not_ready: {"error": "TypeError(\"MinMaxScaler.__init__() got an unexpected keyword argument 'clip'\")", "event": "error", "stage": "ready"}) (measured this run) |
+
+settings: {'clip': False, 'feature_range': [0, 1]}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `None`, seed 7): MATCHED
+
+| parameter |  |
+
+| library (source) |  |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | - | - | 0 | - | - | - | - | LIKE-FOR-LIKE-SPAN | REFUSED(not_ready: {"error": "TypeError(\"MinMaxScaler.__init__() got an unexpected keyword argument 'clip'\")", "event": "error", "stage": "ready"}) |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### moe / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.moe.synthetic.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 12.0 | 12.0..12.0 | 1 | - | - | 1008.6 | 469.1 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 11.9 | 11.9..11.9 | 1 | - | - | 1273.6 | 446.7 | max_rel_diff_vs_torch_eager_fp32=0.026193, rel_fro_vs_torch_eager_fp32=1.548e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 9.8 | 9.8..9.8 | 1 | - | - | 1004.4 | 469.1 | max_rel_diff_vs_torch_eager_fp32=1004.691291, rel_fro_vs_torch_eager_fp32=0.017534 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 5.1 | 5.1..5.1 | 1 | - | - | 1220.6 | 478.7 | max_rel_diff_vs_torch_eager_fp32=1004.691291, rel_fro_vs_torch_eager_fp32=0.017534 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 4.3 | 4.3..4.3 | 1 | - | - | 1129.6 | 574.3 | max_rel_diff_vs_torch_eager_fp32=22834.612745, rel_fro_vs_torch_eager_fp32=0.055222 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 4.4 | 4.4..4.4 | 1 | - | - | 1397.4 | 433.6 | max_rel_diff_vs_torch_eager_fp32=22851.987745, rel_fro_vs_torch_eager_fp32=0.055199 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-tf32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'hidden_size': 1024, 'intermediate_size': 2816, 'norm_topk_prob': True, 'num_experts': 8, 'top_k': 2}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| hidden_size | 1024 | 1024 | 1024 | 1024 | 1024 | 1024 |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 11.2 | 11.2..11.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 12.5 | 12.5..12.5 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-tf32 | Xq | - | 4.4 | 4.4..4.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-tf32 | Xq | - | 4.5 | 4.5..4.5 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 3.4 | 3.4..3.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 3.7 | 3.7..3.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-fp32: forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-tf32: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-tf32: forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-bf16: forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-bf16: forward(x) (no autograd)(Xq)
+
+### multinomial-nb / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.multinomial-nb.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 72.6 | 72.6..72.6 | 1 | - | - | 1077.0 | 496.0 | accuracy=0.723160, logloss=0.590750 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'alpha': 1.0, 'fit_prior': True, 'force_alpha': True}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), MultinomialNB (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 1.0 |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 3.5 | 3.5..3.5 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: predict(Xq)(Xq)
+
+### nadam / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.nadam.synthetic.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 20.8 | 20.8..20.8 | 1 | - | - | 971.0 | 960.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 174.5 | 174.5..174.5 | 1 | - | - | 1443.1 | 896.0 | rel_fro_vs_torch_eager_fp32=1.498e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'betas': [0.9, 0.999], 'decoupled_weight_decay': False, 'eps': 1e-08, 'lr': 0.001, 'momentum_decay': 0.004, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| betas | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
+
+### normalizer / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.normalizer.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 0.6 | 0.6..0.6 | 1 | - | - | 935.1 | 496.0 | output_shape=100000x11 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'norm': 'l2'}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), Normalizer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 1.4 | 1.4..1.4 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### onehot / taxi (rows full, shape X 1000000x5; Xq 100000x5; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.onehot.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 173.9 | 173.9..173.9 | 1 | - | - | 1557.8 | 656.0 | output_shape=100000x508 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'categories': 'auto', 'handle_unknown': 'ignore', 'sparse_output': False}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), OneHotEncoder (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 44.8 | 44.8..44.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### pagerank / taxi (rows full, shape X 20000x11; indices 253708; indices2 54528; indptr 20001; indptr2 20001; y 20000)
+
+race: done, driver rc 0, log `logs/algos.pagerank.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cugraph-gpu | cugraph | gpu | opponent | 5.0 | 5.0..5.0 | 1 | - | - | 1023.2 | 438.0 | sum=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cugraph-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'alpha': 0.85, 'max_iter': 100, 'tol': 1e-06}. Rows: None. Timed: None.
+
+mismatch: ours takes a dense adjacency matrix (its class's contract), built from the CSR graph before the clock; networkx and cuGraph take the graph itself
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cugraph-gpu`, seed 7): MATCHED
+
+| parameter | cugraph-gpu |
+|---|---|
+| library (source) | cugraph (declared) |
+| alpha | 0.85 |
+| max_iter | 100 |
+| seed | "none (deterministic)" |
+| tol | 1e-06 |
+
+### permutation-shap / taxi (rows full, shape X 100000x11; Xq 100x11; y 100000; yq 100)
+
+race: done, driver rc 0, log `logs/algos.permutation-shap.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 319.6 | 319.6..319.6 | 1 | - | - | 956.8 | 438.0 | rel_error_vs_exact=1.701e-07 | - | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'n_background': 100, 'npermutations': 10}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (declared) |
+| seed | 7 |
+
+### poly-features / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.poly-features.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 1.5 | 1.5..1.5 | 1 | - | - | 944.4 | 510.0 | output_shape=100000x77 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'degree': 2, 'include_bias': False, 'interaction_only': False}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), PolynomialFeatures (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| degree | 2 |
+| order | "C" |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 4.6 | 4.6..4.6 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### power-transformer / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.power-transformer.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 3161.1 | 3161.1..3161.1 | 1 | - | - | 942.6 | 488.0 | output_shape=100000x11 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'method': 'yeo-johnson', 'standardize': True}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), PowerTransformer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 13.7 | 13.7..13.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### qn-reg / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.qn-reg.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 6.3 | 6.3..6.3 | 1 | - | - | 977.5 | 484.0 | finite=True, r2=0.908983, rmse=4.805040 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'fit_intercept': True, 'l1_strength': 0.0, 'l2_strength': 0.0, 'lbfgs_memory': 5, 'linesearch_max_iter': 50, 'loss': 'squared_error', 'max_iter': 1000, 'penalty_normalized': True, 'tol': 0.0001}. Rows: None. Timed: None.
+
+mismatch: scikit-learn LinearRegression solves the same least-squares problem in closed form (scipy lstsq); it has no max_iter, tol or L-BFGS settings
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| fit_intercept | true |
+| loss | "l2" |
+| max_iter | 1000 |
+| seed | "none (deterministic)" |
+| tol | 0.0001 |
+
+### qr / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.qr.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 7.0 | 7.0..7.0 | 1 | - | - | 831.1 | 168.1 | relative_gram_difference=5.971e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| cupy-gpu | cupy | gpu | opponent | 6.8 | 6.8..6.8 | 1 | - | - | 653.7 | 726.0 | relative_gram_difference=5.971e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+memory, cupy-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'mode': 'reduced'}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | cupy-gpu | torch-gpu |
+|---|---||---|---|
+| library (source) | cupy (declared) | torch (declared) |
+| seed | "none (deterministic)" | "none (deterministic)" |
+
+### quantile-transformer / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.quantile-transformer.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 258.6 | 258.6..258.6 | 1 | - | - | 933.8 | 488.0 | output_shape=100000x11 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'ignore_implicit_zeros': False, 'n_quantiles': 1000, 'output_distribution': 'uniform', 'random_state': 7, 'subsample': 1000000000}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), QuantileTransformer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | 7 |
+| subsample | 1000000000 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 122.2 | 122.2..122.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### randomized-svd / taxi (rows full, shape X 900000x11; Xq 100000x11)
+
+race: done, driver rc 0, log `logs/algos.randomized-svd.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 32.0 | 32.0..32.0 | 1 | - | - | 838.9 | 198.1 | relative_reconstruction_error=0.027197 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'n_components': 8, 'n_iter': 4, 'n_oversamples': 10, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: torch-gpu is torch.svd_lowrank(q=18, niter=4), its randomized range finder
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | torch-gpu |
+|---|---|
+| library (source) | torch (declared) |
+| n_components | 8 |
+| n_iter | 4 |
+| seed | 7 |
+
+### rmsprop / synthetic (rows full, shape -)
+
+race: done, driver rc 0, log `logs/algos.rmsprop.synthetic.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 13.3 | 13.3..13.3 | 1 | - | - | 958.5 | 896.0 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 118.3 | 118.3..118.3 | 1 | - | - | 1308.8 | 832.0 | rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'alpha': 0.99, 'centered': False, 'eps': 1e-08, 'lr': 0.001, 'momentum': 0.0, 'weight_decay': 0.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---|
+| library (source) | torch (optimizer.defaults) | torch (optimizer.defaults) |
+| alpha | 0.99 | 0.99 |
+| eps | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 |
+| momentum | 0.0 | 0.0 |
+| seed | "none (deterministic)" | "none (deterministic)" |
+| weight_decay | 0.0 | 0.0 |
+
+### rnn-clf / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
+
+race: done, driver rc 0, log `logs/algos.rnn-clf.taxi-hourly.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 507.7 | 507.7..507.7 | 1 | - | - | 1122.3 | 404.2 | accuracy=0.868056 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 667.6 | 667.6..667.6 | 1 | - | - | 1174.0 | 404.2 | accuracy=0.868056 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 518.2 | 518.2..518.2 | 1 | - | - | 1123.5 | 404.2 | accuracy=0.868056 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 597.0 | 597.0..597.0 | 1 | - | - | 1174.7 | 404.2 | accuracy=0.868056 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 786.6 | 786.6..786.6 | 1 | - | - | 1459.1 | 220.9 | accuracy=0.868001 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 642.8 | 642.8..642.8 | 1 | - | - | 1511.1 | 220.9 | accuracy=0.868001 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-tf32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'nonlinearity': 'tanh', 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| num_layers | 1 | 1 | 1 | 1 | 1 | 1 |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 1.1 | 1.1..1.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 1.3 | 1.3..1.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-tf32 | Xq | - | 1.2 | 1.2..1.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-tf32 | Xq | - | 1.3 | 1.3..1.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 1.8 | 1.8..1.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 1.9 | 1.9..1.9 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: predict(Xq)(Xq)
+
+inference call, torch-eager-tf32: predict(Xq)(Xq)
+
+inference call, torch-compile-tf32: predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: predict(Xq)(Xq)
+
+### rnn-reg / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
+
+race: done, driver rc 0, log `logs/algos.rnn-reg.taxi-hourly.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | torch | gpu | opponent | 664.7 | 664.7..664.7 | 1 | - | - | 1138.1 | 403.9 | finite=True, r2=0.738796, rmse=0.554271 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | 753.0 | 753.0..753.0 | 1 | - | - | 1189.1 | 403.9 | finite=True, r2=0.738796, rmse=0.554271 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-tf32 | torch | gpu | opponent | 724.2 | 724.2..724.2 | 1 | - | - | 1133.0 | 403.9 | finite=True, r2=0.738800, rmse=0.554267 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-tf32 | torch | gpu | opponent | 633.1 | 633.1..633.1 | 1 | - | - | 1184.7 | 403.9 | finite=True, r2=0.738800, rmse=0.554267 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 612.7 | 612.7..612.7 | 1 | - | - | 1505.1 | 220.5 | finite=True, r2=0.738906, rmse=0.554155 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | 877.8 | 877.8..877.8 | 1 | - | - | 1556.6 | 220.5 | finite=True, r2=0.738906, rmse=0.554155 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-fp32, torch-compile-fp32, torch-eager-tf32, torch-compile-tf32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_epochs': 2, 'nonlinearity': 'tanh', 'num_layers': 1, 'optimizer': 'adam', 'optimizer_options': {'betas': [0.9, 0.999], 'eps': 1e-08, 'weight_decay': 0.0}, 'random_state': 7, 'shuffle': True}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-compile-tf32 | torch-eager-bf16 | torch-eager-fp32 | torch-eager-tf32 |
+|---|---||---|---||---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| num_layers | 1 | 1 | 1 | 1 | 1 | 1 |
+| seed | 7 | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-fp32 | Xq | - | 1.1 | 1.1..1.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | Xq | - | 1.3 | 1.3..1.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-tf32 | Xq | - | 2.0 | 2.0..2.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-tf32 | Xq | - | 1.3 | 1.3..1.3 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | Xq | - | 1.8 | 1.8..1.8 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | Xq | - | 3.1 | 3.1..3.1 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-eager-fp32: predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: predict(Xq)(Xq)
+
+inference call, torch-eager-tf32: predict(Xq)(Xq)
+
+inference call, torch-compile-tf32: predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: predict(Xq)(Xq)
+
+### robust-scaler / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.robust-scaler.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 34.3 | 34.3..34.3 | 1 | - | - | 947.6 | 488.0 | output_shape=100000x11 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'quantile_range': [25.0, 75.0], 'unit_variance': False, 'with_centering': True, 'with_scaling': True}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), RobustScaler (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 0.7 | 0.7..0.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
+
+### sgd-clf / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.sgd-clf.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 1543.9 | 1543.9..1543.9 | 1 | - | - | 1092.9 | 498.0 | accuracy=0.703120 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'alpha': 0.0001, 'average': False, 'early_stopping': False, 'epsilon': 0.1, 'eta0': 0.005, 'fit_intercept': True, 'l1_ratio': 0.15, 'learning_rate': 'constant', 'loss': 'hinge', 'max_iter': 100, 'n_iter_no_change': 5, 'penalty': 'l2', 'power_t': 0.5, 'random_state': 7, 'shuffle': True, 'tol': None}. Rows: None. Timed: None.
+
+mismatch: cuML MBSGD is mini-batch SGD (batch_size 4096); scikit-learn and ours are per-sample SGD (the reference)
+
+mismatch: cuML reads epochs=100, the others max_iter=100
+
+config: cuML benchmark (RAPIDS), MBSGDClassifier (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 0.0001 |
+| batch_size | 4096 |
+| epochs | 100 |
+| eta0 | 0.005 |
+| fit_intercept | true |
+| l1_ratio | 0.15 |
+| learning_rate | "constant" |
+| loss | "hinge" |
+| penalty | "l2" |
+| seed | "none (deterministic)" |
+| shuffle | true |
+| tol | 0.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 0.9 | 0.9..0.9 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: predict(Xq)(Xq)
+
+### sgd-reg / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.sgd-reg.taxi.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 1579.7 | 1579.7..1579.7 | 1 | - | - | 971.4 | 498.0 | finite=True, r2=0.908979, rmse=4.805168 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'alpha': 0.0001, 'average': False, 'early_stopping': False, 'epsilon': 0.1, 'eta0': 0.005, 'fit_intercept': True, 'l1_ratio': 0.15, 'learning_rate': 'constant', 'loss': 'squared_error', 'max_iter': 100, 'n_iter_no_change': 5, 'penalty': 'l2', 'power_t': 0.25, 'random_state': 7, 'shuffle': True, 'tol': None}. Rows: None. Timed: None.
+
+mismatch: cuML MBSGD is mini-batch SGD (batch_size 4096)
+
+config: cuML benchmark (RAPIDS), MBSGDRegressor (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| alpha | 0.0001 |
+| batch_size | 4096 |
+| epochs | 100 |
+| eta0 | 0.005 |
+| fit_intercept | true |
+| l1_ratio | 0.15 |
+| learning_rate | "constant" |
+| loss | "squared_loss" |
+| penalty | "l2" |
+| seed | "none (deterministic)" |
+| shuffle | true |
+| tol | 0.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 0.7 | 0.7..0.7 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: predict(Xq)(Xq)
+
+### simple-imputer / istella (rows full, shape X 1000000x220; X_true 1000000x220; Xq 100000x220; Xq_true 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.simple-imputer.istella.rows-full.log`, ran on 24a11adce16e
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 250.6 | 250.6..250.6 | 1 | - | - | 4914.9 | 1442.0 | masked_rmse=346849.129968 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'add_indicator': False, 'keep_empty_features': False, 'strategy': 'median'}. Rows: None. Timed: None.
+
+config: cuML benchmark (RAPIDS), SimpleImputer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| seed | "none (deterministic)" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | - | 38.2 | 38.2..38.2 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: transform(Xq)(Xq)
 
 ## Not covered by this board
 

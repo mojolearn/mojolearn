@@ -6357,6 +6357,72 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
+      "id": "I19",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "I19-amd-incumbent-I19-shape-ecf5aa990933",
+      "status": "MEASUREMENT_FAILED",
+      "returncode": 1,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I19",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "I19-amd-incumbent-I19-shape-5327ea2f296b",
+      "status": "MEASUREMENT_FAILED",
+      "returncode": 1,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I19",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "I19-amd-incumbent-I19-shape-f80914fff0d4",
+      "status": "MEASUREMENT_FAILED",
+      "returncode": 1,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
       "id": "A04",
       "vendor": "amd",
       "route": "gfx942",
@@ -7401,7 +7467,9 @@
       "scored_samples": 1,
       "warmup_scope": "same_process",
       "measurement_stage": "streamed_driver",
-      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "limitation": "Driver enabled GQA head reuse AND changed backward schedule to kvgrid_r32. Raw component timings represent this bundle, not isolated GQA toggle evidence. Corrected same-schedule driver pending.",
+      "comparison_kind": "confounded_schedule_bundle",
+      "promotion": false,
       "case": "{}/{\"heads\": 12, \"kv_heads\": 4, \"length\": 1024}/candidate",
       "status": "MEASURED",
       "returncode": 0,
@@ -7581,7 +7649,9 @@
       "scored_samples": 1,
       "warmup_scope": "same_process",
       "measurement_stage": "streamed_driver",
-      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "limitation": "Driver enabled GQA head reuse AND changed backward schedule to kvgrid_r32. Raw component timings represent this bundle, not isolated GQA toggle evidence. Corrected same-schedule driver pending.",
+      "comparison_kind": "confounded_schedule_bundle",
+      "promotion": false,
       "case": "{\"AB_HEADS\": \"12\", \"AB_KV_HEADS\": \"4\", \"AB_LENGTH\": \"1536\"}/{\"heads\": 12, \"kv_heads\": 4, \"length\": 1536}/candidate",
       "status": "MEASURED",
       "returncode": 0,
@@ -61567,28 +61637,28 @@
   ],
   "capture_sources": {
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json": {
-      "sha256": "3a37f4966e3c3937b819c7dced6d8411603f0cb56e41cdd035fe1f42b63c7c3d",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-3a37f4966e3c3937b819c7dced6d8411603f0cb56e41cdd035fe1f42b63c7c3d.json"
+      "sha256": "a86bb20013bd36e5697b9aa032c289175d69a15092ba450ae1b3a6cb7b3a15a3",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-a86bb20013bd36e5697b9aa032c289175d69a15092ba450ae1b3a6cb7b3a15a3.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-normalized-measurements.json": {
-      "sha256": "7f203765d3d66f35f373c5377cab7c5b43b993fb1dd78eb2041176cdef10c439",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-7f203765d3d66f35f373c5377cab7c5b43b993fb1dd78eb2041176cdef10c439.json"
+      "sha256": "496de1fe904319498660c33a05b56144fb966c68425fcca73b94145627376d69",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-496de1fe904319498660c33a05b56144fb966c68425fcca73b94145627376d69.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-normalized-measurements.json": {
-      "sha256": "eb22aa4b67541bef9ad46f4253dcb4fc40cb5f733eae420ab41144c8f8b49a7e",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-eb22aa4b67541bef9ad46f4253dcb4fc40cb5f733eae420ab41144c8f8b49a7e.json"
+      "sha256": "1791828b07c78c43675dfc439417bf40b47ece55fef53acaf5510b72fc09efb4",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-1791828b07c78c43675dfc439417bf40b47ece55fef53acaf5510b72fc09efb4.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json": {
       "sha256": "3eed454368c13a7ff3e2e83f0d6ff95b185a5f70d5e30cc92f847ff48cfe7c55",
       "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-3eed454368c13a7ff3e2e83f0d6ff95b185a5f70d5e30cc92f847ff48cfe7c55.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json": {
-      "sha256": "63136e9ae8c3a5e256fa0f397918cec918be83093e26dc6efc6308851c7ace8a",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-63136e9ae8c3a5e256fa0f397918cec918be83093e26dc6efc6308851c7ace8a.json"
+      "sha256": "ff79d801033e4f195229ecf4cb6229ffc5608989d5448b7d9ce2019ea244d5bb",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-ff79d801033e4f195229ecf4cb6229ffc5608989d5448b7d9ce2019ea244d5bb.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json": {
-      "sha256": "82a0024c98f704332791c09c7d3073109be44e9f2ba3de66160fb9e2207f4880",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-82a0024c98f704332791c09c7d3073109be44e9f2ba3de66160fb9e2207f4880.json"
+      "sha256": "23a1d489cafa07369823b13008d0613c39a82a4f491ec28179605fb5156330ed",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-23a1d489cafa07369823b13008d0613c39a82a4f491ec28179605fb5156330ed.json"
     }
   },
   "decisions": [
