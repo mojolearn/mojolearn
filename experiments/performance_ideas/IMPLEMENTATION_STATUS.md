@@ -121,11 +121,13 @@ records the real callers, independent oracles, dependencies and remaining sub-ar
 
 The individual IDENTICAL coverage files explicitly identify original-card
 sub-arms that are not implemented by the current candidate. These include
-new versioned scan/reduction profiles (I09, I22, I23), direct SGD OVR and shared
-folds (I12), integrated geometric coarse-candidate certification (I15),
-additional model-fragment residency (I17), multi-tree/weighted histogram algebra
-(I18), remaining data-preparation consumers beyond quantiles (I19), centered GMM tiles (I21), and
-broader metric/preprocessing pass fusion (I24). They must not be represented
+new versioned scan/reduction profiles (I09, I22, I23), new Gram/shared-fold
+contracts (I12), broader target support for geometric coarse-candidate certification
+(I15), a device tree-builder API for model fragments (I17), multi-tree/weighted
+histogram algebra (I18), and broader metric/preprocessing pass fusion (I24).
+The supported I12 SGD, I19 dictionary/ordinal/bootstrap/selection/radix layout,
+I21 centered-load reuse, F06 compaction/covariance reuse and F12 document-ID
+storage arms are now supplied. Conditional original-card proposals must not be represented
 as completed merely because their card has an executable experiment.
 
 The next qualification work is to run matched frozen candidate/control pairs
