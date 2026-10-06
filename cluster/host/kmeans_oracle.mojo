@@ -564,8 +564,12 @@ def host_assign(
         var key = UInt32(0xFFFFFFFF)
         var xn = xnp.unsafe_load(row)
         comptime if C30_DIRECT_DISTANCE:
+            # The shared helper only reads these arrays. Its raw-pointer ABI
+            # needs an explicit origin; the enclosing Lists retain the storage.
+            var raw_x = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(xp))
+            var raw_ct = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(ctp))
             for col in range(k):
-                var dist = direct_squared_distance(xp + row*d, ctp + col, d, 1, k)
+                var dist = direct_squared_distance(raw_x + row*d, raw_ct + col, d, 1, k)
                 if dist < val or (dist == val and UInt32(col) < key):
                     val = dist
                     key = UInt32(col)
@@ -1315,8 +1319,13 @@ def host_fit_main[with_init: Bool = True](
                     var s = ftz(Float32(sums_i32[idx]) / sum_scale)
                     new_c[idx] = ftz(s / w)
             comptime if C37_ROW_PANELS:
+                # Read-only views for the shared raw-pointer helper. These
+                # Lists remain owned here throughout the synchronous fold.
+                var raw_x = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
+                var raw_labels = MutPointer[UInt32, MutAnyOrigin](unsafe_from_address=Int(labels.unsafe_ptr()))
+                var raw_weights = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(weights.unsafe_ptr()))
                 for idx in range(cd):
-                    new_c[idx] = classical_centroid_cell(host_list_ptr(x),host_list_ptr_u32(labels),host_list_ptr(weights),cur[idx],n,d,idx//d,idx%d)
+                    new_c[idx] = classical_centroid_cell(raw_x,raw_labels,raw_weights,cur[idx],n,d,idx//d,idx%d)
             comptime if not C37_ROW_PANELS:
                 trace.record_i32(it_tag + "sums_i32", sums_i32)
                 trace.record_i32(it_tag + "weight_i32", weight_i32)

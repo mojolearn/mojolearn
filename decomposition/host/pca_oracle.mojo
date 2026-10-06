@@ -247,7 +247,8 @@ def host_column_mean_launch(x: List[Float32], n_rows: Int, n_cols: Int) -> List[
     comptime if C01_LEAF64 or C01_LEAF128:
         if n_rows >= 1 and n_cols >= 1:
             var means = List[Float32](length=n_cols, fill=Float32(0))
-            var ptr = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            # Read-only shared helper ABI; x owns the storage for this fold.
+            var ptr = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
             for column in range(n_cols):
                 means[column] = classical_column_mean(ptr, n_rows, n_cols, column)
             return means^
@@ -741,8 +742,9 @@ def host_pca_fit(
     var cov: List[Float32]
     if C23_CENTERED_PANELS:
         cov = List[Float32](length=n_cols*n_cols, fill=Float32(0))
-        var xp = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var mp = mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        # Shared cell helpers only read x/mu, whose owners outlive this loop.
+        var xp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
+        var mp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(mu.unsafe_ptr()))
         for i in range(n_cols):
             for j in range(i, n_cols):
                 var value = c23_centered_gram_cell(xp, mp, n_rows, n_cols, i, j)
@@ -752,8 +754,8 @@ def host_pca_fit(
         cov = host_gram_splitk(x, mu, True, n_cols, n_rows)
     elif C04_LOAD_CENTER:
         cov = List[Float32](length=n_cols*n_cols, fill=Float32(0))
-        var xp = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var mp = mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var xp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
+        var mp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(mu.unsafe_ptr()))
         for i in range(n_cols):
             for j in range(n_cols):
                 cov[i*n_cols+j] = centered_gram_v1_cell(xp, mp, n_rows, n_cols, i, j)

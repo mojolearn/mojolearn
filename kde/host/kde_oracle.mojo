@@ -543,7 +543,9 @@ def _kde_log_kernel_v(x: KdeV, h: Float32, kernel: Int) -> KdeV:
 def _kde_lse_row(row: HostF32Ptr, n_train: Int) -> Tuple[Float32, Float32]:
     """`oracle_logsumexp_row` over one row buffer (see the block engine)."""
     comptime if C52_PAIR:
-        return pair_row(row, n_train, kde_chunk_rows_for(n_train))
+        # pair_row reads the caller-owned buffer through its shared raw ABI.
+        var raw = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(row))
+        return pair_row(raw, n_train, kde_chunk_rows_for(n_train))
     var max_exp = row.unsafe_load(0)
     for j in range(1, n_train):
         var v = row.unsafe_load(j)
@@ -583,7 +585,8 @@ def _kde_lse_row_chunked(row: HostF32Ptr, n_train: Int) -> Tuple[Float32, Float3
     the rescale on a new strict max; then the chunk maxima's max and the
     chunk sums scaled to it, chunks ascending. Returns `(rowmax, lse)`."""
     comptime if C52_PAIR:
-        return pair_row(row, n_train, kde_chunk_rows_for(n_train))
+        var raw = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(row))
+        return pair_row(raw, n_train, kde_chunk_rows_for(n_train))
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var chunk_rows = kde_chunk_rows_for(n_train)
     var n_chunks = (n_train + chunk_rows - 1) // chunk_rows
