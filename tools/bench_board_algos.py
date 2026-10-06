@@ -3985,7 +3985,7 @@ def _build_als(lane, arm, D):
     from implicit.als import AlternatingLeastSquares
     from threadpoolctl import threadpool_limits
     threadpool_limits(1, "blas")          # implicit's documented setting: its own threads, BLAS at 1
-    info = {"library": "implicit", "env": dict(ARM_ENV[arm]), "version": implicit.__version__, "device": "gpu" if gpu else "cpu",
+    info = {"library": "implicit", "env": dict(ARM_ENV.get(arm, {})), "version": implicit.__version__, "device": "gpu" if gpu else "cpu",
             "pre_clock_fit": False, "input_home": "host",
             "config": "implicit AlternatingLeastSquares(%s, use_gpu=%s)" % (p, gpu)}
     akw = dict(factors=p["factors"], regularization=p["regularization"], alpha=p["alpha"],
