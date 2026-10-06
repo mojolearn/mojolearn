@@ -12,6 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from std.atomic import Atomic,Ordering
 
+# I20 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
 # I20 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Pool requires IDENTICAL + MOJOLEARN_IDN_KDE_PARTIAL_POOL; original allocation path retained.
 # Default OFF; enabling it remains a pending experiment, not a promoted route.
