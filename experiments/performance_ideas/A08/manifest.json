@@ -6,8 +6,7 @@
   "vendors": [
     "nvidia",
     "amd",
-    "apple",
-    "host"
+    "apple"
   ],
   "status": "build_passed",
   "implementation_paths": [

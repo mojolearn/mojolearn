@@ -6,33 +6,34 @@
   "vendors": [
     "nvidia",
     "amd",
-    "apple",
-    "host"
+    "apple"
   ],
   "status": "build_passed",
   "implementation_paths": [
     "gemm/experiments/bounded_workspace.mojo",
-    "gemm/experiments/bounded_workspace_check.mojo"
+    "gemm/experiments/bounded_workspace_check.mojo",
+    "gemm/experiments/native_build.py"
   ],
   "candidate_defines": [
     "MOJOLEARN_STEP_PHASE_TIMERS=1"
   ],
   "baseline_defines": [],
   "build_argv": [
-    "pixi",
-    "run",
-    "mojo",
-    "build",
-    "-j1",
-    "-D",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "-I",
-    "{repo}",
-    "-D",
-    "MOJOLEARN_STEP_PHASE_TIMERS=1",
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
     "{repo}/gemm/experiments/bounded_workspace_check.mojo",
-    "-o",
-    "{output}"
+    "--mojo",
+    "{mojo}",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}",
+    "--define",
+    "MOJOLEARN_STEP_PHASE_TIMERS=1"
   ],
   "run_argv": [
     "{output}"
@@ -45,24 +46,26 @@
   "quality_gates": [
     "same-version NVIDIA/AMD/Apple/host output bits",
     "exact intermediate outputs and poison control",
-    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower"
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Build target/column must match actual device; CPU identity uses independent host references and separately owed host caller qualification, not a GPU DeviceContext host run"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
   "blocker": null,
   "baseline_build_argv": [
-    "pixi",
-    "run",
-    "mojo",
-    "build",
-    "-j1",
-    "-D",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "-I",
-    "{repo}",
-    "-D",
-    "MOJOLEARN_STEP_PHASE_TIMERS=1",
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
     "{repo}/gemm/checks/gemm_workspace_check.mojo",
-    "-o",
-    "{output}"
+    "--mojo",
+    "{mojo}",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}",
+    "--define",
+    "MOJOLEARN_STEP_PHASE_TIMERS=1"
   ]
 }

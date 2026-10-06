@@ -38,7 +38,7 @@ def main():
         binary = args.evidence / (cfg['id']+'-'+arm['name'])
         argv = [args.mojo,'build','-j1','-D','MOJOLEARN_NUMERIC_IDENTICAL=1','-I',str(repo)]
         argv += ['-D','MOJOLEARN_COLUMN_'+args.vendor.upper()+'=1']
-        accelerator = args.accelerator or {'nvidia':'sm_89','amd':'gfx942'}.get(args.vendor)
+        accelerator = args.accelerator or {'nvidia':'sm_89','amd':'gfx942','apple':'apple-m2'}.get(args.vendor)
         if accelerator:
             argv += ['--target-accelerator',accelerator]
         for include in args.mojo_include:

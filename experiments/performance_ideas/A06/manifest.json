@@ -6,30 +6,31 @@
   "vendors": [
     "nvidia",
     "amd",
-    "apple",
-    "host"
+    "apple"
   ],
   "status": "build_passed",
   "implementation_paths": [
     "experiments/performance_ideas/A06/check.mojo",
     "neighbors/checks/fused_slot_merge_check.mojo",
-    "neighbors/estimator.mojo"
+    "neighbors/estimator.mojo",
+    "gemm/experiments/native_build.py"
   ],
   "candidate_defines": [],
   "baseline_defines": [],
   "build_argv": [
-    "pixi",
-    "run",
-    "mojo",
-    "build",
-    "-j1",
-    "-D",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "-I",
-    "{repo}",
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
     "{repo}/experiments/performance_ideas/A06/check.mojo",
-    "-o",
-    "{output}"
+    "--mojo",
+    "{mojo}",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}"
   ],
   "run_argv": [
     "{output}"
@@ -43,22 +44,24 @@
     "same-version NVIDIA/AMD/Apple/host output bits",
     "exact intermediate outputs and poison control",
     "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
-    "Native harness instantiates explicit control and candidate; all compared cells and poison/failure gates required"
+    "Native harness instantiates explicit control and candidate; all compared cells and poison/failure gates required",
+    "Build target/column must match actual device; CPU identity uses independent host references and separately owed host caller qualification, not a GPU DeviceContext host run"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
   "blocker": null,
   "baseline_build_argv": [
-    "pixi",
-    "run",
-    "mojo",
-    "build",
-    "-j1",
-    "-D",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "-I",
-    "{repo}",
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
     "{repo}/experiments/performance_ideas/A06/check.mojo",
-    "-o",
-    "{output}"
+    "--mojo",
+    "{mojo}",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}"
   ]
 }
