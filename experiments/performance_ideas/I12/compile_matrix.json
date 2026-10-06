@@ -29,6 +29,33 @@
       "defines": [
         "MOJOLEARN_IDN_ALL_OFF=1"
       ]
+    },
+    {
+      "name": "sgd_current",
+      "source": "experiments/performance_ideas/I12/sgd_check.mojo",
+      "defines": []
+    },
+    {
+      "name": "sgd_ovr_off",
+      "source": "experiments/performance_ideas/I12/sgd_check.mojo",
+      "defines": [
+        "MOJOLEARN_SGD_IDN_OVR_PAR_OFF=1"
+      ]
+    },
+    {
+      "name": "sgd_batch_fusion_off",
+      "source": "experiments/performance_ideas/I12/sgd_check.mojo",
+      "defines": [
+        "MOJOLEARN_SGD_IDN_MB_FUSE_OFF=1"
+      ]
+    },
+    {
+      "name": "sgd_both_off",
+      "source": "experiments/performance_ideas/I12/sgd_check.mojo",
+      "defines": [
+        "MOJOLEARN_SGD_IDN_OVR_PAR_OFF=1",
+        "MOJOLEARN_SGD_IDN_MB_FUSE_OFF=1"
+      ]
     }
   ]
 }
