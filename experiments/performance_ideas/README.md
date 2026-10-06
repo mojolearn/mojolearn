@@ -36,6 +36,18 @@ uncompiled, unverified and unmeasured; no new defaults are enabled. Legacy F/N
 experiment IDs keep their original meanings. The original `EXPECTED` roster is
 retained; the complete CLI roster additionally includes `TREE_IDS`.
 
+The later [Apple FAST neural source-only campaign](../apple_fast_neural_20261006/README.md)
+adds 44 mechanism cards and eight interaction groups. It is discoverable in
+`tools/performance_ideas.py list --mode fast` under the separate `AFN26-`
+namespace, with named variants selectable by `plan ... --variant NAME`.
+The same plans are exposed by `tools/neural_experiments.py --apple-fast-plan`
+and `tools/afn_ab.sh --experiment-plan`. The shared adapter reads the authored
+JSON; it does not duplicate defines. All entries remain `not_tested`.
+No integration entry point has been run. These are source/plan integrations,
+not executable full-workload manifests: AFN26 execution and qualification
+remain pending. The original manifest/check contract below remains scoped to
+the 60 legacy cards, and legacy AMD `A01` is distinct from `AFN26-A01`.
+
 See the [implementation ledger](IMPLEMENTATION_STATUS.md) for individual source
 commits and remaining sub-arms, and [Apple FAST coverage](apple_fast/coverage.md)
 for the public callers and transport dependency attestations.

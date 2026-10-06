@@ -37,14 +37,16 @@ from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_mul
 from core.apple_air import simdgroup_load_legacy_air
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
-from mamba.impl.modules.afn_defines import AFN_MAMBA2_SSD_MMA
+from mamba.impl.modules.afn_defines import AFN_MAMBA2_SSD_MMA, AFN26_MAMBA2_SSD_K16
 
 comptime _M64 = SIMD[DType.float32, 64]
 comptime _V2 = SIMD[DType.int64, 2]
 
 comptime AFN_MMA_NT = 256  # threads per block: 8 simdgroups
 comptime AFN_MMA_BM = 64  # output rows per block (one 8-row fragment per simdgroup)
-comptime AFN_MMA_KB = 32  # k window
+# M08: not tested. Smaller K staging lowers shared storage while retaining
+# every 8-wide f32 fragment; it trades occupancy against more barriers.
+comptime AFN_MMA_KB = 16 if AFN26_MAMBA2_SSD_K16 else 32
 comptime AFN_MMA_AST = AFN_MMA_BM + 4
 comptime AFN_MMA_BST = AFN_MMA_KB + 4
 
@@ -280,7 +282,7 @@ def afn_m2_mma_kernel[
 
 
 def afn_ssd_mma_applies(qv: Int) -> Bool:
-    """The tile plan needs whole 64-row tiles and whole 32-deep windows.
+    """The tile plan needs whole 64-row tiles and whole AFN_MMA_KB windows.
     Always False off the switch, so no other build instantiates a kernel."""
     comptime if not AFN_MAMBA2_SSD_MMA:
         return False

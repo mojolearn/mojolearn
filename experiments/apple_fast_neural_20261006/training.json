@@ -1,0 +1,738 @@
+{
+  "schema": 1,
+  "family": "training",
+  "status": "not_tested",
+  "numeric_mode": "FAST",
+  "vendor": "Apple GPU",
+  "cards": [
+    {
+      "id": "T01",
+      "title": "One-completion LM step",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "training/byte_lm_afn.mojo"
+      ],
+      "workloads": [
+        "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending"
+      ],
+      "variants": [
+        {
+          "name": "one_completion",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_NOSYNC"
+          ]
+        }
+      ],
+      "notes": [
+        "AFN26 alias selects the existing one-completion path; no default changed.",
+        "Future full-step boundary includes token upload, status and loss download, final completion, consumed outputs and transactional refusal/recovery.",
+        "Default-on LM backward no-sync remains fixed in A and B."
+      ]
+    },
+    {
+      "id": "T02",
+      "title": "Fused byte-LM head loss and dlogits",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "training/byte_lm_afn.mojo"
+      ],
+      "workloads": [
+        "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending"
+      ],
+      "variants": [
+        {
+          "name": "head_fused",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_HEAD_FUSE"
+          ]
+        }
+      ],
+      "notes": [
+        "Existing implementation uses reset plus per-row CE kernel; f32 atomic loss mean can change bits.",
+        "Compare complete training trajectory and held-out loss; preserve target validation, divisor and non-finite behavior.",
+        "Chunked head configurations may bypass this arm; future recipe must document reached route rather than treat the flag as proof."
+      ]
+    },
+    {
+      "id": "T03",
+      "title": "Flat LM parameter and gradient views",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "training/byte_lm_afn.mojo"
+      ],
+      "workloads": [
+        "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending"
+      ],
+      "variants": [
+        {
+          "name": "parameter_views",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_PARAM_VIEWS"
+          ]
+        }
+      ],
+      "notes": [
+        "Existing view routing avoids per-layer packing/unpacking; checkpoint/resume, registry offsets, mutations and aliased-buffer lifetime require future qualification.",
+        "Include cold construction, full steps, and state/save/resume separately."
+      ]
+    },
+    {
+      "id": "T04",
+      "title": "Occupancy-driven split weight-gradient products",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "training/byte_lm_afn_grad.mojo"
+      ],
+      "workloads": [
+        "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+        "SambaStack full samba-train-step where transformer backward reaches these switches; full-workload route mapping pending"
+      ],
+      "variants": [
+        {
+          "name": "wgrad_split",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT"
+          ]
+        }
+      ],
+      "notes": [
+        "Existing split implementation zeroes output then atomically accumulates split GEMM partial tiles; it does not allocate split scratch or run a separate final fold.",
+        "Compare complete training with gradient/trajectory quality and stochastic atomic fold sensitivity; include zero launch and atomic contention."
+      ]
+    },
+    {
+      "id": "T05",
+      "title": "Independent backward fusion paths",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "training/byte_lm_afn.mojo",
+        "training/byte_lm_afn_grad.mojo"
+      ],
+      "workloads": [
+        "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+        "SambaStack full samba-train-step where transformer backward reaches these switches; full-workload route mapping pending"
+      ],
+      "variants": [
+        {
+          "name": "backward_fusion",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_BWD_FUSE"
+          ]
+        },
+        {
+          "name": "gemm_epilogue_fan_in",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_BWD_EPILOGUE"
+          ]
+        },
+        {
+          "name": "norm1_residual",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_BWD_NORM1_RESID"
+          ]
+        },
+        {
+          "name": "three_backward_fusions",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_BWD_FUSE",
+            "MOJOLEARN_AFN26_LM_BWD_EPILOGUE",
+            "MOJOLEARN_AFN26_LM_BWD_NORM1_RESID"
+          ]
+        }
+      ],
+      "notes": [
+        "Each named AFN26 alias independently selects the existing mechanism; the combined arm lists all three explicitly.",
+        "Keep incumbent LM backward no-sync default unchanged in both arms. Check full backward gradients, residual fan-in and trajectory quality."
+      ]
+    },
+    {
+      "id": "T06",
+      "title": "Optimizer and loss orchestration alternatives",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "training/afn_optim.mojo"
+      ],
+      "workloads": [
+        "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+        "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence",
+        "SambaStack full samba-train-step where shared optimizer/loss is reached",
+        "Neural optimizer consumers using SGD, Adam or AdamW and cross-entropy; full dataset recipes and reachability pending"
+      ],
+      "variants": [
+        {
+          "name": "refusal_scan_fusion",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN"
+          ]
+        },
+        {
+          "name": "clip_fusion",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE"
+          ],
+          "notes": "Use a workload with clipping enabled at its documented threshold; unclipped runs do not exercise this mechanism."
+        },
+        {
+          "name": "sgd_multitensor",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR"
+          ],
+          "notes": "SGD consumers only; Adam is already flat and does not exercise this mechanism."
+        },
+        {
+          "name": "adam_vector4",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_VEC4"
+          ],
+          "notes": "Adam and AdamW consumers; preserve update equations and scalar tails."
+        },
+        {
+          "name": "resident_scratch",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+          ]
+        },
+        {
+          "name": "fused_cross_entropy",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LOSS_FUSED"
+          ]
+        },
+        {
+          "name": "adam_optimizer_combined",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+          ]
+        },
+        {
+          "name": "sgd_optimizer_combined",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+          ]
+        },
+        {
+          "name": "adam_loss_combined",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+            "MOJOLEARN_AFN26_LOSS_FUSED"
+          ]
+        },
+        {
+          "name": "sgd_loss_combined",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+            "MOJOLEARN_AFN26_LOSS_FUSED"
+          ]
+        }
+      ],
+      "notes": [
+        "Prior measured losses/wins remain in source and are not repeated evidence for this campaign.",
+        "Shared loss path uses three kernel launches (row, partial reduction, final fold), preserving ignore index, smoothing and reduction denominator.",
+        "A neural consumer's actual route must reach this shared optimizer/loss; one-completion LM, chunked LM heads and fused MLP can bypass it. No opponent-only or optimizer component result qualifies estimator-wide performance.",
+        "Cold pool allocation and repeated use are separate boundaries."
+      ]
+    },
+    {
+      "id": "T07",
+      "title": "Fused SmallMLP full step",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "training/mlp_fast.mojo"
+      ],
+      "workloads": [
+        "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence"
+      ],
+      "variants": [
+        {
+          "name": "fused_step",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP"
+          ]
+        }
+      ],
+      "notes": [
+        "Uses existing public SmallMLP architecture and two-launch GPU path; no dimension dispatch introduced.",
+        "Future quality includes logits, input/parameter gradients, moments, loss, refusal and full training trajectory."
+      ]
+    },
+    {
+      "id": "T08",
+      "title": "Resident and multistep SmallMLP execution",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "training/mlp_fast.mojo"
+      ],
+      "workloads": [
+        "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence"
+      ],
+      "variants": [
+        {
+          "name": "resident",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT"
+          ],
+          "notes": "Compare repeated complete fused calls with resident single-step calls; both sides retain the fused arithmetic parent."
+        },
+        {
+          "name": "multistep",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT",
+            "MOJOLEARN_AFN26_MLP_MULTISTEP"
+          ],
+          "notes": "Compare k resident single-step submissions with one k-step call using identical ordered batches and logical optimizer steps."
+        }
+      ],
+      "notes": [
+        "Resident and multistep are separate transport experiments. The multistep control implies resident in source, which is still explicit on both recipe sides.",
+        "Python/binding caller must explicitly exercise advertised resident/multistep methods; a compiled flag alone is not evidence they ran.",
+        "Preserve downloads, rollback, loss/logit outputs, batch order and checkpoint/resume. Do not redefine batch size or omit per-step outcomes."
+      ]
+    },
+    {
+      "id": "T09",
+      "title": "Weight-gradient split minimum work and split cap",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "training/byte_lm_afn_grad.mojo"
+      ],
+      "workloads": [
+        "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+        "SambaStack full samba-train-step where transformer backward reaches these switches; full-workload route mapping pending"
+      ],
+      "variants": [
+        {
+          "name": "minimum_k128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+            "MOJOLEARN_AFN26_LM_WGRAD_MIN128"
+          ]
+        },
+        {
+          "name": "split_cap8",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+            "MOJOLEARN_AFN26_LM_WGRAD_CAP8"
+          ]
+        },
+        {
+          "name": "minimum_k128_cap8",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+            "MOJOLEARN_AFN26_LM_WGRAD_MIN128",
+            "MOJOLEARN_AFN26_LM_WGRAD_CAP8"
+          ]
+        }
+      ],
+      "notes": [
+        "Incumbent minimum K per split is 256 and cap is 16; candidate minimum 128 and cap 8 are independent.",
+        "Policy continues to use output tile count, hardware occupancy target, K work and KB alignment for all neighboring shapes; no benchmark-name or exact-size dispatch.",
+        "Smaller minimum can increase parallelism and atomic overhead; smaller cap bounds atomic fan-in. Neither geometry define enables the parent."
+      ]
+    },
+    {
+      "id": "T10",
+      "title": "Optimizer launch blocks of 128 or 512 threads",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "training/afn_optim.mojo"
+      ],
+      "workloads": [
+        "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+        "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence",
+        "SambaStack full samba-train-step where shared optimizer/loss is reached",
+        "Neural optimizer consumers using SGD, Adam or AdamW and cross-entropy; full dataset recipes and reachability pending"
+      ],
+      "variants": [
+        {
+          "name": "scan_block128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_BLOCK128"
+          ]
+        },
+        {
+          "name": "clip_block128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_BLOCK128"
+          ]
+        },
+        {
+          "name": "adam_vector_block128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_VEC4"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_BLOCK128"
+          ]
+        },
+        {
+          "name": "sgd_multitensor_block128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+            "MOJOLEARN_AFN26_OPT_BLOCK128"
+          ]
+        },
+        {
+          "name": "adam_combined_block128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+            "MOJOLEARN_AFN26_OPT_BLOCK128"
+          ]
+        },
+        {
+          "name": "sgd_combined_block128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+            "MOJOLEARN_AFN26_OPT_BLOCK128"
+          ]
+        },
+        {
+          "name": "scan_block512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_BLOCK512"
+          ]
+        },
+        {
+          "name": "clip_block512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_BLOCK512"
+          ]
+        },
+        {
+          "name": "adam_vector_block512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_VEC4"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_BLOCK512"
+          ]
+        },
+        {
+          "name": "sgd_multitensor_block512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+            "MOJOLEARN_AFN26_OPT_BLOCK512"
+          ]
+        },
+        {
+          "name": "adam_combined_block512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+            "MOJOLEARN_AFN26_OPT_BLOCK512"
+          ]
+        },
+        {
+          "name": "sgd_combined_block512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+            "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+            "MOJOLEARN_AFN26_OPT_BLOCK512"
+          ]
+        }
+      ],
+      "notes": [
+        "Incumbent optimizer block is 256; power-of-two candidates share one constant across scan scratch, grid, reductions and update launches.",
+        "CE uses a separate constant so this card cannot silently change loss geometry.",
+        "Choose one block define per family; 128 has deterministic precedence if both are accidentally supplied. Parent mechanisms are held equal in A and B.",
+        "Refusal and clipping reductions can change fold order; vector width and update equations are unchanged."
+      ]
+    },
+    {
+      "id": "T11",
+      "title": "CE-specific legal launch and reduction geometries",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "training/byte_lm_afn.mojo",
+        "training/afn_optim.mojo"
+      ],
+      "workloads": [
+        "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+        "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence",
+        "SambaStack full samba-train-step where shared optimizer/loss is reached",
+        "Neural optimizer consumers using SGD, Adam or AdamW and cross-entropy; full dataset recipes and reachability pending"
+      ],
+      "variants": [
+        {
+          "name": "lm_head_block128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_LM_HEAD_FUSE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_HEAD_FUSE",
+            "MOJOLEARN_AFN26_LM_CE_BLOCK128"
+          ]
+        },
+        {
+          "name": "loss_block128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_LOSS_FUSED"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LOSS_FUSED",
+            "MOJOLEARN_AFN26_LOSS_BLOCK128"
+          ]
+        },
+        {
+          "name": "resident_loss_block128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_LOSS_FUSED",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LOSS_FUSED",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+            "MOJOLEARN_AFN26_LOSS_BLOCK128"
+          ]
+        },
+        {
+          "name": "lm_head_block512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_LM_HEAD_FUSE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_HEAD_FUSE",
+            "MOJOLEARN_AFN26_LM_CE_BLOCK512"
+          ]
+        },
+        {
+          "name": "loss_block512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_LOSS_FUSED"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LOSS_FUSED",
+            "MOJOLEARN_AFN26_LOSS_BLOCK512"
+          ]
+        },
+        {
+          "name": "resident_loss_block512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_LOSS_FUSED",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LOSS_FUSED",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+            "MOJOLEARN_AFN26_LOSS_BLOCK512"
+          ]
+        }
+      ],
+      "notes": [
+        "LM CE uses 256 incumbent threads, candidate 128 or 512; status-scan geometry remains unchanged.",
+        "General loss retains 32 threads when vocabulary fits one Apple simdgroup, and changes the incumbent wider-row 256 to 128 or 512; row/partial/final-fold templates and launch dimensions use that same CE geometry.",
+        "These are complete power-of-two reductions with strided coverage of all classes and rows; ignore index, label smoothing, divisor, gate writes and full output writes are retained.",
+        "Small-vocabulary general-loss cases intentionally have identical geometry and are scope controls, not claimed affected cells."
+      ]
+    },
+    {
+      "id": "T12",
+      "title": "SmallMLP row tiles of 32 or 128",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "training/mlp_fast.mojo"
+      ],
+      "workloads": [
+        "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence"
+      ],
+      "variants": [
+        {
+          "name": "fused_rows32",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_ROWS32"
+          ]
+        },
+        {
+          "name": "resident_rows32",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT",
+            "MOJOLEARN_AFN26_MLP_ROWS32"
+          ]
+        },
+        {
+          "name": "multistep_rows32",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT",
+            "MOJOLEARN_AFN26_MLP_MULTISTEP"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT",
+            "MOJOLEARN_AFN26_MLP_MULTISTEP",
+            "MOJOLEARN_AFN26_MLP_ROWS32"
+          ]
+        },
+        {
+          "name": "fused_rows128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_ROWS128"
+          ]
+        },
+        {
+          "name": "resident_rows128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT",
+            "MOJOLEARN_AFN26_MLP_ROWS128"
+          ]
+        },
+        {
+          "name": "multistep_rows128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT",
+            "MOJOLEARN_AFN26_MLP_MULTISTEP"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT",
+            "MOJOLEARN_AFN26_MLP_MULTISTEP",
+            "MOJOLEARN_AFN26_MLP_ROWS128"
+          ]
+        }
+      ],
+      "notes": [
+        "Incumbent rows per block is 64; selected tile controls threadgroup activation storage, row ownership, gradient folding and launch grid.",
+        "Maximum resident partial slots are ceil(public 256-row step capacity / selected row tile), removing the hardcoded four-slot assumption. Public row cap stays fixed.",
+        "Multistep submissions reuse partial slots sequentially on the ordered context. Full batches, partial tiles and complete logical step sequences need future qualification.",
+        "32 trades smaller shared storage for more partials; 128 trades fewer partials for larger shared storage. No shape-specific choice is made."
+      ]
+    }
+  ]
+}

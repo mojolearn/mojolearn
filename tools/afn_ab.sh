@@ -68,7 +68,22 @@
 # checked, every build rc is checked, a failed race prints its first errors.
 set -euo pipefail
 
+# not tested: consume the shared AFN26 experiment definitions without copying
+# flags by hand. This source-only entry prints a plan and exits before any
+# build/install/timing path. Legacy positional invocations remain unchanged.
+# Example: afn_ab.sh --experiment-plan AFN26-E08 --variant threads64
+if [ "${1:-}" = --experiment-plan ]; then
+  shift
+  exec "${AFN_PYTHON:-python3}" "$(dirname "$0")/apple_fast_neural_ideas.py" plan "$@"
+fi
+if [ "${1:-}" = --experiment-list ]; then
+  shift
+  exec "${AFN_PYTHON:-python3}" "$(dirname "$0")/apple_fast_neural_ideas.py" list "$@"
+fi
+
 usage() {
+  echo "       afn_ab.sh --experiment-plan AFN26-ID [--variant NAME]   (metadata only, not tested)" >&2
+  echo "       afn_ab.sh --experiment-list                           (metadata only)" >&2
   echo "usage: afn_ab.sh <tag> <binding> <board-lane> <shape> <reps> \"<defines A>\" \"<defines B>\"" >&2
   echo "       afn_ab.sh <tag> <binding> <board-lane> <shape> <reps> identical fast   (baseline)" >&2
   echo "  binding: linalg|transformer|mamba|training|byte_lm|embedding|x_cnn; shape: full|small" >&2
