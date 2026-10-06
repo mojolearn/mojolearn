@@ -27,6 +27,8 @@ def fused_bias_kernel(c: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,
         c.unsafe_store(cell,ftz(ftz(c.unsafe_load(cell))+ftz(bias.unsafe_load(cell%Int(n)))))
 
 
+# I05 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# Explicit fused adapter only; rounded product seam must pass independent bits.
 def gemm_bias[FUSED: Bool](ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
     mut bias: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:

@@ -11,6 +11,8 @@ from neighbors.checks.query_batch_check import _case
 from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
 
 
+# A06 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# Explicit selector/low-dimensional public caller qualification; incumbent dispatch retained.
 def main() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     check_fused_griddimx_merge()

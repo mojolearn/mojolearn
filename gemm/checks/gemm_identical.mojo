@@ -3343,6 +3343,8 @@ def _mfma_run_ws(
 
 #: `-D MOJOLEARN_IDN_GEMM_MFMA16_OFF` keeps the scalar stepped-down and split
 #: plans on the AMD column; also off under `MOJOLEARN_IDN_ALL_OFF`.
+# A01 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# Incumbent MFMA16 default retained; this card only compares explicit rollback arms.
 comptime IDN_GEMM_MFMA16 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_GEMM_MFMA16_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
@@ -5450,6 +5452,8 @@ def identical_gemm_into[allow_vendor: Bool = True](
 # the column's row is above 0: the shipped dispatch reaches
 # `identical_gemm_shipped_into` and `_ksplit_run` in the long-k section below
 # and nothing else here.
+# N04 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# Experimental staging entrance requires MOJOLEARN_GEMM_ARM_TRIAL; shipped route retained.
 comptime GEMM_ARM_TRIAL = is_defined["MOJOLEARN_GEMM_ARM_TRIAL"]()
 
 comptime GEMM_ARM_SHIPPED = 0
@@ -7122,6 +7126,8 @@ def _shipped_body_kpack_hg[
             else:
                 # `-D MOJOLEARN_GEMM_NV_FS4_OFF` keeps the profile-wide stack.
                 comptime if not is_defined["MOJOLEARN_GEMM_NV_FS4_OFF"]():
+                    # N02 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+                    # FS2 requires explicit define and <=2 logical fold leaves on NVIDIA; incumbent FS4 retained.
                     comptime if is_defined["MOJOLEARN_IDN_GEMM_FS2"]():
                         if gemm_kpack_fold_slots_for(
                             contract_partition(k)[1], gemm_default_ksplit_leaves(m,n,k)
@@ -7214,6 +7220,8 @@ def identical_gemm_shipped_into(
     Row above 0 (NVIDIA): `identical_gemm_shipped_at_row_into[False]` at the
     row. Row 0 (AMD until the MI300X leg decides, Apple, every other column):
     the old line, and the ksplit path is not compiled at all."""
+    # A05 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+    # Compact tile requires MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE; shipped tile retained.
     # A05: halve per-thread row accumulators to shorten register live ranges.
     # Forced opt-in isolates resource changes; no measured default or size rule.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE"]():
@@ -7833,6 +7841,8 @@ comptime AMD_SHORT_K_MAX = 1024
 # A03: physical LDS stride experiment only. Vector-aligned padding leaves
 # every logical staged address and the accumulator traversal unchanged.
 # Compare 0/4/8 words; resource counters decide, never dataset dimensions.
+# A03 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# LDS padding overrides require explicit IDENTICAL define; incumbent padding retained.
 comptime GEMM_KPACK_PAD = (
     get_defined_int["MOJOLEARN_IDN_GEMM_LDS_PAD_WORDS", TUNED_VECLEN]()
     if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else TUNED_VECLEN

@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "id": "N01",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "default_policy": "Packed64 and body-tile candidate arms require explicit defines; incumbent defaults retained.",
+  "entrance": "gemm/experiments/profile_check.mojo",
+  "source_scope": "All admitted source arms listed below are implemented; device qualification is pending.",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "Unknown target.",
+  "targets": {
+    "nvidia": "sm_89",
+    "amd": "gfx942",
+    "apple": "apple-m1 + metal:1"
+  },
+  "compile_command": "python3 gemm/experiments/compile_matrix.py --ids N01 --vendors nvidia amd --evidence /absolute/external/evidence/N01",
+  "compile_prerequisites": [
+    "pixi install --locked -e default; activated Mojo1.0.0 ed45d567",
+    "clean frozen tracked source; compile_slot semaphore; MOJOLEARN_COMPILE_JOBS=1 and -j1",
+    "sm_89/gfx942 cross-builds embed device objects; rebuild native executable on remote Linux before execution",
+    "No GPU execution or timing occurs during matrix build"
+  ],
+  "arms": [
+    {
+      "name": "current",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [],
+      "runtime_environment": {}
+    },
+    {
+      "name": "packed64",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [
+        "MOJOLEARN_GEMM_KPACK_RPT4=1"
+      ],
+      "runtime_environment": {}
+    },
+    {
+      "name": "body_tiles",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY=1"
+      ],
+      "runtime_environment": {}
+    },
+    {
+      "name": "packed64_body_tiles",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [
+        "MOJOLEARN_GEMM_KPACK_RPT4=1",
+        "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY=1"
+      ],
+      "runtime_environment": {}
+    },
+    {
+      "name": "step_off",
+      "source": "gemm/experiments/profile_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF=1"
+      ],
+      "runtime_environment": {}
+    }
+  ]
+}

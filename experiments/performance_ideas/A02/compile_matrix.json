@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "id": "A02",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "default_policy": "Explicit depth1/2/4 staging adapter only; existing library depth stays unchanged.",
+  "entrance": "gemm/experiments/bounded_staging.mojo",
+  "source_scope": "All admitted source arms listed below are implemented; device qualification is pending.",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "Unknown target.",
+  "targets": {
+    "nvidia": "sm_89",
+    "amd": "gfx942",
+    "apple": "apple-m1 + metal:1"
+  },
+  "compile_command": "python3 gemm/experiments/compile_matrix.py --ids A02 --vendors nvidia amd --evidence /absolute/external/evidence/A02",
+  "compile_prerequisites": [
+    "pixi install --locked -e default; activated Mojo1.0.0 ed45d567",
+    "clean frozen tracked source; compile_slot semaphore; MOJOLEARN_COMPILE_JOBS=1 and -j1",
+    "sm_89/gfx942 cross-builds embed device objects; rebuild native executable on remote Linux before execution",
+    "No GPU execution or timing occurs during matrix build"
+  ],
+  "arms": [
+    {
+      "name": "library_depth",
+      "source": "experiments/performance_ideas/A02/check.mojo",
+      "defines": [],
+      "runtime_environment": {}
+    },
+    {
+      "name": "one_page",
+      "source": "experiments/performance_ideas/A02/check.mojo",
+      "defines": [
+        "MOJOLEARN_GEMM_ONE_PAGE=1"
+      ],
+      "runtime_environment": {}
+    }
+  ]
+}

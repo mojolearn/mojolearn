@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "N07",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "default_policy": "Explicit bounded exact-integer adapter; weighted floating forest admission is absent.",
+  "entrance": "experiments/performance_ideas/N07/streamed_histogram.mojo",
+  "source_scope": "Implemented exact bounded Int32 addends and Int64 partials; no floating-weight quantization or production forest dispatcher.",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "Unknown target.",
+  "targets": {
+    "nvidia": "sm_89",
+    "amd": "gfx942",
+    "apple": "apple-m1 + metal:1"
+  },
+  "compile_command": "python3 gemm/experiments/compile_matrix.py --ids N07 --vendors nvidia amd --evidence /absolute/external/evidence/N07",
+  "compile_prerequisites": [
+    "pixi install --locked -e default; activated Mojo1.0.0 ed45d567",
+    "clean frozen tracked source; compile_slot semaphore; MOJOLEARN_COMPILE_JOBS=1 and -j1",
+    "sm_89/gfx942 cross-builds embed device objects; rebuild native executable on remote Linux before execution",
+    "No GPU execution or timing occurs during matrix build"
+  ],
+  "arms": [
+    {
+      "name": "baseline",
+      "source": "experiments/performance_ideas/N07/check.mojo",
+      "defines": []
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/N07/check.mojo",
+      "defines": []
+    }
+  ]
+}

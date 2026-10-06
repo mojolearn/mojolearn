@@ -11,6 +11,8 @@ from std.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceContext
 
 
+# A04 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# Explicit subwave fixture kernel only; no production scheduler admission.
 def membership_kernel[PAIRED: Bool](output: MutPointer[UInt32,MutAnyOrigin],active: Int32,groups: Int32):
     var tid = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     var width = WARP_SIZE
