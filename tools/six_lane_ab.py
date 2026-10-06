@@ -431,6 +431,21 @@ def runtime_requirements(configuration, workload_id, configurations):
                 all_scoped = False
         if all_scoped and target_harnesses and declared_harnesses.isdisjoint(target_harnesses):
             continue
+        # Some neural controls share bench_board_algos with linear regressors.
+        # Explicit board_lanes narrow that shared harness; unknown or mixed
+        # declarations remain blocked rather than manufacturing an adapter.
+        lane_scopes = []
+        for value in selected['workloads']:
+            if not isinstance(value, dict) or not value.get('board_lanes'):
+                break
+            harnesses = set(value.get('recipe_paths', [])) & {'tools/bench_board_algos.py', 'tools/bench_board_neural.py'}
+            if len(harnesses) != 1:
+                break
+            lane_scopes.extend((harness, lane) for harness in harnesses for lane in value['board_lanes'])
+        else:
+            target_scopes = {(w['harness'], str(w.get('source_workload', w.get('lane', ''))).split('@')[0].rsplit(':', 1)[-1].rsplit('/', 1)[-1]) for w in targets if isinstance(w, dict) and w.get('harness')}
+            if lane_scopes and target_scopes and all(lane for _, lane in target_scopes) and target_scopes.isdisjoint(lane_scopes):
+                continue
         ambiguous = any(isinstance(w, dict) and not (w.get('id') or w.get('key') or w.get('lane')) for w in affected)
         if ambiguous or workload_id in {work_id(w) for w in affected}:
             pending[member] = controls
