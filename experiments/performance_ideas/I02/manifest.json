@@ -67,5 +67,8 @@
     "{source_sha}",
     "--define",
     "MOJOLEARN_STEP_PHASE_TIMERS=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }

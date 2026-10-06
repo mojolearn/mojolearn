@@ -66,5 +66,15 @@
     "{vendor}",
     "--build-only"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "validation_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/A08/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
+  ]
 }
