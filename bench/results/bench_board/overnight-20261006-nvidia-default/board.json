@@ -45540,8 +45540,494 @@
       "stored_arms": [],
       "stored_now": 1,
       "wall_s": 5.4
+    },
+    "classical2/umap/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit (ours fit_transform) from host rows to the embedding",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 4.501104354858398
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical2",
+          "hash": "a39f13711d2702e3",
+          "hash_stable": null,
+          "lane": "umap",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 249.137781560421,
+          "median_ms": 249.137781560421,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 588.0,
+            "peak_host_mb": 988.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 588.0,
+            "warmup_host_mb": 983.3
+          },
+          "min_ms": 249.137781560421,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "init": "spectral",
+              "learning_rate": 1.0,
+              "local_connectivity": 1.0,
+              "metric": "euclidean",
+              "min_dist": 0.1,
+              "n_components": 2,
+              "n_epochs": 500,
+              "n_neighbors": 5,
+              "negative_sample_rate": 5,
+              "repulsion_strength": 1.0,
+              "seed": 7,
+              "set_op_mix_ratio": 1.0,
+              "spread": 1.0
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 588.0,
+          "peak_host_mb": 988.4,
+          "quality": {
+            "trustworthiness_k15": 0.9923054919824464
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "manifold",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "UMAP-Unsupervised",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_more.py",
+            "interleaved": true,
+            "lane_config": {
+              "mismatches": [
+                "neighbors: ours exact brute force; umap-learn NN-descent (its choice above 4,096 rows); cuML build_algo='brute_force_knn' (exact)",
+                "umap-learn-cpu: random_state=7 makes umap-learn run one thread (its rule)",
+                "umap-learn-cpu-unseeded: random_state=None and n_jobs=-1, the every-core setting; the seed is the one parameter that differs",
+                "spectral init: each library's own eigensolver and tolerance (ours: Lanczos, at most 20 basis vectors)"
+              ],
+              "params": "n_neighbors=5, n_epochs=500 (the cuML benchmark's UMAP), n_components=2, min_dist=0.1, spread=1.0, metric='euclidean', init='spectral', learning_rate=1.0, repulsion_strength=1.0, negative_sample_rate=5, set_op_mix_ratio=1.0, local_connectivity=1.0, random_state=7",
+              "quality": "trustworthiness k=15 over every row (sklearn's formula, chunked)",
+              "rows": "20000 stride rows of the train split, standardized by the fit rows",
+              "timed": "fit (ours fit_transform) from host rows to the embedding"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 20000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            249.137781560421
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 493.87327022850513
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_more.py",
+        "race",
+        "--lane",
+        "umap",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/more-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical2/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical2",
+      "finished": "2026-10-06T08:12:55Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "classical2/umap/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "umap",
+      "lane_config": {
+        "mismatches": [
+          "neighbors: ours exact brute force; umap-learn NN-descent (its choice above 4,096 rows); cuML build_algo='brute_force_knn' (exact)",
+          "umap-learn-cpu: random_state=7 makes umap-learn run one thread (its rule)",
+          "umap-learn-cpu-unseeded: random_state=None and n_jobs=-1, the every-core setting; the seed is the one parameter that differs",
+          "spectral init: each library's own eigensolver and tolerance (ours: Lanczos, at most 20 basis vectors)"
+        ],
+        "params": "n_neighbors=5, n_epochs=500 (the cuML benchmark's UMAP), n_components=2, min_dist=0.1, spread=1.0, metric='euclidean', init='spectral', learning_rate=1.0, repulsion_strength=1.0, negative_sample_rate=5, set_op_mix_ratio=1.0, local_connectivity=1.0, random_state=7",
+        "quality": "trustworthiness k=15 over every row (sklearn's formula, chunked)",
+        "rows": "20000 stride rows of the train split, standardized by the fit rows",
+        "timed": "fit (ours fit_transform) from host rows to the embedding"
+      },
+      "log": "logs/classical2.umap.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "init": "spectral",
+              "learning_rate": 1.0,
+              "local_connectivity": 1.0,
+              "metric": "euclidean",
+              "min_dist": 0.1,
+              "n_components": 2,
+              "n_epochs": 500,
+              "n_neighbors": 5,
+              "negative_sample_rate": 5,
+              "repulsion_strength": 1.0,
+              "seed": 7,
+              "set_op_mix_ratio": 1.0,
+              "spread": 1.0
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical2",
+        "lane": "umap",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical2/rows-full/umap-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:12:22Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 33.5
+    },
+    "neural/gemm-int8/gaussian/shape=full": {
+      "arms": [
+        "torch-eager-int8",
+        "torch-compile-int8"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-int8",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "neural",
+          "hash": "9b16c7064e10cecd",
+          "hash_stable": null,
+          "lane": "gemm-int8",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 45.49384489655495,
+          "median_ms": 45.49384489655495,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 160.0,
+            "peak_host_mb": 811.7,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 160.0,
+            "warmup_host_mb": 751.9
+          },
+          "min_ms": 45.49384489655495,
+          "mode": "opponent",
+          "neural_shape": "full",
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 160.0,
+          "peak_host_mb": 811.7,
+          "quality": {
+            "max_rel_err_vs_fp64": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {},
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "ours_call": "mojolearn.linalg.matmul_int8((a_codes, 0), (b_codes, 0)) = a @ b.T exactly",
+            "ours_device": "gpu",
+            "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, max_rel_err_vs_fp64",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "4096x4096x4096",
+            "torch_call": "torch._int_mm(a.to(dev), b.to(dev).t()), .float().cpu()",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "4096x4096x4096",
+          "source": "measured this run",
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            45.49384489655495
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 81.79407753050327
+        },
+        {
+          "arm": "torch-compile-int8",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "neural",
+          "hash": "9b16c7064e10cecd",
+          "hash_stable": null,
+          "lane": "gemm-int8",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 44.752201065421104,
+          "median_ms": 44.752201065421104,
+          "memory": {
+            "children_mb": 490.1,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 160.0,
+            "peak_host_mb": 1023.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 160.0,
+            "warmup_host_mb": 963.6
+          },
+          "min_ms": 44.752201065421104,
+          "mode": "opponent",
+          "neural_shape": "full",
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 160.0,
+          "peak_host_mb": 1023.4,
+          "quality": {
+            "max_rel_err_vs_fp64": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {},
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "ours_call": "mojolearn.linalg.matmul_int8((a_codes, 0), (b_codes, 0)) = a @ b.T exactly",
+            "ours_device": "gpu",
+            "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, max_rel_err_vs_fp64",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "4096x4096x4096",
+            "torch_call": "torch._int_mm(a.to(dev), b.to(dev).t()), .float().cpu()",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "4096x4096x4096",
+          "source": "measured this run",
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            44.752201065421104
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1070.2174734324217
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_neural.py",
+        "race",
+        "--lane",
+        "gemm-int8",
+        "--shape",
+        "full",
+        "--arms",
+        "torch-eager-int8,torch-compile-int8",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/neural/shape-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "1800",
+        "--warmup-seconds",
+        "1800",
+        "--round-seconds",
+        "1800"
+      ],
+      "dataset": "gaussian",
+      "env": {},
+      "family": "neural",
+      "finished": "2026-10-06T08:13:13Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "neural/gemm-int8/gaussian/shape=full",
+      "infer_cells": [],
+      "inputs": {
+        "inputs": "A [m,k], B [n,k] = default_rng(7).integers(-127, 128) int8; C = A B^T",
+        "lane": "gemm-int8",
+        "seed": 7,
+        "sha256": {
+          "a": "4157ef2ec27e9864",
+          "b": "43e1e9a5539cbe4b"
+        },
+        "shape": {
+          "k": 4096,
+          "label": "4096x4096x4096",
+          "m": 4096,
+          "n": 4096,
+          "name": "full"
+        },
+        "steps": 2
+      },
+      "lane": "gemm-int8",
+      "log": "logs/neural.gemm-int8.gaussian.shape-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-int8": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-eager-int8": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "neural",
+        "lane": "neural/gemm-int8",
+        "problems": [],
+        "reference": "torch-eager-int8",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/neural/shape-full/gemm-int8-gaussian.json",
+      "rc": 0,
+      "rows": null,
+      "shape": "full",
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:12:55Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 17.3
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T08:12:22Z"
+  "updated": "2026-10-06T08:13:13Z"
 }

@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T08:12:22Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T08:13:13Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T08:12:22Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 94 done, 3 failed, 0 unsupported, 16 pending. Cells: 192 (REFUSED 3, ok 189).
+Races: 113 planned, 96 done, 3 failed, 0 unsupported, 14 pending. Cells: 195 (REFUSED 3, ok 192).
 
 Inference cells: 140 (REFUSED 2, ok 138).
 
@@ -178,6 +178,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | svr | taxi | rmse (lower is better) | - | - | cuml-gpu 7.680405 |
 | classical2 | tsvd | taxi | explained_variance_ratio_sum (higher is better) | - | - | cuml-gpu 0.999964 |
 | classical2 | tsvd | taxi | relative_reconstruction_error (lower is better) | - | - | cuml-gpu 0.003257 |
+| classical2 | umap | taxi | trustworthiness_k15 (higher is better, 1 at most) | - | - | cuml-gpu 0.992305 |
+| neural | gemm-int8 | gaussian | max_rel_err_vs_fp64 (lower is better) | - | - | torch-eager-int8 0.000000; torch-compile-int8 0.000000 |
 
 ## Inference at a glance
 
@@ -1045,6 +1047,69 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | n_iter | 15 |
 | seed | 7 |
 | tol | 1e-07 |
+
+### umap / taxi (rows full, shape X 20000x11)
+
+race: done, driver rc 0, log `logs/classical2.umap.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 249.1 | 249.1..249.1 | 1 | - | - | 988.4 | 588.0 | trustworthiness_k15=0.992305 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: n_neighbors=5, n_epochs=500 (the cuML benchmark's UMAP), n_components=2, min_dist=0.1, spread=1.0, metric='euclidean', init='spectral', learning_rate=1.0, repulsion_strength=1.0, negative_sample_rate=5, set_op_mix_ratio=1.0, local_connectivity=1.0, random_state=7. Rows: 20000 stride rows of the train split, standardized by the fit rows. Timed: fit (ours fit_transform) from host rows to the embedding.
+
+mismatch: neighbors: ours exact brute force; umap-learn NN-descent (its choice above 4,096 rows); cuML build_algo='brute_force_knn' (exact)
+
+mismatch: umap-learn-cpu: random_state=7 makes umap-learn run one thread (its rule)
+
+mismatch: umap-learn-cpu-unseeded: random_state=None and n_jobs=-1, the every-core setting; the seed is the one parameter that differs
+
+mismatch: spectral init: each library's own eigensolver and tolerance (ours: Lanczos, at most 20 basis vectors)
+
+config: cuML benchmark (RAPIDS), UMAP-Unsupervised (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| init | "spectral" |
+| learning_rate | 1.0 |
+| local_connectivity | 1.0 |
+| metric | "euclidean" |
+| min_dist | 0.1 |
+| n_components | 2 |
+| n_epochs | 500 |
+| n_neighbors | 5 |
+| negative_sample_rate | 5 |
+| repulsion_strength | 1.0 |
+| seed | 7 |
+| set_op_mix_ratio | 1.0 |
+| spread | 1.0 |
+
+## Neural
+
+### gemm-int8 / gaussian (neural shape full: 4096x4096x4096)
+
+race: done, driver rc 0, log `logs/neural.gemm-int8.gaussian.shape-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-eager-int8 | torch | gpu | opponent | 45.5 | 45.5..45.5 | 1 | - | - | 811.7 | 160.0 | max_rel_err_vs_fp64=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-int8 | torch | gpu | opponent | 44.8 | 44.8..44.8 | 1 | - | - | 1023.4 | 160.0 | max_rel_err_vs_fp64=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-eager-int8, torch-compile-int8: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-int8`, seed 7): MATCHED
+
+| parameter | torch-compile-int8 | torch-eager-int8 |
+|---|---||---|---|
+| library (source) | torch (declared) | torch (declared) |
+| seed | 7 | 7 |
 
 ## Algorithm expansion
 
