@@ -61,5 +61,8 @@
     "{output}",
     "--define",
     "MOJOLEARN_IDN_EMB_RADIX_SORT_OFF=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
