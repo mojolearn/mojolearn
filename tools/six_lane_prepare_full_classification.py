@@ -68,6 +68,16 @@ def plan(args):
     if text_hash(sources['tools/bench_board_algos.py']) != audit['harness_sha256']:
         raise ValueError('Refresh eligibility audit after harness source changes')
     inventory = json.loads(args.inventory.read_text())
+    owner_deferral = None
+    if args.owner_deferral:
+        decision = json.loads(args.owner_deferral.read_text())
+        if (decision.get('status') != 'DEFERRED_BY_OWNER'
+                or decision.get('owned_children_surviving') != []
+                or decision.get('machine_lock_exclusive_probe') is not True
+                or decision.get('budget_reset') is not False):
+            raise ValueError('Owner deferral lacks retained safe-stop evidence')
+        owner_deferral = dict(path=decision['evidence'] + '/deferral.json',
+                              sha256=digest(args.owner_deferral), reason=decision['reason'])
     rows = [r for r in audit['rows'] if r['vendor'] == 'apple'
             and r['category'] == 'CORRECT_FULL_POPULATION_PREPROCESSING_ARCHIVE_REQUIRED']
     if not rows or any(r['declared_sub'] for r in rows):
@@ -110,6 +120,7 @@ def plan(args):
                             inventory_path=str(args.inventory), inventory_sha256=digest(args.inventory)),
         source_archives=archives, archive_sha256_status='Computed and recorded only during reviewed preparation; not inferred from filename or size',
         population=population, canonical_lock=LOCK, prerequisite_status_paths=WAIT,
+        owner_deferral=owner_deferral,
         execution_authorized=False, dataset_arrays_read=0, recipes=recipes,
         preserved='Original capped1M/100k inputs, settings, recipes, results and active source freezes',
         preparation='Original loaders, sentinel cleanup, full-train standardization; raw unscaled; categorical original mapping fitted on full train. No estimator imports/fits/builds.',
@@ -127,11 +138,23 @@ def load_tool(name):
     return module
 
 
-def prerequisites(paths):
+def prerequisites(paths, owner_deferral=None):
+    if owner_deferral:
+        if digest(owner_deferral['path']) != owner_deferral['sha256']:
+            raise ValueError('Owner deferral evidence changed')
+        decision = json.loads(Path(owner_deferral['path']).read_text())
+        if (decision.get('status') != 'DEFERRED_BY_OWNER'
+                or decision.get('owned_children_surviving') != []
+                or decision.get('machine_lock_exclusive_probe') is not True
+                or decision.get('budget_reset') is not False):
+            raise ValueError('Owner deferral is not an approved safe stop')
+        previous = json.loads(Path(BASE + '/next-full-continuation/status.json').read_text())
+        if previous.get('status') != 'COMPLETE' or sum(g.get('completed', 0) for g in previous.get('groups', [])) != 6:
+            raise ValueError('Owner-priority preceding six A/B cells must complete first')
     result = []
     for path in paths:
         state = json.loads(Path(path).read_text())
-        if state.get('status') not in TERMINAL:
+        if state.get('status') not in TERMINAL and not (owner_deferral and state.get('status') == 'DEFERRED_BY_OWNER'):
             raise ValueError('Existing opponent queue is not terminal: ' + path)
         result.append(dict(path=path, sha256=digest(path), status=state['status']))
     return result
@@ -154,10 +177,10 @@ def prepare(args):
         raise ValueError('Canonical queue prerequisites cannot be redirected')
     if args.output.resolve().is_relative_to(ROOT.resolve()):
         raise ValueError('Preparation outputs must be outside the frozen checkout')
-    prerequisites(WAIT)
+    prerequisites(WAIT, doc.get('owner_deferral'))
     with open(LOCK, 'r+b') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        states = prerequisites(WAIT)
+        states = prerequisites(WAIT, doc.get('owner_deferral'))
         # All source archive reads and CPU preprocessing occur under the same lock.
         import numpy as np
         ctd = load_tool('classical_two_datasets')
@@ -167,6 +190,8 @@ def prepare(args):
         args.output.mkdir(parents=True, exist_ok=False)
         manifest = dict(schema='mojolearn.full-classification-preparation/1', variant=VARIANT,
             source_sha=doc['source_sha'], helper_sha256=digest(__file__), plan_sha256=digest(args.plan),
+            plan=dict(path=str(args.plan.resolve()), sha256=digest(args.plan)),
+            source_hashes=doc['source_hashes'], owner_deferral=doc.get('owner_deferral'),
             prerequisite_states=states, lock=LOCK, started_at=time.time(), status='PREPARING',
             model_executions=0, builds=0, source_archives=[], blocks=[], recipes=doc['recipes'])
         write(args.output / 'started.json', manifest)
@@ -233,11 +258,20 @@ def prepare(args):
                                        scaling='original8 highest-variance fulltrain columns;16 quantile codes')
                     arrays = {k: np.ascontiguousarray(v, dtype=np.float32)
                               for k, v in dict(X=X, Xq=Xq, y=ytr, yq=yte).items()}
+                    if block == 'cat':
+                        # Same data-derived setting as _derived_params(categorical-nb).
+                        # Retain it while the full matrices are resident, avoiding a second read.
+                        minimum = np.maximum(arrays['X'].max(axis=0), arrays['Xq'].max(axis=0)).astype(np.int64) + 1
+                        rec['derived_parameters'] = {'categorical-nb': {'min_categories': dict(
+                            values=minimum.tolist(), dtype=str(minimum.dtype), shape=list(minimum.shape),
+                            sha256=ctd.sha256_array(minimum), original_representation='list[int]')}}
                     name = block + '-' + ds
                     ctd._write_block(str(args.output), name, arrays, rec)
                     manifest['blocks'].append(dict(name=name, arrays=rec['arrays'],
                         npz_sha256=digest(args.output / (name + '.npz')),
-                        sidecar_sha256=digest(args.output / (name + '.json'))))
+                        sidecar_sha256=digest(args.output / (name + '.json')),
+                        input_files=[dict(path=str((args.output / (name + ext)).resolve()),
+                                          sha256=digest(args.output / (name + ext))) for ext in ('.npz', '.json')]))
                     del X, Xq, arrays
                 if digest(archive) != before:
                     raise ValueError('Source archive changed during preparation: ' + ds)
@@ -260,6 +294,7 @@ def main():
     a.add_argument('--source-sha', required=True)
     a.add_argument('--audit', type=Path, required=True)
     a.add_argument('--inventory', type=Path, required=True)
+    a.add_argument('--owner-deferral', type=Path, help='Explicit retained owner reprioritization; also requires prior six A/B cells complete')
     a.add_argument('--output', type=Path, required=True)
     a = sub.add_parser('prepare')
     a.add_argument('--plan', type=Path, required=True)
