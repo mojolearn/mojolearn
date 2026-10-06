@@ -6,7 +6,7 @@ run, so inconclusive bound behavior retains exact candidate semantics."""
 from neighbors.checks.query_batch_check import _case
 from neighbors.checks.knn_check import check_fused_griddimx_merge
 from neighbors.checks.knn_identity_check import check_knn_fused_tie_set_is_geometry_invariant
-from neighbors.checks.knn_selector_bound_compact_check import main as bound_check
+from neighbors.checks.knn_selector_bound_compact_check import check_case as bound_case
 
 def main() raises:
     for n in [255, 257, 1031]:
@@ -14,5 +14,11 @@ def main() raises:
             _case(n, 37, 19, k)
     check_fused_griddimx_merge()
     check_knn_fused_tie_set_is_geometry_invariant()
-    bound_check()
+    var reached=0
+    for length in [257,2049,8193]:
+        for k in [17,33,64]:
+            reached+=bound_case(length,k,True)
+            reached+=bound_case(length,k,False)
+    if reached==0:
+        raise Error("I15 bounded candidate path unreached")
     print("I15 PASS public_queries=9 hierarchical_merge certified_bound_compaction")
