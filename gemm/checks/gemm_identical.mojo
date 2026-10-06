@@ -3239,6 +3239,7 @@ which the non-group store applies itself. Same bits.
 
 
 comptime IDN_GEMM_AMD_BAND_MFMA = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    # A01 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     is_defined["MOJOLEARN_IDN_GEMM_AMD_BAND_MFMA_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 """lane/nr-gemm (2026-10-04, review rank 1 "A4 fix"), default ON under
