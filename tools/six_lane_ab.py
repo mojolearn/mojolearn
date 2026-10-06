@@ -410,9 +410,17 @@ def runtime_requirements(configuration, workload_id, configurations):
     member mappings blocked, and never invent an operation to reach a control.
     """
     from six_lane_full_variants import original_id
+    registered_workload_id = workload_id
     workload_id = original_id(workload_id)
     pending = {}
     targets = [w for value in configuration.get('workloads', []) for w in expand_workload(value) if work_id(w)==workload_id]
+    # These four saved estimator recipes were absent from the original matrix.
+    # Resolve only the reviewed exact registration; unknown workloads stay blocked.
+    if not targets and registered_workload_id.endswith('@input=mlp-full-v1'):
+        from six_lane_mlp_variants import contracts
+        targets = [dict(harness=r['harness'], lane=r['lane']) for r in contracts()['rows']
+                   if r['configuration'] == configuration['id']
+                   and r['variant_workload_id'] == registered_workload_id]
     target_harnesses = {w['harness'] for w in targets if isinstance(w, dict) and w.get('harness')}
     if configuration['A']['runtime']:
         pending[configuration['id']] = configuration['A']['runtime']

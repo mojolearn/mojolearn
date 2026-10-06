@@ -168,6 +168,8 @@ def run(args):
     output=capture(outputs,'all declared consumed outputs',expected_paths=work['output_paths'])
     from six_lane_classification_variants import validate_output_scope
     validate_output_scope(work,output)
+    from six_lane_mlp_variants import validate_output_scope as validate_mlp_output
+    validate_mlp_output(work,output)
     if output['missing_state']:raise ValueError('Incomplete consumed output scope')
     state=capture_model(runner,work.get('model_state_paths'),retain_path=args.output.with_suffix('.model-state.json'))
     # The unchanged quality functions own metric definitions. Gate outcomes are
@@ -198,6 +200,7 @@ def run(args):
         parts['repeated_seconds']=done-again
         repeated_output=capture(values,'repeated consumed outputs',expected_paths=work['output_paths'])
         validate_output_scope(work,repeated_output)
+        validate_mlp_output(work,repeated_output)
         repeated.append(dict(index=index,timings=parts,outputs=repeated_output,model_state=capture_model(runner,work.get('model_state_paths'),retain_path=args.output.with_suffix('.repeated-'+str(index)+'.model-state.json'))))
     from six_lane_evidence import retain_values
     values_path=args.output.with_suffix('.values.json');retain_values(outputs,values_path)
