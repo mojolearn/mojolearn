@@ -41260,8 +41260,1455 @@
       "stored_arms": [],
       "stored_now": 2,
       "wall_s": 33.2
+    },
+    "classical/ols/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu",
+        "torch-gpu",
+        "torch-gpu-eigh"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 174.2571759968996
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "17bb4e81d54a42ed",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 22.05212414264679,
+          "median_ms": 22.05212414264679,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 614.0,
+            "peak_host_mb": 1356.3,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 614.0,
+            "warmup_host_mb": 1356.2
+          },
+          "min_ms": 22.05212414264679,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "algorithm": "eig",
+              "fit_intercept": true,
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 614.0,
+          "peak_host_mb": 1356.3,
+          "quality": {
+            "finite": true,
+            "r2": 0.9088361344383943,
+            "rmse": 4.696487588860491
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "4000000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            22.05212414264679
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 197.64832593500614
+        },
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 14.663124457001686
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "a35c47c923450e4b",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 38.984913378953934,
+          "median_ms": 38.984913378953934,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 4649.6,
+            "peak_host_mb": 1081.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 4626.4,
+            "warmup_host_mb": 1081.3
+          },
+          "min_ms": 38.984913378953934,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 4649.6,
+          "peak_host_mb": 1081.6,
+          "quality": {
+            "finite": true,
+            "r2": 0.9088364473366158,
+            "rmse": 4.696479529066921
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "4000000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            38.984913378953934
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 255.95401972532272
+        },
+        {
+          "arm": "torch-gpu-eigh",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 14.271087944507599
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "472a40bc2162da23",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1.9534584134817123,
+          "median_ms": 1.9534584134817123,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 376.4,
+            "peak_host_mb": 1098.7,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 376.4,
+            "warmup_host_mb": 1098.6
+          },
+          "min_ms": 1.9534584134817123,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 376.4,
+          "peak_host_mb": 1098.7,
+          "quality": {
+            "finite": true,
+            "r2": 0.9088360234990305,
+            "rmse": 4.696490446490448
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "4000000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1.9534584134817123
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 186.50571629405022
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "ols",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "cuml-gpu,torch-gpu,torch-gpu-eigh",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T08:09:54Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "classical/ols/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "cuml LinearRegression.predict(Xq on the device, output_type cupy); Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 174.2571759968996
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 21.138807758688927
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "6eb046533f2d4c20",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "cuml",
+          "max_ms": 1.6334708780050278,
+          "median_ms": 1.6334708780050278,
+          "memory": {},
+          "min_ms": 1.6334708780050278,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "predict_max_rel_err_own_fp64": 8.178996661659431e-08,
+            "r2_eval": 0.9088361374684139,
+            "rmse_eval": 4.696487510811752
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            1.6334708780050278
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1.661192625761032
+        },
+        {
+          "arm": "torch-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 14.663124457001686
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 1.470118761062622
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "8bdee6ebc1b9f6ce",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "max_ms": 0.3657173365354538,
+          "median_ms": 0.3657173365354538,
+          "memory": {},
+          "min_ms": 0.3657173365354538,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "predict_max_rel_err_own_fp64": 1.0928990393556919e-07,
+            "r2_eval": 0.9088364486679238,
+            "rmse_eval": 4.696479494774376
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.3657173365354538
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.34305639564991
+        },
+        {
+          "arm": "torch-gpu-eigh",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 14.271087944507599
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 1.3050548732280731
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "b776004effb1388f",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "max_ms": 0.41090697050094604,
+          "median_ms": 0.41090697050094604,
+          "memory": {},
+          "min_ms": 0.41090697050094604,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "predict_max_rel_err_own_fp64": 1.4437889685962628e-07,
+            "r2_eval": 0.9088360220045536,
+            "rmse_eval": 4.6964904849858975
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.41090697050094604
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.29003433883190155
+        }
+      ],
+      "lane": "ols",
+      "lane_config": {
+        "mismatches": [
+          "seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)",
+          "solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff",
+          "scikit-learn positive=False and copy_X=True: parameters ours does not have"
+        ],
+        "params": "fit_intercept=True",
+        "rows": "big block, raw; R2 and RMSE on the 500,000 eval rows",
+        "timed": "fit"
+      },
+      "log": "logs/classical.ols.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "algorithm": "eig",
+              "fit_intercept": true,
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-gpu-eigh": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-gpu",
+            "ours": true,
+            "param": "fit_intercept",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-gpu-eigh",
+            "ours": true,
+            "param": "fit_intercept",
+            "same": true,
+            "theirs": true
+          }
+        ],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "ols",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/ols-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:09:39Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 3,
+      "wall_s": 14.2
+    },
+    "classical/pca/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu",
+        "torch-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 171.28768004477024
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "676b3082295ef5e9",
+          "hash_stable": true,
+          "lane": "pca",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 20.486874505877495,
+          "median_ms": 20.486874505877495,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 642.0,
+            "peak_host_mb": 1308.2,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 642.0,
+            "warmup_host_mb": 1307.9
+          },
+          "min_ms": 20.486874505877495,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "n_components": 10,
+              "seed": "none (deterministic)",
+              "svd_solver": "covariance_eigh",
+              "tol": 1e-07,
+              "whiten": false
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 642.0,
+          "peak_host_mb": 1308.2,
+          "quality": {
+            "explained_variance_ratio_sum": 0.9999961512713827
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PCA",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "4000000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            20.486874505877495
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 166.73901304602623
+        },
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 9.191872552037239
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "5287f2019672246a",
+          "hash_stable": true,
+          "lane": "pca",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1.4386679977178574,
+          "median_ms": 1.4386679977178574,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 344.4,
+            "peak_host_mb": 1057.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 344.4,
+            "warmup_host_mb": 1057.7
+          },
+          "min_ms": 1.4386679977178574,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "n_components": 10,
+              "seed": 7,
+              "svd_solver": "covariance_eigh",
+              "whiten": false
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 344.4,
+          "peak_host_mb": 1057.9,
+          "quality": {
+            "explained_variance_ratio_sum": 0.9999959395309672
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PCA",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "4000000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1.4386679977178574
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 193.66658851504326
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "pca",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "cuml-gpu,torch-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T08:10:06Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "classical/pca/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "cuml PCA.transform(Xq on the device, output_type cupy); Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 171.28768004477024
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 45.73207162320614
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "8660f28ae62a621a",
+          "hash_stable": true,
+          "lane": "pca",
+          "library": "cuml",
+          "max_ms": 1.9823983311653137,
+          "median_ms": 1.9823983311653137,
+          "memory": {},
+          "min_ms": 1.9823983311653137,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "transform_max_rel_err_own_fp64": 1.0665570306895663e-07
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PCA",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            1.9823983311653137
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 12.722428888082504
+        },
+        {
+          "arm": "torch-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch (Xq - mean) @ components.T; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 9.191872552037239
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 2.7682222425937653
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "44208f076d10f421",
+          "hash_stable": true,
+          "lane": "pca",
+          "library": "torch",
+          "max_ms": 0.29602646827697754,
+          "median_ms": 0.29602646827697754,
+          "memory": {},
+          "min_ms": 0.29602646827697754,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "transform_max_rel_err_own_fp64": 1.0720325822956e-07
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PCA",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.29602646827697754
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.35084784030914307
+        }
+      ],
+      "lane": "pca",
+      "lane_config": {
+        "mismatches": [
+          "svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'",
+          "torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)",
+          "random_state is read by none of the covariance solvers; set to 7 on every arm"
+        ],
+        "params": "n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'",
+        "rows": "big block, raw",
+        "timed": "fit"
+      },
+      "log": "logs/classical.pca.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "n_components": 10,
+              "seed": "none (deterministic)",
+              "svd_solver": "covariance_eigh",
+              "tol": 1e-07,
+              "whiten": false
+            },
+            "source": "get_params"
+          },
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "n_components": 10,
+              "seed": 7,
+              "svd_solver": "covariance_eigh",
+              "whiten": false
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-gpu",
+            "ours": 10,
+            "param": "n_components",
+            "same": true,
+            "theirs": 10
+          },
+          {
+            "arm": "torch-gpu",
+            "ours": "covariance_eigh",
+            "param": "svd_solver",
+            "same": true,
+            "theirs": "covariance_eigh"
+          },
+          {
+            "arm": "torch-gpu",
+            "ours": false,
+            "param": "whiten",
+            "same": true,
+            "theirs": false
+          }
+        ],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "pca",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/pca-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:09:54Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 12.2
+    },
+    "classical/svc/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 8.392825722694397
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical",
+          "hash": "e3c4f0596b05fcf8",
+          "hash_stable": true,
+          "lane": "svc",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 379.39062155783176,
+          "median_ms": 379.39062155783176,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 440.0,
+            "peak_host_mb": 985.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 440.0,
+            "warmup_host_mb": 982.9
+          },
+          "min_ms": 379.39062155783176,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "C": 1.0,
+              "class_weight": null,
+              "coef0": 0.0,
+              "degree": 3,
+              "gamma": 0.09090909090909091,
+              "kernel": "rbf",
+              "max_iter": -1,
+              "seed": 7,
+              "tol": 0.001
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 440.0,
+          "peak_host_mb": 985.0,
+          "quality": {
+            "accuracy": 0.7675,
+            "n_support": 5541
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "svc",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "SVC-RBF",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "10000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            379.39062155783176
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 831.4447570592165
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "svc",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T08:10:12Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "classical/svc/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-gpu",
+          "batch": "Xq",
+          "batch_rows": 10000,
+          "call": "cuml SVC.predict(Xq on the device, output_type cupy); Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "cuml",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 8.392825722694397
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "6f6a2b9d0649be1a",
+          "hash_stable": true,
+          "lane": "svc",
+          "library": "cuml",
+          "max_ms": 7.134605199098587,
+          "median_ms": 7.134605199098587,
+          "memory": {},
+          "min_ms": 7.134605199098587,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "accuracy_eval": 0.7675
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "svc",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "SVC-RBF",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            7.134605199098587
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 4.185158759355545
+        }
+      ],
+      "lane": "svc",
+      "lane_config": {
+        "mismatches": [
+          "seed: scikit-learn and cuML random_state=7 (read only with probability=True); ours refuses random_state without probability=True, so ours stays None",
+          "cache_size=2000 on every arm; ours honors it only as the prediction buffer (DEVIATION 871), so its training is unaffected",
+          "shrinking=True: scikit-learn only; nochange_steps=1000: ours and cuML only"
+        ],
+        "params": "C=1.0, kernel='rbf', gamma=1/d, tol=1e-3, degree=3, coef0=0.0, max_iter=-1, cache_size=2000 MB, class_weight=None",
+        "rows": "svc block: 10,000 fit rows, 10,000 eval rows, standardized",
+        "timed": "fit"
+      },
+      "log": "logs/classical.svc.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "C": 1.0,
+              "class_weight": null,
+              "coef0": 0.0,
+              "degree": 3,
+              "gamma": 0.09090909090909091,
+              "kernel": "rbf",
+              "max_iter": -1,
+              "seed": 7,
+              "tol": 0.001
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "svc",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/svc-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:10:06Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 6.0
+    },
+    "classical2/agglomerative/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 8.438767865300179
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical2",
+          "hash": "6b400bb1c568f20f",
+          "hash_stable": null,
+          "lane": "agglomerative",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 62.16301769018173,
+          "median_ms": 62.16301769018173,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 430.0,
+            "peak_host_mb": 813.7,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 430.0,
+            "warmup_host_mb": 806.7
+          },
+          "min_ms": 62.16301769018173,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "linkage": "single",
+              "metric": "euclidean",
+              "n_clusters": 8,
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 430.0,
+          "peak_host_mb": 813.7,
+          "quality": {
+            "n_clusters": 8,
+            "silhouette": 0.6855242274703756
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "cls",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "AgglomerativeClustering",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_more.py",
+            "interleaved": true,
+            "lane_config": {
+              "mismatches": [
+                "single linkage only: ours and cuML implement no other linkage",
+                "seed: no arm has a seed argument (deterministic)"
+              ],
+              "params": "n_clusters=8, linkage='single', metric='euclidean' (ours and cuML connectivity='pairwise')",
+              "quality": "cluster count, silhouette, ARI vs ours",
+              "rows": "10000 stride rows of the cls block (standardized by the fit rows); O(n^2)",
+              "timed": "fit"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 10000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            62.16301769018173
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 130.5045336484909
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_more.py",
+        "race",
+        "--lane",
+        "agglomerative",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/more-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical2/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical2",
+      "finished": "2026-10-06T08:10:19Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "classical2/agglomerative/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "agglomerative",
+      "lane_config": {
+        "mismatches": [
+          "single linkage only: ours and cuML implement no other linkage",
+          "seed: no arm has a seed argument (deterministic)"
+        ],
+        "params": "n_clusters=8, linkage='single', metric='euclidean' (ours and cuML connectivity='pairwise')",
+        "quality": "cluster count, silhouette, ARI vs ours",
+        "rows": "10000 stride rows of the cls block (standardized by the fit rows); O(n^2)",
+        "timed": "fit"
+      },
+      "log": "logs/classical2.agglomerative.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "linkage": "single",
+              "metric": "euclidean",
+              "n_clusters": 8,
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical2",
+        "lane": "agglomerative",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical2/rows-full/agglomerative-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:10:12Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 6.7
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T08:09:39Z"
+  "updated": "2026-10-06T08:10:19Z"
 }
