@@ -714,6 +714,7 @@ comptime ARIMA_FAST_BATCH_GRAD = has_apple_gpu_accelerator() and (
     )
     or (
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        # I23 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
         and not is_defined["MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF"]()
     )
 )
