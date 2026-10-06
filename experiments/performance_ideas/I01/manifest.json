@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "I01",
+  "title": "Attribute existing GEMM schedules",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "blocked_toolchain",
+  "implementation_paths": [
+    "gemm/experiments/profile_check.mojo",
+    "gemm/checks/gemm_identical.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "pixi",
+    "run",
+    "mojo",
+    "build",
+    "-j1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-I",
+    "{repo}",
+    "-D",
+    "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1",
+    "{repo}/gemm/experiments/profile_check.mojo",
+    "-o",
+    "{output}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "gemm/checks/gemm_step_arms_check.mojo",
+    "core/gemm_identity_check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host output bits",
+    "exact intermediate outputs and poison control",
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower"
+  ],
+  "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
+  "blocker": "Mojo 1.0.0 front-end accepted source; local executable link cannot locate CompilerRT. I01-build.log retained; no device qualification."
+}
