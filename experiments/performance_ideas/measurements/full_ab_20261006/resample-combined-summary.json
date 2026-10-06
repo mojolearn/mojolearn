@@ -1,0 +1,108 @@
+[
+  {
+    "cell": "F19-combined-wait-tiled-istella-full",
+    "id": "F19",
+    "variant": "wait-pair+tiled",
+    "interaction_candidates": [
+      "F04",
+      "F19"
+    ],
+    "comparison_scope": "combined proposed WAIT_PAIR+TILED configuration vs GATHER-only baseline",
+    "adapter_variant_note": "Frozen adapter variant=default names public replacement workload; experiment variant is this receipt metadata, not isolated F19",
+    "flags_A": [
+      "MOJOLEARN_RESAMPLE_FAST_GATHER"
+    ],
+    "flags_B": [
+      "MOJOLEARN_RESAMPLE_FAST_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+    ],
+    "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+    "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+    "dimensions": {
+      "train": [
+        2043304,
+        220
+      ],
+      "labels": [
+        2043304
+      ]
+    },
+    "A_ms": 1379.7996249999999,
+    "B_ms": 1242.142042,
+    "B_over_A": 0.9002336422580199,
+    "quality": {
+      "exact_gather_matches_public_indices": true,
+      "repeated_output_exact": true,
+      "baseline_exact_match": true
+    },
+    "output_hash_A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+    "output_hash_B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+    "indices_hash_A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+    "indices_hash_B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+    "model_state": {
+      "status": "UNAVAILABLE",
+      "reason": "Stateless resampling has no fitted model"
+    },
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "evidence": {
+      "A": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/scored-A.json",
+      "B": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/scored-B.json"
+    },
+    "promotion": false
+  },
+  {
+    "cell": "F19-combined-wait-tiled-taxi-full",
+    "id": "F19",
+    "variant": "wait-pair+tiled",
+    "interaction_candidates": [
+      "F04",
+      "F19"
+    ],
+    "comparison_scope": "combined proposed WAIT_PAIR+TILED configuration vs GATHER-only baseline",
+    "adapter_variant_note": "Frozen adapter variant=default names public replacement workload; experiment variant is this receipt metadata, not isolated F19",
+    "flags_A": [
+      "MOJOLEARN_RESAMPLE_FAST_GATHER"
+    ],
+    "flags_B": [
+      "MOJOLEARN_RESAMPLE_FAST_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+    ],
+    "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+    "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+    "dimensions": {
+      "train": [
+        5250086,
+        11
+      ],
+      "labels": [
+        5250086
+      ]
+    },
+    "A_ms": 212.94062499999998,
+    "B_ms": 198.056667,
+    "B_over_A": 0.9301027786501519,
+    "quality": {
+      "exact_gather_matches_public_indices": true,
+      "repeated_output_exact": true,
+      "baseline_exact_match": true
+    },
+    "output_hash_A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+    "output_hash_B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+    "indices_hash_A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+    "indices_hash_B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+    "model_state": {
+      "status": "UNAVAILABLE",
+      "reason": "Stateless resampling has no fitted model"
+    },
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "evidence": {
+      "A": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/scored-A.json",
+      "B": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/scored-B.json"
+    },
+    "promotion": false
+  }
+]

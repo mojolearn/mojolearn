@@ -16,7 +16,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F01 | fast | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 | F02 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
 | F03 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
-| F04 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
+| F04 | fast | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 | F05 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
 | F06 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
 | F07 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
@@ -31,7 +31,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F16 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
 | F17 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
 | F18 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
-| F19 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
+| F19 | fast | PARTIAL_MEASUREMENTS_RETAINED | 4 |
 | F20 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
 | I01 | identical | NOT_SELECTED_CURRENT_SCOPE | 0 |
 | I02 | identical | NOT_SELECTED_CURRENT_SCOPE | 0 |
@@ -84,6 +84,8 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F02 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | F03 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | F04 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
+| F04 | apple/metal | F04-default-resample-istella-full/attempt-0001 | full_workload | MEASURED | 0.9199 | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F04-default-resample-istella-full/attempts/attempt-0001/receipt.json |
+| F04 | apple/metal | F04-default-resample-taxi-full/attempt-0001 | full_workload | MEASURED | 0.9538 | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F04-default-resample-taxi-full/attempts/attempt-0001/receipt.json |
 | F05 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | F06 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | F07 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
@@ -101,6 +103,10 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F17 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | F18 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | F19 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
+| F19 | apple/metal | F19-combined-wait-tiled-istella-full/attempt-0001 | full_workload | MEASURED | 0.9002 | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/receipt.json |
+| F19 | apple/metal | F19-combined-wait-tiled-taxi-full/attempt-0001 | full_workload | MEASURED | 0.9301 | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/receipt.json |
+| F19 | apple/metal | F19-default-resample-istella-full/attempt-0001 | full_workload | MEASURED | 0.9724 | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F19-default-resample-istella-full/attempts/attempt-0001/receipt.json |
+| F19 | apple/metal | F19-default-resample-taxi-full/attempt-0001 | full_workload | MEASURED | 0.9729 | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F19-default-resample-taxi-full/attempts/attempt-0001/receipt.json |
 | F20 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | I01 | apple/default | candidate-to-full-workload mapping pending | full_workload | NOT_SELECTED_CURRENT_SCOPE | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | I02 | apple/default | candidate-to-full-workload mapping pending | full_workload | NOT_SELECTED_CURRENT_SCOPE | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
@@ -140,5 +146,5 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 - NVIDIA/AMD prior campaign resources retired; no new rental started without a runnable full-workload pair.
 - Model/output SHA256 capture added to actual workload drivers; unavailable model exports remain explicit. No compilation or separate identity validation run.
 - Final frozen main SHA is retained in /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/freeze.json after push.
-- Four full Apple FAST PCA A/B pairs completed on uncapped Istella and taxi under ec3c8c850; first da7 receipt failure retained. NVIDIA/AMD full-workload artifact coverage remains pending.
 - Apple FAST now proceeds independently. Current measured PCA subsets do not close downstream LLE, other adapters or interaction coverage.
+- Ten full Apple FAST A/B pairs captured: PCA and compensated PCA on uncapped Istella/taxi; paired gather, tiled gather and their combined configuration on both full datasets. Original failed PCA receipt remains separate. No default promotion or opponent comparison inferred.

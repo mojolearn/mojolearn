@@ -97,5 +97,5 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 - NVIDIA/AMD prior campaign resources retired; no new rental started without a runnable full-workload pair.
 - Model/output SHA256 capture added to actual workload drivers; unavailable model exports remain explicit. No compilation or separate identity validation run.
 - Final frozen main SHA is retained in /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/freeze.json after push.
-- Four full Apple FAST PCA A/B pairs completed on uncapped Istella and taxi under ec3c8c850; first da7 receipt failure retained. NVIDIA/AMD full-workload artifact coverage remains pending.
 - Apple FAST now proceeds independently. Current measured PCA subsets do not close downstream LLE, other adapters or interaction coverage.
+- Ten full Apple FAST A/B pairs captured: PCA and compensated PCA on uncapped Istella/taxi; paired gather, tiled gather and their combined configuration on both full datasets. Original failed PCA receipt remains separate. No default promotion or opponent comparison inferred.

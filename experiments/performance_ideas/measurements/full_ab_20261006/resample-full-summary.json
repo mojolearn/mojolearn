@@ -1,0 +1,222 @@
+[
+  {
+    "cell": "F04-default-resample-istella-full",
+    "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+    "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+    "dimensions": {
+      "train": [
+        2043304,
+        220
+      ],
+      "labels": [
+        2043304
+      ]
+    },
+    "A_ms": 1381.7082919999998,
+    "B_ms": 1271.051791,
+    "B_over_A": 0.9199132684947368,
+    "timing_A": {
+      "full_operation_seconds": 1.381708292,
+      "cold_operation_seconds": 1.381708292,
+      "cold_preparation_seconds": 4.417e-06,
+      "cold_draw_gather_consume_seconds": 1.381703875,
+      "repeated_operation_seconds": 1.351870458,
+      "repeated_preparation_seconds": 2.375e-06,
+      "repeated_draw_gather_consume_seconds": 1.351868083
+    },
+    "timing_B": {
+      "full_operation_seconds": 1.271051791,
+      "cold_operation_seconds": 1.271051791,
+      "cold_preparation_seconds": 4.125e-06,
+      "cold_draw_gather_consume_seconds": 1.271047666,
+      "repeated_operation_seconds": 1.255700083,
+      "repeated_preparation_seconds": 1.958e-06,
+      "repeated_draw_gather_consume_seconds": 1.255698125
+    },
+    "quality": {
+      "exact_gather_matches_public_indices": true,
+      "repeated_output_exact": true,
+      "baseline_exact_match": true
+    },
+    "output_hash_A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+    "output_hash_B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+    "indices_hash_A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+    "indices_hash_B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+    "model_state": {
+      "status": "UNAVAILABLE",
+      "reason": "Stateless resampling has no fitted model"
+    },
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "evidence": {
+      "A": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/scored-A.json",
+      "B": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/scored-B.json"
+    },
+    "promotion": false
+  },
+  {
+    "cell": "F04-default-resample-taxi-full",
+    "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+    "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+    "dimensions": {
+      "train": [
+        5250086,
+        11
+      ],
+      "labels": [
+        5250086
+      ]
+    },
+    "A_ms": 209.236583,
+    "B_ms": 199.5785,
+    "B_over_A": 0.9538413270685079,
+    "timing_A": {
+      "full_operation_seconds": 0.209236583,
+      "cold_operation_seconds": 0.209236583,
+      "cold_preparation_seconds": 3.916e-06,
+      "cold_draw_gather_consume_seconds": 0.209232667,
+      "repeated_operation_seconds": 0.180552083,
+      "repeated_preparation_seconds": 2.833e-06,
+      "repeated_draw_gather_consume_seconds": 0.18054925
+    },
+    "timing_B": {
+      "full_operation_seconds": 0.1995785,
+      "cold_operation_seconds": 0.1995785,
+      "cold_preparation_seconds": 3.709e-06,
+      "cold_draw_gather_consume_seconds": 0.199574791,
+      "repeated_operation_seconds": 0.166523542,
+      "repeated_preparation_seconds": 2.834e-06,
+      "repeated_draw_gather_consume_seconds": 0.166520708
+    },
+    "quality": {
+      "exact_gather_matches_public_indices": true,
+      "repeated_output_exact": true,
+      "baseline_exact_match": true
+    },
+    "output_hash_A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+    "output_hash_B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+    "indices_hash_A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+    "indices_hash_B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+    "model_state": {
+      "status": "UNAVAILABLE",
+      "reason": "Stateless resampling has no fitted model"
+    },
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "evidence": {
+      "A": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/scored-A.json",
+      "B": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/scored-B.json"
+    },
+    "promotion": false
+  },
+  {
+    "cell": "F19-default-resample-istella-full",
+    "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+    "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+    "dimensions": {
+      "train": [
+        2043304,
+        220
+      ],
+      "labels": [
+        2043304
+      ]
+    },
+    "A_ms": 1268.163375,
+    "B_ms": 1233.141708,
+    "B_over_A": 0.9723839469815945,
+    "timing_A": {
+      "full_operation_seconds": 1.268163375,
+      "cold_operation_seconds": 1.268163375,
+      "cold_preparation_seconds": 4.5e-06,
+      "cold_draw_gather_consume_seconds": 1.268158875,
+      "repeated_operation_seconds": 1.256534208,
+      "repeated_preparation_seconds": 2.292e-06,
+      "repeated_draw_gather_consume_seconds": 1.256531916
+    },
+    "timing_B": {
+      "full_operation_seconds": 1.233141708,
+      "cold_operation_seconds": 1.233141708,
+      "cold_preparation_seconds": 4e-06,
+      "cold_draw_gather_consume_seconds": 1.233137708,
+      "repeated_operation_seconds": 1.234106459,
+      "repeated_preparation_seconds": 2.5e-06,
+      "repeated_draw_gather_consume_seconds": 1.234103959
+    },
+    "quality": {
+      "exact_gather_matches_public_indices": true,
+      "repeated_output_exact": true,
+      "baseline_exact_match": true
+    },
+    "output_hash_A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+    "output_hash_B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+    "indices_hash_A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+    "indices_hash_B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+    "model_state": {
+      "status": "UNAVAILABLE",
+      "reason": "Stateless resampling has no fitted model"
+    },
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "evidence": {
+      "A": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/scored-A.json",
+      "B": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/scored-B.json"
+    },
+    "promotion": false
+  },
+  {
+    "cell": "F19-default-resample-taxi-full",
+    "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+    "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+    "dimensions": {
+      "train": [
+        5250086,
+        11
+      ],
+      "labels": [
+        5250086
+      ]
+    },
+    "A_ms": 195.660834,
+    "B_ms": 190.365084,
+    "B_over_A": 0.9729340313452818,
+    "timing_A": {
+      "full_operation_seconds": 0.195660834,
+      "cold_operation_seconds": 0.195660834,
+      "cold_preparation_seconds": 3.792e-06,
+      "cold_draw_gather_consume_seconds": 0.195657042,
+      "repeated_operation_seconds": 0.167369958,
+      "repeated_preparation_seconds": 2.333e-06,
+      "repeated_draw_gather_consume_seconds": 0.167367625
+    },
+    "timing_B": {
+      "full_operation_seconds": 0.190365084,
+      "cold_operation_seconds": 0.190365084,
+      "cold_preparation_seconds": 3.625e-06,
+      "cold_draw_gather_consume_seconds": 0.190361459,
+      "repeated_operation_seconds": 0.164104792,
+      "repeated_preparation_seconds": 2.542e-06,
+      "repeated_draw_gather_consume_seconds": 0.16410225
+    },
+    "quality": {
+      "exact_gather_matches_public_indices": true,
+      "repeated_output_exact": true,
+      "baseline_exact_match": true
+    },
+    "output_hash_A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+    "output_hash_B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+    "indices_hash_A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+    "indices_hash_B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+    "model_state": {
+      "status": "UNAVAILABLE",
+      "reason": "Stateless resampling has no fitted model"
+    },
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "evidence": {
+      "A": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/scored-A.json",
+      "B": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/scored-B.json"
+    },
+    "promotion": false
+  }
+]

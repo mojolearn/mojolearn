@@ -2310,6 +2310,15 @@ comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 # remain owned until the single completion; direct host transport avoids a
 # second packed copy. This is default-off and applies to the supported
 # float32 all-GPU gather entrance, never the hybrid narrow route.
+# Full M3 FAST F04 resample, freeze 265872c29 (2026-10-06), one excluded
+# warmup and one score per arm: all Istella 2,043,304 rows, A=1381.708 ms,
+# B=1271.052 ms (0.91991); all taxi 5,250,086 rows, A=209.237 ms,
+# B=199.579 ms (0.95384). Preparation, paired X/y draw and consumed outputs
+# included. Exact full output/indices/repeat checks passed. These scoped
+# gains retain the prior small-workload losses; default remains OFF pending
+# broad call-shape coverage and admission of the complete default route.
+# Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
+# resample-full-summary.json; model is stateless, output/index hashes saved.
 comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
@@ -2319,6 +2328,15 @@ comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 
 # F19 M3 2026-10-06 public resample shapes(1,37)/(3,129)/(1,7,67):
 # B/A1.0402/0.9868/1.7701, quality equal, one warmup+score. Keep tiled gather OFF.
+# Full M3 FAST F19, freeze 265872c29: all Istella rows A=1268.163 ms,
+# B=1233.142 ms (0.97238); all taxi rows A=195.661 ms, B=190.365 ms
+# (0.97293). One excluded warmup/one score; exact output/indices/repeat PASS.
+# Combined WAIT_PAIR+TILED versus GATHER-only was also measured on full data:
+# Istella 1379.800 -> 1242.142 ms (0.90023), taxi 212.941 -> 198.057 ms
+# (0.93010), exact checks PASS. These are scoped gather-enabled comparisons,
+# not admission of the complete main default route; retain OFF and preserve
+# the earlier small-workload losses. F19 permutation remains unqualified.
+# Evidence beside the F04 summary: resample-combined-summary.json and boards.
 comptime RESAMPLE_FAST_TILED_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     # MEASURED M3; default OFF (mixed/regression).

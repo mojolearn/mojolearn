@@ -405,6 +405,44 @@
               }
             ]
           },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/da7fc8e52b70/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/da7fc8e52b70/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/da7fc8e52b70/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/da7fc8e52b70/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
           "warmup_scope": "separate_process",
           "steady_state_claim": false,
           "model_hash_policy": "FAST hashes are reported separately; equality is not required",
@@ -483,6 +521,44 @@
                   "MOJOLEARN_SCOPED_GEMM_PCA",
                   "MOJOLEARN_SCOPED_GEMM_SPLIT"
                 ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
                 "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
                 "target": "Apple Metal arm64"
               }
@@ -675,6 +751,44 @@
               }
             ]
           },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-pca/ec3c8c8504e5/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
           "warmup_scope": "separate_process",
           "steady_state_claim": false,
           "model_hash_policy": "FAST hashes are reported separately; equality is not required",
@@ -858,9 +972,447 @@
           "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
+        },
+        {
+          "id": "F04",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F04-default-resample-istella-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-resample-265872c2922e/F04-default-resample-istella-full/attempts/attempt-0001",
+          "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F04-default-resample-istella-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASURED",
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "dimensions": {
+            "train": [
+              2043304,
+              220
+            ],
+            "labels": [
+              2043304
+            ]
+          },
+          "estimator_settings": {
+            "replace": true,
+            "n_samples": null,
+            "effective_n_samples": 2043304,
+            "random_state": 109,
+            "paired_arrays": [
+              "X",
+              "y"
+            ]
+          },
+          "timed_boundary": "host input preparation + public paired resample index draw and both gathers + native synchronization + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-istella-full/A/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "f22eb9593a0643076dd93002964bf5423540533a67bda17d4f6ee7e77bbb93d1",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-istella-full/B/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "c2c831c59c4783f44644b7c74f335f954c1341ae958d76489c340826d993deff",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-istella-full/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-istella-full/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-istella-full/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-istella-full/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/warmup-A.json"
+            },
+            {
+              "phase": "warmup",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/warmup-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/warmup-B.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/scored-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/scored-A.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/scored-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-istella-full/attempts/attempt-0001/scored-B.json"
+            }
+          ],
+          "scored_arm_timings": {
+            "A": {
+              "full_operation_seconds": 1.381708292,
+              "cold_operation_seconds": 1.381708292,
+              "cold_preparation_seconds": 4.417e-06,
+              "cold_draw_gather_consume_seconds": 1.381703875,
+              "repeated_operation_seconds": 1.351870458,
+              "repeated_preparation_seconds": 2.375e-06,
+              "repeated_draw_gather_consume_seconds": 1.351868083
+            },
+            "B": {
+              "full_operation_seconds": 1.271051791,
+              "cold_operation_seconds": 1.271051791,
+              "cold_preparation_seconds": 4.125e-06,
+              "cold_draw_gather_consume_seconds": 1.271047666,
+              "repeated_operation_seconds": 1.255700083,
+              "repeated_preparation_seconds": 1.958e-06,
+              "repeated_draw_gather_consume_seconds": 1.255698125
+            }
+          },
+          "model_states": {
+            "A": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            },
+            "B": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            }
+          },
+          "output_hashes": {
+            "A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+            "B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c"
+          },
+          "repeated_output_hashes": {
+            "A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+            "B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c"
+          },
+          "indices_hashes": {
+            "A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+            "B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3"
+          },
+          "quality": {
+            "exact_resample": {
+              "ok": true,
+              "complete_output_equal": true,
+              "public_indices_equal": true,
+              "repeated_output_equal": true,
+              "cold_equals_repeated": true,
+              "own_row_oracle": true,
+              "own_repeated_oracle": true,
+              "candidate_baseline_oracle": true
+            },
+            "actual_gpu_gather": true,
+            "scope": "all gathered rows, public seeded indices, cold/repeated A/B output"
+          },
+          "model_hashes_equal": null,
+          "output_hashes_equal": true,
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 1381.7082919999998,
+          "candidate_ms": 1271.051791,
+          "baseline_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "candidate_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "baseline_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "candidate_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "artifact_hashes": {
+            "baseline": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-istella-full/A/package/mojolearn/_mojolearn_resample.so": "f22eb9593a0643076dd93002964bf5423540533a67bda17d4f6ee7e77bbb93d1"
+            },
+            "candidate": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-istella-full/B/package/mojolearn/_mojolearn_resample.so": "c2c831c59c4783f44644b7c74f335f954c1341ae958d76489c340826d993deff"
+            }
+          },
+          "variant": "default",
+          "pending_coverage": [
+            "other affected public operations and interacting candidate combinations"
+          ],
+          "producer": "full-pca-collector",
+          "candidate_over_baseline": 0.9199132684947369
+        },
+        {
+          "id": "F04",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F04-default-resample-taxi-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-resample-265872c2922e/F04-default-resample-taxi-full/attempts/attempt-0001",
+          "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F04-default-resample-taxi-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASURED",
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "dimensions": {
+            "train": [
+              5250086,
+              11
+            ],
+            "labels": [
+              5250086
+            ]
+          },
+          "estimator_settings": {
+            "replace": true,
+            "n_samples": null,
+            "effective_n_samples": 5250086,
+            "random_state": 109,
+            "paired_arrays": [
+              "X",
+              "y"
+            ]
+          },
+          "timed_boundary": "host input preparation + public paired resample index draw and both gathers + native synchronization + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-taxi-full/A/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "f22eb9593a0643076dd93002964bf5423540533a67bda17d4f6ee7e77bbb93d1",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-taxi-full/B/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "c2c831c59c4783f44644b7c74f335f954c1341ae958d76489c340826d993deff",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-taxi-full/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-taxi-full/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-taxi-full/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-taxi-full/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/warmup-A.json"
+            },
+            {
+              "phase": "warmup",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/warmup-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/warmup-B.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/scored-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/scored-A.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/scored-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F04-default-resample-taxi-full/attempts/attempt-0001/scored-B.json"
+            }
+          ],
+          "scored_arm_timings": {
+            "A": {
+              "full_operation_seconds": 0.209236583,
+              "cold_operation_seconds": 0.209236583,
+              "cold_preparation_seconds": 3.916e-06,
+              "cold_draw_gather_consume_seconds": 0.209232667,
+              "repeated_operation_seconds": 0.180552083,
+              "repeated_preparation_seconds": 2.833e-06,
+              "repeated_draw_gather_consume_seconds": 0.18054925
+            },
+            "B": {
+              "full_operation_seconds": 0.1995785,
+              "cold_operation_seconds": 0.1995785,
+              "cold_preparation_seconds": 3.709e-06,
+              "cold_draw_gather_consume_seconds": 0.199574791,
+              "repeated_operation_seconds": 0.166523542,
+              "repeated_preparation_seconds": 2.834e-06,
+              "repeated_draw_gather_consume_seconds": 0.166520708
+            }
+          },
+          "model_states": {
+            "A": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            },
+            "B": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            }
+          },
+          "output_hashes": {
+            "A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+            "B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542"
+          },
+          "repeated_output_hashes": {
+            "A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+            "B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542"
+          },
+          "indices_hashes": {
+            "A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+            "B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb"
+          },
+          "quality": {
+            "exact_resample": {
+              "ok": true,
+              "complete_output_equal": true,
+              "public_indices_equal": true,
+              "repeated_output_equal": true,
+              "cold_equals_repeated": true,
+              "own_row_oracle": true,
+              "own_repeated_oracle": true,
+              "candidate_baseline_oracle": true
+            },
+            "actual_gpu_gather": true,
+            "scope": "all gathered rows, public seeded indices, cold/repeated A/B output"
+          },
+          "model_hashes_equal": null,
+          "output_hashes_equal": true,
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 209.236583,
+          "candidate_ms": 199.5785,
+          "baseline_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "candidate_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "baseline_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "candidate_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "artifact_hashes": {
+            "baseline": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-taxi-full/A/package/mojolearn/_mojolearn_resample.so": "f22eb9593a0643076dd93002964bf5423540533a67bda17d4f6ee7e77bbb93d1"
+            },
+            "candidate": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F04-default-resample-taxi-full/B/package/mojolearn/_mojolearn_resample.so": "c2c831c59c4783f44644b7c74f335f954c1341ae958d76489c340826d993deff"
+            }
+          },
+          "variant": "default",
+          "pending_coverage": [
+            "other affected public operations and interacting candidate combinations"
+          ],
+          "producer": "full-pca-collector",
+          "candidate_over_baseline": 0.9538413270685079
         }
       ],
-      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "F05",
@@ -1054,6 +1606,44 @@
               }
             ]
           },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
           "warmup_scope": "separate_process",
           "steady_state_claim": false,
           "model_hash_policy": "FAST hashes are reported separately; equality is not required",
@@ -1224,6 +1814,44 @@
                 "defines": [
                   "MOJOLEARN_PCA_FAST_COMPENSATED_COV"
                 ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-compensated-pca/ec3c8c8504e5/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
                 "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
                 "target": "Apple Metal arm64"
               }
@@ -1508,9 +2136,895 @@
           "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
+        },
+        {
+          "id": "F19",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F19-combined-wait-tiled-istella-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-resample-265872c2922e/F19-combined-wait-tiled-istella-full/attempts/attempt-0001",
+          "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASURED",
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "dimensions": {
+            "train": [
+              2043304,
+              220
+            ],
+            "labels": [
+              2043304
+            ]
+          },
+          "estimator_settings": {
+            "replace": true,
+            "n_samples": null,
+            "effective_n_samples": 2043304,
+            "random_state": 109,
+            "paired_arrays": [
+              "X",
+              "y"
+            ]
+          },
+          "timed_boundary": "host input preparation + public paired resample index draw and both gathers + native synchronization + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-istella-full/A/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "f22eb9593a0643076dd93002964bf5423540533a67bda17d4f6ee7e77bbb93d1",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-istella-full/B/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "2711f69cf522e906ec44ee117ec7e43e0619713257bb42d27c2785e45a23b6f0",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-istella-full/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-istella-full/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-istella-full/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-istella-full/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/warmup-A.json"
+            },
+            {
+              "phase": "warmup",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/warmup-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/warmup-B.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/scored-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/scored-A.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/scored-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-istella-full/attempts/attempt-0001/scored-B.json"
+            }
+          ],
+          "scored_arm_timings": {
+            "A": {
+              "full_operation_seconds": 1.379799625,
+              "cold_operation_seconds": 1.379799625,
+              "cold_preparation_seconds": 5.125e-06,
+              "cold_draw_gather_consume_seconds": 1.3797945,
+              "repeated_operation_seconds": 1.389671792,
+              "repeated_preparation_seconds": 2.542e-06,
+              "repeated_draw_gather_consume_seconds": 1.38966925
+            },
+            "B": {
+              "full_operation_seconds": 1.242142042,
+              "cold_operation_seconds": 1.242142042,
+              "cold_preparation_seconds": 4.584e-06,
+              "cold_draw_gather_consume_seconds": 1.242137458,
+              "repeated_operation_seconds": 1.243476041,
+              "repeated_preparation_seconds": 2.791e-06,
+              "repeated_draw_gather_consume_seconds": 1.24347325
+            }
+          },
+          "model_states": {
+            "A": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            },
+            "B": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            }
+          },
+          "output_hashes": {
+            "A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+            "B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c"
+          },
+          "repeated_output_hashes": {
+            "A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+            "B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c"
+          },
+          "indices_hashes": {
+            "A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+            "B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3"
+          },
+          "quality": {
+            "exact_resample": {
+              "ok": true,
+              "complete_output_equal": true,
+              "public_indices_equal": true,
+              "repeated_output_equal": true,
+              "cold_equals_repeated": true,
+              "own_row_oracle": true,
+              "own_repeated_oracle": true,
+              "candidate_baseline_oracle": true
+            },
+            "actual_gpu_gather": true,
+            "scope": "all gathered rows, public seeded indices, cold/repeated A/B output"
+          },
+          "model_hashes_equal": null,
+          "output_hashes_equal": true,
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 1379.7996249999999,
+          "candidate_ms": 1242.142042,
+          "baseline_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "candidate_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "baseline_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "candidate_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "artifact_hashes": {
+            "baseline": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-istella-full/A/package/mojolearn/_mojolearn_resample.so": "f22eb9593a0643076dd93002964bf5423540533a67bda17d4f6ee7e77bbb93d1"
+            },
+            "candidate": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-istella-full/B/package/mojolearn/_mojolearn_resample.so": "2711f69cf522e906ec44ee117ec7e43e0619713257bb42d27c2785e45a23b6f0"
+            }
+          },
+          "variant": "default",
+          "pending_coverage": [
+            "other affected public operations and interacting candidate combinations",
+            "F19 permutation variant is separate and remains unmeasured here"
+          ],
+          "producer": "full-pca-collector",
+          "candidate_over_baseline": 0.9002336422580199
+        },
+        {
+          "id": "F19",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F19-combined-wait-tiled-taxi-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-resample-265872c2922e/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001",
+          "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASURED",
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "dimensions": {
+            "train": [
+              5250086,
+              11
+            ],
+            "labels": [
+              5250086
+            ]
+          },
+          "estimator_settings": {
+            "replace": true,
+            "n_samples": null,
+            "effective_n_samples": 5250086,
+            "random_state": 109,
+            "paired_arrays": [
+              "X",
+              "y"
+            ]
+          },
+          "timed_boundary": "host input preparation + public paired resample index draw and both gathers + native synchronization + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-taxi-full/A/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "f22eb9593a0643076dd93002964bf5423540533a67bda17d4f6ee7e77bbb93d1",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-taxi-full/B/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "2711f69cf522e906ec44ee117ec7e43e0619713257bb42d27c2785e45a23b6f0",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-taxi-full/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-taxi-full/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-taxi-full/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-taxi-full/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/warmup-A.json"
+            },
+            {
+              "phase": "warmup",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/warmup-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/warmup-B.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/scored-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/scored-A.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/scored-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-combined-wait-tiled-taxi-full/attempts/attempt-0001/scored-B.json"
+            }
+          ],
+          "scored_arm_timings": {
+            "A": {
+              "full_operation_seconds": 0.212940625,
+              "cold_operation_seconds": 0.212940625,
+              "cold_preparation_seconds": 3.916e-06,
+              "cold_draw_gather_consume_seconds": 0.212936709,
+              "repeated_operation_seconds": 0.186580791,
+              "repeated_preparation_seconds": 2.25e-06,
+              "repeated_draw_gather_consume_seconds": 0.186578541
+            },
+            "B": {
+              "full_operation_seconds": 0.198056667,
+              "cold_operation_seconds": 0.198056667,
+              "cold_preparation_seconds": 3.625e-06,
+              "cold_draw_gather_consume_seconds": 0.198053042,
+              "repeated_operation_seconds": 0.172328833,
+              "repeated_preparation_seconds": 2.458e-06,
+              "repeated_draw_gather_consume_seconds": 0.172326375
+            }
+          },
+          "model_states": {
+            "A": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            },
+            "B": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            }
+          },
+          "output_hashes": {
+            "A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+            "B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542"
+          },
+          "repeated_output_hashes": {
+            "A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+            "B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542"
+          },
+          "indices_hashes": {
+            "A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+            "B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb"
+          },
+          "quality": {
+            "exact_resample": {
+              "ok": true,
+              "complete_output_equal": true,
+              "public_indices_equal": true,
+              "repeated_output_equal": true,
+              "cold_equals_repeated": true,
+              "own_row_oracle": true,
+              "own_repeated_oracle": true,
+              "candidate_baseline_oracle": true
+            },
+            "actual_gpu_gather": true,
+            "scope": "all gathered rows, public seeded indices, cold/repeated A/B output"
+          },
+          "model_hashes_equal": null,
+          "output_hashes_equal": true,
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 212.94062499999998,
+          "candidate_ms": 198.056667,
+          "baseline_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "candidate_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "baseline_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "candidate_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "artifact_hashes": {
+            "baseline": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-taxi-full/A/package/mojolearn/_mojolearn_resample.so": "f22eb9593a0643076dd93002964bf5423540533a67bda17d4f6ee7e77bbb93d1"
+            },
+            "candidate": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-taxi-full/B/package/mojolearn/_mojolearn_resample.so": "2711f69cf522e906ec44ee117ec7e43e0619713257bb42d27c2785e45a23b6f0"
+            }
+          },
+          "variant": "default",
+          "pending_coverage": [
+            "other affected public operations and interacting candidate combinations",
+            "F19 permutation variant is separate and remains unmeasured here"
+          ],
+          "producer": "full-pca-collector",
+          "candidate_over_baseline": 0.930102778650152
+        },
+        {
+          "id": "F19",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F19-default-resample-istella-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-resample-265872c2922e/F19-default-resample-istella-full/attempts/attempt-0001",
+          "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F19-default-resample-istella-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASURED",
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "dimensions": {
+            "train": [
+              2043304,
+              220
+            ],
+            "labels": [
+              2043304
+            ]
+          },
+          "estimator_settings": {
+            "replace": true,
+            "n_samples": null,
+            "effective_n_samples": 2043304,
+            "random_state": 109,
+            "paired_arrays": [
+              "X",
+              "y"
+            ]
+          },
+          "timed_boundary": "host input preparation + public paired resample index draw and both gathers + native synchronization + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-istella-full/A/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "c2c831c59c4783f44644b7c74f335f954c1341ae958d76489c340826d993deff",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-istella-full/B/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "2711f69cf522e906ec44ee117ec7e43e0619713257bb42d27c2785e45a23b6f0",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-istella-full/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-istella-full/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-istella-full/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-istella-full/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/warmup-A.json"
+            },
+            {
+              "phase": "warmup",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/warmup-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/warmup-B.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/scored-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/scored-A.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/scored-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-istella-full/attempts/attempt-0001/scored-B.json"
+            }
+          ],
+          "scored_arm_timings": {
+            "A": {
+              "full_operation_seconds": 1.268163375,
+              "cold_operation_seconds": 1.268163375,
+              "cold_preparation_seconds": 4.5e-06,
+              "cold_draw_gather_consume_seconds": 1.268158875,
+              "repeated_operation_seconds": 1.256534208,
+              "repeated_preparation_seconds": 2.292e-06,
+              "repeated_draw_gather_consume_seconds": 1.256531916
+            },
+            "B": {
+              "full_operation_seconds": 1.233141708,
+              "cold_operation_seconds": 1.233141708,
+              "cold_preparation_seconds": 4e-06,
+              "cold_draw_gather_consume_seconds": 1.233137708,
+              "repeated_operation_seconds": 1.234106459,
+              "repeated_preparation_seconds": 2.5e-06,
+              "repeated_draw_gather_consume_seconds": 1.234103959
+            }
+          },
+          "model_states": {
+            "A": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            },
+            "B": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            }
+          },
+          "output_hashes": {
+            "A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+            "B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c"
+          },
+          "repeated_output_hashes": {
+            "A": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c",
+            "B": "3c639d004e44465d1cef5fd4561d26dcc7f33d155050b57395230d0faf113e8c"
+          },
+          "indices_hashes": {
+            "A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
+            "B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3"
+          },
+          "quality": {
+            "exact_resample": {
+              "ok": true,
+              "complete_output_equal": true,
+              "public_indices_equal": true,
+              "repeated_output_equal": true,
+              "cold_equals_repeated": true,
+              "own_row_oracle": true,
+              "own_repeated_oracle": true,
+              "candidate_baseline_oracle": true
+            },
+            "actual_gpu_gather": true,
+            "scope": "all gathered rows, public seeded indices, cold/repeated A/B output"
+          },
+          "model_hashes_equal": null,
+          "output_hashes_equal": true,
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 1268.163375,
+          "candidate_ms": 1233.141708,
+          "baseline_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "candidate_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "baseline_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "candidate_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "artifact_hashes": {
+            "baseline": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-istella-full/A/package/mojolearn/_mojolearn_resample.so": "c2c831c59c4783f44644b7c74f335f954c1341ae958d76489c340826d993deff"
+            },
+            "candidate": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-istella-full/B/package/mojolearn/_mojolearn_resample.so": "2711f69cf522e906ec44ee117ec7e43e0619713257bb42d27c2785e45a23b6f0"
+            }
+          },
+          "variant": "default",
+          "pending_coverage": [
+            "other affected public operations and interacting candidate combinations",
+            "F19 permutation variant is separate and remains unmeasured here"
+          ],
+          "producer": "full-pca-collector",
+          "candidate_over_baseline": 0.9723839469815946
+        },
+        {
+          "id": "F19",
+          "vendor": "apple",
+          "mode": "fast",
+          "route": "metal",
+          "case": "F19-default-resample-taxi-full/attempt-0001",
+          "scope": "full_workload",
+          "measurement_id": "apple-resample-265872c2922e/F19-default-resample-taxi-full/attempts/attempt-0001",
+          "source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/collector/captures/resample-265872c2922e/F19-default-resample-taxi-full/attempts/attempt-0001/receipt.json",
+          "remote_evidence": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/receipt.json",
+          "status": "MEASURED",
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "dimensions": {
+            "train": [
+              5250086,
+              11
+            ],
+            "labels": [
+              5250086
+            ]
+          },
+          "estimator_settings": {
+            "replace": true,
+            "n_samples": null,
+            "effective_n_samples": 5250086,
+            "random_state": 109,
+            "paired_arrays": [
+              "X",
+              "y"
+            ]
+          },
+          "timed_boundary": "host input preparation + public paired resample index draw and both gathers + native synchronization + host copies; disk load and hashes excluded",
+          "artifact_provenance": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-taxi-full/A/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "c2c831c59c4783f44644b7c74f335f954c1341ae958d76489c340826d993deff",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-taxi-full/B/package/mojolearn/_mojolearn_resample.so",
+                "sha256": "2711f69cf522e906ec44ee117ec7e43e0619713257bb42d27c2785e45a23b6f0",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [
+                  "MOJOLEARN_RESAMPLE_FAST_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+                  "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+                ],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "retained_prerequisites": {
+            "A": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-taxi-full/A/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-taxi-full/A/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ],
+            "B": [
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-taxi-full/B/package/mojolearn/_mojolearn.so",
+                "sha256": "50b42e04fb74d7b33d862fa454cf142500bcf4402474c29173cb5771b9de3b78",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              },
+              {
+                "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-taxi-full/B/package/mojolearn/identical/_mojolearn.so",
+                "sha256": "a87518f0459165173123ac239a692efc107a83bc43523ad9396d68c0faae60df",
+                "numerical_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+                "defines": [],
+                "compiler": "Mojo1.0.0 pinned pixi.lock; accepted original compilation receipt",
+                "target": "Apple Metal arm64"
+              }
+            ]
+          },
+          "warmup_scope": "separate_process",
+          "steady_state_claim": false,
+          "model_hash_policy": "Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim",
+          "promotion": false,
+          "retained_runs": [
+            {
+              "phase": "warmup",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/warmup-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/warmup-A.json"
+            },
+            {
+              "phase": "warmup",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/warmup-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/warmup-B.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "A",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/scored-A.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/scored-A.json"
+            },
+            {
+              "phase": "scored",
+              "arm": "B",
+              "returncode": 0,
+              "error": null,
+              "log": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/scored-B.log",
+              "output": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/runs/F19-default-resample-taxi-full/attempts/attempt-0001/scored-B.json"
+            }
+          ],
+          "scored_arm_timings": {
+            "A": {
+              "full_operation_seconds": 0.195660834,
+              "cold_operation_seconds": 0.195660834,
+              "cold_preparation_seconds": 3.792e-06,
+              "cold_draw_gather_consume_seconds": 0.195657042,
+              "repeated_operation_seconds": 0.167369958,
+              "repeated_preparation_seconds": 2.333e-06,
+              "repeated_draw_gather_consume_seconds": 0.167367625
+            },
+            "B": {
+              "full_operation_seconds": 0.190365084,
+              "cold_operation_seconds": 0.190365084,
+              "cold_preparation_seconds": 3.625e-06,
+              "cold_draw_gather_consume_seconds": 0.190361459,
+              "repeated_operation_seconds": 0.164104792,
+              "repeated_preparation_seconds": 2.542e-06,
+              "repeated_draw_gather_consume_seconds": 0.16410225
+            }
+          },
+          "model_states": {
+            "A": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            },
+            "B": {
+              "status": "UNAVAILABLE",
+              "reason": "Stateless resampling has no fitted model"
+            }
+          },
+          "output_hashes": {
+            "A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+            "B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542"
+          },
+          "repeated_output_hashes": {
+            "A": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542",
+            "B": "840d7147d68968c8ed96835a769267756c35ec5abd74869546ecdedcb3233542"
+          },
+          "indices_hashes": {
+            "A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
+            "B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb"
+          },
+          "quality": {
+            "exact_resample": {
+              "ok": true,
+              "complete_output_equal": true,
+              "public_indices_equal": true,
+              "repeated_output_equal": true,
+              "cold_equals_repeated": true,
+              "own_row_oracle": true,
+              "own_repeated_oracle": true,
+              "candidate_baseline_oracle": true
+            },
+            "actual_gpu_gather": true,
+            "scope": "all gathered rows, public seeded indices, cold/repeated A/B output"
+          },
+          "model_hashes_equal": null,
+          "output_hashes_equal": true,
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 195.660834,
+          "candidate_ms": 190.365084,
+          "baseline_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "candidate_machine": "Apple M3 Ultra / m3ultra-b / 54.157.1.251",
+          "baseline_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "candidate_source_sha": "265872c2922e466a41698cc8d4da054936991fb2",
+          "artifact_hashes": {
+            "baseline": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-taxi-full/A/package/mojolearn/_mojolearn_resample.so": "c2c831c59c4783f44644b7c74f335f954c1341ae958d76489c340826d993deff"
+            },
+            "candidate": {
+              "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-default-resample-taxi-full/B/package/mojolearn/_mojolearn_resample.so": "2711f69cf522e906ec44ee117ec7e43e0619713257bb42d27c2785e45a23b6f0"
+            }
+          },
+          "variant": "default",
+          "pending_coverage": [
+            "other affected public operations and interacting candidate combinations",
+            "F19 permutation variant is separate and remains unmeasured here"
+          ],
+          "producer": "full-pca-collector",
+          "candidate_over_baseline": 0.9729340313452819
         }
       ],
-      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "F20",
@@ -2798,8 +4312,8 @@
     "NVIDIA/AMD prior campaign resources retired; no new rental started without a runnable full-workload pair.",
     "Model/output SHA256 capture added to actual workload drivers; unavailable model exports remain explicit. No compilation or separate identity validation run.",
     "Final frozen main SHA is retained in /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/freeze.json after push.",
-    "Four full Apple FAST PCA A/B pairs completed on uncapped Istella and taxi under ec3c8c850; first da7 receipt failure retained. NVIDIA/AMD full-workload artifact coverage remains pending.",
-    "Apple FAST now proceeds independently. Current measured PCA subsets do not close downstream LLE, other adapters or interaction coverage."
+    "Apple FAST now proceeds independently. Current measured PCA subsets do not close downstream LLE, other adapters or interaction coverage.",
+    "Ten full Apple FAST A/B pairs captured: PCA and compensated PCA on uncapped Istella/taxi; paired gather, tiled gather and their combined configuration on both full datasets. Original failed PCA receipt remains separate. No default promotion or opponent comparison inferred."
   ],
   "decisions": []
 }
