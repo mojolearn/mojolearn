@@ -37,11 +37,13 @@ def main():
     slot=Path.home()/'mojolearn-evidence/compile_slot.sh'
     if not slot.is_file():raise RuntimeError('existing M2 compile-slot script missing: '+str(slot))
     dependencies={}
-    def build(name,defines,destination):
+    def build(name,defines,destination,numeric_mode="fast"):
         script='bindings/build.sh' if name=='core' else 'bindings/build_'+name+'.sh'
-        local=dict(env,MOJOLEARN_MOJO_BUILD_FLAGS=flags(defines),MOJOLEARN_BUILD_EXTRA_DEFINES=flags(defines))
+        local=dict(env,MOJOLEARN_NUMERIC_MODE=numeric_mode,MOJOLEARN_MOJO_BUILD_FLAGS=flags(defines),MOJOLEARN_BUILD_EXTRA_DEFINES=flags(defines))
         if name=='byte_lm':local['MOJOLEARN_BYTE_LM_OUTDIR']=str(a.output/(destination.stem+'-native'))
-        binary=ROOT/'python/mojolearn'/('_mojolearn.so' if name=='core' else '_mojolearn_'+name+'.so')
+        binary=ROOT/'python/mojolearn'
+        if numeric_mode=='identical':binary=binary/'identical'
+        binary=binary/('_mojolearn.so' if name=='core' else '_mojolearn_'+name+'.so')
         if name=='byte_lm':binary=Path(local['MOJOLEARN_BYTE_LM_OUTDIR'])/'_mojolearn_byte_lm.so'
         with destination.with_suffix('.build.log').open('x') as stream:
             rc=subprocess.run(['bash',str(slot),'bash',script],cwd=ROOT,env=local,stdout=stream,stderr=subprocess.STDOUT).returncode
@@ -54,6 +56,12 @@ def main():
         destination=a.output/'dependencies'/name
         digest=build(prerequisite,[],destination)
         dependencies[name]=dict(source_sha=source,numeric_mode='fast',vendor='apple',target_column='apple',defines=[],sha256=digest)
+    # Public buffer conversion always calls the IDENTICAL core helpers, even
+    # for FAST estimators. Attest this precise transport role separately.
+    helper=a.output/'dependencies'/'identical'/'_mojolearn.so'
+    helper.parent.mkdir()
+    digest=build('core',[],helper,numeric_mode='identical')
+    dependencies['identical/_mojolearn.so']=dict(source_sha=source,numeric_mode='identical',vendor='apple',target_column='apple',defines=[],sha256=digest,role='input_transport_helpers')
     hashes={}
     baseline=card.get('variant_baseline_defines',{}).get(a.variant,card['baseline_defines'])
     for arm,defines in (('A',baseline),('B',candidate)):

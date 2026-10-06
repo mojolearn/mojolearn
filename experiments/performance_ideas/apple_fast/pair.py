@@ -63,14 +63,23 @@ def main():
     for arm in ('A', 'B'):
         package = args.output / arm / 'package' / 'mojolearn'
         shutil.copytree(ROOT / 'python/mojolearn', package, ignore=shutil.ignore_patterns('*.so', '__pycache__'))
-        # Only exact-source FAST Apple prerequisites from the build receipt may
-        # enter the isolated package. Never copy arbitrary installed binaries.
+        # Only enumerated FAST prerequisites and the sole IDENTICAL core
+        # input-transport helper may enter this isolated package.
         prerequisites = manifest['dependencies']
+        expected=card.get('variant_prerequisite_bindings',{}).get(args.variant,card.get('prerequisite_bindings',['core']))
+        names={'_mojolearn.so' if item=='core' else '_mojolearn_'+item+'.so' for item in expected}
+        assert set(prerequisites)==names|{'identical/_mojolearn.so'}
         for name, receipt in prerequisites.items():
             path = args.arms / 'dependencies' / name
-            assert receipt['source_sha'] == source and receipt['numeric_mode'] == 'fast'
-            assert receipt['vendor'] == 'apple' and receipt['sha256'] == sha(path)
-            shutil.copy2(path, package / name)
+            assert receipt['source_sha'] == source and receipt['defines']==[]
+            assert receipt['vendor'] == 'apple' and receipt['target_column']=='apple' and receipt['sha256'] == sha(path)
+            if name=='identical/_mojolearn.so':
+                assert receipt['numeric_mode']=='identical' and receipt['role']=='input_transport_helpers'
+            else:
+                assert receipt['numeric_mode']=='fast' and name in names
+            destination=package/name
+            destination.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(path,destination)
         shutil.copy2(args.arms / (arm + '.so'), package / ('_mojolearn.so' if binding == 'core' else '_mojolearn_' + binding + '.so'))
         env = dict(os.environ, PYTHONPATH=str(package.parent), MOJOLEARN_NUMERIC_MODE='fast',
                    MOJOLEARN_VENDOR='apple', OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1')

@@ -74,5 +74,15 @@
       "core",
       "training"
     ]
-  }
+  },
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F20",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
 }

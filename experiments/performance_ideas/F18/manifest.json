@@ -63,5 +63,15 @@
       "MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"
     ]
   },
-  "paired_build": true
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F18",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
 }

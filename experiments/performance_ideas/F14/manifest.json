@@ -78,5 +78,15 @@
     "ann": [
       "candidate_counts"
     ]
-  }
+  },
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F14",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
 }

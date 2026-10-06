@@ -76,5 +76,15 @@
       "core",
       "x_decomp"
     ]
-  }
+  },
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F11",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
 }

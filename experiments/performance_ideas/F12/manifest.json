@@ -81,5 +81,15 @@
       "MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF"
     ]
   },
-  "paired_build": true
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F12",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
 }
