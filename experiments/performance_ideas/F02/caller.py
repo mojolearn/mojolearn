@@ -93,10 +93,11 @@ def pca(args):
     from mojolearn import _mojolearn_estimators as binding
     spec=importlib.util.spec_from_file_location('pca_caller',Path(__file__).resolve().parents[1]/'F11/caller.py')
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    before=int(binding.scoped_gemm_count(2,2))
+    # Self-Gram selects arm 1; arm 2 is the non-aliased NT tile.
+    before=sum(int(binding.scoped_gemm_count(2,arm)) for arm in (1,2))
     # Reuse fixed PCA quality fixtures, but assert this adapter's own counter.
     packet=module.pca(SimpleNamespace(arm='A',variant='pca'))
-    reached=int(binding.scoped_gemm_count(2,2))-before
+    reached=sum(int(binding.scoped_gemm_count(2,arm)) for arm in (1,2))-before
     if args.arm=='B':assert reached>0,'PCA split adapter never reached'
     packet['split_products']=reached
     return packet

@@ -4958,14 +4958,14 @@ class EllipticEnvelope(MinCovDet):
         from ._expansion_metrics import accuracy_fraction
         pa = self.predict(X)
         n = len(pa)
-        ya = as_f64_c(y, ndim=1, name="y")[0]
-        if len(ya) != n:
+        # Preserve classification label types for the shared encoder.
+        # Converting integer labels to Float64 made valid score calls fail.
+        if len(y) != n:
             raise ValueError("y and X have different numbers of rows")
         if sample_weight is not None and len(as_f64_c(sample_weight, ndim=1, name="sample_weight")[0]) != n:
             raise ValueError("sample_weight and X have different numbers of rows")
-        # both sides Float64 labels: one label kind for the encoder
         try:
-            return accuracy_fraction(ya, pa.astype("<f8"), sample_weight, self.numeric_mode_)
+            return accuracy_fraction(y, pa, sample_weight, self.numeric_mode_)
         except ZeroDivisionError:
             raise ZeroDivisionError("Weights sum to zero, can't be normalized") from None
 
