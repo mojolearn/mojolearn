@@ -8,6 +8,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -45,13 +46,32 @@ def tick(config, state):
                 if result.returncode:
                     row['status'] = 'PROBE_FAILED'
             if row['status'] in ('RUNNING', 'MEASURING'):
-                heartbeat = value.get('heartbeat_at', path.stat().st_mtime)
-                if time.time() - heartbeat > lane.get('heartbeat_timeout_seconds', 300):
-                    row['status'] = 'HEARTBEAT_STALE'
+                heartbeat = None
+                for field in ('heartbeat_at', 'updated_at', 'updated'):
+                    candidate = value.get(field)
+                    if (isinstance(candidate, (int, float)) and not isinstance(candidate, bool)
+                            and math.isfinite(candidate)):
+                        heartbeat = candidate
+                        row['heartbeat_source'] = field
+                        break
+                if heartbeat is None and not lane.get('fetch_status_argv'):
+                    # A local controller updates this original file itself.
+                    # A fetched copy's mtime only proves the observer is alive.
+                    heartbeat = path.stat().st_mtime
+                    row['heartbeat_source'] = 'local_file_mtime'
+                if heartbeat is None:
+                    row['status'] = 'HEARTBEAT_MISSING'
+                    row['error'] = 'Active remote status has no finite numeric heartbeat_at, updated_at or updated'
+                else:
+                    row['heartbeat_at'] = heartbeat
+                    if time.time() - heartbeat > lane.get('heartbeat_timeout_seconds', 300):
+                        row['status'] = 'HEARTBEAT_STALE'
             # Ignore timestamps and counters for alerts; phase/failure changes
             # are enough. A quiet, healthy long workload is not a failed run.
             row['alert_key'] = hashlib.sha256(json.dumps({
                 'status': row['status'], 'error': value.get('error'),
+                'observer_error': row.get('error'), 'reason': value.get('reason'),
+                'errors': value.get('errors'), 'freeze_error': value.get('freeze_error'),
                 'failed': value.get('failed'), 'blockers': value.get('blockers'),
                 'freeze': value.get('source_sha'),
             }, sort_keys=True).encode()).hexdigest()
