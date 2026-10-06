@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "id": "N06",
+  "title": "Keep compact feature gradients in registers without query barriers",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "build_passed",
+  "implementation_paths": [
+    "experiments/performance_ideas/N06/compact_grad.mojo",
+    "experiments/performance_ideas/N06/check.mojo",
+    "transformer/impl/llama/attention_v2.mojo"
+  ],
+  "candidate_defines": [],
+  "baseline_defines": [],
+  "build_argv": [
+    "pixi",
+    "run",
+    "mojo",
+    "build",
+    "-j1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-I",
+    "{repo}",
+    "{repo}/experiments/performance_ideas/N06/check.mojo",
+    "-o",
+    "{output}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "gemm/checks/gemm_step_arms_check.mojo",
+    "core/gemm_identity_check.mojo",
+    "bench/evidence/2026-09-20_attention_v2_cooperative_dkdv_rejected.md"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host output bits",
+    "exact intermediate outputs and poison control",
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Must beat complete v1 training route as well as stock v2; no Apple-rejection performance extrapolation"
+  ],
+  "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
+  "blocker": null,
+  "baseline_build_argv": [
+    "pixi",
+    "run",
+    "mojo",
+    "build",
+    "-j1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-I",
+    "{repo}",
+    "{repo}/transformer/checks/attention_v2_backward_check.mojo",
+    "-o",
+    "{output}"
+  ]
+}
