@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "id": "F01",
+  "title": "Actual PCA caller GEMM geometry",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/F01/caller.py",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "experiments/apple_fast/gemm/scoped_dispatch.mojo"
+  ],
+  "candidate_defines": [
+    "-D",
+    "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+    "-D",
+    "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+    "-D",
+    "MOJOLEARN_SCOPED_GEMM_PCA",
+    "-D",
+    "MOJOLEARN_SCOPED_GEMM_AUDIT"
+  ],
+  "baseline_defines": [
+    "-D",
+    "MOJOLEARN_SCOPED_GEMM_AUDIT"
+  ],
+  "build_argv": [
+    "bash",
+    "bindings/build_estimators.sh"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F01",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F01/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "actual compiled FAST Metal binding",
+    "candidate route count positive",
+    "PCA reconstruction no material loss",
+    "fit and inverse timings remain separate"
+  ],
+  "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
+  "blocker": null
+}
