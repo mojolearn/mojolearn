@@ -62,5 +62,8 @@
     "{output}",
     "--define",
     "MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
