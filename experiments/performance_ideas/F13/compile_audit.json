@@ -21,7 +21,24 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "packed-layout",
+      "binding": "rf",
+      "baseline_defines": [
+        "MOJOLEARN_FOREST_SEPARATE_NODES"
+      ],
+      "candidate_defines": [],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -37,7 +54,8 @@
         "core",
         "rf"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     }
@@ -54,7 +72,5 @@
   ],
   "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
   "promotion_authorized": false,
-  "remaining_original_card_subarms": [
-    "Additional branch-pattern/input-layout schedules remain independent future variants; no speed qualification claimed."
-  ]
+  "remaining_original_card_subarms": []
 }

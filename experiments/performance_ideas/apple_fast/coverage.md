@@ -2,7 +2,7 @@
 
 All F01–F20 cards use **FAST on Apple**. They do not promise IDENTICAL bits, and no candidate is promoted by this work. Kernel changes are opt-in; existing FAST defaults are compared with independent rollback arms where applicable. A successful source build does not establish device correctness, task quality, speed, or opponent admission.
 
-Each `Fxx/manifest.json` declares its actual source, baseline/candidate compiler definitions, caller, dependencies and variants. `build_pair.py` builds both arms once on the existing M2 Pro, under the compile semaphore, with an exact required source SHA. `pair.py` runs isolated, attested packages on the existing M3 Ultra and retains both complete logs and captures. Every requested output is read before its caller timer ends. Test-only NumPy constructs inputs and independent references; new product arithmetic remains compiled Mojo.
+Each `Fxx/manifest.json` declares its actual source, baseline/candidate compiler definitions, caller, dependencies and variants. `build_pair.py` builds both arms once on the retained Apple build queue, under the compile semaphore, with an exact required source SHA. `pair.py` runs isolated, attested packages on the existing M3 Ultra and retains both complete logs and captures. Every requested output is read before its caller timer ends. Test-only NumPy constructs inputs and independent references; new product arithmetic remains compiled Mojo.
 
 | ID | Implemented experiment and actual caller | Quality/reach/lifecycle checks |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ Each `Fxx/manifest.json` declares its actual source, baseline/candidate compiler
 
 ## Qualification and original-card limits
 
-No GPU qualification or speed result is claimed by this document. Local checks comprise Python syntax/manifest review and compile-only builds; the complete retained logs include unsuccessful attempts and their corrections. Explicit Metal target builds passed for the shared SDK adapter, SHAP, permutation gather, and compensated PCA/direct DBSCAN output. Publication hooks passed without bypassing or expanding the host-loop baseline. These checks are not source-frozen M2 artifact receipts and cannot stand in for M3 runs.
+No GPU qualification or speed result is claimed by this document. Local checks comprise Python syntax/manifest review and compile-only builds; the complete retained logs include unsuccessful attempts and their corrections. Explicit Metal target builds passed for the shared SDK adapter, SHAP, permutation gather, and compensated PCA/direct DBSCAN output. Publication hooks passed without bypassing or expanding the host-loop baseline. These checks are not source-frozen artifact receipts and cannot stand in for M3 runs.
 
 The following portions remain separate work or explicit capability boundaries:
 
@@ -47,7 +47,7 @@ The following portions remain separate work or explicit capability boundaries:
 
 ## Frozen queue use
 
-Build exactly one selected variant on M2, for example:
+Build exactly one selected variant on the retained M3 build queue, for example:
 
 ```sh
 python3 experiments/performance_ideas/apple_fast/build_pair.py \
@@ -55,9 +55,9 @@ python3 experiments/performance_ideas/apple_fast/build_pair.py \
   --output "$HOME/performance-idea-arms/$FROZEN_SHA/F14-ann"
 ```
 
-The source checkout must already match the reviewed SHA, be clean, and include every implementation/caller dependency. The existing queue starts the command on the lane tree; the helper refuses source drift and any other build machine. Do not run a second baseline build: `paired_build: true` means one invocation prepares both separately compiled arms. Both build flag environment interfaces are populated, build jobs are one, kernel smoke is disabled only during build, and native binary validation remains the repository builder's responsibility.
+The source checkout must already match the reviewed SHA, be clean, and include every implementation/caller dependency. The existing queue starts the command on the lane tree; the helper refuses source drift and any other build machine. Do not run a second baseline build: `paired_build: true` means one invocation prepares both separately compiled arms. Defines use only MOJOLEARN_MOJO_BUILD_FLAGS and MOJOLEARN_BUILD_EXTRA_DEFINES is explicitly empty; build jobs are one, kernel smoke is disabled only during build, and native binary validation remains the repository builder's responsibility.
 
-Root stages an artifact directory only after `manifest.status == OK` and every arm, prerequisite and native-check file hash matches. M3 runs `pair.py --idea F14 --variant ann --arms <staged-arms> --output <new-capture-dir>` on the same frozen source. Existing M2/M3 queues and staging only; no lane SSH or new machines. F16 additionally runs its attested independent native checker before public captures.
+Root stages an artifact directory only after `manifest.status == OK` and every arm, prerequisite and native-check file hash matches. M3 runs `pair.py --idea F14 --variant ann --arms <staged-arms> --output <new-capture-dir>` on the same frozen source. Existing retained M3 queue and staging only; no lane SSH or new machines. F16 additionally runs its attested independent native checker before public captures.
 
 M3 orchestration validates the environment/hardware without importing mojolearn; only isolated captures load the product. Use the existing test environment (`pixi run -e test python`) or an already supported oracle environment for M3. Python assertions must remain enabled. ANN candidate-count equality is an explicit cross-arm semantic field gate. M3's selected Python must have NumPy available; these harnesses do not install it or import PyTorch. Source-package isolation must retain the attested core and required secondary bindings (for example training for Mamba/normalization, x_decomp for LLE, RF for SHAP). A missing dependency, non-FAST/non-Metal binding, caller exception, wrong variant, hash/source mismatch or native-oracle failure stops the run and retains its exit/log. `pair.py` quality PASS only admits the captured caller comparison; repeated timing, peak device memory and strongest-opponent admission remain separate gates.
 
@@ -84,4 +84,51 @@ Reviewed the F01–F20 public fixture calls against the Python source on this ex
 
 The audit found and corrected missing FAST TSA dependencies in both AutoARIMA cards. Every paired build additionally compiles the exact-source IDENTICAL core with no experiment defines as the sole `input_transport_helpers` dependency: public `_buffer._native` uses this tier even when the estimator is FAST. The pair installer admits only this explicit role at `identical/_mojolearn.so` and the card's enumerated FAST prerequisites, checking source, mode, Apple target, defines and binary hashes. The called estimator binding must still report FAST/Metal and match its A/B hash. Earlier artifacts lacking this helper cannot qualify the corrected source.
 
-Every card exposes its paired quality capture as `validation_argv`; a build makes both arms once (`paired_build: true`). Queue qualification must use an existing Python environment with NumPy, such as `pixi run -e test python`, and hardware-only pair admission occurs before importing the isolated product. The paired builder pins both the Apple vendor and target column and supplies experiment defines only through `MOJOLEARN_MOJO_BUILD_FLAGS` and explicitly clears `MOJOLEARN_BUILD_EXTRA_DEFINES`, because builders that read both reject duplicate defines. No artifact from another source SHA, arbitrary installed library or rebuild on the M3 can satisfy the source-frozen pair.
+Every card exposes its paired quality capture as `validation_argv`; a build makes both arms once (`paired_build: true`). Queue qualification must use an existing Python environment with NumPy, such as `pixi run -e test python`, and hardware-only pair admission occurs before importing the isolated product. The paired builder pins both the Apple vendor and target column and supplies experiment defines only through `MOJOLEARN_MOJO_BUILD_FLAGS` and explicitly clears `MOJOLEARN_BUILD_EXTRA_DEFINES`, because builders that read both reject duplicate defines. No artifact from another source SHA, arbitrary installed library or unrelated-source rebuild can satisfy the source-frozen pair.
+
+
+## Final frozen compile campaign and additional subarms
+
+The user authorized compilation on the retained M3 and requested one full
+campaign after integration. `compile_campaign.py --source-sha <frozen-SHA>
+--output <new-evidence-directory> --execute --jobs 4` creates four pristine
+source worktrees, installs the locked SDK normally in each, and shares the
+normal package cache and existing four-slot compiler semaphore. It deduplicates
+exact binding/tier/define configurations across every card arm and prerequisite,
+including independent native checks. Each worker builds sequentially; outputs,
+full logs, exit codes, source/define/tier/vendor and hashes remain per job.
+`--job jobNNN` permits only failed or previously unbuilt configurations to be
+selected. A compiler pass makes no device quality, speed, opponent or promotion
+claim. No kernel smoke or Python product import runs during this campaign.
+
+F12 now includes explicit Ordered tasks, four fixed permutations, off-grid
+regression targets and nonzero fixed-seed score noise. The promoted storage
+bundle is retained; an independent rollback arm compares its whole-fit result.
+The new `MOJOLEARN_ORD_DOC_ID_STORAGE` candidate is FAST Apple and default off:
+it passes the existing retained document-ID table through every pointwise
+histogram launch and scalar/vector loop while keeping compressed-index loads in
+fold-position order. Fixed-point quantizers receive original document IDs.
+Actual submission counts establish reach; a native actual PointHist8 checker
+uses independent host quantization for unaligned head/tail, scalar/vector and
+empty cases before public caller admission. Existing winner records and
+score-before state already stay on the device through all levels, with one
+production completion drain per tree; the Ordered fixture exercises that route.
+Public device quality, full-fit speed and peak scratch remain pending.
+
+F13 adds `packed-layout`: rollback `MOJOLEARN_FOREST_SEPARATE_NODES` versus the
+promoted packed conversion. It asserts the public binding's resident layout,
+records cold conversion/first prediction separately from retained prediction,
+and requires old caller outputs to survive both reuse and a fixed-seed refit.
+The promoted four-word nodes and compact leaf conversion remain unchanged.
+
+F15 adds independent `center-accumulation` and `scratch-reuse` controls for the
+promoted compact ascending-row center sum and cross-fit device-input pool.
+Fixtures attest the compiled policy, report cold/repeated complete fits and
+require old center/label outputs to survive pool reuse. These promoted defaults
+remain unchanged. Batched independent starts remain a mathematical/capability
+prerequisite: current winner selection sums distances in one ascending Float64
+chain, retaining the first strict minimum (`common.mojo:sum_f64`,
+`minibatch_ptr.mojo`). A different reduction or Float32/compensated comparison
+must not be silently substituted for that policy. No new CPU data loop or
+approximate winner policy was introduced; a safe supported device implementation
+or independently admitted replacement oracle is still required.

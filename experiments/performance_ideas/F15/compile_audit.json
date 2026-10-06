@@ -12,6 +12,22 @@
   "existing_default_exception": null,
   "variants": [
     {
+      "name": "center-accumulation",
+      "binding": "x_cluster",
+      "baseline_defines": [
+        "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"
+      ],
+      "candidate_defines": [],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
       "name": "dbscan-outputs",
       "binding": "estimators",
       "baseline_defines": [],
@@ -22,7 +38,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -37,7 +54,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -52,7 +70,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -67,7 +86,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -82,7 +102,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -97,7 +118,24 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "scratch-reuse",
+      "binding": "x_cluster",
+      "baseline_defines": [
+        "MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"
+      ],
+      "candidate_defines": [],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -112,7 +150,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     }
@@ -128,5 +167,8 @@
     "Independent seeded starts, center accumulation and scratch reuse need separate candidate integrations."
   ],
   "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
-  "promotion_authorized": false
+  "promotion_authorized": false,
+  "remaining_original_card_subarms": [
+    "Batched independent starts: production winner policy sums distances in one ascending Float64 chain (x_cluster/common.mojo:sum_f64; minibatch_ptr.mojo strict first-min selection). A safe Metal device implementation preserving that policy requires supported Float64 or independently admitted replacement mathematics; neither provided. No new CPU data loop or approximate winner policy introduced."
+  ]
 }

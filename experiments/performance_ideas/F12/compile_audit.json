@@ -5,7 +5,8 @@
   "vendor": "apple",
   "source_guard_paths": [
     "gbdt/methods/sym_iter_fast.mojo",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo"
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+    "gbdt/methods/ordered_fast_switches.mojo"
   ],
   "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
   "existing_default_exception": "Rollback arms for previously promoted schedules retain existing production defaults.",
@@ -21,7 +22,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -36,7 +38,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -51,7 +54,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -66,7 +70,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -81,7 +86,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -96,7 +102,47 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "ordered-docids",
+      "binding": "gbdt",
+      "baseline_defines": [
+        "MOJOLEARN_ORD_ALL_OFF"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_ORD_DOC_ID_STORAGE"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "native_checks": [
+        {
+          "name": "ordered-doc-id-check",
+          "source": "gbdt/checks/ordered_doc_id_check.mojo"
+        }
+      ],
+      "compiler_status": "pending_final_frozen_campaign",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "ordered-storage",
+      "binding": "gbdt",
+      "baseline_defines": [
+        "MOJOLEARN_ORD_ALL_OFF"
+      ],
+      "candidate_defines": [],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     },
@@ -111,7 +157,8 @@
       "prerequisites": [
         "core"
       ],
-      "compiler_status": "pending_current_source_instantiation",
+      "native_checks": [],
+      "compiler_status": "pending_final_frozen_campaign",
       "device_quality": "pending",
       "performance": "pending"
     }
@@ -127,5 +174,6 @@
     "No new ordered doc-ID coalesced permutation store or categorical winner-residency kernel is claimed."
   ],
   "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
-  "promotion_authorized": false
+  "promotion_authorized": false,
+  "remaining_original_card_subarms": []
 }

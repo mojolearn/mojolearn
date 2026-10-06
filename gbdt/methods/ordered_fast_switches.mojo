@@ -68,3 +68,33 @@ def ord_all_on(n_features: Int) -> Bool:
             return n_features >= 1
     else:
         return False
+
+
+# F12 pending device quality/performance. Restore stable document-key dither
+# while retaining coalesced fold-position compressed storage. Existing ORD_ALL
+# promotion is unchanged; IDENTICAL/non-Apple builds cannot admit this candidate.
+comptime ORD_DOC_ID_STORAGE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_ORD_DOC_ID_STORAGE"]()
+)
+
+
+from std.atomic import Atomic, Ordering
+from std.ffi import _Global
+
+struct _OrderedDocAudit(Defaultable,Movable):
+    var submissions: Int64
+    def __init__(out self):self.submissions=Int64(0)
+
+comptime _ORD_DOC_AUDIT=_Global[StorageType=_OrderedDocAudit,name="MojoOrderedDocAuditV1",init_fn=_OrderedDocAudit.__init__]
+
+def ordered_doc_count() raises -> Int:
+    comptime if ORD_DOC_ID_STORAGE:
+        ref audit=_ORD_DOC_AUDIT.get_or_create_ptr()[]
+        return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.submissions)))
+    return 0
+
+def ordered_doc_hit() raises:
+    comptime if ORD_DOC_ID_STORAGE:
+        ref audit=_ORD_DOC_AUDIT.get_or_create_ptr()[]
+        _=Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.submissions),Int64(1))

@@ -10,7 +10,7 @@ from support import capture_main,binding_check,consumed
 
 def exercise(args):
     import numpy as np
-    if args.variant in ("categorical","ranking","depthwise","lossguide"):
+    if args.variant in ("categorical","ranking","depthwise","lossguide","ordered-storage","ordered-docids"):
         return workloads(args)
     from mojolearn import GradientBoosting
     from mojolearn import _mojolearn_gbdt as binding
@@ -50,13 +50,21 @@ def workloads(args):
             target=np.asarray(q[:,0]>.4,'float32')+np.asarray(q[:,1]>.8,'float32')
             groups=np.asarray(np.arange(rows)//17,'int32');fit_args['group_id']=groups
             params.update(loss='QueryRMSE')
+        elif kind.startswith('ordered-'):
+            y=np.asarray(np.sin(x[:,0])+x[:,1]*x[:,2]+.0137*rng.normal(size=rows),'float32')
+            target=np.sin(q[:,0])+q[:,1]*q[:,2]
+            params.update(loss='RMSE',boosting_type='Ordered',permutation_count=4,random_strength=.137)
         else:
             y=np.asarray(np.sin(x[:,0])+x[:,1]*x[:,2],'float32');target=np.sin(q[:,0])+q[:,1]*q[:,2]
             params.update(loss='RMSE',grow_policy='Depthwise' if kind=='depthwise' else 'Lossguide')
             if kind=='lossguide':params['max_leaves']=17
         model=GradientBoosting(**params)
         def fit():model.fit(x,y,**fit_args);return model.predict(q)
+        before=int(binding.gbdt_ordered_doc_count())
         predicted,cold=consumed(fit)
+        reached=int(binding.gbdt_ordered_doc_count())-before
+        if kind=='ordered-docids':
+            assert (reached>0)==(args.arm=='B'),'document-ID storage adapter reach mismatch'
         repeated,reuse=consumed(lambda:model.predict(q))
         assert np.isfinite(np.asarray(model.loss_curve_)).all()
         if kind=='categorical':error=float(np.mean((np.asarray(predicted).reshape(-1)>.5)!=target))
@@ -70,8 +78,8 @@ def workloads(args):
                             total+=1;bad+=int((pred[i]-pred[j])*(target[i]-target[j])<=0)
             error=float(bad/max(total,1))
         else:error=float(np.sqrt(np.mean((np.asarray(predicted,float).reshape(-1)-target)**2)))
-        cases[f'{kind}-{rows}-{d}']=dict(contract=dict(kind=kind,rows=rows,d=d,depth=depth,iterations=24,seed=7,lr=.08,bootstrap='No',score_noise=0),
+        cases[f'{kind}-{rows}-{d}']=dict(contract=dict(kind=kind,rows=rows,d=d,depth=depth,iterations=24,seed=7,lr=.08,bootstrap='No',score_noise=.137 if kind.startswith('ordered-') else 0,permutations=4 if kind.startswith('ordered-') else None),
             metrics=dict(task_error=dict(value=error,rtol=.001,atol=.002)),fit_and_first_predict_ms=cold,repeated_predict_ms=reuse,
-            completed_iterations=len(model.loss_curve_),repeat_error=float(np.max(np.abs(np.asarray(predicted)-np.asarray(repeated)))))
+            completed_iterations=len(model.loss_curve_),document_map_submissions=reached,repeat_error=float(np.max(np.abs(np.asarray(predicted)-np.asarray(repeated)))))
     return dict(binding=binding_check(binding,'gbdt'),cases=cases)
 if __name__=='__main__':capture_main(exercise)
