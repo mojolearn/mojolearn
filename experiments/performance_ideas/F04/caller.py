@@ -10,7 +10,7 @@ from support import capture_main,binding_check,consumed
 
 def exercise(args):
     import numpy as np
-    from mojolearn import resample as draw, resample_indices
+    from mojolearn.resample import resample as draw, resample_indices
     from mojolearn import _mojolearn_resample as binding
     identity=binding_check(binding,'resample')
     assert int(binding.resample_gpu_gather_enabled())==1
