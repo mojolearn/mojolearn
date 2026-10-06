@@ -1,5 +1,5 @@
 {
-  "note": "Reviewed original source recipes; distinct uncapped preparation, original capped cells preserved. Missing bindings excluded, no numerical or quality admission.",
+  "note": "Reviewed original source recipes; distinct uncapped preparation, original capped cells preserved. Missing bindings excluded, no numerical or quality admission. Added eight exact full-population classical2 LogReg/LinearSVC variants (four per vendor), same preserved classification archives; original capped cells unchanged.",
   "rows": [
     {
       "block": "cls",
@@ -8384,6 +8384,842 @@
       "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
       "variant_workload_id": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
       "vendor": "nvidia"
+    },
+    {
+      "block": "cls",
+      "configuration": "AF.X.complete-proposed",
+      "constructor": {
+        "inherited": null,
+        "line": 1138,
+        "name": "LogisticRegression",
+        "source": "python/mojolearn/linear_model.py",
+        "source_sha256": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c"
+      },
+      "dataset": "taxi",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "C": 1.0,
+          "class_weight": null,
+          "fit_intercept": true,
+          "l1_ratio": null,
+          "linesearch_max_iter": 50,
+          "max_iter": 1000,
+          "penalty": "l2",
+          "solver": "qn",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "expected_shapes_from_population_metadata": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "harness": "tools/bench_board_more.py",
+      "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+      "inference": "separate",
+      "lane": "logreg",
+      "limitations": [
+        "Historical frozen Python API tested only; no claim of product native compliance.",
+        "Complete fitted-state contract remains unqualified; output capture alone is not model identity.",
+        "Complete-proposed configuration measured; individual candidate reach and default promotion remain separate pending qualification."
+      ],
+      "mode": "fast",
+      "original_preparation_caps": {
+        "query": 100000,
+        "train": 1000000
+      },
+      "original_registration_sha256": "1db0d16f4b42c4c4cf9476ae68001611069a9926f1ba7bb5ba0a579bda1ef334",
+      "original_workload_id": "classical2/logreg@dataset=taxi",
+      "output_paths": [
+        "$.pred",
+        "$.proba1"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        },
+        "$.proba1": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "package_dependencies": "Keep complete parent-accepted A/B packages and their core/validation bindings, including existing IDENTICAL helper package; listed dependencies are numerical/readback minimums, not a standalone install.",
+      "partial_or_complete_params": {
+        "C": 1.0,
+        "class_weight": null,
+        "fit_intercept": true,
+        "l1_ratio": null,
+        "linesearch_max_iter": 50,
+        "max_iter": 1000,
+        "penalty": "l2",
+        "solver": "qn",
+        "tol": 0.0001
+      },
+      "population": {
+        "numeric_features": 11,
+        "query": 500000,
+        "rule": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+        "train": 4110786
+      },
+      "preprocessing": [],
+      "quality_gate_source": "tools/bench_board_more.py:quality; exact full-input classification accuracy and original log-loss/nonfinite-probability metrics; independent matching opponent acceptance remains pending",
+      "repeated_operations": 1,
+      "required_bindings": [
+        "bindings/_mojolearn_estimators.mojo"
+      ],
+      "seed": 7,
+      "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "variant_workload_id": "classical2/logreg@dataset=taxi@input=classification-full-v1",
+      "vendor": "apple"
+    },
+    {
+      "block": "cls",
+      "configuration": "AF.X.complete-proposed",
+      "constructor": {
+        "inherited": null,
+        "line": 1138,
+        "name": "LogisticRegression",
+        "source": "python/mojolearn/linear_model.py",
+        "source_sha256": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c"
+      },
+      "dataset": "istella",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "C": 1.0,
+          "class_weight": null,
+          "fit_intercept": true,
+          "l1_ratio": null,
+          "linesearch_max_iter": 50,
+          "max_iter": 1000,
+          "penalty": "l2",
+          "solver": "qn",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "expected_shapes_from_population_metadata": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "harness": "tools/bench_board_more.py",
+      "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+      "inference": "separate",
+      "lane": "logreg",
+      "limitations": [
+        "Historical frozen Python API tested only; no claim of product native compliance.",
+        "Complete fitted-state contract remains unqualified; output capture alone is not model identity.",
+        "Complete-proposed configuration measured; individual candidate reach and default promotion remain separate pending qualification."
+      ],
+      "mode": "fast",
+      "original_preparation_caps": {
+        "query": 100000,
+        "train": 1000000
+      },
+      "original_registration_sha256": "1db0d16f4b42c4c4cf9476ae68001611069a9926f1ba7bb5ba0a579bda1ef334",
+      "original_workload_id": "classical2/logreg@dataset=istella",
+      "output_paths": [
+        "$.pred",
+        "$.proba1"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        },
+        "$.proba1": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "package_dependencies": "Keep complete parent-accepted A/B packages and their core/validation bindings, including existing IDENTICAL helper package; listed dependencies are numerical/readback minimums, not a standalone install.",
+      "partial_or_complete_params": {
+        "C": 1.0,
+        "class_weight": null,
+        "fit_intercept": true,
+        "l1_ratio": null,
+        "linesearch_max_iter": 50,
+        "max_iter": 1000,
+        "penalty": "l2",
+        "solver": "qn",
+        "tol": 0.0001
+      },
+      "population": {
+        "numeric_features": 220,
+        "query": 500000,
+        "rule": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+        "train": 2043304
+      },
+      "preprocessing": [],
+      "quality_gate_source": "tools/bench_board_more.py:quality; exact full-input classification accuracy and original log-loss/nonfinite-probability metrics; independent matching opponent acceptance remains pending",
+      "repeated_operations": 1,
+      "required_bindings": [
+        "bindings/_mojolearn_estimators.mojo"
+      ],
+      "seed": 7,
+      "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "variant_workload_id": "classical2/logreg@dataset=istella@input=classification-full-v1",
+      "vendor": "apple"
+    },
+    {
+      "block": "cls",
+      "configuration": "I.X.complete-proposed",
+      "constructor": {
+        "inherited": null,
+        "line": 1138,
+        "name": "LogisticRegression",
+        "source": "python/mojolearn/linear_model.py",
+        "source_sha256": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c"
+      },
+      "dataset": "taxi",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "C": 1.0,
+          "class_weight": null,
+          "fit_intercept": true,
+          "l1_ratio": null,
+          "linesearch_max_iter": 50,
+          "max_iter": 1000,
+          "penalty": "l2",
+          "solver": "qn",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "expected_shapes_from_population_metadata": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "harness": "tools/bench_board_more.py",
+      "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+      "inference": "separate",
+      "lane": "logreg",
+      "limitations": [
+        "Historical frozen Python API tested only; no claim of product native compliance.",
+        "Complete fitted-state contract remains unqualified; output capture alone is not model identity.",
+        "Complete-proposed configuration measured; individual candidate reach and default promotion remain separate pending qualification."
+      ],
+      "mode": "identical",
+      "original_preparation_caps": {
+        "query": 100000,
+        "train": 1000000
+      },
+      "original_registration_sha256": "1db0d16f4b42c4c4cf9476ae68001611069a9926f1ba7bb5ba0a579bda1ef334",
+      "original_workload_id": "more:logreg@dataset=taxi",
+      "output_paths": [
+        "$.pred",
+        "$.proba1"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        },
+        "$.proba1": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "package_dependencies": "Keep complete parent-accepted A/B packages and their core/validation bindings, including existing IDENTICAL helper package; listed dependencies are numerical/readback minimums, not a standalone install.",
+      "partial_or_complete_params": {
+        "C": 1.0,
+        "class_weight": null,
+        "fit_intercept": true,
+        "l1_ratio": null,
+        "linesearch_max_iter": 50,
+        "max_iter": 1000,
+        "penalty": "l2",
+        "solver": "qn",
+        "tol": 0.0001
+      },
+      "population": {
+        "numeric_features": 11,
+        "query": 500000,
+        "rule": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+        "train": 4110786
+      },
+      "preprocessing": [],
+      "quality_gate_source": "tools/bench_board_more.py:quality; exact full-input classification accuracy and original log-loss/nonfinite-probability metrics; independent matching opponent acceptance remains pending",
+      "repeated_operations": 1,
+      "required_bindings": [
+        "bindings/_mojolearn_estimators.mojo"
+      ],
+      "seed": 7,
+      "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "variant_workload_id": "more:logreg@dataset=taxi@input=classification-full-v1",
+      "vendor": "nvidia"
+    },
+    {
+      "block": "cls",
+      "configuration": "I.X.complete-proposed",
+      "constructor": {
+        "inherited": null,
+        "line": 1138,
+        "name": "LogisticRegression",
+        "source": "python/mojolearn/linear_model.py",
+        "source_sha256": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c"
+      },
+      "dataset": "istella",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "C": 1.0,
+          "class_weight": null,
+          "fit_intercept": true,
+          "l1_ratio": null,
+          "linesearch_max_iter": 50,
+          "max_iter": 1000,
+          "penalty": "l2",
+          "solver": "qn",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "expected_shapes_from_population_metadata": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "harness": "tools/bench_board_more.py",
+      "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+      "inference": "separate",
+      "lane": "logreg",
+      "limitations": [
+        "Historical frozen Python API tested only; no claim of product native compliance.",
+        "Complete fitted-state contract remains unqualified; output capture alone is not model identity.",
+        "Complete-proposed configuration measured; individual candidate reach and default promotion remain separate pending qualification."
+      ],
+      "mode": "identical",
+      "original_preparation_caps": {
+        "query": 100000,
+        "train": 1000000
+      },
+      "original_registration_sha256": "1db0d16f4b42c4c4cf9476ae68001611069a9926f1ba7bb5ba0a579bda1ef334",
+      "original_workload_id": "more:logreg@dataset=istella",
+      "output_paths": [
+        "$.pred",
+        "$.proba1"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        },
+        "$.proba1": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "package_dependencies": "Keep complete parent-accepted A/B packages and their core/validation bindings, including existing IDENTICAL helper package; listed dependencies are numerical/readback minimums, not a standalone install.",
+      "partial_or_complete_params": {
+        "C": 1.0,
+        "class_weight": null,
+        "fit_intercept": true,
+        "l1_ratio": null,
+        "linesearch_max_iter": 50,
+        "max_iter": 1000,
+        "penalty": "l2",
+        "solver": "qn",
+        "tol": 0.0001
+      },
+      "population": {
+        "numeric_features": 220,
+        "query": 500000,
+        "rule": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+        "train": 2043304
+      },
+      "preprocessing": [],
+      "quality_gate_source": "tools/bench_board_more.py:quality; exact full-input classification accuracy and original log-loss/nonfinite-probability metrics; independent matching opponent acceptance remains pending",
+      "repeated_operations": 1,
+      "required_bindings": [
+        "bindings/_mojolearn_estimators.mojo"
+      ],
+      "seed": 7,
+      "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "variant_workload_id": "more:logreg@dataset=istella@input=classification-full-v1",
+      "vendor": "nvidia"
+    },
+    {
+      "block": "cls",
+      "configuration": "AF.X.complete-proposed",
+      "constructor": {
+        "inherited": null,
+        "line": 113,
+        "name": "LinearSVC",
+        "source": "python/mojolearn/svm.py",
+        "source_sha256": "694ed3942598c4612584794546e4a65c23a508fab27f4da1087f253cde651182"
+      },
+      "dataset": "taxi",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "C": 1.0,
+          "class_weight": null,
+          "fit_intercept": true,
+          "lbfgs_memory": 5,
+          "linesearch_max_iter": 100,
+          "loss": "squared_hinge",
+          "max_iter": 1000,
+          "multi_class": "ovr",
+          "penalized_intercept": false,
+          "penalty": "l2",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "expected_shapes_from_population_metadata": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "harness": "tools/bench_board_more.py",
+      "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+      "inference": "separate",
+      "lane": "linearsvc",
+      "limitations": [
+        "Historical frozen Python API tested only; no claim of product native compliance.",
+        "Complete fitted-state contract remains unqualified; output capture alone is not model identity.",
+        "Complete-proposed configuration measured; individual candidate reach and default promotion remain separate pending qualification."
+      ],
+      "mode": "fast",
+      "original_preparation_caps": {
+        "query": 100000,
+        "train": 1000000
+      },
+      "original_registration_sha256": "68c935ee69fdb8597e38dc919df6acc274948d19498b87c0659133d35d17a843",
+      "original_workload_id": "classical2/linearsvc@dataset=taxi",
+      "output_paths": [
+        "$.pred"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "package_dependencies": "Keep complete parent-accepted A/B packages and their core/validation bindings, including existing IDENTICAL helper package; listed dependencies are numerical/readback minimums, not a standalone install.",
+      "partial_or_complete_params": {
+        "C": 1.0,
+        "class_weight": null,
+        "fit_intercept": true,
+        "lbfgs_memory": 5,
+        "linesearch_max_iter": 100,
+        "loss": "squared_hinge",
+        "max_iter": 1000,
+        "multi_class": "ovr",
+        "penalized_intercept": false,
+        "penalty": "l2",
+        "tol": 0.0001
+      },
+      "population": {
+        "numeric_features": 11,
+        "query": 500000,
+        "rule": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+        "train": 4110786
+      },
+      "preprocessing": [],
+      "quality_gate_source": "tools/bench_board_more.py:quality; exact full-input classification accuracy and original log-loss/nonfinite-probability metrics; independent matching opponent acceptance remains pending",
+      "repeated_operations": 1,
+      "required_bindings": [
+        "bindings/_mojolearn_estimators.mojo"
+      ],
+      "seed": 7,
+      "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "variant_workload_id": "classical2/linearsvc@dataset=taxi@input=classification-full-v1",
+      "vendor": "apple"
+    },
+    {
+      "block": "cls",
+      "configuration": "AF.X.complete-proposed",
+      "constructor": {
+        "inherited": null,
+        "line": 113,
+        "name": "LinearSVC",
+        "source": "python/mojolearn/svm.py",
+        "source_sha256": "694ed3942598c4612584794546e4a65c23a508fab27f4da1087f253cde651182"
+      },
+      "dataset": "istella",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "C": 1.0,
+          "class_weight": null,
+          "fit_intercept": true,
+          "lbfgs_memory": 5,
+          "linesearch_max_iter": 100,
+          "loss": "squared_hinge",
+          "max_iter": 1000,
+          "multi_class": "ovr",
+          "penalized_intercept": false,
+          "penalty": "l2",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "expected_shapes_from_population_metadata": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "harness": "tools/bench_board_more.py",
+      "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+      "inference": "separate",
+      "lane": "linearsvc",
+      "limitations": [
+        "Historical frozen Python API tested only; no claim of product native compliance.",
+        "Complete fitted-state contract remains unqualified; output capture alone is not model identity.",
+        "Complete-proposed configuration measured; individual candidate reach and default promotion remain separate pending qualification."
+      ],
+      "mode": "fast",
+      "original_preparation_caps": {
+        "query": 100000,
+        "train": 1000000
+      },
+      "original_registration_sha256": "68c935ee69fdb8597e38dc919df6acc274948d19498b87c0659133d35d17a843",
+      "original_workload_id": "classical2/linearsvc@dataset=istella",
+      "output_paths": [
+        "$.pred"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "package_dependencies": "Keep complete parent-accepted A/B packages and their core/validation bindings, including existing IDENTICAL helper package; listed dependencies are numerical/readback minimums, not a standalone install.",
+      "partial_or_complete_params": {
+        "C": 1.0,
+        "class_weight": null,
+        "fit_intercept": true,
+        "lbfgs_memory": 5,
+        "linesearch_max_iter": 100,
+        "loss": "squared_hinge",
+        "max_iter": 1000,
+        "multi_class": "ovr",
+        "penalized_intercept": false,
+        "penalty": "l2",
+        "tol": 0.0001
+      },
+      "population": {
+        "numeric_features": 220,
+        "query": 500000,
+        "rule": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+        "train": 2043304
+      },
+      "preprocessing": [],
+      "quality_gate_source": "tools/bench_board_more.py:quality; exact full-input classification accuracy and original log-loss/nonfinite-probability metrics; independent matching opponent acceptance remains pending",
+      "repeated_operations": 1,
+      "required_bindings": [
+        "bindings/_mojolearn_estimators.mojo"
+      ],
+      "seed": 7,
+      "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "variant_workload_id": "classical2/linearsvc@dataset=istella@input=classification-full-v1",
+      "vendor": "apple"
+    },
+    {
+      "block": "cls",
+      "configuration": "I.X.complete-proposed",
+      "constructor": {
+        "inherited": null,
+        "line": 113,
+        "name": "LinearSVC",
+        "source": "python/mojolearn/svm.py",
+        "source_sha256": "694ed3942598c4612584794546e4a65c23a508fab27f4da1087f253cde651182"
+      },
+      "dataset": "taxi",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "C": 1.0,
+          "class_weight": null,
+          "fit_intercept": true,
+          "lbfgs_memory": 5,
+          "linesearch_max_iter": 100,
+          "loss": "squared_hinge",
+          "max_iter": 1000,
+          "multi_class": "ovr",
+          "penalized_intercept": false,
+          "penalty": "l2",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "expected_shapes_from_population_metadata": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "harness": "tools/bench_board_more.py",
+      "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+      "inference": "separate",
+      "lane": "linearsvc",
+      "limitations": [
+        "Historical frozen Python API tested only; no claim of product native compliance.",
+        "Complete fitted-state contract remains unqualified; output capture alone is not model identity.",
+        "Complete-proposed configuration measured; individual candidate reach and default promotion remain separate pending qualification."
+      ],
+      "mode": "identical",
+      "original_preparation_caps": {
+        "query": 100000,
+        "train": 1000000
+      },
+      "original_registration_sha256": "68c935ee69fdb8597e38dc919df6acc274948d19498b87c0659133d35d17a843",
+      "original_workload_id": "more:linearsvc@dataset=taxi",
+      "output_paths": [
+        "$.pred"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "package_dependencies": "Keep complete parent-accepted A/B packages and their core/validation bindings, including existing IDENTICAL helper package; listed dependencies are numerical/readback minimums, not a standalone install.",
+      "partial_or_complete_params": {
+        "C": 1.0,
+        "class_weight": null,
+        "fit_intercept": true,
+        "lbfgs_memory": 5,
+        "linesearch_max_iter": 100,
+        "loss": "squared_hinge",
+        "max_iter": 1000,
+        "multi_class": "ovr",
+        "penalized_intercept": false,
+        "penalty": "l2",
+        "tol": 0.0001
+      },
+      "population": {
+        "numeric_features": 11,
+        "query": 500000,
+        "rule": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+        "train": 4110786
+      },
+      "preprocessing": [],
+      "quality_gate_source": "tools/bench_board_more.py:quality; exact full-input classification accuracy and original log-loss/nonfinite-probability metrics; independent matching opponent acceptance remains pending",
+      "repeated_operations": 1,
+      "required_bindings": [
+        "bindings/_mojolearn_estimators.mojo"
+      ],
+      "seed": 7,
+      "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "variant_workload_id": "more:linearsvc@dataset=taxi@input=classification-full-v1",
+      "vendor": "nvidia"
+    },
+    {
+      "block": "cls",
+      "configuration": "I.X.complete-proposed",
+      "constructor": {
+        "inherited": null,
+        "line": 113,
+        "name": "LinearSVC",
+        "source": "python/mojolearn/svm.py",
+        "source_sha256": "694ed3942598c4612584794546e4a65c23a508fab27f4da1087f253cde651182"
+      },
+      "dataset": "istella",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "C": 1.0,
+          "class_weight": null,
+          "fit_intercept": true,
+          "lbfgs_memory": 5,
+          "linesearch_max_iter": 100,
+          "loss": "squared_hinge",
+          "max_iter": 1000,
+          "multi_class": "ovr",
+          "penalized_intercept": false,
+          "penalty": "l2",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "expected_shapes_from_population_metadata": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "harness": "tools/bench_board_more.py",
+      "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+      "inference": "separate",
+      "lane": "linearsvc",
+      "limitations": [
+        "Historical frozen Python API tested only; no claim of product native compliance.",
+        "Complete fitted-state contract remains unqualified; output capture alone is not model identity.",
+        "Complete-proposed configuration measured; individual candidate reach and default promotion remain separate pending qualification."
+      ],
+      "mode": "identical",
+      "original_preparation_caps": {
+        "query": 100000,
+        "train": 1000000
+      },
+      "original_registration_sha256": "68c935ee69fdb8597e38dc919df6acc274948d19498b87c0659133d35d17a843",
+      "original_workload_id": "more:linearsvc@dataset=istella",
+      "output_paths": [
+        "$.pred"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "package_dependencies": "Keep complete parent-accepted A/B packages and their core/validation bindings, including existing IDENTICAL helper package; listed dependencies are numerical/readback minimums, not a standalone install.",
+      "partial_or_complete_params": {
+        "C": 1.0,
+        "class_weight": null,
+        "fit_intercept": true,
+        "lbfgs_memory": 5,
+        "linesearch_max_iter": 100,
+        "loss": "squared_hinge",
+        "max_iter": 1000,
+        "multi_class": "ovr",
+        "penalized_intercept": false,
+        "penalty": "l2",
+        "tol": 0.0001
+      },
+      "population": {
+        "numeric_features": 220,
+        "query": 500000,
+        "rule": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+        "train": 2043304
+      },
+      "preprocessing": [],
+      "quality_gate_source": "tools/bench_board_more.py:quality; exact full-input classification accuracy and original log-loss/nonfinite-probability metrics; independent matching opponent acceptance remains pending",
+      "repeated_operations": 1,
+      "required_bindings": [
+        "bindings/_mojolearn_estimators.mojo"
+      ],
+      "seed": 7,
+      "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+      "variant_workload_id": "more:linearsvc@dataset=istella@input=classification-full-v1",
+      "vendor": "nvidia"
     }
   ],
   "schema": "mojolearn.classification-full-contracts/1",
@@ -8395,8 +9231,11 @@
     "python/mojolearn/_expansion_trees.py": "41a54e3e2560f7a190bc494574569be6f7695c4294fbce95231527688b06610b",
     "python/mojolearn/_mode.py": "1c04c53e061bbf161a61b9bf1ed2d722df1a1053a063078da21d8dd9a37819b1",
     "python/mojolearn/extratrees.py": "b2f953f8eec3fa78aa1f0b430ed9928dae44a505e5fb6516ad5723055596692b",
+    "python/mojolearn/linear_model.py": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
     "python/mojolearn/preprocessing.py": "c90a62593c3521be288284cb6f69ce85195c0f80eb8348a1b0c373e77cc3e8f2",
+    "python/mojolearn/svm.py": "694ed3942598c4612584794546e4a65c23a508fab27f4da1087f253cde651182",
     "tools/bench_board_algos.py": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+    "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
     "tools/bench_board_params.py": "b5aa1c7a9d7ab41382e8875513b1d7515b9da0883c1dda593976d58ed30a6d2e",
     "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
   },
