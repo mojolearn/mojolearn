@@ -99,7 +99,7 @@
       "base_sha256": "a71a1717323f1147885328228828b34bc0d42d3391e32c44cab0fbd7e165a3b9",
       "changed": true,
       "changed_incumbent_module_assignments": {},
-      "integrated_sha256": "3a3880d6db2a353311144dc232ebfa10a9f43de0cf1019e3489503a8d0467ec2",
+      "integrated_sha256": "bbace775f06a0729700dc54a91a744a5a976510fb3dd63b6b0194e9c0d289b70",
       "path": "tools/performance_measurement_board.py"
     },
     {
@@ -154,11 +154,11 @@
     }
   ],
   "merge_review": {
-    "numerical_validation": "No compilation or numerical verification; actual retained metadata rendered successfully.",
+    "numerical_validation": "Retained metadata rendering only; no compilation or numerical verification",
     "reviewed_changes": {
-      "tools/performance_measurement_board.py": "Count retained complete executions separately from quality/identity admission in captured-pairs column. No change to metrics, timing, dataset, estimator or promotion rules."
+      "tools/performance_measurement_board.py": "Separate footer retains failed/quality-rejected attempts, worker exits, sample coverage and explicitly unqualified complete-pair timing. Fix ratio label to A/B. No changed metrics, dataset, estimator or default acceptance."
     },
-    "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780"
+    "source_sha": "00ae203818d188a132dad37429423fd8c558bde2"
   },
   "opponent_execution": "NOT RUN; opponent source/dependencies/results untouched",
   "policy": "Existing datasets, splits, seeds, preprocessing, workload sizes, estimator settings, modes, quality rules, timing definitions and opponent roster are immutable. Added capture/selector APIs do not authorize alternate races.",

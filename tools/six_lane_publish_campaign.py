@@ -70,6 +70,8 @@ def main():
                      source_sha=receipt['source_sha'],evidence=str(target.relative_to(REPO)),
                      dimensions=job['dimensions'],dataset_sha256=job['dataset_sha256'],
                      execution_status=execution_status,
+                     worker_returncodes=[r.get('returncode') for r in receipt['runs']],
+                     failure_reasons=[str(r['error']) for r in receipt['runs'] if r.get('error')],
                      actual_sample_counts=samples,
                      warmups=min(samples[arm]['warmup'] for arm in samples),
                      scored_samples=min(samples[arm]['scored'] for arm in samples),

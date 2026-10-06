@@ -10,7 +10,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 
 ## Captured evidence
 
-| Candidate | Vendor / route | Case | Scope | Status | B/A time | Evidence |
+| Candidate | Vendor / route | Case | Scope | Status | A/B time | Evidence |
 |---|---|---|---|---|---:|---|
 | AF.X.complete-proposed | apple/apple-fast | classical/ols@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/440956ba5f3a721465b8/attempt-0001/receipt.json |
 | AF.X.complete-proposed | apple/apple-fast | classical/ols@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/4a650353219f94bd483f/attempt-0001/receipt.json |
@@ -72,3 +72,15 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | AF.X.complete-proposed/algos/huber@dataset=istella/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 47301d12b14859e81cadc9ab6a0cd4f728d0e206 | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json |
 | I.X.complete-proposed/expanded:enet-cv@dataset=taxi/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 1c773404b24dcb05b9fd4684d5f4c8654c13f780 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json |
 | I.X.complete-proposed/expanded:lasso-cv@dataset=taxi/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 1c773404b24dcb05b9fd4684d5f4c8654c13f780 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json |
+
+## Failed or quality-rejected attempts
+
+Original attempts remain visible after repairs. A quality failure may have complete timings; those are observations, not admitted gains. Interrupted or failed executions have no valid pair timing.
+
+| Candidate | Vendor / case | Outcome / reason | Worker exits | Samples A; B (warmup/scored) | Observed A/B time | Evidence |
+|---|---|---|---|---|---:|---|
+| AF.X.complete-proposed | apple / classical/kmeans@dataset=istella/attempt-0001 | FAILED_OR_INCOMPLETE: Workload failed or did not write result JSON | [1] | A: 0/0; B: 0/0 | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/69a08c873718b0d710ad/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple / classical/kmeans@dataset=istella/attempt-0002 | FAILED_OR_INCOMPLETE: Workload failed or did not write result JSON | [1] | A: 0/0; B: 0/0 | — | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--runs/69a08c873718b0d710ad/attempt-0002/receipt.json |
+| AF.X.complete-proposed | apple / classical/kmeans@dataset=istella/attempt-0001 | QUALITY_FAILED: Candidate and baseline both have worse inertia than retained same-data sklearn; deficit is inherited, not introduced by candidate. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.0114 (2.3893s / 2.3625s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple / algos/resample@dataset=istella/attempt-0001 | QUALITY_FAILED: Saved candidate task metrics are worse than at least one exact-full-input/settings opponent under existing tolerance; no default admission. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 0.9997 (2.2927s / 2.2933s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json |
+| AF.X.complete-proposed | apple / algos/huber@dataset=istella/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.0020 (2.4092s / 2.4043s) | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json |

@@ -9,7 +9,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 
 ## Captured evidence
 
-| Candidate | Vendor / route | Case | Scope | Status | B/A time | Evidence |
+| Candidate | Vendor / route | Case | Scope | Status | A/B time | Evidence |
 |---|---|---|---|---|---:|---|
 
 ## Campaign notes
@@ -33,3 +33,9 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | AF.X.complete-proposed/algos/huber@dataset=istella/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 47301d12b14859e81cadc9ab6a0cd4f728d0e206 | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json |
 | I.X.complete-proposed/expanded:enet-cv@dataset=taxi/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 1c773404b24dcb05b9fd4684d5f4c8654c13f780 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json |
 | I.X.complete-proposed/expanded:lasso-cv@dataset=taxi/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 1c773404b24dcb05b9fd4684d5f4c8654c13f780 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json |
+
+## Failed or quality-rejected attempts
+
+Original attempts remain visible after repairs. A quality failure may have complete timings; those are observations, not admitted gains. Interrupted or failed executions have no valid pair timing.
+
+No failed or quality-rejected attempts recorded for this scope.
