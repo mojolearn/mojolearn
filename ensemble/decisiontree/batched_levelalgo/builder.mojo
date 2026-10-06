@@ -90,6 +90,7 @@ from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import Re
 # PENDING qualification; default OFF. Explicit IDENTICAL opt-in only.
 # No feature resampling or weighted/fixed-point algebra is admitted. The
 # cache's byte cap is a resource bound; it never selects benchmark shapes.
+# I18: NEVER RUN — PENDING VALIDATION; explicit experiment, default OFF.
 comptime RETAINED_COUNT_HIST = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST"]()
 comptime RETAINED_COUNT_HIST_BYTES = get_defined_int["MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES", 8*1024*1024]()
 
