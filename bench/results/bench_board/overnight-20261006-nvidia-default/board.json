@@ -27001,8 +27001,1776 @@
       "stored_arms": [],
       "stored_now": 1,
       "wall_s": 3.8
+    },
+    "algos/maxpool2d/synthetic/rows=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-compile-fp32",
+        "torch-eager-tf32",
+        "torch-compile-tf32",
+        "torch-eager-bf16",
+        "torch-compile-bf16"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1.7673727124929428,
+          "median_ms": 1.7673727124929428,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 639.0,
+            "peak_host_mb": 719.8,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 590.0,
+            "warmup_host_mb": 672.9
+          },
+          "min_ms": 1.7673727124929428,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 639.0,
+          "peak_host_mb": 719.8,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1.7673727124929428
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 303.38975228369236
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 2.261260524392128,
+          "median_ms": 2.261260524392128,
+          "memory": {
+            "children_mb": 12799.6,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 552.5,
+            "peak_host_mb": 1221.8,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 599.5,
+            "warmup_host_mb": 1201.7
+          },
+          "min_ms": 2.261260524392128,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 552.5,
+          "peak_host_mb": 1221.8,
+          "quality": {
+            "max_rel_diff_vs_torch_eager_fp32": 0.0,
+            "rel_fro_vs_torch_eager_fp32": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            2.261260524392128
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2313.6080019176006
+        },
+        {
+          "arm": "torch-eager-tf32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1.7394032329320908,
+          "median_ms": 1.7394032329320908,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 639.0,
+            "peak_host_mb": 720.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 590.0,
+            "warmup_host_mb": 673.8
+          },
+          "min_ms": 1.7394032329320908,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 639.0,
+          "peak_host_mb": 720.0,
+          "quality": {
+            "max_rel_diff_vs_torch_eager_fp32": 0.0,
+            "rel_fro_vs_torch_eager_fp32": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1.7394032329320908
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 304.303590208292
+        },
+        {
+          "arm": "torch-compile-tf32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 2.5396179407835007,
+          "median_ms": 2.5396179407835007,
+          "memory": {
+            "children_mb": 12792.4,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 553.5,
+            "peak_host_mb": 913.7,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 504.5,
+            "warmup_host_mb": 899.5
+          },
+          "min_ms": 2.5396179407835007,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 553.5,
+          "peak_host_mb": 913.7,
+          "quality": {
+            "max_rel_diff_vs_torch_eager_fp32": 0.0,
+            "rel_fro_vs_torch_eager_fp32": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            2.5396179407835007
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1342.7238464355469
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 2.24849209189415,
+          "median_ms": 2.24849209189415,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 639.0,
+            "peak_host_mb": 720.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 590.0,
+            "warmup_host_mb": 672.7
+          },
+          "min_ms": 2.24849209189415,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 639.0,
+          "peak_host_mb": 720.0,
+          "quality": {
+            "max_rel_diff_vs_torch_eager_fp32": 0.0,
+            "rel_fro_vs_torch_eager_fp32": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            2.24849209189415
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 298.3800768852234
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 2.7936138212680817,
+          "median_ms": 2.7936138212680817,
+          "memory": {
+            "children_mb": 538.1,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 553.5,
+            "peak_host_mb": 908.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 504.5,
+            "warmup_host_mb": 891.4
+          },
+          "min_ms": 2.7936138212680817,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 553.5,
+          "peak_host_mb": 908.0,
+          "quality": {
+            "max_rel_diff_vs_torch_eager_fp32": 0.0,
+            "rel_fro_vs_torch_eager_fp32": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            2.7936138212680817
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1149.9256324023008
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "maxpool2d",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-eager-fp32,torch-compile-fp32,torch-eager-tf32,torch-compile-tf32,torch-eager-bf16,torch-compile-bf16",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "synthetic",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:46:58Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/maxpool2d/synthetic/rows=full",
+      "infer_cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "forward(x) (no autograd)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "max_ms": 0.6119925528764725,
+          "median_ms": 0.6119925528764725,
+          "memory": {},
+          "min_ms": 0.6119925528764725,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.6119925528764725
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.6934031844139099
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "forward(x) (no autograd)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "max_ms": 0.5425717681646347,
+          "median_ms": 0.5425717681646347,
+          "memory": {},
+          "min_ms": 0.5425717681646347,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.5425717681646347
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 317.8865648806095
+        },
+        {
+          "arm": "torch-eager-tf32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "forward(x) (no autograd)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "max_ms": 0.6083119660615921,
+          "median_ms": 0.6083119660615921,
+          "memory": {},
+          "min_ms": 0.6083119660615921,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.6083119660615921
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.7089730352163315
+        },
+        {
+          "arm": "torch-compile-tf32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "forward(x) (no autograd)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "max_ms": 0.5435291677713394,
+          "median_ms": 0.5435291677713394,
+          "memory": {},
+          "min_ms": 0.5435291677713394,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.5435291677713394
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 105.08021526038647
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "forward(x) (no autograd)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "max_ms": 0.6324723362922668,
+          "median_ms": 0.6324723362922668,
+          "memory": {},
+          "min_ms": 0.6324723362922668,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.6324723362922668
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.7681529968976974
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "forward(x) (no autograd)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "forward + backward(dy)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "97cfede5e4c32f4f",
+          "hash_stable": null,
+          "lane": "maxpool2d",
+          "library": "torch",
+          "max_ms": 0.5538705736398697,
+          "median_ms": 0.5538705736398697,
+          "memory": {},
+          "min_ms": 0.5538705736398697,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "tensor",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "cnn",
+              "kind": "layer",
+              "mismatches": [],
+              "notes": [
+                "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+              ],
+              "ours_class": "mojolearn.MaxPool2d",
+              "params": {
+                "ceil_mode": false,
+                "dilation": 1,
+                "kernel_size": 2,
+                "padding": 0,
+                "stride": 2
+              },
+              "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+              "task": "maxpool2d",
+              "timed_fit": "forward + backward(dy)",
+              "timed_infer": "forward(x) (no autograd)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.5538705736398697
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 54.76992763578892
+        }
+      ],
+      "lane": "maxpool2d",
+      "lane_config": {
+        "block": "tensor",
+        "datasets": [
+          "synthetic"
+        ],
+        "expansion_lane": "cnn",
+        "kind": "layer",
+        "mismatches": [],
+        "notes": [
+          "x (64, 64, 112, 112), seeded N(0,1) tensors (no image set is in the R2 store)"
+        ],
+        "ours_class": "mojolearn.MaxPool2d",
+        "params": {
+          "ceil_mode": false,
+          "dilation": 1,
+          "kernel_size": 2,
+          "padding": 0,
+          "stride": 2
+        },
+        "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+        "task": "maxpool2d",
+        "timed_fit": "forward + backward(dy)",
+        "timed_infer": "forward(x) (no autograd)"
+      },
+      "log": "logs/algos.maxpool2d.synthetic.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-bf16": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-compile-tf32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-eager-bf16": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-eager-tf32": {
+            "library": "torch",
+            "params": {
+              "seed": 7
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/maxpool2d",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/maxpool2d-synthetic.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:46:37Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 6,
+      "wall_s": 20.3
+    },
+    "algos/minmax-scaler/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 56.77902698516846
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "7a42e69e2a675d42",
+          "hash_stable": null,
+          "lane": "minmax-scaler",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 5.078336223959923,
+          "median_ms": 5.078336223959923,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 488.0,
+            "peak_host_mb": 891.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 488.0,
+            "warmup_host_mb": 883.4
+          },
+          "min_ms": 5.078336223959923,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "clip": false,
+              "feature_range": [
+                0,
+                1
+              ],
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params + fixed unclipped MinMaxScaler behavior"
+          },
+          "peak_gpu_mb": 488.0,
+          "peak_host_mb": 891.9,
+          "quality": {
+            "output_shape": "100000x11"
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw",
+              "cuml": "cuml.preprocessing:MinMaxScaler",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "cuML 26.08 MinMaxScaler has fixed unclipped transform behavior, equivalent to clip=False; the unsupported constructor keyword is omitted"
+              ],
+              "ours_class": "mojolearn.MinMaxScaler",
+              "params": {
+                "clip": false,
+                "feature_range": [
+                  0,
+                  1
+                ]
+              },
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:MinMaxScaler",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            5.078336223959923
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 133.87637585401535
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "minmax-scaler",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:47:01Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/minmax-scaler/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-gpu",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "transform(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 56.77902698516846
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 56.77902698516846
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "7a42e69e2a675d42",
+          "hash_stable": null,
+          "lane": "minmax-scaler",
+          "library": "cuml",
+          "max_ms": 0.7129833102226257,
+          "median_ms": 0.7129833102226257,
+          "memory": {},
+          "min_ms": 0.7129833102226257,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw",
+              "cuml": "cuml.preprocessing:MinMaxScaler",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "cuML 26.08 MinMaxScaler has fixed unclipped transform behavior, equivalent to clip=False; the unsupported constructor keyword is omitted"
+              ],
+              "ours_class": "mojolearn.MinMaxScaler",
+              "params": {
+                "clip": false,
+                "feature_range": [
+                  0,
+                  1
+                ]
+              },
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:MinMaxScaler",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.7129833102226257
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 68.1240800768137
+        }
+      ],
+      "lane": "minmax-scaler",
+      "lane_config": {
+        "block": "raw",
+        "cuml": "cuml.preprocessing:MinMaxScaler",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [
+          "cuML 26.08 MinMaxScaler has fixed unclipped transform behavior, equivalent to clip=False; the unsupported constructor keyword is omitted"
+        ],
+        "ours_class": "mojolearn.MinMaxScaler",
+        "params": {
+          "clip": false,
+          "feature_range": [
+            0,
+            1
+          ]
+        },
+        "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+        "sklearn": "sklearn.preprocessing:MinMaxScaler",
+        "task": "transform",
+        "timed_fit": "fit(X)",
+        "timed_infer": "transform(Xq)"
+      },
+      "log": "logs/algos.minmax-scaler.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "clip": false,
+              "feature_range": [
+                0,
+                1
+              ],
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params + fixed unclipped MinMaxScaler behavior"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/minmax-scaler",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/minmax-scaler-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:46:58Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 3.7
+    },
+    "algos/multinomial-nb/istella/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 712.8571178764105
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "ffa607b7fab32e96",
+          "hash_stable": null,
+          "lane": "multinomial-nb",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 56.69716373085976,
+          "median_ms": 56.69716373085976,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 1372.0,
+            "peak_host_mb": 3910.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 1370.0,
+            "warmup_host_mb": 3907.4
+          },
+          "min_ms": 56.69716373085976,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "alpha": 1.0,
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 1372.0,
+          "peak_host_mb": 3910.6,
+          "quality": {
+            "accuracy": 0.85362,
+            "logloss": 3.628599105341562
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "MultinomialNB",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "countclf",
+              "cuml": "cuml.naive_bayes:MultinomialNB",
+              "datasets": [
+                "text",
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "text: byte-bigram counts of 2 KB documents, label = which corpus (enwik8 or pile_github); taxi/Istella: the nonnegative block"
+              ],
+              "ours_class": "mojolearn.MultinomialNB",
+              "params": {
+                "alpha": 1.0,
+                "fit_prior": true,
+                "force_alpha": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "sklearn": "sklearn.naive_bayes:MultinomialNB",
+              "task": "clf",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            56.69716373085976
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 165.30531644821167
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "multinomial-nb",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:47:14Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/multinomial-nb/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-gpu",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 712.8571178764105
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 712.8571178764105
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "ffa607b7fab32e96",
+          "hash_stable": null,
+          "lane": "multinomial-nb",
+          "library": "cuml",
+          "max_ms": 2.1878108382225037,
+          "median_ms": 2.1878108382225037,
+          "memory": {},
+          "min_ms": 2.1878108382225037,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "MultinomialNB",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "countclf",
+              "cuml": "cuml.naive_bayes:MultinomialNB",
+              "datasets": [
+                "text",
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "text: byte-bigram counts of 2 KB documents, label = which corpus (enwik8 or pile_github); taxi/Istella: the nonnegative block"
+              ],
+              "ours_class": "mojolearn.MultinomialNB",
+              "params": {
+                "alpha": 1.0,
+                "fit_prior": true,
+                "force_alpha": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "sklearn": "sklearn.naive_bayes:MultinomialNB",
+              "task": "clf",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            2.1878108382225037
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 65.23609533905983
+        }
+      ],
+      "lane": "multinomial-nb",
+      "lane_config": {
+        "block": "countclf",
+        "cuml": "cuml.naive_bayes:MultinomialNB",
+        "datasets": [
+          "text",
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [
+          "text: byte-bigram counts of 2 KB documents, label = which corpus (enwik8 or pile_github); taxi/Istella: the nonnegative block"
+        ],
+        "ours_class": "mojolearn.MultinomialNB",
+        "params": {
+          "alpha": 1.0,
+          "fit_prior": true,
+          "force_alpha": true
+        },
+        "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+        "sklearn": "sklearn.naive_bayes:MultinomialNB",
+        "task": "clf",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": "predict(Xq)"
+      },
+      "log": "logs/algos.multinomial-nb.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "alpha": 1.0,
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/multinomial-nb",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/multinomial-nb-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:47:01Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 12.3
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T07:46:37Z"
+  "updated": "2026-10-06T07:47:14Z"
 }
