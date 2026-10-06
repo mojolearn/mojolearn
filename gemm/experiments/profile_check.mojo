@@ -24,6 +24,8 @@ from gemm.checks.gemm_identical import contract_partition
 
 # I01 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Explicit campaign harness only; shipped group and tile defaults retained.
+# N01 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# Packed64 and body-tile candidate arms require explicit defines; incumbent defaults retained.
 def run_profile() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, "IDENTICAL only"
     var ctx = DeviceContext()
