@@ -23,6 +23,7 @@ SOURCES=[('apple',ROOT/'apple/captured/runs'),
          ('apple',ROOT/'apple/captured/pls-qn-full/runs'),
          ('apple',ROOT/'apple/captured/tsvd-full-v1/runs'),
          ('apple',ROOT/'apple/captured/selectors-full/runs'),
+         ('apple',ROOT/'apple/captured/classification-full-v1/runs'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-next-reg'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-gmm-istella'),
@@ -30,6 +31,8 @@ SOURCES=[('apple',ROOT/'apple/captured/runs'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv'),
+         ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1'),
+         ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements')]
 
 
@@ -78,7 +81,7 @@ def main():
                      scored_samples=min(samples[arm]['scored'] for arm in samples),
                      quality='PENDING' if complete else 'NOT_ASSESSED',
                      identity='NOT_REQUIRED' if receipt['mode']=='fast' else 'INCOMPLETE',
-                     route='native-sm90' if vendor=='nvidia' else 'apple-fast',
+                     route={'nvidia':'native-sm90','amd':'amd-native-gfx942','apple':'apple-fast'}[vendor],
                      receipt_sha256=digest,source_coverage_pending=job.get('source_coverage_pending',[]))
             if vendor=='apple' and source in [ROOT/'apple/captured/runs',ROOT/'apple/captured/kmeans-repair2/runs']:
                 row['resource_limitations']=['Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established.']
