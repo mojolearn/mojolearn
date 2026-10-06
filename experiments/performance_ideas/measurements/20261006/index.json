@@ -6505,6 +6505,66 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
+      "id": "I07",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+      "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+      "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_HEADS\": \"12\", \"AB_KV_HEADS\": \"4\", \"AB_LENGTH\": \"1024\"}/{\"heads\": 12, \"kv_heads\": 4, \"length\": 1024}/candidate",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "15ab3936aad710fcefae78b917a18a045a18a7f7bc8278e9efe700a991cad9dc",
+        "candidate": "b9ed4121b74c21593a4085f428c9de7eec6fb019157bd3f95f106e264b16e891"
+      },
+      "baseline_ms": 24.891797,
+      "candidate_ms": 24.934967,
+      "baseline_arm": "baseline",
+      "candidate_arm": "candidate",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I07",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+      "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+      "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_HEADS\": \"12\", \"AB_KV_HEADS\": \"4\", \"AB_LENGTH\": \"1536\"}/{\"heads\": 12, \"kv_heads\": 4, \"length\": 1536}/candidate",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "15ab3936aad710fcefae78b917a18a045a18a7f7bc8278e9efe700a991cad9dc",
+        "candidate": "b9ed4121b74c21593a4085f428c9de7eec6fb019157bd3f95f106e264b16e891"
+      },
+      "baseline_ms": 37.874817,
+      "candidate_ms": 37.996035,
+      "baseline_arm": "baseline",
+      "candidate_arm": "candidate",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
       "id": "N01",
       "vendor": "nvidia",
       "route": "specific",
@@ -56595,6 +56655,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "1"
+      },
       "id": "N03",
       "vendor": "nvidia",
       "route": "specific",
@@ -56623,6 +56689,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "1"
+      },
       "id": "N03",
       "vendor": "nvidia",
       "route": "specific",
@@ -56651,6 +56723,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "1"
+      },
       "id": "N03",
       "vendor": "nvidia",
       "route": "specific",
@@ -56679,6 +56757,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "1"
+      },
       "id": "N03",
       "vendor": "nvidia",
       "route": "specific",
@@ -56707,6 +56791,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "1"
+      },
       "id": "N03",
       "vendor": "nvidia",
       "route": "specific",
@@ -56735,6 +56825,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "1"
+      },
       "id": "N03",
       "vendor": "nvidia",
       "route": "specific",
@@ -56763,6 +56859,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -56791,6 +56893,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -56819,6 +56927,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -56847,6 +56961,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -56875,6 +56995,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -56903,6 +57029,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -56931,6 +57063,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -56959,6 +57097,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -56987,6 +57131,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -57015,6 +57165,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -57043,6 +57199,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -57071,6 +57233,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -57099,6 +57267,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -57127,6 +57301,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -57155,6 +57335,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -57183,6 +57369,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -57211,6 +57403,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -57239,6 +57437,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "3"
+      },
       "id": "N05",
       "vendor": "nvidia",
       "route": "specific",
@@ -57267,6 +57471,7 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {},
       "id": "N06",
       "vendor": "nvidia",
       "route": "specific",
@@ -57295,6 +57500,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "1024",
+        "AB_COLUMNS": "4096",
+        "AB_FEATURES": "8"
+      },
       "id": "N08",
       "vendor": "nvidia",
       "route": "specific",
@@ -57323,6 +57533,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "1023",
+        "AB_COLUMNS": "4097",
+        "AB_FEATURES": "17"
+      },
       "id": "N08",
       "vendor": "nvidia",
       "route": "specific",
@@ -57351,6 +57566,10 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "32"
+      },
       "id": "N07",
       "vendor": "nvidia",
       "route": "specific",
@@ -57379,6 +57598,10 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "131071",
+        "AB_FEATURES": "17"
+      },
       "id": "N07",
       "vendor": "nvidia",
       "route": "specific",
@@ -57407,6 +57630,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "2"
+      },
       "id": "I03",
       "vendor": "nvidia",
       "route": "default",
@@ -57418,7 +57647,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57435,6 +57664,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "2"
+      },
       "id": "I03",
       "vendor": "nvidia",
       "route": "default",
@@ -57446,7 +57681,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57463,6 +57698,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "2"
+      },
       "id": "I03",
       "vendor": "nvidia",
       "route": "default",
@@ -57474,7 +57715,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57491,6 +57732,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "2"
+      },
       "id": "I03",
       "vendor": "nvidia",
       "route": "default",
@@ -57502,7 +57749,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57519,6 +57766,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "2"
+      },
       "id": "I03",
       "vendor": "nvidia",
       "route": "default",
@@ -57530,7 +57783,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57547,6 +57800,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "2"
+      },
       "id": "I03",
       "vendor": "nvidia",
       "route": "default",
@@ -57558,7 +57817,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57575,6 +57834,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "0"
+      },
       "id": "I05",
       "vendor": "nvidia",
       "route": "default",
@@ -57586,7 +57851,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57603,6 +57868,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "0"
+      },
       "id": "I05",
       "vendor": "nvidia",
       "route": "default",
@@ -57614,7 +57885,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57631,6 +57902,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "257",
+        "AB_N": "259",
+        "AB_K": "1025",
+        "AB_KIND": "0"
+      },
       "id": "I05",
       "vendor": "nvidia",
       "route": "default",
@@ -57642,7 +57919,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57659,6 +57936,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "0"
+      },
       "id": "I05",
       "vendor": "nvidia",
       "route": "default",
@@ -57670,7 +57953,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57687,6 +57970,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "0"
+      },
       "id": "I05",
       "vendor": "nvidia",
       "route": "default",
@@ -57698,7 +57987,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57715,6 +58004,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049",
+        "AB_KIND": "0"
+      },
       "id": "I05",
       "vendor": "nvidia",
       "route": "default",
@@ -57726,7 +58021,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57743,6 +58038,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_QUERIES": "2000",
+        "AB_FEATURES": "8",
+        "AB_K": "8"
+      },
       "id": "I15",
       "vendor": "nvidia",
       "route": "default",
@@ -57754,7 +58055,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57765,6 +58066,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "131071",
+        "AB_QUERIES": "1024",
+        "AB_FEATURES": "17",
+        "AB_K": "16"
+      },
       "id": "I15",
       "vendor": "nvidia",
       "route": "default",
@@ -57776,7 +58083,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57787,6 +58094,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_QUERIES": "2000",
+        "AB_FEATURES": "8",
+        "AB_K": "8"
+      },
       "id": "I15",
       "vendor": "nvidia",
       "route": "default",
@@ -57798,7 +58111,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57809,6 +58122,12 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "131071",
+        "AB_QUERIES": "1024",
+        "AB_FEATURES": "17",
+        "AB_K": "16"
+      },
       "id": "I15",
       "vendor": "nvidia",
       "route": "default",
@@ -57820,7 +58139,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57831,6 +58150,9 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_GROUPS": "65537"
+      },
       "id": "A04",
       "vendor": "nvidia",
       "route": "default",
@@ -57842,7 +58164,7 @@
       "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57859,6 +58181,9 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_GROUPS": "65537"
+      },
       "id": "A04",
       "vendor": "nvidia",
       "route": "default",
@@ -57870,7 +58195,7 @@
       "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57887,6 +58212,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "33",
+        "AB_QUERIES": "128"
+      },
       "id": "I16",
       "vendor": "nvidia",
       "route": "default",
@@ -57898,7 +58228,7 @@
       "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57915,6 +58245,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "33",
+        "AB_QUERIES": "128"
+      },
       "id": "I16",
       "vendor": "nvidia",
       "route": "default",
@@ -57926,7 +58261,7 @@
       "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57943,6 +58278,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "33",
+        "AB_QUERIES": "128"
+      },
       "id": "I16",
       "vendor": "nvidia",
       "route": "default",
@@ -57954,7 +58294,7 @@
       "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57971,6 +58311,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1024",
+        "AB_N": "1024",
+        "AB_K": "2048"
+      },
       "id": "I02",
       "vendor": "nvidia",
       "route": "default",
@@ -57982,7 +58327,7 @@
       "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -57999,6 +58344,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049"
+      },
       "id": "I02",
       "vendor": "nvidia",
       "route": "default",
@@ -58010,7 +58360,7 @@
       "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58027,6 +58377,271 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_GROUPS": "4096"
+      },
+      "id": "A04",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A04-paired-5b467815b5-shape44dfd12d2d/runtime0",
+      "scope": "component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "e3ed64132b44436e4604daeebec64819345873954fe78aadd206062de1a83b43",
+        "candidate": "e3ed64132b44436e4604daeebec64819345873954fe78aadd206062de1a83b43"
+      },
+      "baseline_ms": 0.00786,
+      "candidate_ms": 0.007451,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_GROUPS": "1048576"
+      },
+      "id": "A04",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A04-paired-5b467815b5-shapefacfdaed3d/runtime0",
+      "scope": "component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "e3ed64132b44436e4604daeebec64819345873954fe78aadd206062de1a83b43",
+        "candidate": "e3ed64132b44436e4604daeebec64819345873954fe78aadd206062de1a83b43"
+      },
+      "baseline_ms": 0.082221,
+      "candidate_ms": 0.078011,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "7",
+        "AB_QUERIES": "128"
+      },
+      "id": "I16",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I16-paired-5b467815b5-shapefe63f22b11/runtime0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63",
+        "candidate": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63"
+      },
+      "baseline_ms": 3.833893,
+      "candidate_ms": 15.977532,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "7",
+        "AB_QUERIES": "128"
+      },
+      "id": "I16",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I16-paired-5b467815b5-shapefe63f22b11/runtime1",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63",
+        "candidate": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63"
+      },
+      "baseline_ms": 5.058466,
+      "candidate_ms": 16.527973,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "7",
+        "AB_QUERIES": "128"
+      },
+      "id": "I16",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I16-paired-5b467815b5-shapefe63f22b11/runtime2",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63",
+        "candidate": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63"
+      },
+      "baseline_ms": 3.943815,
+      "candidate_ms": 16.038203,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "65",
+        "AB_QUERIES": "128"
+      },
+      "id": "I16",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I16-paired-5b467815b5-shape8ecec863f3/runtime0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63",
+        "candidate": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63"
+      },
+      "baseline_ms": 35.98267,
+      "candidate_ms": 44.36662,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "65",
+        "AB_QUERIES": "128"
+      },
+      "id": "I16",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I16-paired-5b467815b5-shape8ecec863f3/runtime1",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63",
+        "candidate": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63"
+      },
+      "baseline_ms": 37.425018,
+      "candidate_ms": 45.075083,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "65",
+        "AB_QUERIES": "128"
+      },
+      "id": "I16",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I16-paired-5b467815b5-shape8ecec863f3/runtime2",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63",
+        "candidate": "f55f8f3242ee8fb608f57adc7779c3f584c168f4a6ab881546341585704e3a63"
+      },
+      "baseline_ms": 36.268896,
+      "candidate_ms": 44.541013,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "32",
+        "AB_CLUSTERS": "32"
+      },
       "id": "A08",
       "vendor": "nvidia",
       "route": "default",
@@ -58038,7 +58653,7 @@
       "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58055,6 +58670,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "32",
+        "AB_CLUSTERS": "32"
+      },
       "id": "A08",
       "vendor": "nvidia",
       "route": "default",
@@ -58066,7 +58686,7 @@
       "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58083,6 +58703,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "32",
+        "AB_CLUSTERS": "32"
+      },
       "id": "A08",
       "vendor": "nvidia",
       "route": "default",
@@ -58094,7 +58719,7 @@
       "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58111,6 +58736,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "32",
+        "AB_CLUSTERS": "32"
+      },
       "id": "A08",
       "vendor": "nvidia",
       "route": "default",
@@ -58122,7 +58752,7 @@
       "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
       "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58139,6 +58769,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_QUERIES": "1024",
+        "AB_FEATURES": "8"
+      },
       "id": "I20",
       "vendor": "nvidia",
       "route": "default",
@@ -58150,7 +58785,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58167,6 +58802,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "131071",
+        "AB_QUERIES": "513",
+        "AB_FEATURES": "17"
+      },
       "id": "I20",
       "vendor": "nvidia",
       "route": "default",
@@ -58178,7 +58818,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58195,6 +58835,42 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "100000",
+        "AB_FEATURES": "32"
+      },
+      "id": "A07",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A07-production_tasks256-5b467815b5-f0/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "8144124adc4b64c1aea48f32be4645b259056efb1cce94171e0f7fc697e69a62",
+        "candidate": "c6d7f48262b505d93c9cf083fe0edaa2e99de8a7d5842b101b7e066a5d8f09e1"
+      },
+      "baseline_ms": 124.910387,
+      "candidate_ms": 123.566701,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "1000000",
+        "AB_CLASSES": "33"
+      },
       "id": "I24",
       "vendor": "nvidia",
       "route": "default",
@@ -58206,7 +58882,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58223,6 +58899,10 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_ROWS": "1048573",
+        "AB_CLASSES": "17"
+      },
       "id": "I24",
       "vendor": "nvidia",
       "route": "default",
@@ -58234,7 +58914,7 @@
       "source_sha": "f32549d28",
       "baseline_source_sha": "f32549d28",
       "candidate_source_sha": "f32549d28",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58251,6 +58931,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1024",
+        "AB_N": "1024",
+        "AB_K": "2048"
+      },
       "id": "I04",
       "vendor": "nvidia",
       "route": "default",
@@ -58262,7 +58947,7 @@
       "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58279,6 +58964,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_M": "1023",
+        "AB_N": "1025",
+        "AB_K": "2049"
+      },
       "id": "I04",
       "vendor": "nvidia",
       "route": "default",
@@ -58290,7 +58980,7 @@
       "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58307,6 +58997,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_LENGTH": "1024",
+        "AB_HEADS": "12",
+        "AB_KV_HEADS": "4"
+      },
       "id": "I06",
       "vendor": "nvidia",
       "route": "default",
@@ -58318,7 +59013,7 @@
       "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58335,6 +59030,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_LENGTH": "1536",
+        "AB_HEADS": "12",
+        "AB_KV_HEADS": "4"
+      },
       "id": "I06",
       "vendor": "nvidia",
       "route": "default",
@@ -58346,7 +59046,7 @@
       "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58363,6 +59063,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_LENGTH": "1024",
+        "AB_HEADS": "12",
+        "AB_KV_HEADS": "4"
+      },
       "id": "I07",
       "vendor": "nvidia",
       "route": "default",
@@ -58374,7 +59079,7 @@
       "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58391,6 +59096,11 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
+      "effective_environment": {
+        "AB_LENGTH": "1536",
+        "AB_HEADS": "12",
+        "AB_KV_HEADS": "4"
+      },
       "id": "I07",
       "vendor": "nvidia",
       "route": "default",
@@ -58402,7 +59112,7 @@
       "source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "baseline_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
       "candidate_source_sha": "cbcc8dcd3303c66b70f32474e410ecba79d10749",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/b1467d8ba4f06af53aed7bf1fa839a47a7a4243086f19fe3df77da6a745bb6c6.json",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
@@ -58416,6 +59126,334 @@
       },
       "baseline_ms": 3.510407,
       "candidate_ms": 3.527977,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100001",
+        "AB_FEATURES": "33",
+        "AB_CLUSTERS": "32"
+      },
+      "id": "A08",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A08-wide4096-5b467815b5-shape3c546c019b/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+        "candidate": "c7faa090cc6c748af8a39f77fc674552d96071ec4912e5e074cf04b86ea52ae2"
+      },
+      "baseline_ms": 1.272154,
+      "candidate_ms": 3.637499,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "65537",
+        "AB_FEATURES": "17",
+        "AB_CLUSTERS": "32"
+      },
+      "id": "A08",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A08-wide4096-5b467815b5-shapebf7e5f2bf1/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+        "candidate": "c7faa090cc6c748af8a39f77fc674552d96071ec4912e5e074cf04b86ea52ae2"
+      },
+      "baseline_ms": 1.502589,
+      "candidate_ms": 6.730238,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100001",
+        "AB_FEATURES": "33",
+        "AB_CLUSTERS": "32"
+      },
+      "id": "A08",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A08-old1024-5b467815b5-shape3c546c019b/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+        "candidate": "c7f7c1c0222f7e96d527e18c167cfe6b8ce30777b0838e3fd07161f12273e698"
+      },
+      "baseline_ms": 1.272154,
+      "candidate_ms": 1.638681,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "65537",
+        "AB_FEATURES": "17",
+        "AB_CLUSTERS": "32"
+      },
+      "id": "A08",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A08-old1024-5b467815b5-shapebf7e5f2bf1/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+        "candidate": "c7f7c1c0222f7e96d527e18c167cfe6b8ce30777b0838e3fd07161f12273e698"
+      },
+      "baseline_ms": 1.502589,
+      "candidate_ms": 2.416486,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100001",
+        "AB_FEATURES": "33",
+        "AB_CLUSTERS": "32"
+      },
+      "id": "A08",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A08-1024_conv_poll1-5b467815b5-shape3c546c019b/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+        "candidate": "240d28f85496d9e07c0f4931048648282ec63539654fe8f8e981965136e80745"
+      },
+      "baseline_ms": 1.272154,
+      "candidate_ms": 1.539559,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "65537",
+        "AB_FEATURES": "17",
+        "AB_CLUSTERS": "32"
+      },
+      "id": "A08",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A08-1024_conv_poll1-5b467815b5-shapebf7e5f2bf1/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+        "candidate": "240d28f85496d9e07c0f4931048648282ec63539654fe8f8e981965136e80745"
+      },
+      "baseline_ms": 1.502589,
+      "candidate_ms": 2.412335,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100001",
+        "AB_FEATURES": "33"
+      },
+      "id": "A07",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A07-production_tasks256-5b467815b5-shapecd30427c19/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "8144124adc4b64c1aea48f32be4645b259056efb1cce94171e0f7fc697e69a62",
+        "candidate": "c6d7f48262b505d93c9cf083fe0edaa2e99de8a7d5842b101b7e066a5d8f09e1"
+      },
+      "baseline_ms": 126.938692,
+      "candidate_ms": 125.678158,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "65537",
+        "AB_FEATURES": "17"
+      },
+      "id": "A07",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A07-production_tasks256-5b467815b5-shapec8eed4c7d6/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "8144124adc4b64c1aea48f32be4645b259056efb1cce94171e0f7fc697e69a62",
+        "candidate": "c6d7f48262b505d93c9cf083fe0edaa2e99de8a7d5842b101b7e066a5d8f09e1"
+      },
+      "baseline_ms": 92.867687,
+      "candidate_ms": 92.117723,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "100001",
+        "AB_FEATURES": "33",
+        "AB_CLUSTERS": "32"
+      },
+      "id": "A08",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A08-256_conv_poll1-5b467815b5-shape3c546c019b/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+        "candidate": "7a90144221af15eb7046b1dd57059de0068d67c08c6262927a35afe2c7fdae93"
+      },
+      "baseline_ms": 1.272154,
+      "candidate_ms": 1.077181,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_ROWS": "65537",
+        "AB_FEATURES": "17",
+        "AB_CLUSTERS": "32"
+      },
+      "id": "A08",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "A08-256_conv_poll1-5b467815b5-shapebf7e5f2bf1/case0",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/acdda972bb88c973b9d7c65f43f9ebb7b95acee0913286a3a806d521782f49df.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "MEASURED",
+      "returncode": 0,
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
+      "promotion": false,
+      "artifact_hashes": {
+        "baseline": "dbc51bc246360efc4e9e416f2c1f8d4ad92a5e37c43657130ba07ad27f5ff7c4",
+        "candidate": "7a90144221af15eb7046b1dd57059de0068d67c08c6262927a35afe2c7fdae93"
+      },
+      "baseline_ms": 1.502589,
+      "candidate_ms": 1.516739,
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     }
   ],
@@ -58455,28 +59493,28 @@
   ],
   "capture_sources": {
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json": {
-      "sha256": "555f256115acd4fb8354e5cc5a85bb2668eb449ad74b49653f7b157c1a8bd897",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-555f256115acd4fb8354e5cc5a85bb2668eb449ad74b49653f7b157c1a8bd897.json"
+      "sha256": "b3cb29932e09a97b23ecdec051abae5b5e34b08de24f9b8000225aaf26fc9ac8",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-b3cb29932e09a97b23ecdec051abae5b5e34b08de24f9b8000225aaf26fc9ac8.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-normalized-measurements.json": {
-      "sha256": "06260e15971cbc9dbb57ca7dea23830197aa95d00c20364ddb8a9e1bfb94844b",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-06260e15971cbc9dbb57ca7dea23830197aa95d00c20364ddb8a9e1bfb94844b.json"
+      "sha256": "f8ce88110d9c3f0e637d2967362acd5974be0fdaa57a2c9813704244754d99b0",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-f8ce88110d9c3f0e637d2967362acd5974be0fdaa57a2c9813704244754d99b0.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-normalized-measurements.json": {
-      "sha256": "67968df5c0358ff53c0e40818a16058210ccc2908494ae0221faab39857fda18",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-67968df5c0358ff53c0e40818a16058210ccc2908494ae0221faab39857fda18.json"
+      "sha256": "1376027b7d895a1834b071c47a6ee3483c2eb2a8efb5830af9f3ad73bb619552",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-1376027b7d895a1834b071c47a6ee3483c2eb2a8efb5830af9f3ad73bb619552.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json": {
       "sha256": "3eed454368c13a7ff3e2e83f0d6ff95b185a5f70d5e30cc92f847ff48cfe7c55",
       "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-3eed454368c13a7ff3e2e83f0d6ff95b185a5f70d5e30cc92f847ff48cfe7c55.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json": {
-      "sha256": "fef9d1db31959eb965f75e8257f81db9130d195769ebb58c15df1056ffb56508",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-fef9d1db31959eb965f75e8257f81db9130d195769ebb58c15df1056ffb56508.json"
+      "sha256": "a41414a96b017dc257c3d83cff15a0da2c99127d156386f97bd81c9984066ee2",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-a41414a96b017dc257c3d83cff15a0da2c99127d156386f97bd81c9984066ee2.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json": {
-      "sha256": "8369a1a9d84b651242de354cf732109f68c0f22029e072625a0cb3ece1c5f6f0",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-8369a1a9d84b651242de354cf732109f68c0f22029e072625a0cb3ece1c5f6f0.json"
+      "sha256": "cc9227b64838d01c69b440ed1999a986d831fbf65313d6ee52c81844f673d6ca",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-cc9227b64838d01c69b440ed1999a986d831fbf65313d6ee52c81844f673d6ca.json"
     }
   },
   "decisions": [
