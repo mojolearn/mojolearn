@@ -23,6 +23,7 @@ from arima.impl.tsa.arima_common import ARIMAOrder
 
 # F16 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Tail requires Apple FAST + MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL; original Kalman path retained.
+# NEVER RUN — PENDING VALIDATION: actual production compensated likelihood/gradient tail.
 comptime PRODUCT_DF_ON=(GLOBAL_NUMERIC_MODE==NUMERIC_FAST and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL"]())
 comptime PRODUCT_DF_TPB=256
