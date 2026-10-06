@@ -50,7 +50,7 @@ struct OwnedClipTensor(Movable):
         var ga = self.gradient.create_sub_buffer[DType.float32](0,count)
         var gb = self.gradient.create_sub_buffer[DType.float32](0,count)
         comptime if NN57_NORM_PROFILE:
-            nn_reduce_pointer_into[128, True](ctx, cell.unsafe_ptr(), ga.unsafe_ptr(), ws.unsafe_ptr(), count)
+            nn_reduce_pointer_into[128, True](ctx, cell.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ga.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), count)
         else:
             identical_gemm_into(ctx,cell,ga,gb,ws,1,1,count,OP_NT)
         ctx.synchronize()

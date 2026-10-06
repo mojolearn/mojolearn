@@ -33,6 +33,24 @@ def capture(value, scope, *, expected_paths=None):
                 completeness='complete_declared_scope' if expected_paths is not None and not missing else 'scope_not_qualified')
 
 
+def retain_values(value,path):
+    """Retain an exact typed tree plus .npy leaves, after clocks have stopped."""
+    import numpy as np
+    path=Path(path);folder=path.with_suffix('');folder.mkdir(exist_ok=False)
+    leaves=[]
+    def encode(v):
+        if isinstance(v,dict):return {'dict':[[k,encode(child)] for k,child in v.items()]}
+        if isinstance(v,(tuple,list)):return {'sequence':[encode(child) for child in v]}
+        if isinstance(v,(np.ndarray,np.generic)):
+            a=np.asarray(v)
+            if a.dtype.hasobject:raise ValueError('Object arrays are not retained identity state')
+            dest=folder/(str(len(leaves))+'.npy');np.save(dest,a,allow_pickle=False);leaves.append(str(dest))
+            return {'array':str(dest),'dtype':a.dtype.str,'shape':list(a.shape),'sha256':hashlib.sha256(dest.read_bytes()).hexdigest()}
+        if v is None or isinstance(v,(str,int,float,bool)):return {'scalar':v}
+        raise TypeError('Unsupported retained output type '+type(v).__name__)
+    tree=encode(value);path.write_text(json.dumps(dict(schema='mojolearn.typed-values/1',tree=tree),allow_nan=False,indent=2)+'\n')
+
+
 def capture_model(runner, expected_paths=None):
     from bench_board_state import runner_model
     model=runner_model(runner)

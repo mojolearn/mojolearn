@@ -1257,7 +1257,7 @@ def identical_clip_coefficient(
         var nb = norms.create_sub_buffer[DType.float32](0, j_count)
         var tv = total_cell.create_sub_buffer[DType.float32](0, 1)
         comptime if NN57_NORM_PROFILE:
-            nn_reduce_pointer_into[128, True](ctx, tv.unsafe_ptr(), na.unsafe_ptr(), ws.unsafe_ptr(), j_count)
+            nn_reduce_pointer_into[128, True](ctx, tv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), na.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), j_count)
         else:
             identical_gemm_into(ctx, tv, na, nb, ws, 1, 1, j_count, OP_NT)
         step_count_sync()
@@ -1412,7 +1412,7 @@ def identical_clip_grad_norm(
             var gb = grad.create_sub_buffer[DType.float32](begin, count)
             var cv = sumsq.create_sub_buffer[DType.float32](slot, 1)
             comptime if NN57_NORM_PROFILE:
-                nn_reduce_pointer_into[128, True](ctx, cv.unsafe_ptr(), ga.unsafe_ptr(), ws.unsafe_ptr(), count)
+                nn_reduce_pointer_into[128, True](ctx, cv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ga.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), count)
             else:
                 identical_gemm_into(ctx, cv, ga, gb, ws, 1, 1, count, OP_NT)
             step_count_sync()
@@ -1475,7 +1475,7 @@ def identical_clip_grad_norm_batched(
         var gb = grad.create_sub_buffer[DType.float32](begin, count)
         var cv = sumsq.create_sub_buffer[DType.float32](j, 1)
         comptime if NN57_NORM_PROFILE:
-            nn_reduce_pointer_into[128, True](ctx, cv.unsafe_ptr(), ga.unsafe_ptr(), ws.unsafe_ptr(), count)
+            nn_reduce_pointer_into[128, True](ctx, cv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ga.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), count)
         else:
             identical_gemm_into(ctx, cv, ga, gb, ws, 1, 1, count, OP_NT)
         keep.append(ga^)

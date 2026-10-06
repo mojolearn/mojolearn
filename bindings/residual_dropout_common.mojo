@@ -19,7 +19,7 @@ def residual_dropout_args(params: PythonObject) raises -> ResidualDropoutArgs:
     var args = ResidualDropoutArgs(Int(py=params[0]),Int(py=params[1]),Int(py=params[2]),
         Int(py=params[3]),Int(py=params[4]),Float32(Float64(py=params[5])))
     _ = residual_dropout_admit(args.n,args.offset,args.p,args.seed_lo,args.seed_hi,args.stream)
-    return args
+    return args^
 
 
 def _residual_overlap(a: Int,b: Int,n: Int) -> Bool:

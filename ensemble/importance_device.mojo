@@ -81,7 +81,7 @@ struct ImportanceStore(Movable):
         self.finite = ctx.enqueue_create_buffer[DType.uint64](trees*features if enabled else 1)
         self.infinite = ctx.enqueue_create_buffer[DType.uint64](trees*features if enabled else 1)
 
-    def append[dtype: DType](self, ctx: DeviceContext,
+    def append[dtype: DType](mut self, ctx: DeviceContext,
         nodes: MutPointer[SparseTreeNode[dtype],MutUntrackedOrigin], count: Int, tree: Int) raises:
         if not self.enabled:
             return
@@ -89,7 +89,7 @@ struct ImportanceStore(Movable):
             nodes.unsafe_origin_cast[MutAnyOrigin](),self.finite.unsafe_ptr(),self.infinite.unsafe_ptr(),
             Int32(count),Int32(self.n_features),Int32(tree),grid_dim=1,block_dim=1)
 
-    def finish(self, ctx: DeviceContext) raises -> List[Float32]:
+    def finish(mut self, ctx: DeviceContext) raises -> List[Float32]:
         var output = ctx.enqueue_create_buffer[DType.float32](self.n_features)
         var accumulated = ctx.enqueue_create_buffer[DType.uint64](self.n_features)
         var host = ctx.enqueue_create_host_buffer[DType.float32](self.n_features)

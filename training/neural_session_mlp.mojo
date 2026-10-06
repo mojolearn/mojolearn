@@ -105,6 +105,9 @@ def nn_mlp_session_forward(ctx: DeviceContext,
     identical_gemm_into(ctx, hidden_values, x, w1, ws, rows, hidden, in_width, OP_NT)
     # Bias and activation operate on independent cells; 128 is launch geometry,
     # never a fold or a model-dimension route. Original MLP seams are reused.
-    ctx.enqueue_function[_mlp_kernel](hidden_values.unsafe_ptr(), b1.unsafe_ptr(), hidden_values.unsafe_ptr(), Int32(rows), Int32(hidden), Int32(1), grid_dim=((rows * hidden + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+    # Each cell reads and writes itself; take one raw view for in-place use.
+    var hidden_ptr = hidden_values.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[_mlp_kernel](hidden_ptr, b1.unsafe_ptr(), hidden_ptr, Int32(rows), Int32(hidden), Int32(1), grid_dim=((rows * hidden + 127) // 128, 1, 1), block_dim=(128, 1, 1))
     identical_gemm_into(ctx, output, hidden_values, w2, ws, rows, out_width, hidden, OP_NT)
-    ctx.enqueue_function[_mlp_kernel](output.unsafe_ptr(), b2.unsafe_ptr(), output.unsafe_ptr(), Int32(rows), Int32(out_width), Int32(0), grid_dim=((rows * out_width + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+    var output_ptr = output.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[_mlp_kernel](output_ptr, b2.unsafe_ptr(), output_ptr, Int32(rows), Int32(out_width), Int32(0), grid_dim=((rows * out_width + 127) // 128, 1, 1), block_dim=(128, 1, 1))

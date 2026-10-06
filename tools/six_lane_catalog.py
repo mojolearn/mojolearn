@@ -35,7 +35,7 @@ def metadata_module(name):
 
 
 def config(defines=(), env=None, runtime=None):
-    return dict(defines=unique(defines), environment=env or {}, runtime=runtime or {})
+    return dict(defines=unique(d if '=' in d else d+'=1' for d in defines), environment=env or {}, runtime=runtime or {})
 
 
 def config_from(e, arm):
@@ -65,13 +65,16 @@ def normalize(lane, source, e, path, *, original=None, workloads=None, bindings=
                 if isinstance(e.get(arm),dict) and isinstance(value.get(arm),dict): merged[arm]={**e[arm],**value[arm]}
             variant_rows.append((name,merged))
     arms=[]
+    descriptive_keys={'caller_workload','api','allocation_query','saved_cols','model_options','baseline_profile_id','candidate_profile_id','contract','state_arrays','state_metadata','after_parameter_update','export','install','metadata','release','numeric_mode'}
     for name,v in variant_rows:
         A=config_from(v,'A'); B=config_from(v,'B')
+        declared_runtime=dict(A['runtime'])
+        A['runtime']={k:v for k,v in A['runtime'].items() if k not in descriptive_keys and not (k=='operation' and v=='model_default')}
         # B is the frozen shipped incumbent. Lane-authored comparison controls
         # are retained for attribution, never silently treated as the incumbent.
         incumbent=config([],{}, {})
         changed_reference=bool(B['defines'] or B['environment'] or B['runtime'])
-        arms.append(dict(id=key+':'+name,name=name,A=A,B=incumbent,authored_B=B,
+        arms.append(dict(id=key+':'+name,name=name,A=A,B=incumbent,authored_B=B,declared_runtime=declared_runtime,
                          reference_policy='frozen incumbent defaults; authored reference retained separately',
                          authored_reference_differs=changed_reference,
                          prerequisites=seq(v.get('dependencies'))+seq(v.get('prerequisites')),
@@ -80,14 +83,17 @@ def normalize(lane, source, e, path, *, original=None, workloads=None, bindings=
                          source_gaps=seq(v.get('source_gaps'))+seq(v.get('blocker')),
                          parameters=v.get('parameters',e.get('required_compile_parameters',{})),
                          workloads=workloads if workloads is not None else v.get('required_workload_keys',e.get('workloads',[]))))
-    return dict(id=key,lane=lane,source_id=source,original_id=ident,title=e.get('title',ident),
+    paths=unique(paths+[p for p in calls if (ROOT/p).is_file()])
+    status=e.get('source_status',e.get('implementation_status',e.get('status','idea')))
+    role='incumbent_dependency' if status in ('reused_existing','existing_candidate_unverified') else 'source_rejected' if status=='rejected_source' else 'new_candidate'
+    return dict(id=key,lane=lane,source_id=source,original_id=ident,title=e.get('title',ident),campaign_role=role,
                 source_record=reference(path,ident),implementation_paths=paths,production_callers=calls,
                 bindings=bindings or e.get('required_bindings',[]),affected_workloads=workloads if workloads is not None else e.get('workloads',[]),
                 affected_estimators=e.get('estimators',e.get('affected_estimators',e.get('intended_models',[]))),
                 prerequisites=seq(e.get('dependencies'))+seq(e.get('prerequisites')),
                 conflicts=seq(e.get('mutually_exclusive_with'))+seq(e.get('incompatible_defines')),
-                gaps=gaps,implementation=dict(idea=True,programmed=bool(paths),production_wired=bool(calls or e.get('caller_integration')),harness_wired='source_adapter',compiled=[]),
-                source_status=e.get('source_status',e.get('implementation_status',e.get('status','idea'))),
+                gaps=gaps,implementation=dict(idea=True,programmed=bool(paths),production_wired=bool(calls or e.get('caller_integration')),harness_wired='master_planner; execution adapter requires concrete saved recipe',compiled=[],runtime_reach='unverified'),
+                source_status=status,
                 qualification=dict(QUALIFICATION),mode='fast' if lane.startswith('AF.') else 'identical',
                 vendors=['apple'] if lane.startswith('AF.') else ['nvidia','amd','apple','host'],
                 new_defaults_enabled=False,arms=arms)
@@ -170,8 +176,9 @@ def discover():
         members=e.get('candidate_ids',[]);ident=e.get('id',e.get('configuration','complete'))
         item=normalize('I.C.X','identical.classical',dict(e,id=ident,title=ident),ci+'interactions.json',variants=[(e.get('configuration','combined'),e)],workloads=e.get('required_workload_keys',[]));item.update(kind='interaction',members=['I.C.'+x for x in members],rationale='Authored classical dataflow interaction; individual arms precede combined configuration');interactions.append(item)
     tree_records={e['original_id']:e for e in entries if e['lane']=='I.T'}
+    overlaps={a['id'].rsplit('.',1)[-1]:a['members'] for a in aliases if a['kind']=='cross_link'}
     for e in read(t+'interactions.json')['interactions']:
-        interactions.append(dict(id='I.T.X.'+e['id'],members=['I.T.'+m for m in e['members']],kind='interaction',rationale=e.get('scope','Authored tree stage interaction'),source_record=reference(t+'interactions.json',e['id']),selection_only=True))
+        interactions.append(dict(id='I.T.X.'+e['id'],members=unique(x for m in e['members'] for x in overlaps.get(m,['I.T.'+m])),kind='interaction',rationale=e.get('scope','Authored tree stage interaction'),source_record=reference(t+'interactions.json',e['id']),selection_only=True))
     # Concrete complete-configuration proposals choose one schedule/graph per
     # seam. Alternatives remain individually selectable and visibly incompatible.
     groups=[('I.N.X.gemm-memory',['I.N.NN02','I.N.NN11','I.N.NN12'],'Streaming planes, fold and retained owner share workspace'),
@@ -189,7 +196,13 @@ def discover():
     for lane in ('I.C','I.T','I.N','AF.C','AF.T','AF.N'):
         members=[e['id'] for e in entries if e['lane']==lane]
         interactions.append(dict(id=lane+'.X.complete-proposed',members=members,kind='complete_proposed',selection_only=True,
-            rationale='All new mechanisms with declared alternatives unresolved explicitly; this proposal is blocked when members conflict, lack controls, or alter frozen workload settings. Never enabled by default.'))
+            rationale='Stable catalog order chooses one compatible new implementation at each competing seam. Historical reuse and equivalent aliases remain dependencies; every excluded alternative is listed and remains independently selectable. Runtime-specific APIs retain missing-coverage cells. This is a proposal, never a default.'))
+    interactions.extend([
+        dict(id='AF.X.tree-preparation',members=['AF.C.AFCL-T01','AF.C.AFCL-T02','AF.T.G06','AF.T.G09'],kind='interaction',selection_only=True,rationale='Histogram row/feature grouping shares the quantization and categorical preparation boundary.'),
+        dict(id='AF.X.tree-shap',members=['AF.C.AFCL-T11','AF.T.P08','AF.T.P09','AF.T.P10'],kind='interaction',selection_only=True,rationale='Query geometry, contribution scratch budget, and fold scheduling share one SHAP operation.'),
+        dict(id='AF.X.complete-proposed',members=[e['id'] for e in entries if e['mode']=='fast'],kind='complete_proposed',selection_only=True,rationale='Complete Apple FAST proposal across all three lanes; explicit alternative exclusions and unchanged benchmark coverage remain visible.'),
+        dict(id='I.X.complete-proposed',members=[e['id'] for e in entries if e['mode']=='identical'],kind='complete_proposed',selection_only=True,rationale='Complete IDENTICAL proposal across classical, trees and reconciled neural source. All numerical columns share this configuration; Apple timing does not vote.'),
+    ])
     for e in entries+interactions:
         e.setdefault('qualification',dict(QUALIFICATION));e.setdefault('new_defaults_enabled',False)
     return entries,interactions,aliases
@@ -206,7 +219,7 @@ def source_graph():
             elif rel+'/__init__.mojo' in paths:imports.append(rel+'/__init__.mojo')
         graph[path]=set(imports)
     closures={}
-    for binding in sorted(p for p in paths if p.startswith('bindings/_mojolearn_')):
+    for binding in sorted(p for p in paths if p.startswith('bindings/_mojolearn_') or p=='bindings/_mojolearn.mojo'):
         seen=set();todo=[binding]
         while todo:
             p=todo.pop()
@@ -218,11 +231,13 @@ def source_graph():
 
 def catalog_document():
     entries,interactions,aliases=discover();closures,texts=source_graph()
+    alias_map={a['id']:a for a in aliases if a['kind']=='equivalent_implementation'}
     for e in entries:
         paths={p.split(':')[0] for p in e['implementation_paths']+e['production_callers']}
         e['source_binding_reach']=[b for b,reach in closures.items() if paths & reach]
         e['source_binding_reach_policy']='Conservative import closure, not observed runtime reach or template instantiation proof.'
         for arm in e['arms']:
+            if arm['id'] in alias_map:arm['equivalence']=alias_map[arm['id']]
             arm['define_sources']={d.split('=')[0]:[p for p,t in texts.items() if d.split('=')[0] in t and p!='core/six_lane_experiment_guards.mojo'] for d in arm['A']['defines']}
             missing=[d for d,ps in arm['define_sources'].items() if not ps]
             arm['source_gaps'] += ['Define not referenced in retained Mojo source: '+d for d in missing]

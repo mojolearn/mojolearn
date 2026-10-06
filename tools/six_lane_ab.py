@@ -33,6 +33,13 @@ CONFLICTS=[
  ('MOJOLEARN_IDN_NEURAL_NN12','MOJOLEARN_NI01_TRAINING_WORKSPACE'),
  ('MOJOLEARN_NN48_CSR_TILES','MOJOLEARN_NI55_GRAPH_FEATURE4'),
  ('MOJOLEARN_NI59_DROPOUT_CHANNEL','MOJOLEARN_NI60_DROPOUT_APPLY4'),
+ ('MOJOLEARN_IDN_NEURAL_NN02','MOJOLEARN_NI02_GEMM_STREAM_PARTIALS'),
+ ('MOJOLEARN_IDN_NEURAL_NN03','MOJOLEARN_NI08_GEMM_LEAF_256'),
+ ('MOJOLEARN_NN34_AFFINE_PREFIX','MOJOLEARN_IDN_M1_STATE_WINDOW'),
+ ('MOJOLEARN_NN39_M2_GRAD_TREE','MOJOLEARN_IDN_M2_GRAD_LEAF128'),
+ ('MOJOLEARN_NN53_HEAD_CHUNK512','MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2'),
+ ('MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF','MOJOLEARN_AFT_P02'),
+ ('MOJOLEARN_AFT_P07','MOJOLEARN_SHAP_FAST_ROW_PAIR'),
 ]
 
 
@@ -84,28 +91,39 @@ def combine(configs):
 
 def configurations(doc):
     entries={e['id']:e for e in doc['entries']};rows=[]
+    aliases={a['id']:a for a in doc['aliases'] if a['kind']=='equivalent_implementation'}
     for e in doc['entries']:
         for arm in e['arms']:
-            A,problems=combine([arm['A']]);rows.append(dict(arm,id=arm['id'],members=[e['id']],mode=e['mode'],vendors=e['vendors'],A=A,problems=problems,kind='candidate'))
+            A,problems=combine([arm['A']])
+            rows.append(dict(arm,id=arm['id'],members=[e['id']],mode=e['mode'],vendors=e['vendors'],A=A,problems=problems,kind='candidate',campaign_role=e['campaign_role'],source_gaps=unique(arm['source_gaps']+e['gaps']),alias_of=aliases.get(arm['id'],{}).get('canonical')))
     for e in doc['interactions']:
         if e.get('selection_only'):
-            members=[];specs=[];missing=[]
+            members=[];specs=[];missing=[];excluded=[];compile_specs=[]
             for mid in e['members']:
                 base,_,variant=mid.partition(':');item=entries.get(base)
                 if not item:missing.append('Missing scoped implementation '+mid);continue
                 choices=item['arms'];chosen=next((a for a in choices if a['name']==variant),choices[0]) if choices else None
-                if chosen:members.append(base);specs.append(chosen)
-                else:missing.append('No selectable subarm '+mid)
-            A,problems=combine([a['A'] for a in specs])
+                if not chosen:missing.append('No selectable subarm '+mid);continue
+                proposed=e['kind']=='complete_proposed'
+                if proposed and (item['campaign_role']!='new_candidate' or chosen['id'] in aliases):
+                    excluded.append(dict(id=chosen['id'],reason=item['campaign_role'] if chosen['id'] not in aliases else 'Equivalent '+aliases[chosen['id']]['canonical']));continue
+                # Public operations belong to individual saved workloads. They
+                # are retained per member, never overwritten by a global flag.
+                cs=dict(chosen['A'],runtime={})
+                _,incompatible=combine(compile_specs+[cs])
+                if proposed and incompatible:
+                    excluded.append(dict(id=chosen['id'],reason=incompatible));continue
+                members.append(base);specs.append(chosen);compile_specs.append(cs)
+            A,problems=combine(compile_specs)
             workloads=[]
-            for a in specs:
-                for w in a['workloads']:
+            for arm in specs:
+                for w in arm['workloads']:
                     if w not in workloads:workloads.append(w)
             mode=entries[members[0]]['mode'] if members else 'identical'
-            rows.append(dict(id=e['id'],members=members,mode=mode,vendors=['apple'] if mode=='fast' else list(VENDORS),A=A,B=config(),problems=missing+problems,workloads=workloads,kind=e['kind'],rationale=e['rationale'],source_gaps=[],parameters={}))
+            rows.append(dict(id=e['id'],members=members,selected_subarms=[a['id'] for a in specs],excluded_alternatives=excluded,mode=mode,vendors=['apple'] if mode=='fast' else list(VENDORS),A=A,B=config(),problems=missing+problems,workloads=workloads,kind=e['kind'],campaign_role='new_interaction',rationale=e['rationale'],source_gaps=unique(g for a in specs for g in a['source_gaps']),parameters={},runtime_by_member={a['id']:a['A']['runtime'] for a in specs if a['A']['runtime']}))
         else:
             for arm in e.get('arms',[]):
-                A,problems=combine([arm['A']]);rows.append(dict(arm,members=e.get('members',[e['id']]),mode=e['mode'],vendors=e['vendors'],A=A,problems=problems,kind=e['kind']))
+                A,problems=combine([arm['A']]);rows.append(dict(arm,members=e.get('members',[e['id']]),mode=e['mode'],vendors=e['vendors'],A=A,problems=problems,kind=e['kind'],campaign_role='new_interaction'))
     return rows
 
 
@@ -122,11 +140,11 @@ def matrix(doc):
                 gaps=list(c['problems'])+c.get('source_gaps',[])
                 gaps+=['Full dataset/version/hash, dimensions, settings, cap audit and accepted artifacts must be supplied from the frozen saved recipe.']
                 if c['A']==c['B']:gaps.append('Reused incumbent/no distinct A configuration; historical comparison is not new work')
-                if c['A']['runtime']:
+                if c['A']['runtime'] or c.get('runtime_by_member'):
                     gaps.append('Declared runtime operation/settings require a matching existing saved race; never change a race to reach this arm')
                 key=sha_value([c['id'],vendor,w])[:20]
-                cells.append(dict(key=key,configuration=c['id'],implementation_ids=c['members'],vendor=vendor,mode=c['mode'],workload=w,workload_id=work_id(w),status='INCOMPATIBLE' if c['problems'] else 'PENDING_COVERAGE',blockers=gaps,
-                    promotion_vote=c['mode']=='fast' or vendor in ('nvidia','amd'),identity_group='same-arm-across-columns' if c['mode']=='identical' else 'task-quality',planned_excluded_warmups=1,planned_scored_samples=1,actual_samples=0))
+                cells.append(dict(key=key,configuration=c['id'],implementation_ids=c['members'],vendor=vendor,mode=c['mode'],workload=w,workload_id=work_id(w),status='INCOMPATIBLE' if c['problems'] else 'ALIAS' if c.get('alias_of') else 'RETAINED_DEPENDENCY' if c['campaign_role']=='incumbent_dependency' else 'SOURCE_REJECTED' if c['campaign_role']=='source_rejected' else 'PENDING_COVERAGE',blockers=gaps,
+                    campaign_role=c['campaign_role'],alias_of=c.get('alias_of'),promotion_vote=c['mode']=='fast' or vendor in ('nvidia','amd'),identity_group='same-arm-across-columns' if c['mode']=='identical' else 'task-quality',planned_excluded_warmups=1,planned_scored_samples=1,actual_samples=0))
     return dict(schema='mojolearn.six-lane-matrix/1',base_main=doc['base_main'],configurations=configs,cells=cells,execution='NOT EXECUTED',qualification=doc['qualification'])
 
 
@@ -163,13 +181,15 @@ def binding_paths(e,mode):
         if (ROOT/path).exists():out.append(path)
     # Source closure also finds transitive callers omitted by handoffs.
     out+=e.get('source_binding_reach',[])
-    return unique(p for p in out if not p.endswith('_host.mojo') or mode=='identical')
+    return unique(p for p in out if ('probe' not in p and 'check' not in p) and (not p.endswith('_host.mojo') or mode=='identical'))
 
 
 def build_plan(doc,mat):
     entries={e['id']:e for e in doc['entries']};entries.update({e['id']:e for e in doc['interactions'] if 'arms' in e})
     jobs={};blocked=[]
     for c in mat['configurations']:
+        if c['campaign_role'] in ('incumbent_dependency','source_rejected'):
+            blocked.append(dict(configuration=c['id'],status='RETAINED_DEPENDENCY' if c['campaign_role']=='incumbent_dependency' else 'SOURCE_REJECTED'));continue
         if c['problems']:
             blocked.append(dict(configuration=c['id'],status='INCOMPATIBLE',reasons=c['problems']));continue
         paths=unique([p for mid in c['members'] if mid in entries for p in binding_paths(entries[mid],c['mode'])])
@@ -215,6 +235,11 @@ def compile_jobs(args):
     hardware={k:subprocess.check_output(['sysctl','-n',k],text=True).strip() for k in ['machdep.cpu.brand_string','hw.ncpu','hw.memsize']}
     manifest=dict(schema='mojolearn.six-lane-build-campaign/1',source_sha=source,compiler=str(compiler),compiler_sha256=digest(compiler),compiler_version=version,hardware=hardware,build_plan_sha256=digest(args.plan),records=[],qualification='No runtime, identity, quality or performance execution')
     closures,_=source_graph()
+    reusable=[]
+    for root in args.reuse or []:
+        for path in root.resolve().glob('**/receipt.json'):
+            old=json.loads(path.read_text())
+            if old.get('status')=='COMPILED':reusable.append((path,old))
     chosen=[j for j in plan['jobs'] if (not args.binding or j['binding'] in args.binding) and (not args.key or j['key'] in args.key)]
     if args.limit:chosen=chosen[:args.limit]
     for job in chosen:
@@ -240,6 +265,21 @@ def compile_jobs(args):
         dep_hash={p:digest(ROOT/p) for p in sorted(closures.get(job['binding'],{job['binding']}))}
         record=dict(job,source_sha=source,compiler=version,compiler_sha256=manifest['compiler_sha256'],hardware=hardware,argv=argv,source_closure_sha256=sha_value(dep_hash),source_files=dep_hash,artifact=str(artifact),log=str(log),wrapper=str(wrapper),wrapper_sha256=digest(wrapper) if wrapper.exists() else None)
         write(directory/'input.json',record)
+        def comparable_argv(values):
+            return values[:-2]  # only -o and the artifact destination may differ
+        match=next(((path,old) for path,old in reusable if old.get('key')==job['key']
+            and old.get('source_closure_sha256')==record['source_closure_sha256']
+            and old.get('compiler_sha256')==record['compiler_sha256']
+            and old.get('compiler')==version
+            and comparable_argv(old.get('argv',[]))==comparable_argv(argv)
+            and Path(old.get('artifact','')).is_file()
+            and digest(old['artifact'])==old.get('artifact_sha256')),None)
+        if match:
+            old_path,old=match
+            reused=dict(old,qualification_source_sha=source,reused_receipt=str(old_path),reuse_basis='Identical conservative source closure, compiler, target flags, mode/defines and artifact hash; original source SHA retained')
+            write(receipt,reused);manifest['records'].append(reused);write(out/'campaign.json',manifest)
+            print(json.dumps(dict(key=job['key'],binding=job['binding'],status='REUSED_COMPILED',receipt=str(old_path))),flush=True)
+            continue
         with log.open('x') as stream:proc=subprocess.run(argv,cwd=ROOT,env=env,stdout=stream,stderr=subprocess.STDOUT)
         record.update(returncode=proc.returncode,status='COMPILED' if proc.returncode==0 and artifact.exists() else 'FAILED',artifact_sha256=digest(artifact) if artifact.exists() else None)
         write(receipt,record);manifest['records'].append(record);write(out/'campaign.json',manifest)
@@ -250,33 +290,48 @@ def compile_jobs(args):
 
 
 def queue(args):
-    """Produce the existing queue schema from frozen concrete admitted recipes.
-
-    No job execution here. Incomplete cells remain blocked; never fabricate data,
-    adapter commands, accepted quality, loaded binaries or opponent ratios.
-    """
-    check_benchmark();mat=read('experiments/six_lane_integration/matrix.json');recipes=json.loads(args.recipes.read_text()) if args.recipes else {}
-    configurations_by_id={c['id']:c for c in mat['configurations']};jobs=[]
+    """Write the existing queue contract; never launch a worker or a build."""
+    check_benchmark();mat=read('experiments/six_lane_integration/matrix.json')
+    recipes=json.loads(args.recipes.read_text()) if args.recipes else {}
+    configs={c['id']:c for c in mat['configurations']};jobs=[];source=git('rev-parse','HEAD')
     for cell in mat['cells']:
         if cell['vendor']!=args.vendor or (args.select and cell['configuration'] not in args.select):continue
-        recipe=recipes.get(cell['key'],{});c=configurations_by_id[cell['configuration']]
-        job=dict(key=cell['key'],mode=cell['mode'],implementation_ids=cell['implementation_ids'],master_selection=c,workload_id=cell['workload_id'],blocked=list(cell['blockers']),arms={a:dict(configuration=c[a], argv=[sys.executable, str(ROOT/'tools/six_lane_ab_worker.py'), '--recipe', 'PENDING_RESOLVED_RECIPE', '--arm', a, '--phase', '{phase}', '--output', '{output}'], environment=c[a]['environment']) for a in ('A','B')})
+        c=configs[cell['configuration']];recipe=recipes.get(cell['key'])
+        job=dict(key=cell['key'],mode=cell['mode'],implementation_ids=cell['implementation_ids'],master_selection=c,workload_id=cell['workload_id'],matrix_status=cell['status'],blocked=list(cell['blockers']),arms={a:dict(configuration=c[a],argv=[],environment=c[a]['environment']) for a in ('A','B')})
+        if cell['status']!='PENDING_COVERAGE':job['blocked'].append('Not an independent new executable candidate: '+cell['status'])
         if recipe:
-            required=('dataset_sha256','dimensions','estimator_settings','timed_boundary','intrinsic_caps','full_dataset_coverage','artifact_provenance','arms','benchmark_sha256')
+            required=('dataset_sha256','dimensions','estimator_settings','timed_boundary','intrinsic_caps','full_dataset_coverage','artifact_provenance','benchmark_sha256','workload','packages','coverage_resolutions','resource_policy')
             absent=[k for k in required if k not in recipe]
             if absent:raise ValueError('Recipe missing '+','.join(absent))
             if recipe['benchmark_sha256']!=digest(STORE/'benchmark.json'):raise ValueError('Recipe benchmark specification drift')
+            if recipe.get('source_sha')!=source:raise ValueError('Recipe names a different source freeze')
             if recipe.get('changes_frozen_race') or recipe['full_dataset_coverage'] is not True:raise ValueError('Recipe changes frozen race or lacks full coverage')
-            if c['problems']:raise ValueError('Incompatible selection')
+            if c['problems'] or cell['status']!='PENDING_COVERAGE':raise ValueError('Incompatible, historical, rejected or alias-only selection')
+            if c['A']['runtime'] or c.get('runtime_by_member'):raise ValueError('This source API needs a saved matching race; the master never alters one')
+            resolutions=recipe['coverage_resolutions']
+            if set(resolutions)!=set(job['blocked']):raise ValueError('Resolve each recorded coverage gap explicitly; removing blockers is not evidence')
+            for reason,evidence in resolutions.items():
+                if not evidence.get('conclusion') or digest(evidence['path'])!=evidence['sha256']:raise ValueError('Missing/changed gap evidence: '+reason)
+            work=recipe['workload']
+            if work['actual_shapes']!=recipe['dimensions'] or work['estimator_settings_record']!=recipe['estimator_settings']:raise ValueError('Recipe dimensions/settings differ from worker admission facts')
+            for field in ('dataset_sha256','dimensions','estimator_settings','timed_boundary','intrinsic_caps','full_dataset_coverage','artifact_provenance'):job[field]=recipe[field]
+            job['blocked']=[]
+            worker=dict(recipe,job=job,source_sha=source,vendor=args.vendor,execution_authorized=False)
+            worker_path=args.output.resolve().parent/(args.output.stem+'-workers')/(cell['key']+'.json')
             for arm in ('A','B'):
-                if recipe['arms'][arm].get('configuration')!=c[arm]:raise ValueError('Recipe controls differ from master '+arm)
-                argv=recipe['arms'][arm].get('argv',[])
-                if not argv or any('--full-tree-workload'==a for a in argv):raise ValueError('Unsupported or changed workload command')
-            job.update(recipe);job['blocked']=recipe.get('remaining_blockers',[])
+                job['arms'][arm]['argv']=[sys.executable,str(ROOT/'tools/six_lane_ab_worker.py'),'--recipe',str(worker_path),'--arm',arm,'--phase','{phase}','--output','{output}']
+            write(worker_path,worker)
         jobs.append(job)
-    result=dict(schema='mojolearn.full-ab-queue/1',repo=str(ROOT),source_sha=git('rev-parse','HEAD'),vendor=args.vendor,jobs=jobs,environment={},master_policy=read('experiments/six_lane_integration/evidence_policy.json'))
+    result=dict(schema='mojolearn.full-ab-queue/1',repo=str(ROOT),source_sha=source,vendor=args.vendor,jobs=jobs,environment={},execution_authorized=False,master_policy=read('experiments/six_lane_integration/evidence_policy.json'))
     write(args.output,result)
-    print(json.dumps(dict(jobs=len(jobs),blocked=sum(bool(j.get('blocked')) for j in jobs),output=str(args.output),execution='NOT RUN')))
+    print(json.dumps(dict(jobs=len(jobs),blocked=sum(bool(j.get('blocked')) for j in jobs),output=str(args.output),execution='NOT RUN; later authorization must be recorded in queue and workers')))
+
+
+def board_plan(args):
+    from six_lane_evidence import board_inputs
+    inventory,index=board_inputs(catalog(),[])
+    write(args.output/'inventory.json',inventory);write(args.output/'index.json',index)
+    write(args.output/'future_command.json',dict(argv=[sys.executable,str(ROOT/'tools/performance_measurement_board.py'),'--inventory',str(args.output/'inventory.json'),'--index',str(args.output/'index.json'),'--out',str(args.output/'board')],execution='NOT RUN',note='Future own-only board inputs; no historical opponent rows, admitted measurements, or default changes.'))
 
 
 def main(argv=None):
@@ -285,8 +340,9 @@ def main(argv=None):
     ls=s.add_parser('list');ls.add_argument('--lane')
     sh=s.add_parser('show');sh.add_argument('id')
     b=s.add_parser('compile',help='compile shared libraries only, never import or execute')
-    b.add_argument('--plan',type=Path,default=STORE/'build_plan.json');b.add_argument('--compiler',type=Path,required=True);b.add_argument('--output',type=Path,required=True);b.add_argument('--binding',action='append');b.add_argument('--key',action='append');b.add_argument('--limit',type=int);b.add_argument('--keep-going',action='store_true')
+    b.add_argument('--plan',type=Path,default=STORE/'build_plan.json');b.add_argument('--compiler',type=Path,required=True);b.add_argument('--output',type=Path,required=True);b.add_argument('--binding',action='append');b.add_argument('--key',action='append');b.add_argument('--limit',type=int);b.add_argument('--keep-going',action='store_true');b.add_argument('--reuse',type=Path,action='append',help='Prior compile evidence roots; exact source-closure/toolchain matches only')
     q=s.add_parser('queue',help='write future queue; incomplete cells stay blocked');q.add_argument('--vendor',choices=VENDORS,required=True);q.add_argument('--recipes',type=Path);q.add_argument('--select',action='append');q.add_argument('--output',type=Path,required=True)
+    bp=s.add_parser('board-plan',help='write inputs and command for the existing board tool, without invoking it');bp.add_argument('--output',type=Path,required=True)
     args=p.parse_args(argv)
     if args.command=='refresh':
         doc=catalog_document();mat=matrix(doc);build=build_plan(doc,mat);bench=freeze_benchmarks()
@@ -300,6 +356,7 @@ def main(argv=None):
         if not rows:raise ValueError('Unknown namespaced ID')
         print(json.dumps(rows,indent=2))
     elif args.command=='compile':return compile_jobs(args)
+    elif args.command=='board-plan':board_plan(args)
     else:queue(args)
     return 0
 

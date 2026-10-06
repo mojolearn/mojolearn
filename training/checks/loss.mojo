@@ -1224,8 +1224,10 @@ def ce_token_tree_v2_into(
                 grid_dim=(1, 1, 1), block_dim=(CE_TPB, 1, 1),
             )
         else:
+            # The ping-pong planes are disjoint within the retained owner.
+            var ws_ptr = ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             ctx.enqueue_function[ce_token_tree_v2_level_kernel](
-                ws.unsafe_ptr() + output_offset, ws.unsafe_ptr() + input_offset,
+                ws_ptr + output_offset, ws_ptr + input_offset,
                 Int32(active), grid_dim=(_grid_for(parents), 1, 1),
                 block_dim=(CE_TPB, 1, 1),
             )
@@ -1721,7 +1723,7 @@ def identical_ce_forward_into(
             block_dim=(CE_TPB, 1, 1),
         )
     elif NN54_LOSS_PROFILE:
-        nn_reduce_pointer_into[128, False](ctx, total.unsafe_ptr(), row.unsafe_ptr(), ws.unsafe_ptr(), n_rows)
+        nn_reduce_pointer_into[128, False](ctx, total.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), row.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows)
     elif IDN_LOSS_TOKEN_TREE_V2:
         # NI35 intentionally versions only the token-total graph. Vocabulary
         # softmax, label smoothing, count/divisor and logits VJP remain pinned.

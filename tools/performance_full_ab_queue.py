@@ -103,12 +103,16 @@ def validate_result(data, job, config, arm, phase, artifacts):
     """
     if not isinstance(data, dict) or data.get('schema') != 'mojolearn.full-ab-result/1':
         raise ValueError('Missing full-operation result schema')
-    if data.get('status') != 'PASS' or embedded_failures(data):
+    execution_data = ({k:v for k,v in data.items() if k not in ('task_quality','master_qualification')}
+                      if job.get('master_selection') else data)
+    if data.get('status') != 'PASS' or embedded_failures(execution_data):
         raise ValueError('Result reports failure or incomplete work')
     expected = dict(source_sha=config['source_sha'], dataset_sha256=job['dataset_sha256'],
                     mode=job['mode'], vendor=config['vendor'], arm=arm, phase=phase)
     if any(data.get(key) != value for key, value in expected.items()):
         raise ValueError('Result source/dataset/mode/vendor/arm/phase provenance differs')
+    if job.get('master_selection') and data.get('estimator_settings') != job['estimator_settings']:
+        raise ValueError('Observed estimator settings differ from frozen recipe')
     if data.get('dimensions') != job['dimensions'] or data.get('full_dataset_coverage') is not True:
         raise ValueError('Actual full dataset dimensions/coverage differ from declared recipe')
     if data.get('timed_boundary') != job['timed_boundary']:
@@ -144,6 +148,8 @@ def run(config, root, retry_failed=False):
     source = config['source_sha']
     repo = Path(config['repo'])
     check_freeze(repo, source)
+    if any(j.get('master_selection') for j in config['jobs']) and not config.get('execution_authorized'):
+        raise ValueError('Master plan has no later measurement authorization')
     results_path = root / 'results.json'
     results = json.loads(results_path.read_text()) if results_path.exists() else {}
     if any(result['source_sha'] != source for result in results.values()):
