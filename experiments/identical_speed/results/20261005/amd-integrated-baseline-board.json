@@ -1,0 +1,1221 @@
+{
+  "box": {
+    "artifact_hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+    "artifact_identity": {
+      "code_path": "native",
+      "files": {
+        "host/_mojolearn_linalg_host.so": "5ca31f6a9b6540d7a35661d4cb0483ff83cbc1c22f33d82ad17f73ac536eb0e1",
+        "host/_mojolearn_neural_host.so": "c1edebd9b4657e441cb66cb2c91e86c9f5f6b6187cf4fc831d05b74981a9538e",
+        "host/_mojolearn_training_host.so": "4dc31fefc95e5787b3af83730b9198137bdc3f34e73268ed1ad6d337da022d75",
+        "host/_mojolearn_transformer_host.so": "e6084610038e353321c7163a6d08becac0f8bd74b8c1b4bfaedc610b997ebc34",
+        "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323",
+        "identical/_mojolearn_linalg.so": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2",
+        "identical/_mojolearn_training.so": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d",
+        "identical/_mojolearn_transformer.so": "39db80e61044c9752c8aee444ec6b3aa0a44576b802ac24f680ff5e0d93c323c"
+      },
+      "installation": "source",
+      "numeric_mode": "identical",
+      "runtime_files": {
+        "/root/integrated-neural-a006-v2/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+        "/root/integrated-neural-a006-v2/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+        "/root/integrated-neural-a006-v2/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+        "/root/integrated-neural-a006-v2/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+        "/root/integrated-neural-a006-v2/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+        "/root/integrated-neural-a006-v2/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+        "/root/integrated-neural-a006-v2/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+      },
+      "schema": "mojolearn-board-artifacts/1",
+      "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "source_root": "/root/integrated-neural-a006-v2/baseline/source",
+      "vendor": "hip"
+    },
+    "env": {
+      "MKL_NUM_THREADS": null,
+      "MODULAR_NVPTX_COMPILER_PATH": null,
+      "NUMEXPR_NUM_THREADS": null,
+      "OMP_NUM_THREADS": null,
+      "OPENBLAS_NUM_THREADS": null,
+      "VECLIB_MAXIMUM_THREADS": null
+    },
+    "gpu": {
+      "api": "hip",
+      "driver": "6.12.12",
+      "name": "AMD Instinct Mi325X VF",
+      "rocm": "6.4.0-47",
+      "vendor": "amd"
+    },
+    "host": {
+      "cpu_count": 20,
+      "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+      "hostname": "mojolearn-steward-do-amd",
+      "machine": "x86_64",
+      "memory_bytes": 168790061056
+    },
+    "mojolearn": {
+      "requested": null,
+      "version": null,
+      "wheel": null
+    },
+    "os": {
+      "name": "Ubuntu 24.04.2 LTS",
+      "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+      "release": "6.8.0-59-generic",
+      "system": "Linux"
+    },
+    "packages": {
+      "aiohappyeyeballs": "2.7.1",
+      "aiohttp": "3.14.3",
+      "aiosignal": "1.4.0",
+      "attrs": "26.1.0",
+      "certifi": "2026.7.22",
+      "charset-normalizer": "3.5.2",
+      "click": "8.5.0",
+      "cloudpickle": "3.1.2",
+      "colorama": "0.4.6",
+      "einops": "0.8.1",
+      "exceptiongroup": "1.3.1",
+      "filelock": "3.32.3",
+      "frozenlist": "1.8.0",
+      "fsspec": "2026.7.0",
+      "idna": "3.20",
+      "importlib_metadata": "9.0.1",
+      "iniconfig": "2.3.0",
+      "jinja2": "3.1.6",
+      "joblib": "1.6.0",
+      "jupyter_client": "8.6.3",
+      "jupyter_core": "5.9.1",
+      "markdown-it-py": "4.2.0",
+      "markupsafe": "3.0.3",
+      "mdurl": "0.1.2",
+      "mpmath": "1.3.0",
+      "msgspec": "0.21.1",
+      "multidict": "6.9.1",
+      "mypy_extensions": "1.1.0",
+      "narwhals": "2.26.0",
+      "networkx": "3.6.1",
+      "numpy": "2.5.3",
+      "packaging": "26.3",
+      "pathspec": "1.1.1",
+      "pip": "26.2.1",
+      "platformdirs": "4.11.8",
+      "pluggy": "1.6.0",
+      "propcache": "0.5.4",
+      "psutil": "7.2.2",
+      "pygments": "2.21.0",
+      "pyparsing": "3.3.3",
+      "pytest": "9.1.1",
+      "python-dateutil": "2.9.0.post0",
+      "pyzmq": "27.2.0",
+      "requests": "2.34.2",
+      "rich": "15.0.0",
+      "scikit-learn": "1.9.1",
+      "scipy": "1.18.1",
+      "setuptools": "78.1.0",
+      "six": "1.17.0",
+      "sympy": "1.14.0",
+      "taskgroup": "0.2.2",
+      "threadpoolctl": "3.7.0",
+      "tomli": "2.4.1",
+      "torch": "2.13.0+cpu",
+      "torch-geometric": "2.8.0.post1",
+      "tornado": "6.5.8",
+      "tqdm": "4.70.1",
+      "traitlets": "5.16.1",
+      "typing_extensions": "4.16.0",
+      "urllib3": "2.8.0",
+      "xxhash": "4.0.1",
+      "yarl": "1.25.1",
+      "zipp": "4.1.0"
+    },
+    "python": {
+      "executable": "/root/integrated-neural-a006-v2/baseline/env/bin/python",
+      "orchestrator": "3.14.7",
+      "version": "3.14.7 CPython"
+    },
+    "repo": {
+      "commit": "ad1d9ec2e4c7f906b05e9a305971967272a0dcf5",
+      "script": "tools/bench_board.py",
+      "script_sha256": "3b6876d058271c13e63086139bf860d691c7a6b7f9effb6ce6e027b9fdffe78f",
+      "sync": null
+    }
+  },
+  "config": {
+    "artifact_identity": {
+      "code_path": "native",
+      "files": {
+        "host/_mojolearn_linalg_host.so": "5ca31f6a9b6540d7a35661d4cb0483ff83cbc1c22f33d82ad17f73ac536eb0e1",
+        "host/_mojolearn_neural_host.so": "c1edebd9b4657e441cb66cb2c91e86c9f5f6b6187cf4fc831d05b74981a9538e",
+        "host/_mojolearn_training_host.so": "4dc31fefc95e5787b3af83730b9198137bdc3f34e73268ed1ad6d337da022d75",
+        "host/_mojolearn_transformer_host.so": "e6084610038e353321c7163a6d08becac0f8bd74b8c1b4bfaedc610b997ebc34",
+        "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323",
+        "identical/_mojolearn_linalg.so": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2",
+        "identical/_mojolearn_training.so": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d",
+        "identical/_mojolearn_transformer.so": "39db80e61044c9752c8aee444ec6b3aa0a44576b802ac24f680ff5e0d93c323c"
+      },
+      "installation": "source",
+      "numeric_mode": "identical",
+      "runtime_files": {
+        "/root/integrated-neural-a006-v2/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+        "/root/integrated-neural-a006-v2/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+        "/root/integrated-neural-a006-v2/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+        "/root/integrated-neural-a006-v2/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+        "/root/integrated-neural-a006-v2/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+        "/root/integrated-neural-a006-v2/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+        "/root/integrated-neural-a006-v2/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+      },
+      "schema": "mojolearn-board-artifacts/1",
+      "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+      "source_root": "/root/integrated-neural-a006-v2/baseline/source",
+      "vendor": "hip"
+    },
+    "data": {},
+    "data_root": "/root/datasets/gbm-bench",
+    "data_sha256": {},
+    "datasets": [
+      "taxi"
+    ],
+    "families": [
+      "neural"
+    ],
+    "guarded_smoke_override_reason": "Authorized selected real full neural A/B after captured frozen builds; one warmup/sample, no opponents, no synthetic-only promotion",
+    "harness_sha256": "1ac6e30b5b8b16973fc1de586dc506481286dbae16c2a10f9054ba388c6089c8",
+    "infer": true,
+    "lanes": [
+      "gemm",
+      "transformer-forward",
+      "mlp-train-step"
+    ],
+    "modes": [
+      "identical"
+    ],
+    "neural_shape": "full",
+    "opponent_store": "/root/mojolearn-full-identical-20261005/amd-results/integrated-neural-ab/empty-opponents.jsonl",
+    "retime_opponents": false,
+    "rounds": 1,
+    "rows": null,
+    "seed": 7,
+    "shard": null,
+    "smoke": false,
+    "smoke_check": false,
+    "smoke_gate": "overridden (--no-smoke-gate)",
+    "vendor": "amd"
+  },
+  "created": "2026-10-06T01:26:40Z",
+  "plan": [
+    "neural/gemm/gaussian/shape=full",
+    "neural/transformer-forward/gaussian/shape=full",
+    "neural/mlp-train-step/gaussian/shape=full"
+  ],
+  "races": {
+    "neural/gemm/gaussian/shape=full": {
+      "arms": [
+        "ours"
+      ],
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "neural",
+          "hash": "535b4c27bd9313d1",
+          "hash_stable": null,
+          "installed_wheel": "UNKNOWN(/root/integrated-neural-a006-v2/baseline/source/python/mojolearn/linalg.py)",
+          "lane": "gemm",
+          "library": "mojolearn",
+          "library_version": "0.8.37",
+          "max_ms": 28.560270002344623,
+          "median_ms": 28.560270002344623,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "KFD /sys/class/kfd/kfd/proc/243950/vram_* bytes for this pid at the round's end (not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3692.3,
+            "peak_host_mb": 2275.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3692.3,
+            "warmup_host_mb": 2211.0
+          },
+          "min_ms": 28.560270002344623,
+          "mode": "identical",
+          "mode_witness": "identical",
+          "neural_shape": "full",
+          "params": {
+            "library": "mojolearn",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3692.3,
+          "peak_host_mb": 2275.0,
+          "quality": {
+            "max_rel_err_vs_fp64": 2.398716979667606e-07
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {},
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "ours_call": "mojolearn.linalg.matmul(a, b)",
+            "ours_device": "gpu",
+            "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, max_rel_err_vs_fp64",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "4096x4096x4096",
+            "torch_call": "a.to(dev) @ b.to(dev), .cpu()",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "4096x4096x4096",
+          "status": "ok",
+          "times_ms": [
+            28.560270002344623
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 337.96444699692074
+        }
+      ],
+      "command": [
+        "/root/integrated-neural-a006-v2/baseline/env/bin/python",
+        "-u",
+        "/root/integrated-neural-a006-v2/harness/tools/bench_board_neural.py",
+        "race",
+        "--lane",
+        "gemm",
+        "--shape",
+        "full",
+        "--arms",
+        "ours",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/mojolearn-full-identical-20261005/amd-results/integrated-neural-ab/baseline/raw/neural/shape-full",
+        "--work",
+        "/root/mojolearn-full-identical-20261005/amd-results/integrated-neural-ab/baseline/work",
+        "--ours-python",
+        "/root/integrated-neural-a006-v2/baseline/env/bin/python",
+        "--theirs-python",
+        "/root/integrated-neural-a006-v2/baseline/env/bin/python",
+        "--ready-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--round-seconds",
+        "900"
+      ],
+      "dataset": "gaussian",
+      "env": {},
+      "family": "neural",
+      "finished": "2026-10-06T01:26:42Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "neural/gemm/gaussian/shape=full",
+      "inputs": {
+        "inputs": "A [m,k], B [k,n] = default_rng(7).standard_normal float32",
+        "lane": "gemm",
+        "seed": 7,
+        "sha256": {
+          "a": "485a7287793a9d7d",
+          "b": "3f38db408e287e78"
+        },
+        "shape": {
+          "k": 4096,
+          "label": "4096x4096x4096",
+          "m": 4096,
+          "n": 4096,
+          "name": "full"
+        },
+        "steps": 2
+      },
+      "lane": "gemm",
+      "log": "logs/neural.gemm.gaussian.shape-full.log",
+      "our_arms": {
+        "ours": "identical"
+      },
+      "params": {
+        "arms": {
+          "ours": {
+            "library": "mojolearn",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "neural",
+        "lane": "neural/gemm",
+        "problems": [],
+        "reference": "ours",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "ours"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "provenance_dir": "provenance/race-zy583cbd",
+      "race_json": "raw/neural/shape-full/gemm-gaussian.json",
+      "rc": 0,
+      "rows": null,
+      "shape": "full",
+      "skipped_opponents": [
+        "torch-eager-fp32",
+        "torch-compile-fp32",
+        "torch-eager-bf16",
+        "torch-compile-bf16"
+      ],
+      "started": "2026-10-06T01:26:40Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 1.8,
+      "worker_provenance": [
+        {
+          "argv": [
+            "/root/integrated-neural-a006-v2/harness/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "gemm",
+            "--shape",
+            "full",
+            "--data",
+            "/root/mojolearn-full-identical-20261005/amd-results/integrated-neural-ab/baseline/work/neural-gemm-full.npz"
+          ],
+          "artifact_identity": {
+            "code_path": "native",
+            "files": {
+              "host/_mojolearn_linalg_host.so": "5ca31f6a9b6540d7a35661d4cb0483ff83cbc1c22f33d82ad17f73ac536eb0e1",
+              "host/_mojolearn_neural_host.so": "c1edebd9b4657e441cb66cb2c91e86c9f5f6b6187cf4fc831d05b74981a9538e",
+              "host/_mojolearn_training_host.so": "4dc31fefc95e5787b3af83730b9198137bdc3f34e73268ed1ad6d337da022d75",
+              "host/_mojolearn_transformer_host.so": "e6084610038e353321c7163a6d08becac0f8bd74b8c1b4bfaedc610b997ebc34",
+              "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323",
+              "identical/_mojolearn_linalg.so": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2",
+              "identical/_mojolearn_training.so": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d",
+              "identical/_mojolearn_transformer.so": "39db80e61044c9752c8aee444ec6b3aa0a44576b802ac24f680ff5e0d93c323c"
+            },
+            "installation": "source",
+            "numeric_mode": "identical",
+            "runtime_files": {
+              "/root/integrated-neural-a006-v2/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+              "/root/integrated-neural-a006-v2/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+              "/root/integrated-neural-a006-v2/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+              "/root/integrated-neural-a006-v2/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+              "/root/integrated-neural-a006-v2/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+              "/root/integrated-neural-a006-v2/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+              "/root/integrated-neural-a006-v2/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+            },
+            "schema": "mojolearn-board-artifacts/1",
+            "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+            "source_root": "/root/integrated-neural-a006-v2/baseline/source",
+            "vendor": "hip"
+          },
+          "final": true,
+          "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+          "identical_qualified": false,
+          "loaded_files": [
+            {
+              "file": "identical/_mojolearn.so",
+              "module": "mojolearn._mojolearn",
+              "role": "gpu",
+              "sha256": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+            },
+            {
+              "file": "identical/_mojolearn_linalg.so",
+              "module": "mojolearn._mojolearn_linalg",
+              "role": "gpu",
+              "sha256": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2"
+            },
+            {
+              "file": "identical/_mojolearn_training.so",
+              "module": "mojolearn._mojolearn_training",
+              "role": "gpu",
+              "sha256": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d"
+            },
+            {
+              "file": "identical/_mojolearn_transformer.so",
+              "module": "mojolearn._mojolearn_transformer",
+              "role": "gpu",
+              "sha256": "39db80e61044c9752c8aee444ec6b3aa0a44576b802ac24f680ff5e0d93c323c"
+            },
+            {
+              "file": "identical/_mojolearn.so",
+              "module": "mojolearn._sets.identical._mojolearn",
+              "role": "gpu",
+              "sha256": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+            },
+            {
+              "file": "identical/_mojolearn_linalg.so",
+              "module": "mojolearn._sets.identical._mojolearn_linalg",
+              "role": "gpu",
+              "sha256": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2"
+            },
+            {
+              "file": "identical/_mojolearn_training.so",
+              "module": "mojolearn._sets.identical._mojolearn_training",
+              "role": "gpu",
+              "sha256": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d"
+            }
+          ],
+          "loaded_runtime_files": [
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libAsyncRTMojoBindings.so",
+              "sha256": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libAsyncRTRuntimeGlobals.so",
+              "sha256": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libKGENCompilerRTShared.so",
+              "sha256": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libMSupportGlobals.so",
+              "sha256": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libgcc_s.so.1",
+              "sha256": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libstdc++.so.6",
+              "sha256": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+            }
+          ],
+          "numeric_mode": "identical",
+          "pid": 243950,
+          "runtime_selection": null,
+          "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+          "status": "verified"
+        }
+      ]
+    },
+    "neural/mlp-train-step/gaussian/shape=full": {
+      "arms": [
+        "ours"
+      ],
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "neural",
+          "hash": null,
+          "hash_stable": null,
+          "installed_wheel": "UNKNOWN(/root/integrated-neural-a006-v2/baseline/source/python/mojolearn/_mlp_impl.py)",
+          "lane": "mlp-train-step",
+          "library": "mojolearn",
+          "library_version": "0.8.37",
+          "max_ms": 2.999903001182247,
+          "median_ms": 2.999903001182247,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "KFD /sys/class/kfd/kfd/proc/244180/vram_* bytes for this pid at the round's end (not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 676.5,
+            "peak_host_mb": 2023.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 676.5,
+            "warmup_host_mb": 2023.8
+          },
+          "min_ms": 2.999903001182247,
+          "mode": "identical",
+          "mode_witness": "identical",
+          "neural_shape": "full",
+          "params": {
+            "library": "mojolearn",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.01
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 676.5,
+          "peak_host_mb": 2023.9,
+          "quality": {
+            "loss_first_step": 1.1604011058807373,
+            "loss_last_step": 1.1233608722686768,
+            "steps": 2
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized; training state device-resident on both sides; round r is step r+1",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "lr": 0.001,
+              "weight_decay": 0.01
+            },
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "optimizer": "AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01, no amsgrad, passed explicitly on both",
+            "ours_call": "mojolearn.SmallMLPTrainer(w1, b1, w2, b2).train_step(X, y)",
+            "ours_device": "gpu",
+            "quality": "loss_first_step, loss_last_step (same init, same batches), loss_first_abs_diff_vs_ours, loss_last_abs_diff_vs_ours",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "rows256 8-16-3",
+            "torch_call": "F.linear, ReLU, F.linear; mean CE; backward; torch.optim.AdamW step",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "rows256 8-16-3",
+          "status": "ok",
+          "times_ms": [
+            2.999903001182247
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 66.84647699876223
+        }
+      ],
+      "command": [
+        "/root/integrated-neural-a006-v2/baseline/env/bin/python",
+        "-u",
+        "/root/integrated-neural-a006-v2/harness/tools/bench_board_neural.py",
+        "race",
+        "--lane",
+        "mlp-train-step",
+        "--shape",
+        "full",
+        "--arms",
+        "ours",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/mojolearn-full-identical-20261005/amd-results/integrated-neural-ab/baseline/raw/neural/shape-full",
+        "--work",
+        "/root/mojolearn-full-identical-20261005/amd-results/integrated-neural-ab/baseline/work",
+        "--ours-python",
+        "/root/integrated-neural-a006-v2/baseline/env/bin/python",
+        "--theirs-python",
+        "/root/integrated-neural-a006-v2/baseline/env/bin/python",
+        "--ready-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--round-seconds",
+        "900"
+      ],
+      "dataset": "gaussian",
+      "env": {},
+      "family": "neural",
+      "finished": "2026-10-06T01:26:44Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "neural/mlp-train-step/gaussian/shape=full",
+      "inputs": {
+        "inputs": "weights uniform(+-1/sqrt(fan_in)); X standard normal; labels 0..2",
+        "lane": "mlp-train-step",
+        "seed": 7,
+        "sha256": {
+          "X": "262e29f919de82bb",
+          "w:bias1": "b48379c8c2c5ad9a",
+          "w:bias2": "be693e14a817fc9a",
+          "w:weight1": "4c28195b7722791d",
+          "w:weight2": "4338fa31b9b56adb",
+          "y": "e432edaa11fa4ef3"
+        },
+        "shape": {
+          "batch": 256,
+          "label": "rows256 8-16-3",
+          "name": "full"
+        },
+        "steps": 2
+      },
+      "lane": "mlp-train-step",
+      "log": "logs/neural.mlp-train-step.gaussian.shape-full.log",
+      "our_arms": {
+        "ours": "identical"
+      },
+      "params": {
+        "arms": {
+          "ours": {
+            "library": "mojolearn",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": "none (deterministic)",
+              "weight_decay": 0.01
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "neural",
+        "lane": "neural/mlp-train-step",
+        "problems": [],
+        "reference": "ours",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "ours"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "provenance_dir": "provenance/race-p8wvlsu3",
+      "race_json": "raw/neural/shape-full/mlp-train-step-gaussian.json",
+      "rc": 0,
+      "rows": null,
+      "shape": "full",
+      "skipped_opponents": [
+        "torch-eager-fp32",
+        "torch-compile-fp32",
+        "torch-eager-bf16",
+        "torch-compile-bf16"
+      ],
+      "started": "2026-10-06T01:26:43Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 1.1,
+      "worker_provenance": [
+        {
+          "argv": [
+            "/root/integrated-neural-a006-v2/harness/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "mlp-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/mojolearn-full-identical-20261005/amd-results/integrated-neural-ab/baseline/work/neural-mlp-train-step-full.npz"
+          ],
+          "artifact_identity": {
+            "code_path": "native",
+            "files": {
+              "host/_mojolearn_linalg_host.so": "5ca31f6a9b6540d7a35661d4cb0483ff83cbc1c22f33d82ad17f73ac536eb0e1",
+              "host/_mojolearn_neural_host.so": "c1edebd9b4657e441cb66cb2c91e86c9f5f6b6187cf4fc831d05b74981a9538e",
+              "host/_mojolearn_training_host.so": "4dc31fefc95e5787b3af83730b9198137bdc3f34e73268ed1ad6d337da022d75",
+              "host/_mojolearn_transformer_host.so": "e6084610038e353321c7163a6d08becac0f8bd74b8c1b4bfaedc610b997ebc34",
+              "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323",
+              "identical/_mojolearn_linalg.so": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2",
+              "identical/_mojolearn_training.so": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d",
+              "identical/_mojolearn_transformer.so": "39db80e61044c9752c8aee444ec6b3aa0a44576b802ac24f680ff5e0d93c323c"
+            },
+            "installation": "source",
+            "numeric_mode": "identical",
+            "runtime_files": {
+              "/root/integrated-neural-a006-v2/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+              "/root/integrated-neural-a006-v2/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+              "/root/integrated-neural-a006-v2/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+              "/root/integrated-neural-a006-v2/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+              "/root/integrated-neural-a006-v2/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+              "/root/integrated-neural-a006-v2/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+              "/root/integrated-neural-a006-v2/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+            },
+            "schema": "mojolearn-board-artifacts/1",
+            "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+            "source_root": "/root/integrated-neural-a006-v2/baseline/source",
+            "vendor": "hip"
+          },
+          "final": true,
+          "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+          "identical_qualified": false,
+          "loaded_files": [
+            {
+              "file": "identical/_mojolearn.so",
+              "module": "mojolearn._mojolearn",
+              "role": "gpu",
+              "sha256": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+            },
+            {
+              "file": "identical/_mojolearn_linalg.so",
+              "module": "mojolearn._mojolearn_linalg",
+              "role": "gpu",
+              "sha256": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2"
+            },
+            {
+              "file": "identical/_mojolearn_training.so",
+              "module": "mojolearn._mojolearn_training",
+              "role": "gpu",
+              "sha256": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d"
+            },
+            {
+              "file": "identical/_mojolearn_transformer.so",
+              "module": "mojolearn._mojolearn_transformer",
+              "role": "gpu",
+              "sha256": "39db80e61044c9752c8aee444ec6b3aa0a44576b802ac24f680ff5e0d93c323c"
+            },
+            {
+              "file": "identical/_mojolearn.so",
+              "module": "mojolearn._sets.identical._mojolearn",
+              "role": "gpu",
+              "sha256": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+            },
+            {
+              "file": "identical/_mojolearn_linalg.so",
+              "module": "mojolearn._sets.identical._mojolearn_linalg",
+              "role": "gpu",
+              "sha256": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2"
+            },
+            {
+              "file": "identical/_mojolearn_training.so",
+              "module": "mojolearn._sets.identical._mojolearn_training",
+              "role": "gpu",
+              "sha256": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d"
+            }
+          ],
+          "loaded_runtime_files": [
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libAsyncRTMojoBindings.so",
+              "sha256": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libAsyncRTRuntimeGlobals.so",
+              "sha256": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libKGENCompilerRTShared.so",
+              "sha256": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libMSupportGlobals.so",
+              "sha256": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libgcc_s.so.1",
+              "sha256": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libstdc++.so.6",
+              "sha256": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+            }
+          ],
+          "numeric_mode": "identical",
+          "pid": 244180,
+          "runtime_selection": null,
+          "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+          "status": "verified"
+        }
+      ]
+    },
+    "neural/transformer-forward/gaussian/shape=full": {
+      "arms": [
+        "ours"
+      ],
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "gaussian",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "neural",
+          "hash": "d5a2b289afdb5709",
+          "hash_stable": null,
+          "installed_wheel": "UNKNOWN(/root/integrated-neural-a006-v2/baseline/source/python/mojolearn/_transformer_impl.py)",
+          "lane": "transformer-forward",
+          "library": "mojolearn",
+          "library_version": "0.8.37",
+          "max_ms": 3.490076996968128,
+          "median_ms": 3.490076996968128,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "KFD /sys/class/kfd/kfd/proc/244055/vram_* bytes for this pid at the round's end (not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 1552.6,
+            "peak_host_mb": 2039.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 1552.6,
+            "warmup_host_mb": 2039.2
+          },
+          "min_ms": 3.490076996968128,
+          "mode": "identical",
+          "mode_witness": "identical",
+          "neural_shape": "full",
+          "params": {
+            "library": "mojolearn",
+            "params": {
+              "eps": 1e-06,
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 1552.6,
+          "peak_host_mb": 2039.4,
+          "quality": {
+            "host_reference": "TransformerBlockInference",
+            "host_reference_atol": 1e-06,
+            "host_reference_finite": true,
+            "host_reference_passed": true,
+            "host_reference_rtol": 1e-05,
+            "host_reference_tolerance_ratio": 0.0,
+            "max_abs_diff_vs_host": 0.0,
+            "max_rel_diff_vs_host": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_neural.py",
+            "explicit_params": {
+              "eps": 1e-06,
+              "rope_theta": 10000.0
+            },
+            "interleaved": true,
+            "numeric_mode": "identical (`ours`; the neural FAST tier is Apple only)",
+            "opponent_mode": "torch at every fast setting it supports on this box, one arm each (eager/compile x fp32/tf32/bf16 autocast; tools/torch_lm_step_opponent.py COLUMNS); the arm name carries the setting",
+            "ours_call": "mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
+            "ours_device": "gpu",
+            "quality": "max_abs_diff_vs_ours, max_rel_diff_vs_ours, untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)",
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "seed_rule": "seed 7: every parameter and input of every arm comes from the conductor's default_rng(7) file; torch arms also call torch.manual_seed(7); ours' neural classes take no seed argument (nothing in them draws)",
+            "shape": "full",
+            "shape_dims": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+            "torch_call": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+            "torch_settings": {
+              "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-compile-fp32": "float32, TF32 off",
+              "torch-compile-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+              "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+              "torch-eager-fp32": "float32, TF32 off",
+              "torch-eager-tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)"
+            },
+            "warmup_rounds": 1
+          },
+          "shape": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+          "status": "ok",
+          "times_ms": [
+            3.490076996968128
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 314.5906490026391
+        }
+      ],
+      "command": [
+        "/root/integrated-neural-a006-v2/baseline/env/bin/python",
+        "-u",
+        "/root/integrated-neural-a006-v2/harness/tools/bench_board_neural.py",
+        "race",
+        "--lane",
+        "transformer-forward",
+        "--shape",
+        "full",
+        "--arms",
+        "ours",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/mojolearn-full-identical-20261005/amd-results/integrated-neural-ab/baseline/raw/neural/shape-full",
+        "--work",
+        "/root/mojolearn-full-identical-20261005/amd-results/integrated-neural-ab/baseline/work",
+        "--ours-python",
+        "/root/integrated-neural-a006-v2/baseline/env/bin/python",
+        "--theirs-python",
+        "/root/integrated-neural-a006-v2/baseline/env/bin/python",
+        "--ready-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--round-seconds",
+        "900"
+      ],
+      "dataset": "gaussian",
+      "env": {},
+      "family": "neural",
+      "finished": "2026-10-06T01:26:43Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "neural/transformer-forward/gaussian/shape=full",
+      "inputs": {
+        "inputs": "weights default_rng(7).normal(0, .02) (+1 on norms), x standard normal",
+        "lane": "transformer-forward",
+        "seed": 7,
+        "sha256": {
+          "w:down_proj.weight": "4f541cdd26763c05",
+          "w:gate_proj.weight": "e3c09f35b4fb8470",
+          "w:input_layernorm.weight": "d7e392be7606b1d7",
+          "w:k_proj.weight": "903ecc205be58476",
+          "w:o_proj.weight": "2f850b14052e2c41",
+          "w:post_attention_layernorm.weight": "66f46b8645ad41c7",
+          "w:q_proj.weight": "e7091836478d511d",
+          "w:up_proj.weight": "d88c8dfb67cb29eb",
+          "w:v_proj.weight": "1add771b75ce477e",
+          "x": "35f158783f4ca2c4"
+        },
+        "shape": {
+          "batch": 1,
+          "d_model": 384,
+          "head_dim": 64,
+          "intermediate": 1024,
+          "label": "B1 L2048 DM384 H6 KV6 HD64 FF1024",
+          "length": 2048,
+          "n_heads": 6,
+          "n_kv": 6,
+          "name": "full"
+        },
+        "steps": 2
+      },
+      "lane": "transformer-forward",
+      "log": "logs/neural.transformer-forward.gaussian.shape-full.log",
+      "our_arms": {
+        "ours": "identical"
+      },
+      "params": {
+        "arms": {
+          "ours": {
+            "library": "mojolearn",
+            "params": {
+              "eps": 1e-06,
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "neural",
+        "lane": "neural/transformer-forward",
+        "problems": [],
+        "reference": "ours",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "ours"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "provenance_dir": "provenance/race-io1lo_wb",
+      "race_json": "raw/neural/shape-full/transformer-forward-gaussian.json",
+      "rc": 0,
+      "rows": null,
+      "shape": "full",
+      "skipped_opponents": [
+        "torch-eager-fp32",
+        "torch-compile-fp32",
+        "torch-eager-bf16",
+        "torch-compile-bf16"
+      ],
+      "started": "2026-10-06T01:26:42Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 1.2,
+      "worker_provenance": [
+        {
+          "argv": [
+            "/root/integrated-neural-a006-v2/harness/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "transformer-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/mojolearn-full-identical-20261005/amd-results/integrated-neural-ab/baseline/work/neural-transformer-forward-full.npz"
+          ],
+          "artifact_identity": {
+            "code_path": "native",
+            "files": {
+              "host/_mojolearn_linalg_host.so": "5ca31f6a9b6540d7a35661d4cb0483ff83cbc1c22f33d82ad17f73ac536eb0e1",
+              "host/_mojolearn_neural_host.so": "c1edebd9b4657e441cb66cb2c91e86c9f5f6b6187cf4fc831d05b74981a9538e",
+              "host/_mojolearn_training_host.so": "4dc31fefc95e5787b3af83730b9198137bdc3f34e73268ed1ad6d337da022d75",
+              "host/_mojolearn_transformer_host.so": "e6084610038e353321c7163a6d08becac0f8bd74b8c1b4bfaedc610b997ebc34",
+              "identical/_mojolearn.so": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323",
+              "identical/_mojolearn_linalg.so": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2",
+              "identical/_mojolearn_training.so": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d",
+              "identical/_mojolearn_transformer.so": "39db80e61044c9752c8aee444ec6b3aa0a44576b802ac24f680ff5e0d93c323c"
+            },
+            "installation": "source",
+            "numeric_mode": "identical",
+            "runtime_files": {
+              "/root/integrated-neural-a006-v2/runtime/libAsyncRTMojoBindings.so": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857",
+              "/root/integrated-neural-a006-v2/runtime/libAsyncRTRuntimeGlobals.so": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18",
+              "/root/integrated-neural-a006-v2/runtime/libKGENCompilerRTShared.so": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321",
+              "/root/integrated-neural-a006-v2/runtime/libMSupportGlobals.so": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9",
+              "/root/integrated-neural-a006-v2/runtime/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+              "/root/integrated-neural-a006-v2/runtime/libgcc_s.so.1": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34",
+              "/root/integrated-neural-a006-v2/runtime/libstdc++.so.6": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+            },
+            "schema": "mojolearn-board-artifacts/1",
+            "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+            "source_root": "/root/integrated-neural-a006-v2/baseline/source",
+            "vendor": "hip"
+          },
+          "final": true,
+          "hardware": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x18d3aa1dc3d4838e\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+          "identical_qualified": false,
+          "loaded_files": [
+            {
+              "file": "identical/_mojolearn.so",
+              "module": "mojolearn._mojolearn",
+              "role": "gpu",
+              "sha256": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+            },
+            {
+              "file": "identical/_mojolearn_linalg.so",
+              "module": "mojolearn._mojolearn_linalg",
+              "role": "gpu",
+              "sha256": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2"
+            },
+            {
+              "file": "identical/_mojolearn_training.so",
+              "module": "mojolearn._mojolearn_training",
+              "role": "gpu",
+              "sha256": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d"
+            },
+            {
+              "file": "identical/_mojolearn_transformer.so",
+              "module": "mojolearn._mojolearn_transformer",
+              "role": "gpu",
+              "sha256": "39db80e61044c9752c8aee444ec6b3aa0a44576b802ac24f680ff5e0d93c323c"
+            },
+            {
+              "file": "identical/_mojolearn.so",
+              "module": "mojolearn._sets.identical._mojolearn",
+              "role": "gpu",
+              "sha256": "d4004272a116909648433ea78e96e6b68c1dc6df15a7fa23fef83d1b9004d323"
+            },
+            {
+              "file": "identical/_mojolearn_linalg.so",
+              "module": "mojolearn._sets.identical._mojolearn_linalg",
+              "role": "gpu",
+              "sha256": "1b2ddc648652e7d49527a92012cae667d865087435514ed1f286e7d9a6f394b2"
+            },
+            {
+              "file": "identical/_mojolearn_training.so",
+              "module": "mojolearn._sets.identical._mojolearn_training",
+              "role": "gpu",
+              "sha256": "f941ad5676cdff83841279f9527c9a37afe1a55c1a62aa4a5bc9d6d592602e8d"
+            },
+            {
+              "file": "identical/_mojolearn_transformer.so",
+              "module": "mojolearn._sets.identical._mojolearn_transformer",
+              "role": "gpu",
+              "sha256": "39db80e61044c9752c8aee444ec6b3aa0a44576b802ac24f680ff5e0d93c323c"
+            }
+          ],
+          "loaded_runtime_files": [
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libAsyncRTMojoBindings.so",
+              "sha256": "3679dac391cee6d937f71ab48a995e9677c223e75b1a0149d2c6531a058bb857"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libAsyncRTRuntimeGlobals.so",
+              "sha256": "b2bc321899e288422c6e09069b39cfe81c13d9d646426a0b5348e3b5a56f8f18"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libKGENCompilerRTShared.so",
+              "sha256": "70db9f3a7c95fe78b5b0104433e339e32986c63b014e4b5f30082495e44d6321"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libMSupportGlobals.so",
+              "sha256": "9ab7ddcb1f2eae79db3056841224d1167d13ec2da21e69a416fdc6a632ec85b9"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libgcc_s.so.1",
+              "sha256": "ea851f14f254a7e3075001199139b2f553432d843d3b94e07790839f55154a34"
+            },
+            {
+              "file": "/root/integrated-neural-a006-v2/runtime/libstdc++.so.6",
+              "sha256": "a19397502bdc7bdd9ba402b6a1e68590f1344e60a681e8144aeca1f67bcdf12c"
+            }
+          ],
+          "numeric_mode": "identical",
+          "pid": 244055,
+          "runtime_selection": null,
+          "source_commit": "a006da73d78634683cfc77a12dcb99666c55748c",
+          "status": "verified"
+        }
+      ]
+    }
+  },
+  "schema": "mojolearn-bench-board/1",
+  "updated": "2026-10-06T01:26:44Z"
+}
