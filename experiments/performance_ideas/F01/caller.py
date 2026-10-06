@@ -2,7 +2,12 @@
 # F01: qualification pending. Build every independent variant; device quality,
 # complete-call speed, peak scratch and opponent admission remain separate gates.
 # New experiment mechanisms remain opt-in; existing promoted defaults are retained.
-"""Actual PCA projection/Gram geometry; generic neighboring shapes, cold + reuse."""
+"""Actual PCA projection/Gram geometry; generic neighboring shapes, cold + reuse.
+
+Measurement revision 2026-10-06 enables the previously compiled complete scoped
+adapter set: PCA covariance uses split-K, transform/inverse may use NT layouts.
+The initial recipe omitted those adapters and failed its positive reach gate.
+"""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'apple_fast'))

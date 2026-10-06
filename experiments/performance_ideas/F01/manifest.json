@@ -13,10 +13,13 @@
     "experiments/apple_fast/gemm/scoped_dispatch.mojo"
   ],
   "candidate_defines": [
+    "MOJOLEARN_SCOPED_GEMM_AUDIT",
     "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+    "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
     "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
-    "MOJOLEARN_SCOPED_GEMM_PCA",
-    "MOJOLEARN_SCOPED_GEMM_AUDIT"
+    "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+    "MOJOLEARN_SCOPED_GEMM_SPLIT",
+    "MOJOLEARN_SCOPED_GEMM_PCA"
   ],
   "baseline_defines": [
     "MOJOLEARN_SCOPED_GEMM_AUDIT"
@@ -69,5 +72,6 @@
     "{output}/arms",
     "--output",
     "{output}/run"
-  ]
+  ],
+  "measurement_revision": "2026-10-06: enable existing split and NT adapters required by actual PCA callers; reuse the already compiled F02/pca candidate with the same baseline; previous no-reach attempt retained"
 }

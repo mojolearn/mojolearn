@@ -10,7 +10,7 @@ from support import capture_main,binding_check,consumed
 
 def exercise(args):
     import numpy as np
-    from mojolearn import chunked_lm_head_loss,linear_forward,linear_backward,cross_entropy,SGD
+    from mojolearn.training import chunked_lm_head_loss,linear_forward,linear_backward,cross_entropy,SGD
     from mojolearn import _mojolearn_training as binding
     cases={}
     for vocabulary,logit_scale in ((1031,1),(4099,1),(1031,128)):
