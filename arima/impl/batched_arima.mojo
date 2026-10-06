@@ -981,7 +981,7 @@ def batched_loglike_grad_x(
         )
         ctx.synchronize()
         _ = pert^
-    var ll = _ll_finish(ctx, base.ws.loglike.unsafe_ptr(), d_bad, batch_size)
+    var ll = _ll_finish(ctx, base.ws.loglike.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_bad, batch_size)
     _ = d_bad^
     _ = base^
     return ll^
