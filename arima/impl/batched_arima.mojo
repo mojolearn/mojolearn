@@ -715,9 +715,16 @@ def batched_loglike_grad(
 # use sequential gradients there. Nine planted AR1/MA1/ARMA11 cases, batch6,
 # observations4096/4097/8193, were timed with one same-process warmup/score;
 # their raw ratios (AMD0.956-1.044,NVIDIA0.988-1.000) are same-route controls,
-# not evidence for the batch-gradient schedule. Apple timing is separately
-# pending; retain all established defaults and the Apple-only guard.
-# Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurements, I23.
+# not evidence for the batch-gradient schedule. Apple-only actual schedule
+# measured M3 2026-10-06, same frozen5b467815b timing driver, batch6:
+# observations4096 AR1/MA1/ARMA11 B/A1.0968/1.0488/1.0041;
+# observations4097 B/A1.0254/1.0374/0.9992;
+# observations8193 B/A1.0070/0.9993/1.0165. One same-process warmup+score,
+# complete batched_fit component; evaluation counts match in all9 pairs.
+# Prior identity evidence reused, no new numerical oracle; neutral/regression,
+# no cross-vendor IDENTICAL vote. Retain existing default and Apple-only guard.
+# Evidence: ab-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23,
+# overnight-ab-20261006/{amd,nvidia} normalized controls.
 comptime ARIMA_FAST_BATCH_GRAD = has_apple_gpu_accelerator() and (
     (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
