@@ -11,9 +11,13 @@ from std.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceContext
 
 
-# A04 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-# A04 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
-# Explicit subwave fixture kernel only; no production scheduler admission.
+# A04 2026-10-06 AMD MI325X component WINNER: paired logical32 / physical-wave
+# completion ratios 0.802, 0.740, 0.538 at 4096, 65537, 1048576 groups (31 active).
+# Source 5b467815b; one same-process excluded warmup and scored sample per arm.
+# Existing identity evidence reused; not rerun. Explicit reduction fixture only:
+# no production caller/scheduler admission or default change from this result.
+# NVIDIA full-caller qualification remains pending. Evidence:
+# overnight-ab-20261006/amd/normalized-measurements.json, A04 (raw live/repairs).
 def membership_kernel[PAIRED: Bool](output: MutPointer[UInt32,MutAnyOrigin],active: Int32,groups: Int32):
     var tid = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     var width = WARP_SIZE

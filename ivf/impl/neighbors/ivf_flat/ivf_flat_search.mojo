@@ -902,11 +902,16 @@ def ivf_flat_search_prepared(
                 comptime for KM in [8, 16, 32]:
                     if k <= KM and (KM == 8 or k > KM // 2):
                         comptime if IVF_IDENTICAL_SCAN or IVF_APPLE_FAST_BALANCED:
-                            # I16 new candidate remains default off. Qualification is pending: native
-                            # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
-                            # NEVER RUN — PENDING MEASUREMENT
+                            # I16 2026-10-06 AMD MI325X scoped LOSER, source 5b467815b:
+                            # balanced / flat ratios 3.253-16.510; staged / flat 1.381-2.200.
+                            # 100000 rows, 128 queries, features7/33/65, 64 lists/probes,
+                            # k17; all-one-list, uniform and skewed occupancy (9 cases).
+                            # Actual search from a planted index; one same-process warmup
+                            # and score per arm. Existing identity evidence reused, not rerun.
+                            # Remains opt-in/default OFF; these synthetic caller results
+                            # do not qualify a full-workload cross-vendor promotion. Evidence:
+                            # overnight-ab-20261006/amd/normalized-measurements.json, I16.
                             if IVF_APPLE_FAST_BALANCED or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
-                                # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
                                 comptime if IVF_APPLE_FAST_BALANCED and is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
                                     _BALANCED_AUDIT.get_or_create_ptr()[].hits += 1
                                 ivf_balanced_scan[KM](ctx,dq,dq_norm,dev.dlist_data,dev.dlist_norm,dev.d_off,dev.d_ind,dprobe_idx,d_keep,keep_len,d_od,d_oi,n_queries,n_probes,dim,k)

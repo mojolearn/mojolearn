@@ -16,6 +16,11 @@ from std.atomic import Atomic,Ordering
 # 9.477 vs 9.546 ms and 6.573 vs 6.629 ms (1.007x/1.008x); inconclusive.
 # One same-process warmup and score; full AMD+NVIDIA workloads still owed.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
+# I20 AMD MI325X scoped LOSER (2026-10-06, source f32549d28): candidate/base
+# 1.392, 1.160, 1.070 at 100000 rows, 1024 queries, features8/9/17.
+# One same-process warmup and score on the resident public caller; existing
+# identity evidence reused, not rerun. Synthetic scope; no default promotion.
+# Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I20.
 # Pool requires IDENTICAL + MOJOLEARN_IDN_KDE_PARTIAL_POOL; original allocation path retained.
 # Default OFF; enabling it remains a pending experiment, not a promoted route.
 comptime KDE_CHUNK_POOL_ON=GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_KDE_PARTIAL_POOL"]()
