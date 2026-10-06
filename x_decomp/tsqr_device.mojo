@@ -94,6 +94,7 @@ comptime TS_SMEM_BYTES = 4 * (TS_PART + 3 * _TT + TS_TPB + TS_P)
 comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime TS_GRID_UPDATE = _TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime TS_NORM_FUSED = _TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime TS_STRIP_UPDATE = _TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_STRIP_UPDATE"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime TS_SMEM_OK = lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_BYTES]()
 
 
@@ -319,7 +320,7 @@ def ts_leaf_panel_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in
             c0 += TS_NB
 
 
-def ts_leaf_update_kernel(
+def ts_leaf_update_kernel[STRIP: Int = 1](
     a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32, b0_in: Int32, pan_in: Int32, nch_in: Int32
 ):
     """`ts_leaf_panel_kernel`'s (U) for panel `pan`, one threadgroup per
@@ -349,12 +350,18 @@ def ts_leaf_update_kernel(
     var j0 = pan * TS_NB
     var pw = min(TS_NB, n - j0)
     var npan = ts_panels(n)
-    var c0 = j0 + pw + ch * TS_NB
-    if c0 >= n:
+    var first = j0 + pw + ch * STRIP * TS_NB
+    if first >= n:
         return
+    # One T load for a bounded strip of independent trailing-column chunks.
+    # The unchanged helper ends in a barrier before scratch is reused. Each
+    # column sees exactly its old row chains, reflector fold and update order.
     tsh[tid] = tst.unsafe_load((b * npan + pan) * _TT + tid)
     barrier()
-    _wy_chunk_kern[True](blk, n, blk, n, c0, n, mb, j0, pw, tsh, part, zsh, wsh, g, l)
+    comptime for piece in range(STRIP):
+        var c0=first+piece*TS_NB
+        if c0<n:
+            _wy_chunk_kern[True](blk,n,blk,n,c0,n,mb,j0,pw,tsh,part,zsh,wsh,g,l)
 
 
 def ts_rtile_kernel(a: F32Ptr, tiles: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32):
@@ -642,10 +649,17 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
                 var j1 = pan * TS_NB + min(TS_NB, n - pan * TS_NB)
                 var nch = (n - j1 + TS_NB - 1) // TS_NB
                 if nch > 0:
-                    ctx.enqueue_function[ts_leaf_update_kernel](
-                        da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(pan),
-                        Int32(nch), grid_dim=cnt * nch, block_dim=TS_TPB,
-                    )
+                    comptime if TS_STRIP_UPDATE:
+                        var strips=(nch+1)//2
+                        ctx.enqueue_function[ts_leaf_update_kernel[2]](
+                            da.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(n),Int32(nb),Int32(b0),Int32(pan),
+                            Int32(strips),grid_dim=cnt*strips,block_dim=TS_TPB,
+                        )
+                    else:
+                        ctx.enqueue_function[ts_leaf_update_kernel[1]](
+                            da.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(n),Int32(nb),Int32(b0),Int32(pan),
+                            Int32(nch),grid_dim=cnt*nch,block_dim=TS_TPB,
+                        )
                     _wait_apple(ctx)
             b0 += cnt
     ctx.enqueue_function[ts_rtile_kernel](

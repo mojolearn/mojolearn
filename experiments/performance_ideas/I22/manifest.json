@@ -15,7 +15,8 @@
     "experiments/performance_ideas/I22/reuse_check.mojo"
   ],
   "candidate_defines": [
-    "MOJOLEARN_IDN_TSQR_REUSE=1"
+    "MOJOLEARN_IDN_TSQR_REUSE=1",
+    "MOJOLEARN_IDN_TSQR_STRIP_UPDATE=1"
   ],
   "baseline_defines": [
     "MOJOLEARN_IDN_TSQR_GRID_OFF=1",
@@ -36,7 +37,9 @@
     "--output",
     "{output}",
     "--define",
-    "MOJOLEARN_IDN_TSQR_REUSE=1"
+    "MOJOLEARN_IDN_TSQR_REUSE=1",
+    "--define",
+    "MOJOLEARN_IDN_TSQR_STRIP_UPDATE=1"
   ],
   "run_argv": [
     "{output}"
