@@ -10,7 +10,11 @@
   "implementation_paths": [
     "experiments/performance_ideas/F12/caller.py",
     "gbdt/methods/sym_iter_fast.mojo",
-    "gbdt/methods/leaves_estimation/apple_fast_est.mojo"
+    "gbdt/methods/leaves_estimation/apple_fast_est.mojo",
+    "gbdt/methods/ordered_fast_switches.mojo",
+    "gbdt/methods/pointwise_scores_calcer.mojo",
+    "gbdt/methods/pointwise_kernels.mojo",
+    "gbdt/methods/kernel/compute_point_hist2_loop.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_SYM_REUSE_PARTITION"
@@ -44,7 +48,9 @@
     "actual complete boosting fit",
     "same tree count/depth/random seed/sampling semantics",
     "heldout RMSE no material loss",
-    "Categorical/ranking fixed-seed tasks and independent depthwise/lossguide incumbent-route scheduling controls, whole fit/iterations/quality"
+    "Categorical/ranking fixed-seed tasks and independent depthwise/lossguide incumbent-route scheduling controls, whole fit/iterations/quality",
+    "Explicit Ordered fixed permutations with nonzero document-keyed score noise and off-grid regression targets; retained winner records are existing production route",
+    "New document-ID map actual positive submissions, native PointHist8 oracle across unaligned scalar/vector/empty cases before public quality/timing"
   ],
   "timing_contract": "Whole boosting fit and first prediction separately from retained prediction",
   "blocker": null,
@@ -66,7 +72,11 @@
       "MOJOLEARN_SYM_REUSE_PARTITION"
     ],
     "depthwise": [],
-    "lossguide": []
+    "lossguide": [],
+    "ordered-storage": [],
+    "ordered-docids": [
+      "MOJOLEARN_ORD_DOC_ID_STORAGE"
+    ]
   },
   "binding": "gbdt",
   "prerequisite_bindings": [
@@ -79,6 +89,12 @@
     ],
     "lossguide": [
       "MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF"
+    ],
+    "ordered-storage": [
+      "MOJOLEARN_ORD_ALL_OFF"
+    ],
+    "ordered-docids": [
+      "MOJOLEARN_ORD_ALL_OFF"
     ]
   },
   "paired_build": true,
@@ -91,5 +107,13 @@
     "{output}/arms",
     "--output",
     "{output}/run"
-  ]
+  ],
+  "variant_native_checks": {
+    "ordered-docids": [
+      {
+        "name": "ordered-doc-id-check",
+        "source": "gbdt/checks/ordered_doc_id_check.mojo"
+      }
+    ]
+  }
 }

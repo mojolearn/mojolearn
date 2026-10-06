@@ -93,6 +93,7 @@ def compute_split_properties_half_byte_kernel[
     total_feature_count_in: Int32,
     fixed_scale_p: MutPointer[Float32, MutAnyOrigin],
     int_slot: Int32,
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ):
     """`ComputeSplitPropertiesHalfByteImpl` (`:23-94`), copied; under the
     ordered tiers the fixed-point accumulator (`PointHistHalfByteInt`,
@@ -141,11 +142,13 @@ def compute_split_properties_half_byte_kernel[
             compute_histogram_2[PW_HB_BLOCK, 1, 1, m](
                 hi, indices, UInt32(part_offset), UInt32(part_size),
                 target, weight, ci,
+                dither_ids=dither_ids,
             )
         else:
             compute_histogram[PW_HB_BLOCK, 1, 1, 1, m](
                 hi, indices, UInt32(part_offset), UInt32(part_size),
                 target, weight, ci,
+                dither_ids=dither_ids,
             )
         barrier()
         var fid_i = tid // 32
@@ -176,11 +179,13 @@ def compute_split_properties_half_byte_kernel[
         compute_histogram_2[PW_HB_BLOCK, 1, 1, m](
             hist, indices, UInt32(part_offset), UInt32(part_size),
             target, weight, ci,
+            dither_ids=dither_ids,
         )
     else:
         compute_histogram[PW_HB_BLOCK, 1, 1, 1, m](
             hist, indices, UInt32(part_offset), UInt32(part_size),
             target, weight, ci,
+            dither_ids=dither_ids,
         )
 
     barrier()  # theirs, `:78`

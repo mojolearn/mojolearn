@@ -70,7 +70,7 @@ def main():
     for arm,defines in (('A',baseline),('B',candidate)):
         hashes[arm]=build(binding,defines,a.output/(arm+'.so'))
     native_checks={}
-    for check in card.get('native_checks',[]):
+    for check in card.get('variant_native_checks',{}).get(a.variant,card.get('native_checks',[])):
         destination=a.output/check['name']
         command=['pixi','run','mojo','build','-j','1','--target-cpu','apple-m1','--target-accelerator','metal:1','-I','.','-I','bindings']
         for token in candidate:command.extend(['-D',token])

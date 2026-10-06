@@ -49,7 +49,7 @@ def main():
     assert binding == card.get('variant_bindings', {}).get(args.variant, card['binding'])
     args.output.mkdir(parents=True, exist_ok=False)
     # Independent structural/gradient gates run before measured public calls.
-    required=card.get('native_checks',[])
+    required=card.get('variant_native_checks',{}).get(args.variant,card.get('native_checks',[]))
     assert set(manifest.get('native_checks',{}))=={check['name'] for check in required}
     for check in required:
         receipt=manifest['native_checks'][check['name']]

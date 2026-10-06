@@ -172,6 +172,25 @@ trait PointHist2(Movable):
         ...
 
 
+# F12 pending qualification. New doc-ID restoration is default-off FAST Apple;
+# input positions/loads and accumulator order remain the existing ones.
+from gbdt.methods.ordered_fast_switches import ORD_DOC_ID_STORAGE
+
+
+@always_inline
+def _hist_doc_key(row: UInt32, ids: Optional[MutPointer[UInt32, MutAnyOrigin]]) -> UInt32:
+    comptime if ORD_DOC_ID_STORAGE:
+        if ids:return ids.value().unsafe_load(Int(row))
+    return row
+
+
+@always_inline
+def _hist_doc_keys[width: Int](rows: SIMD[DType.uint32,width],ids: Optional[MutPointer[UInt32,MutAnyOrigin]]) -> SIMD[DType.uint32,width]:
+    var mapped=rows
+    comptime for lane in range(width):mapped[lane]=_hist_doc_key(rows[lane],ids)
+    return mapped
+
+
 @always_inline
 def _column_of_thread[hist_block_count: Int](tid: Int) -> Int:
     """Their `(threadIdx.x & 31) + (threadIdx.x / 32 / HIST_BLOCK_COUNT) * 32`.
@@ -199,6 +218,7 @@ def _peel[
     weight: MutPointer[Float32, MutAnyOrigin],
     cindex: MutPointer[UInt32, MutAnyOrigin],
     col_step: Int,
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ):
     """Their striding peel loop (`:150-157`, `:176-184`, `:262-269`,
     `:288-296`), CONVERGED for the whole block.
@@ -243,7 +263,7 @@ def _peel[
             ci = ldg(cindex.unsafe_offset(Int(row)))
             w = ldg(weight.unsafe_offset(at + col))
             wt = ldg(target.unsafe_offset(at + col))
-        hist.add_point(ci, wt, w, row)
+        hist.add_point(ci, wt, w, _hist_doc_key(row,dither_ids))
         col += col_step
 
 
@@ -263,6 +283,7 @@ def compute_histogram[
     target: MutPointer[Float32, MutAnyOrigin],
     weight: MutPointer[Float32, MutAnyOrigin],
     cindex: MutPointer[UInt32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ):
     """`ComputeHistogram` (`:12-131`), copied.
 
@@ -297,7 +318,7 @@ def compute_histogram[
         # UNCONDITIONAL, exactly as theirs is: a thread outside the head
         # still calls AddPoint, with a zero bin and zero stats. Guarding it
         # would drop a barrier that the accumulators take inside AddPoint.
-        hist.add_point(ci, wt, w, index)
+        hist.add_point(ci, wt, w, _hist_doc_key(index,dither_ids))
 
     ds_size = ds_size - last_id if ds_size > last_id else 0
     base += last_id
@@ -316,7 +337,7 @@ def compute_histogram[
                 ci = ldg(cindex.unsafe_offset(Int(index)))
                 w = ldg(weight.unsafe_offset(base + tail_offset + i))
                 wt = ldg(target.unsafe_offset(base + tail_offset + i))
-            hist.add_point(ci, wt, w, index)
+            hist.add_point(ci, wt, w, _hist_doc_key(index,dither_ids))
     ds_size -= unaligned_tail
 
     if bpf_id == 0 and ds_size <= 0:
@@ -394,7 +415,7 @@ def compute_histogram[
 
             comptime for k in range(n):
                 hist.add_point(
-                    local_ci[k], local_wt[k], local_w[k], local_row[k]
+                    local_ci[k], local_wt[k], local_w[k], _hist_doc_key(local_row[k],dither_ids)
                 )
 
         for _ in range(blocked_iters * n, max_iters):
@@ -409,7 +430,7 @@ def compute_histogram[
                 wt = ldg(target.unsafe_offset(cur))
             cur += stripe
             done += 1
-            hist.add_point(ci, wt, w, index)
+            hist.add_point(ci, wt, w, _hist_doc_key(index,dither_ids))
 
         barrier()
         hist.reduce()
@@ -430,6 +451,7 @@ def compute_histogram_2[
     target: MutPointer[Float32, MutAnyOrigin],
     weight: MutPointer[Float32, MutAnyOrigin],
     cindex: MutPointer[UInt32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ):
     """`ComputeHistogram2` (`:123-240`), copied.
 
@@ -454,8 +476,10 @@ def compute_histogram_2[
         last_id = ds_size
 
     if bpf_id == 0:
-        _peel[hist_block_count](hist, 128, last_id, base, indices, target,
-                                weight, cindex, col_step)
+        _peel[hist_block_count](
+            hist, 128, last_id, base, indices, target,
+            weight, cindex, col_step, dither_ids=dither_ids,
+        )
 
     ds_size = ds_size - last_id if ds_size > last_id else 0
     base += last_id
@@ -467,7 +491,8 @@ def compute_histogram_2[
             var tail_offset = ds_size - unaligned_tail
             _peel[hist_block_count](hist, 64, unaligned_tail,
                                     base + tail_offset, indices, target,
-                                    weight, cindex, col_step)
+                                    weight, cindex, col_step,
+                                    dither_ids=dither_ids)
     ds_size -= unaligned_tail
 
     if ds_size <= 0:
@@ -519,7 +544,7 @@ def compute_histogram_2[
                     ldg(weight.unsafe_offset(cur + 1)),
                 )
             cur += stripe
-            hist.add_point_2(bins, lt, lw, li)
+            hist.add_point_2(bins, lt, lw, _hist_doc_keys[2](li,dither_ids))
 
         barrier()
         hist.reduce()
@@ -540,6 +565,7 @@ def compute_histogram_4[
     target: MutPointer[Float32, MutAnyOrigin],
     weight: MutPointer[Float32, MutAnyOrigin],
     cindex: MutPointer[UInt32, MutAnyOrigin],
+    dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ):
     """`ComputeHistogram4` (`:245-352`), copied.
 
@@ -564,8 +590,10 @@ def compute_histogram_4[
         last_id = ds_size
 
     if bpf_id == 0:
-        _peel[hist_block_count](hist, 128, last_id, base, indices, target,
-                                weight, cindex, col_step)
+        _peel[hist_block_count](
+            hist, 128, last_id, base, indices, target,
+            weight, cindex, col_step, dither_ids=dither_ids,
+        )
 
     ds_size = ds_size - last_id if ds_size > last_id else 0
     base += last_id
@@ -577,7 +605,8 @@ def compute_histogram_4[
             var tail_offset = ds_size - unaligned_tail
             _peel[hist_block_count](hist, 128, unaligned_tail,
                                     base + tail_offset, indices, target,
-                                    weight, cindex, col_step)
+                                    weight, cindex, col_step,
+                                    dither_ids=dither_ids)
     ds_size -= unaligned_tail
 
     if ds_size <= 0:
@@ -639,7 +668,7 @@ def compute_histogram_4[
                     ldg(weight.unsafe_offset(cur + 3)),
                 )
             cur += stripe
-            hist.add_point_4(bins, lt, lw, li)
+            hist.add_point_4(bins, lt, lw, _hist_doc_keys[4](li,dither_ids))
 
         barrier()
         hist.reduce()

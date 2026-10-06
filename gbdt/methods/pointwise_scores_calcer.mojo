@@ -74,6 +74,7 @@ from gbdt.methods.kernel.pointwise_split_resolve import (
     launch_pw_seed_sentinel,
 )
 from gbdt.methods.pointwise_kernels import FoldsHistogram, compute_hist2_dev
+from gbdt.methods.ordered_fast_switches import ORD_DOC_ID_STORAGE, ordered_doc_hit
 from std.memory import bitcast
 from gbdt.methods.pointwise_optimization_subsets import TOptimizationSubsets
 from gbdt.data.permutation import TRandom
@@ -364,6 +365,7 @@ struct PolicyScoreHelper(Movable):
         n_rows: Int,
         sm_count: Int,
         fixed_scale: Float32,
+        dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
     ) raises:
         """`TScoreHelper::SubmitCompute` (`histograms_helper.h:380-384`),
         which is `ComputeHistogramsHelper.Compute` and nothing else. The
@@ -376,6 +378,7 @@ struct PolicyScoreHelper(Movable):
                 rebind[MutPointer[Float32, MutAnyOrigin]](
                     self.d_scale_word.unsafe_ptr()
                 ),
+                dither_ids=dither_ids,
             )
             return
         self._stage_words(fixed_scale, self.h_std_staged)
@@ -384,6 +387,7 @@ struct PolicyScoreHelper(Movable):
             rebind[MutPointer[Float32, MutAnyOrigin]](
                 self.d_scale_word.unsafe_ptr()
             ),
+            dither_ids=dither_ids,
         )
 
     def _stage_words(mut self, scale: Float32, std: Float32) raises:
@@ -413,6 +417,7 @@ struct PolicyScoreHelper(Movable):
         n_rows: Int,
         sm_count: Int,
         scale_word: MutPointer[Float32, MutAnyOrigin],
+        dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
     ) raises:
         """T5 drain (lane cpu3-gbdt-a): `submit_compute` with the scale on
         the device (the ordered fit's `_ord_std_scale_kernel` word), never
@@ -435,6 +440,7 @@ struct PolicyScoreHelper(Movable):
         self._submit(
             ctx, subsets, cindex, docs, n_rows, sm_count, host_scale,
             scale_word,
+            dither_ids=dither_ids,
         )
 
     def _submit(
@@ -447,6 +453,7 @@ struct PolicyScoreHelper(Movable):
         sm_count: Int,
         fixed_scale: Float32,
         scale_word: MutPointer[Float32, MutAnyOrigin],
+        dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
     ) raises:
         """The shared body: the multi-GPU shards take `fixed_scale` (a
         host value), the one-device histogram reads `scale_word`."""
@@ -498,7 +505,10 @@ struct PolicyScoreHelper(Movable):
             self.folds_hist.copy(),
             sm_count,
             scale_word,
+            dither_ids=dither_ids,
         )
+        comptime if ORD_DOC_ID_STORAGE:
+            if dither_ids:ordered_doc_hit()
         self.hist_helper.clear_from_scratch()
 
     def compute_optimal_split(
@@ -707,11 +717,13 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         n_rows: Int,
         sm_count: Int,
         fixed_scale: Float32,
+        dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
     ) raises:
         """`SubmitCompute` (`:71-78`)."""
         for i in range(len(self.helpers)):
             self.helpers[i].submit_compute(
-                ctx, subsets, cindex, docs, n_rows, sm_count, fixed_scale
+                ctx, subsets, cindex, docs, n_rows, sm_count, fixed_scale,
+                dither_ids=dither_ids,
             )
 
     def submit_compute_dev(
@@ -723,12 +735,14 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         n_rows: Int,
         sm_count: Int,
         scale_word: MutPointer[Float32, MutAnyOrigin],
+        dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
     ) raises:
         """T5 drain (lane cpu3-gbdt-a): `submit_compute` with the scale a
         device word."""
         for i in range(len(self.helpers)):
             self.helpers[i].submit_compute_dev(
-                ctx, subsets, cindex, docs, n_rows, sm_count, scale_word
+                ctx, subsets, cindex, docs, n_rows, sm_count, scale_word,
+                dither_ids=dither_ids,
             )
 
     def compute_optimal_split(

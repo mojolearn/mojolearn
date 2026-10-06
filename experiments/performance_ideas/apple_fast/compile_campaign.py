@@ -39,7 +39,7 @@ def matrix():
             prerequisites=[add(dep,'fast',[],consumer+'/prerequisite') for dep in card.get('variant_prerequisite_bindings',{}).get(variant,card.get('prerequisite_bindings',['core']))]
             prerequisites.append(add('core','identical',[],consumer+'/input_transport_helpers'))
             checks=[]
-            for check in card.get('native_checks',[]):
+            for check in card.get('variant_native_checks',{}).get(variant,card.get('native_checks',[])):
                 for arm,defines in [('A',baseline),('B',candidate)]:
                     checks.append(add(check['name'],'fast',defines,consumer+'/native/'+arm,check['source']))
             variants.append(dict(idea=idea,variant=variant,arms=arms,prerequisites=prerequisites,native_checks=checks))
