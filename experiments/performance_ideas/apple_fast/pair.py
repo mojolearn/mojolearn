@@ -59,7 +59,7 @@ def main():
             assert receipt['source_sha'] == source and receipt['numeric_mode'] == 'fast'
             assert receipt['vendor'] == 'apple' and receipt['sha256'] == sha(path)
             shutil.copy2(path, package / name)
-        shutil.copy2(args.arms / (arm + '.so'), package / ('_mojolearn_' + binding + '.so'))
+        shutil.copy2(args.arms / (arm + '.so'), package / ('_mojolearn.so' if binding == 'core' else '_mojolearn_' + binding + '.so'))
         env = dict(os.environ, PYTHONPATH=str(package.parent), MOJOLEARN_NUMERIC_MODE='fast',
                    MOJOLEARN_VENDOR='apple', OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1')
         output = args.output / (arm + '.json')

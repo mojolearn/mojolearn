@@ -38,7 +38,7 @@ def main():
     dependencies={}
     def build(name,defines,destination):
         script='bindings/build.sh' if name=='core' else 'bindings/build_'+name+'.sh'
-        local=dict(env,MOJOLEARN_MOJO_BUILD_FLAGS=flags(defines),MOJOLEARN_BUILD_EXTRA_DEFINES='')
+        local=dict(env,MOJOLEARN_MOJO_BUILD_FLAGS=flags(defines),MOJOLEARN_BUILD_EXTRA_DEFINES=flags(defines))
         if name=='byte_lm':local['MOJOLEARN_BYTE_LM_OUTDIR']=str(a.output/(destination.stem+'-native'))
         binary=ROOT/'python/mojolearn'/('_mojolearn.so' if name=='core' else '_mojolearn_'+name+'.so')
         if name=='byte_lm':binary=Path(local['MOJOLEARN_BYTE_LM_OUTDIR'])/'_mojolearn_byte_lm.so'

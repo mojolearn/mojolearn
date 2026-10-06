@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "F14",
+  "title": "Reuse streamed index rows across four exact query accumulators",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "neighbors/impl/detail/fast_topk_knn.mojo",
+    "experiments/performance_ideas/F14/caller.py"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_KNN_FAST_QUERY_GROUP4"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F14",
+    "--output",
+    "{output}/arms"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F14",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F14/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "exhaustive exact neighbor candidate certification",
+    "same k/search contract",
+    "neighbor distance error tolerance, no digest gate",
+    "approximate ANN compaction is separately owed"
+  ],
+  "timing_contract": "Exact public kneighbors through distance/index output reads; fit/index construction remains explicit",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "core",
+  "prerequisite_bindings": [],
+  "build_uses_compile_slot": true
+}
