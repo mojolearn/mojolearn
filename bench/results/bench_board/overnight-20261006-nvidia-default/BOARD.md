@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:53:57Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T08:09:39Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T07:53:57Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 71 done, 2 failed, 0 unsupported, 40 pending. Cells: 163 (REFUSED 2, ok 161).
+Races: 113 planned, 76 done, 2 failed, 0 unsupported, 35 pending. Cells: 170 (REFUSED 2, ok 168).
 
-Inference cells: 132 (REFUSED 2, ok 130).
+Inference cells: 134 (REFUSED 2, ok 132).
 
 ## Quality at a glance
 
@@ -133,6 +133,18 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | svgp | taxi | rmse (lower is better) | - | - | gpytorch-gpu 17.831018 |
 | algos | tree-shap | taxi | max_additivity_error | - | - | xgboost-gpu 5.402e-05 |
 | algos | tsne | taxi | trustworthiness_k15 (higher is better, 1 at most) | - | - | cuml-gpu 0.998353 |
+| classical | dbscan | taxi | n_clusters | - | - | cuml-gpu 36 |
+| classical | dbscan | taxi | noise_fraction | - | - | cuml-gpu 0.000174 |
+| classical | dbscan | taxi | rows | - | - | cuml-gpu 1000000 |
+| classical | hdbscan | taxi | n_clusters | - | - | cuml-gpu 159 |
+| classical | hdbscan | taxi | noise_fraction | - | - | cuml-gpu 0.130970 |
+| classical | hdbscan | taxi | rows | - | - | cuml-gpu 100000 |
+| classical | kde | taxi | mean_log_likelihood (higher is better) | - | - | cuml-gpu -14.826437 |
+| classical | kde | taxi | rows_without_density | - | - | cuml-gpu 0 |
+| classical | kmeans | taxi | inertia (lower is better) | - | - | cuml-gpu 3.06e+08; torch-gpu 3.06e+08 |
+| classical | kmeans | taxi | n_iter | - | - | cuml-gpu 32; torch-gpu 58 |
+| classical | knn | taxi | recall_at_k (higher is better) | - | - | cuml-gpu 0.999742; torch-gpu 0.999773 |
+| classical | knn | taxi | rows_with_repeated_ids | - | - | cuml-gpu 0; torch-gpu 0 |
 
 ## Inference at a glance
 
@@ -192,6 +204,186 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | standard-scaler | taxi | Xq | - | - | - | - | cuml-gpu 0.7 ms (IDENTICAL/arm -) |
 | algos | svgp | taxi | Xq | - | - | - | - | gpytorch-gpu 7.2 ms (IDENTICAL/arm -) |
 | algos | target-encoder | taxi | Xq | - | - | - | - | cuml-gpu 29.8 ms (IDENTICAL/arm -) |
+| classical | kmeans | taxi | Xq | - | - | - | - | cuml-gpu 2.8 ms (IDENTICAL/arm -); torch-gpu 0.7 ms (IDENTICAL/arm -) |
+
+## Classical
+
+### dbscan / taxi (rows full, shape 1000000x11)
+
+race: done, driver rc 0, log `logs/classical.dbscan.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 436957.2 | 436957.2..436957.2 | 1 | - | - | 841.9 | 474.0 | n_clusters=36, noise_fraction=0.000174, rows=1000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: eps=3, min_samples=2 (the cuML benchmark's DBSCAN) on every arm; metric='euclidean'. Rows: dbscan block: 1,000,000 rows, standardized. Timed: fit.
+
+mismatch: seed: no arm has a seed argument (deterministic)
+
+mismatch: algorithm (an exact neighbor search on every arm, results unchanged): ours 'rbc' (its default), scikit-learn 'brute' (the cuML benchmark's cpu_args; it has no 'rbc'), cuml-gpu 'brute', cuml-gpu-rbc 'rbc'
+
+mismatch: leaf_size=30 and n_jobs=-1: scikit-learn only
+
+config: cuML benchmark (RAPIDS), DBSCAN (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| algorithm | "brute" |
+| eps | 3.0 |
+| metric | "euclidean" |
+| min_samples | 2 |
+| seed | "none (deterministic)" |
+
+### hdbscan / taxi (rows full, shape 1000000x11)
+
+race: done, driver rc 0, log `logs/classical.hdbscan.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 369.1 | 369.1..369.1 | 1 | - | - | 940.5 | 448.0 | n_clusters=159, noise_fraction=0.130970, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: min_samples=10 (scikit-learn 11: the same core distance, the 10th neighbour besides the point), min_cluster_size=100, metric='euclidean', cluster_selection_method='eom', cluster_selection_epsilon=0.0, alpha=1.0, allow_single_cluster=False. Rows: the dbscan block's first 100,000 rows. Timed: fit.
+
+mismatch: seed: no arm has a seed argument (deterministic)
+
+mismatch: max_cluster_size: ours and cuML 0, scikit-learn None (both mean no limit)
+
+mismatch: min_samples: ours and cuML 10, scikit-learn 11. The SAME k-th neighbour: cuML's runner.h:68-80 (ours transcribes it) runs the k-NN at min_samples + 1 including the point itself; scikit-learn's kneighbors(X, min_samples) counts the point itself (its HDBSCAN Notes say so). tools/bench_board_params.py maps both to one canonical value
+
+mismatch: scikit-learn algorithm='auto', leaf_size=40, n_jobs=-1: its own; cuML build_algo at its default
+
+config: cuML benchmark (RAPIDS), HDBSCAN (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| allow_single_cluster | false |
+| alpha | 1.0 |
+| cluster_selection_epsilon | 0.0 |
+| cluster_selection_method | "eom" |
+| max_cluster_size | 0 |
+| metric | "euclidean" |
+| min_cluster_size | 100 |
+| min_samples | 10 |
+| p | null |
+| seed | "none (deterministic)" |
+
+### kde / taxi (rows full, shape 100000x11)
+
+race: done, driver rc 0, log `logs/classical.kde.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 3.8 | 3.8..3.8 | 1 | - | - | 799.7 | 436.0 | mean_log_likelihood=-14.826437, rows_without_density=0 | yes | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: bandwidth=1.0, kernel='gaussian' (the cuML benchmark's KernelDensity), metric='euclidean' on every arm; ours and scikit-learn atol=0, rtol=0, algorithm='auto', leaf_size=40, breadth_first=True. Rows: kde block: 100,000 fit rows, 2,000 queries, standardized. Timed: score_samples; the fit is before the clock on every arm.
+
+mismatch: seed: no arm has a seed argument (exact density)
+
+mismatch: cuML has no atol, rtol, algorithm, leaf_size or breadth_first (exact brute force)
+
+config: cuML benchmark (RAPIDS), KernelDensity (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| bandwidth | 1.0 |
+| kernel | "gaussian" |
+| metric | "euclidean" |
+| seed | "none (deterministic)" |
+
+### kmeans / taxi (rows full, shape 4000000x11)
+
+race: done, driver rc 0, log `logs/classical.kmeans.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 306.6 | 306.6..306.6 | 1 | - | - | 1227.4 | 614.0 | inertia=3.06e+08, n_iter=32 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-gpu | torch | gpu | opponent | 609.7 | 609.7..609.7 | 1 | - | - | 1251.1 | 438.0 | inertia=3.06e+08, n_iter=58 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic sequential seeding), tol=1e-7, metric='euclidean', Lloyd; seed 7 (ours, scikit-learn and cuML random_state=7, torch a generator seeded 7). Rows: big block: 4,000,000 taxi rows or the Istella-S train split, raw. Timed: fit (the k-means++ seeding included on every arm).
+
+mismatch: k-means++: each library draws its own start from its own generator seeded 7, so the starts differ; scikit-learn greedy k-means++ (2 + log k candidates per center), ours and cuML the sequential k-means++ of cuML (oversampling_factor=0), torch-gpu scikit-learn's greedy rule written out
+
+mismatch: tol=1e-7 on ours, scikit-learn and cuML (ours and cuML refuse 0); each library applies it through its own convergence test; torch-gpu stops by scikit-learn's (center shift <= tol x mean feature variance). n_iter is in every quality cell
+
+mismatch: algorithm: scikit-learn algorithm='lloyd'; ours and cuML have no such parameter (Lloyd); torch-gpu is written as Lloyd
+
+config: cuML benchmark (RAPIDS), KMeans (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu | torch-gpu |
+|---|---||---|---|
+| library (source) | cuml (get_params) | torch (declared) |
+| init | "k-means++" | "k-means++" |
+| max_iter | 300 | 300 |
+| metric | - | "euclidean" |
+| n_clusters | 8 | 8 |
+| n_init | 1 | 1 |
+| oversampling_factor | 0.0 | - |
+| seed | 7 | 7 |
+| tol | 1e-07 | 1e-07 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | Xq | 500000 | 2.8 | 2.8..2.8 | 1 | - | - | eval_inertia=4.571e+07, label_agreement_own_centers=1.000000 | yes | LIKE-FOR-LIKE-SPAN | ok |
+| torch-gpu | Xq | 500000 | 0.7 | 0.7..0.7 | 1 | - | - | eval_inertia=4.572e+07, label_agreement_own_centers=0.999998 | yes | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, cuml-gpu: cuml KMeans.predict(Xq on the device, output_type cupy); Xq uploaded before the clock, which ends at the device synchronize
+
+inference call, torch-gpu: torch chunked addmm(//c//^2, Xq, c.T, alpha -2).argmin over the fitted centers; Xq uploaded before the clock, which ends at the device synchronize
+
+### knn / taxi (rows full, shape 400000x11)
+
+race: done, driver rc 0, log `logs/classical.knn.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 33.3 | 33.3..33.3 | 1 | - | - | 818.1 | 452.0 | recall_at_k=0.999742, rows_with_repeated_ids=0 | yes | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok (measured this run) |
+| torch-gpu | torch | gpu | opponent | 96.5 | 96.5..96.5 | 1 | - | - | 891.5 | 3174.8 | recall_at_k=0.999773, rows_with_repeated_ids=0 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', algorithm='brute' (ours, scikit-learn, cuML); torch cdist p=2 plus topk. Rows: knn block: 400,000 index rows, 4,000 queries, raw. Timed: kneighbors; the fit (index) is before the clock on every arm.
+
+mismatch: seed: no arm has a seed argument (exact search); torch-gpu torch.manual_seed(7)
+
+mismatch: query_tile: ours only (tiling, results unchanged); n_jobs=-1: scikit-learn only
+
+config: cuML benchmark (RAPIDS), NearestNeighbors (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu | torch-gpu |
+|---|---||---|---|
+| library (source) | cuml (get_params) | torch (declared) |
+| algorithm | "brute" | "brute" |
+| metric | "euclidean" | "euclidean" |
+| n_neighbors | 64 | 64 |
+| p | 2 | 2 |
+| seed | "none (deterministic)" | 7 |
 
 ## Algorithm expansion
 
