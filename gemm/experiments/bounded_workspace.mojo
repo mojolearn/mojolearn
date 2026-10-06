@@ -13,7 +13,8 @@ from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm_workspace_m
 # Full caller qualification remains pending; incumbent defaults retained.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 # I02 AMD MI325X component WINNER, source cbcc8dcd3303 (2026-10-06):
-# retained / temporary 0.358 (0.181 / 0.504 ms), m1024/n1024/k2048.
+# retained / temporary 0.358 (0.181 / 0.504 ms), m1024/n1024/k2048;
+# neighboring m1023/n1025/k2049 also wins at 0.399.
 # One same-process warmup and score; existing identity evidence reused, not rerun.
 # Scope is a GEMM component, not a full application. No default admission.
 # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I02.
