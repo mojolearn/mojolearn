@@ -22,6 +22,18 @@
       "defines": [
         "MOJOLEARN_IDN_RAGGED_FLOAT_RADIX=1"
       ]
+    },
+    {
+      "name": "selection_control",
+      "source": "experiments/performance_ideas/I19/select_check.mojo",
+      "defines": []
+    },
+    {
+      "name": "radix_selection",
+      "source": "experiments/performance_ideas/I19/select_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RAGGED_RADIX_SELECT=1"
+      ]
     }
   ]
 }

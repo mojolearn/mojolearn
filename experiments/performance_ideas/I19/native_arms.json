@@ -61,6 +61,58 @@
         "{output}"
       ],
       "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "selection_control",
+      "source": "experiments/performance_ideas/I19/select_check.mojo",
+      "defines": [],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I19/select_check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native compile and device validation"
+    },
+    {
+      "name": "radix_selection",
+      "source": "experiments/performance_ideas/I19/select_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RAGGED_RADIX_SELECT=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I19/select_check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_RAGGED_RADIX_SELECT=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native compile and device validation"
     }
   ]
 }
