@@ -1,6 +1,11 @@
 import copy
 import unittest
+import json
+import tempfile
+import time
+from pathlib import Path
 from performance_measurement_board import build
+from performance_measurement_watch import tick
 
 
 class MeasurementBoardTest(unittest.TestCase):
@@ -38,6 +43,31 @@ class MeasurementBoardTest(unittest.TestCase):
         del cell['source_sha']
         with self.assertRaises(ValueError):
             build(self.inventory, {'cells': [cell]})
+
+    def test_watcher_preserves_manual_and_last_good_rows_on_bad_capture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = root / 'state'
+            state.mkdir()
+            inventory = root / 'inventory.json'
+            inventory.write_text(json.dumps(self.inventory))
+            source = root / 'source.json'
+            source.write_text(json.dumps({'rows': [self.cell]}))
+            index = root / 'index.json'
+            manual = {'id': 'A01', 'vendor': 'amd', 'status': 'INTERRUPTED', 'evidence': 'older-attempt'}
+            index.write_text(json.dumps({'cells': [manual]}))
+            (state / 'status.json').write_text(json.dumps({'last_notified': time.time()}))
+            config = {'index': str(index), 'inventory': str(inventory), 'sources': [{'path': str(source)}],
+                      'out': str(root / 'board'), 'notify_seconds': 999999}
+            tick(config, state)
+            self.assertEqual(len(json.loads(index.read_text())['cells']), 2)
+            source.write_text('{partial write')
+            tick(config, state)
+            self.assertEqual(len(json.loads(index.read_text())['cells']), 2)
+            self.assertTrue(json.loads((state / 'status.json').read_text())['errors'])
+            source.unlink()
+            tick(config, state)
+            self.assertEqual(len(json.loads(index.read_text())['cells']), 2)
 
 
 if __name__ == '__main__':

@@ -66,9 +66,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.7896724871075725
         },
         {
@@ -96,9 +97,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.672989010989011
         },
         {
@@ -126,9 +128,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.6103792415169661
         },
         {
@@ -156,9 +159,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8794517020945457
         },
         {
@@ -186,9 +190,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.6416673504554034
         },
         {
@@ -216,9 +221,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.6021918861757355
         },
         {
@@ -246,9 +252,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.809976100865325
         },
         {
@@ -276,9 +283,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8450558543649151
         },
         {
@@ -306,9 +314,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.6127277028625503
         },
         {
@@ -336,9 +345,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.7050887580890346
         },
         {
@@ -366,9 +376,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.1985459435607573
         },
         {
@@ -396,9 +407,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.052380042056968
         },
         {
@@ -426,9 +438,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.013039780780497
         },
         {
@@ -456,9 +469,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.1516288252714708
         },
         {
@@ -486,9 +500,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.042652329749104
         },
         {
@@ -516,9 +531,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8064215211726986
         },
         {
@@ -546,9 +562,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0488205012162697
         },
         {
@@ -576,9 +593,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0872056972134012
         },
         {
@@ -606,9 +624,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.687274669909403
         },
         {
@@ -636,9 +655,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.1670696856451965
         },
         {
@@ -666,9 +686,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0590683845391475
         },
         {
@@ -696,9 +717,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9724072834466929
         },
         {
@@ -726,9 +748,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.1763182318534027
         },
         {
@@ -756,9 +779,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.067405791118712
         },
         {
@@ -786,9 +810,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.7607098343518817
         },
         {
@@ -816,9 +841,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0254189418188666
         },
         {
@@ -846,9 +872,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9189419795221844
         },
         {
@@ -876,9 +903,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0134118185751049
         },
         {
@@ -906,9 +934,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0097014413787675
         },
         {
@@ -936,9 +965,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9695687319863926
         },
         {
@@ -966,9 +996,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0490712580642916
         },
         {
@@ -996,9 +1027,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0927472527472528
         },
         {
@@ -1026,9 +1058,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.091816367265469
         },
         {
@@ -1056,9 +1089,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.131277536425419
         },
         {
@@ -1086,9 +1120,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9928612455895627
         },
         {
@@ -1116,9 +1151,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0636223803114786
         },
         {
@@ -1146,9 +1182,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9996856690011425
         },
         {
@@ -1176,9 +1213,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0099296648738105
         },
         {
@@ -1206,9 +1244,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0183800112827792
         },
         {
@@ -1236,9 +1275,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8654736666534989
         },
         {
@@ -1266,9 +1306,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9409342102498371
         },
         {
@@ -1296,9 +1337,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9575798126553239
         },
         {
@@ -1326,9 +1368,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0877678784491278
         },
         {
@@ -1356,9 +1399,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9204343534057255
         },
         {
@@ -1386,9 +1430,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0184682135446141
         },
         {
@@ -1416,9 +1461,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0011610212289042
         },
         {
@@ -1446,9 +1492,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8702457053421583
         },
         {
@@ -1476,9 +1523,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.958304364982431
         },
         {
@@ -1506,9 +1554,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.790622136103433
         },
         {
@@ -1536,9 +1585,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0292371949879093
         },
         {
@@ -1566,9 +1616,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0019821605550048
         },
         {
@@ -1596,9 +1647,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.202592241435742
         },
         {
@@ -1626,9 +1678,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0686149662213205
         },
         {
@@ -1656,9 +1709,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.01865502938806
         },
         {
@@ -1686,9 +1740,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.03731103248633
         },
         {
@@ -1716,9 +1771,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0310487667106008
         },
         {
@@ -1746,9 +1802,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0191126279863483
         },
         {
@@ -1776,9 +1833,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.217240538583787
         },
         {
@@ -1806,9 +1864,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 2.1044866310024655
         },
         {
@@ -1836,9 +1895,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 2.0671321134201674
         }
       ],
@@ -1879,9 +1939,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.7561549496395961
         },
         {
@@ -1909,9 +1970,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9553164821391268
         },
         {
@@ -1939,9 +2001,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0786744815148783
         },
         {
@@ -1969,9 +2032,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9728098475246764
         },
         {
@@ -1999,9 +2063,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.994014160051491
         },
         {
@@ -2029,9 +2094,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9991959207687782
         },
         {
@@ -2059,9 +2125,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8588437056825302
         },
         {
@@ -2089,9 +2156,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9255350337144532
         },
         {
@@ -2119,9 +2187,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0772991407953862
         },
         {
@@ -2149,9 +2218,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8680916785246979
         },
         {
@@ -2179,9 +2249,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.00398378529494
         },
         {
@@ -2209,9 +2280,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9954954954954954
         },
         {
@@ -2239,9 +2311,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9265930837914085
         },
         {
@@ -2269,9 +2342,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0077697511094514
         },
         {
@@ -2299,9 +2373,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0230680507497114
         },
         {
@@ -2329,9 +2404,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.2174715482955294
         },
         {
@@ -2359,9 +2435,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9991305035175085
         },
         {
@@ -2389,9 +2466,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0059217702976468
         },
         {
@@ -2419,9 +2497,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8842250249991935
         },
         {
@@ -2449,9 +2528,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0977370931888002
         },
         {
@@ -2479,9 +2559,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.1336226151698465
         }
       ],
@@ -2522,9 +2603,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.248212527584451
         },
         {
@@ -2552,9 +2634,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0568771280363793
         },
         {
@@ -2582,9 +2665,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0058505850585058
         },
         {
@@ -2612,9 +2696,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.1740688223434133
         },
         {
@@ -2642,9 +2727,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0378652904916958
         },
         {
@@ -2672,9 +2758,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9757313707451701
         },
         {
@@ -2702,9 +2789,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9990006981939171
         },
         {
@@ -2732,9 +2820,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9603244837758113
         },
         {
@@ -2762,9 +2851,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.1662623091194522
         },
         {
@@ -2792,9 +2882,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.1383655240251402
         },
         {
@@ -2822,9 +2913,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9977894381682587
         },
         {
@@ -2852,9 +2944,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0147701268982732
         },
         {
@@ -2882,9 +2975,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9893371803611344
         },
         {
@@ -2912,9 +3006,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0066093083518945
         },
         {
@@ -2942,9 +3037,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0222142343637672
         },
         {
@@ -2972,9 +3068,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0918095898169893
         },
         {
@@ -3002,9 +3099,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0345098655766056
         },
         {
@@ -3032,9 +3130,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9971483771251933
         },
         {
@@ -3062,9 +3161,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8842048534163041
         },
         {
@@ -3092,9 +3192,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9940551803780784
         },
         {
@@ -3122,9 +3223,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9840668955230074
         },
         {
@@ -3152,9 +3254,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0384586657613308
         },
         {
@@ -3182,9 +3285,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9893969516235918
         },
         {
@@ -3212,9 +3316,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.058190819081908
         },
         {
@@ -3242,9 +3347,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.00172840025158
         },
         {
@@ -3272,9 +3378,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0136593557371343
         },
         {
@@ -3302,9 +3409,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0582520699172033
         },
         {
@@ -3332,9 +3440,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.116095910390292
         },
         {
@@ -3362,9 +3471,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8983038348082596
         },
         {
@@ -3392,9 +3502,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9663907521050379
         },
         {
@@ -3422,9 +3533,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8685712065637576
         },
         {
@@ -3452,9 +3564,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0031762283161336
         },
         {
@@ -3482,9 +3595,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0140732265446224
         },
         {
@@ -3512,9 +3626,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.1302097369964648
         },
         {
@@ -3542,9 +3657,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0217495741800235
         },
         {
@@ -3572,9 +3688,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0186340762041697
         },
         {
@@ -3602,9 +3719,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.8910600168027827
         },
         {
@@ -3632,9 +3750,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9894033487933339
         },
         {
@@ -3662,9 +3781,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.995919629057187
         },
         {
@@ -3692,9 +3812,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.868482726868823
         },
         {
@@ -3722,9 +3843,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9807094620038661
         },
         {
@@ -3752,9 +3874,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.9298560694960935
         }
       ],
@@ -3807,9 +3930,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 2.5125822407914327
         },
         {
@@ -3837,9 +3961,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 3.0126153387175822
         },
         {
@@ -3867,9 +3992,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 3.04894596559244
         },
         {
@@ -3897,9 +4023,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.6995663506638707
         },
         {
@@ -3927,9 +4054,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 10.240452065471551
         },
         {
@@ -3957,9 +4085,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 9.296819442816394
         },
         {
@@ -3987,9 +4116,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 4.192202613533869
         },
         {
@@ -4017,9 +4147,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 28.711232122179446
         },
         {
@@ -4047,9 +4178,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 25.773935577351757
         },
         {
@@ -4077,9 +4209,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.0720035011976963
         },
         {
@@ -4107,9 +4240,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.6579031399680682
         },
         {
@@ -4137,9 +4271,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.433804420976342
         },
         {
@@ -4167,9 +4302,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.7228565098819904
         },
         {
@@ -4197,9 +4333,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 7.414303471800654
         },
         {
@@ -4227,9 +4364,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 6.9426116934805755
         },
         {
@@ -4257,9 +4395,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 4.343689372420815
         },
         {
@@ -4287,9 +4426,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 14.774424310050978
         },
         {
@@ -4317,9 +4457,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 15.151526239169188
         },
         {
@@ -4347,9 +4488,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 0.98105419111302
         },
         {
@@ -4377,9 +4519,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.629142246774535
         },
         {
@@ -4407,9 +4550,10 @@
           "warmup_scope": "separate_process",
           "limitation": "First-call component timing; fresh DeviceContext in scored process may include JIT; no steady-state/full-caller promotion",
           "baseline_machine": "DigitalOcean-606508222-MI325X",
-          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_machine": "DigitalOcean-606508222-MI325X",
+          "baseline_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
           "candidate_source_sha": "c58945cd08380400c7b0276945c480efa0fc5398",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json",
           "candidate_over_baseline": 1.6246009918462758
         }
       ],

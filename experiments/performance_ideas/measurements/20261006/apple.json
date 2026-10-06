@@ -134,8 +134,25 @@
       "vendors": [
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "F01",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F01/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('B warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F01/default/B-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        }
+      ],
+      "status": "FAILED"
     },
     {
       "id": "F02",
@@ -144,8 +161,387 @@
       "vendors": [
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "cholesky",
+          "case": "cholesky",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/cholesky/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('B warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F02/cholesky/B-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/257/solve_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.118084,
+          "candidate_ms": 5.814458,
+          "artifact_hashes": {
+            "baseline": "4ca2b8950ac79d8c02198423c57e20b5d0a70289f3992089bb3a54e3aebedbf7",
+            "candidate": "dba340d80184b330e75a85a81a3ee55a76b8f6194c73c03e5ae15b96609e561e"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175",
+            "B": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.41193283089903
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/257/factor_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 42.739709,
+          "candidate_ms": 68.47,
+          "artifact_hashes": {
+            "baseline": "4ca2b8950ac79d8c02198423c57e20b5d0a70289f3992089bb3a54e3aebedbf7",
+            "candidate": "dba340d80184b330e75a85a81a3ee55a76b8f6194c73c03e5ae15b96609e561e"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175",
+            "B": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.6020230741393209
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/319/solve_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 2.093833,
+          "candidate_ms": 2.578792,
+          "artifact_hashes": {
+            "baseline": "4ca2b8950ac79d8c02198423c57e20b5d0a70289f3992089bb3a54e3aebedbf7",
+            "candidate": "dba340d80184b330e75a85a81a3ee55a76b8f6194c73c03e5ae15b96609e561e"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175",
+            "B": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.2316130273999883
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/319/factor_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 14.159083,
+          "candidate_ms": 15.129541,
+          "artifact_hashes": {
+            "baseline": "4ca2b8950ac79d8c02198423c57e20b5d0a70289f3992089bb3a54e3aebedbf7",
+            "candidate": "dba340d80184b330e75a85a81a3ee55a76b8f6194c73c03e5ae15b96609e561e"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175",
+            "B": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0685396081088019
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/513/solve_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 2.80975,
+          "candidate_ms": 2.795167,
+          "artifact_hashes": {
+            "baseline": "4ca2b8950ac79d8c02198423c57e20b5d0a70289f3992089bb3a54e3aebedbf7",
+            "candidate": "dba340d80184b330e75a85a81a3ee55a76b8f6194c73c03e5ae15b96609e561e"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175",
+            "B": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9948098585283388
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/513/factor_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 24.368875,
+          "candidate_ms": 25.442584,
+          "artifact_hashes": {
+            "baseline": "4ca2b8950ac79d8c02198423c57e20b5d0a70289f3992089bb3a54e3aebedbf7",
+            "candidate": "dba340d80184b330e75a85a81a3ee55a76b8f6194c73c03e5ae15b96609e561e"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175",
+            "B": "05b4dd48a17dd1b5eb95750c70307b45cf8a8175"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0440606716559546
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "mcd",
+          "case": "mcd",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/mcd/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('A warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F02/mcd/A-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "pca",
+          "case": "pca",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/pca/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('B warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F02/pca/B-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "sdk",
+          "case": "sdk/1-509-37-129-0/call_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/sdk/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 20.580542,
+          "candidate_ms": 20.420917,
+          "artifact_hashes": {
+            "baseline": "3f1b45ad511e23990b7a5182819f64e55257b578dd60cdd50d149151a51ebdad",
+            "candidate": "deb9f4e2dc1f0d0b999f280c133f0414ad7bcc1bedfffb8967dddabd9f7199b3"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9922438874544702
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "sdk",
+          "case": "sdk/1-137-137-521-1/call_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/sdk/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 0.706667,
+          "candidate_ms": 0.692542,
+          "artifact_hashes": {
+            "baseline": "3f1b45ad511e23990b7a5182819f64e55257b578dd60cdd50d149151a51ebdad",
+            "candidate": "deb9f4e2dc1f0d0b999f280c133f0414ad7bcc1bedfffb8967dddabd9f7199b3"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9800118018812255
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "sdk",
+          "case": "sdk/2-521-31-133-0/call_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/sdk/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 0.527167,
+          "candidate_ms": 0.692875,
+          "artifact_hashes": {
+            "baseline": "3f1b45ad511e23990b7a5182819f64e55257b578dd60cdd50d149151a51ebdad",
+            "candidate": "deb9f4e2dc1f0d0b999f280c133f0414ad7bcc1bedfffb8967dddabd9f7199b3"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.3143368230560712
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "sdk",
+          "case": "sdk/2-509-41-131-0/call_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/sdk/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 0.690708,
+          "candidate_ms": 0.48225,
+          "artifact_hashes": {
+            "baseline": "3f1b45ad511e23990b7a5182819f64e55257b578dd60cdd50d149151a51ebdad",
+            "candidate": "deb9f4e2dc1f0d0b999f280c133f0414ad7bcc1bedfffb8967dddabd9f7199b3"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6981966330200317
+        },
+        {
+          "id": "F02",
+          "vendor": "apple",
+          "route": "sdk",
+          "case": "sdk/2-17-1-67-0/call_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/sdk/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 0.41175,
+          "candidate_ms": 0.63,
+          "artifact_hashes": {
+            "baseline": "3f1b45ad511e23990b7a5182819f64e55257b578dd60cdd50d149151a51ebdad",
+            "candidate": "deb9f4e2dc1f0d0b999f280c133f0414ad7bcc1bedfffb8967dddabd9f7199b3"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.530054644808743
+        }
+      ],
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "F03",
@@ -154,8 +550,69 @@
       "vendors": [
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "F03",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/cold-and-repeated-session/train_step_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F03/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 480.1115,
+          "candidate_ms": 246.058168,
+          "artifact_hashes": {
+            "baseline": "13980c9d213170ef6467db93d76dc06c217a75c14be3017052e6dfdaa98a3588",
+            "candidate": "13980c9d213170ef6467db93d76dc06c217a75c14be3017052e6dfdaa98a3588"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.5125021333586053
+        },
+        {
+          "id": "F03",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/alternate-vocabulary-shape/train_step_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F03/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 420.982753,
+          "candidate_ms": 234.260624,
+          "artifact_hashes": {
+            "baseline": "13980c9d213170ef6467db93d76dc06c217a75c14be3017052e6dfdaa98a3588",
+            "candidate": "13980c9d213170ef6467db93d76dc06c217a75c14be3017052e6dfdaa98a3588"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.556461333227112
+        }
+      ],
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "F04",
@@ -164,8 +621,25 @@
       "vendors": [
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "F04",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F04/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('A warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F04/default/A-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        }
+      ],
+      "status": "FAILED"
     },
     {
       "id": "F05",
@@ -174,8 +648,25 @@
       "vendors": [
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "F05",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F05/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('A warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F05/default/A-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        }
+      ],
+      "status": "FAILED"
     },
     {
       "id": "F06",
@@ -184,8 +675,73 @@
       "vendors": [
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "F06",
+          "vendor": "apple",
+          "route": "active_compact",
+          "case": "active_compact",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F06/active_compact/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('A warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F06/active_compact/A-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        },
+        {
+          "id": "F06",
+          "vendor": "apple",
+          "route": "active_cov",
+          "case": "active_cov",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F06/active_cov/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('A warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F06/active_cov/A-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        },
+        {
+          "id": "F06",
+          "vendor": "apple",
+          "route": "cov_reuse",
+          "case": "cov_reuse",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F06/cov_reuse/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('A warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F06/cov_reuse/A-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        },
+        {
+          "id": "F06",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F06/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('A warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F06/default/A-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        }
+      ],
+      "status": "FAILED"
     },
     {
       "id": "F07",
@@ -194,8 +750,189 @@
       "vendors": [
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "F07",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/L17-KV4/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F07/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 154.190792,
+          "candidate_ms": 27.017917,
+          "artifact_hashes": {
+            "baseline": "d7cdfe65d64dd7b6753680b562a79e7a5ce3200b37ecd65a0b6927c0053f2e42",
+            "candidate": "bd07ddd6da5ffc92d5c20f46f5cdca277c1f5a873e58cbb9d35d461bd061fd9f"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.17522393295703417
+        },
+        {
+          "id": "F07",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/L129-KV1/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F07/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.839291,
+          "candidate_ms": 5.239583,
+          "artifact_hashes": {
+            "baseline": "d7cdfe65d64dd7b6753680b562a79e7a5ce3200b37ecd65a0b6927c0053f2e42",
+            "candidate": "bd07ddd6da5ffc92d5c20f46f5cdca277c1f5a873e58cbb9d35d461bd061fd9f"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.8972978055041271
+        },
+        {
+          "id": "F07",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/L513-KV2/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F07/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 8.087,
+          "candidate_ms": 6.289333,
+          "artifact_hashes": {
+            "baseline": "d7cdfe65d64dd7b6753680b562a79e7a5ce3200b37ecd65a0b6927c0053f2e42",
+            "candidate": "bd07ddd6da5ffc92d5c20f46f5cdca277c1f5a873e58cbb9d35d461bd061fd9f"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.777709039198714
+        },
+        {
+          "id": "F07",
+          "vendor": "apple",
+          "route": "gqa",
+          "case": "gqa/L17-KV4/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F07/gqa/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 26.965416,
+          "candidate_ms": 74.223375,
+          "artifact_hashes": {
+            "baseline": "d7cdfe65d64dd7b6753680b562a79e7a5ce3200b37ecd65a0b6927c0053f2e42",
+            "candidate": "6556ade8a06e2469398fb34ae49f2e7d81773b4a6fc5eb4cb1a07d023d72cfb2"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 2.7525395862611575
+        },
+        {
+          "id": "F07",
+          "vendor": "apple",
+          "route": "gqa",
+          "case": "gqa/L129-KV1/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F07/gqa/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 7.098042,
+          "candidate_ms": 5.023375,
+          "artifact_hashes": {
+            "baseline": "d7cdfe65d64dd7b6753680b562a79e7a5ce3200b37ecd65a0b6927c0053f2e42",
+            "candidate": "6556ade8a06e2469398fb34ae49f2e7d81773b4a6fc5eb4cb1a07d023d72cfb2"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.7077127748750993
+        },
+        {
+          "id": "F07",
+          "vendor": "apple",
+          "route": "gqa",
+          "case": "gqa/L513-KV2/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F07/gqa/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 6.733708,
+          "candidate_ms": 6.116416,
+          "artifact_hashes": {
+            "baseline": "d7cdfe65d64dd7b6753680b562a79e7a5ce3200b37ecd65a0b6927c0053f2e42",
+            "candidate": "6556ade8a06e2469398fb34ae49f2e7d81773b4a6fc5eb4cb1a07d023d72cfb2"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9083280712498968
+        }
+      ],
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "F08",
@@ -204,8 +941,99 @@
       "vendors": [
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "F08",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/train-checkpoint-refusal/train_step_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F08/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 246.495289,
+          "candidate_ms": 216.079586,
+          "artifact_hashes": {
+            "baseline": "13980c9d213170ef6467db93d76dc06c217a75c14be3017052e6dfdaa98a3588",
+            "candidate": "bf8d39aa67e208a5d3206ee2e87bbd26c29da6dcf48f7384f6133a680fd4a360"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.8766073659119709
+        },
+        {
+          "id": "F08",
+          "vendor": "apple",
+          "route": "fused",
+          "case": "fused/train-checkpoint-refusal/train_step_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F08/fused/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 247.668125,
+          "candidate_ms": 235.133833,
+          "artifact_hashes": {
+            "baseline": "13980c9d213170ef6467db93d76dc06c217a75c14be3017052e6dfdaa98a3588",
+            "candidate": "9477153c2f3fd7a87a44371e8d44ca74461391c096323175db53d4c31efd5c83"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.94939077444867
+        },
+        {
+          "id": "F08",
+          "vendor": "apple",
+          "route": "views",
+          "case": "views/train-checkpoint-refusal/train_step_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F08/views/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 246.36375,
+          "candidate_ms": 240.573332,
+          "artifact_hashes": {
+            "baseline": "13980c9d213170ef6467db93d76dc06c217a75c14be3017052e6dfdaa98a3588",
+            "candidate": "f40cb123ae02c5651dc20128e2049922158ec07e14d7700f0e7b1eede9d76d91"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9764964691436949
+        }
+      ],
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "F09",
@@ -214,8 +1042,25 @@
       "vendors": [
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "F09",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default",
+          "status": "FAILED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F09/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 1,
+          "error": "RuntimeError('A warmup FAILED; /Volumes/MojoPerfBuild20261005/performance-20261005/ab-20261006/results/F09/default/A-warmup.log')",
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+        }
+      ],
+      "status": "FAILED"
     },
     {
       "id": "F10",
@@ -224,8 +1069,2229 @@
       "vendors": [
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_a_near_zero_b3_l64_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 30.885458,
+          "candidate_ms": 24.910125,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.8065324788125208
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_a_near_zero_b3_l64_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 23.767833,
+          "candidate_ms": 14.705917,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6187319222581209
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_a_near_zero_b3_l64_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 7.378917,
+          "candidate_ms": 5.3535,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.7255129716190059
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_dt_limit_b2_l8_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.849958,
+          "candidate_ms": 3.721541,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6361654220423463
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_dt_limit_b2_l8_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 18.853959,
+          "candidate_ms": 12.747041,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6760935992276211
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_dt_limit_b2_l8_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.682667,
+          "candidate_ms": 3.565333,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.7613893962564495
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_gate_saturation_b1_l8_d64/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.401459,
+          "candidate_ms": 3.026666,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6876506176701862
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_gate_saturation_b1_l8_d64/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 17.684085,
+          "candidate_ms": 10.676626,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6037420652524572
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_gate_saturation_b1_l8_d64/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.361125,
+          "candidate_ms": 2.630791,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6032367795007022
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_signed_zeros_b2_l8_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.441167,
+          "candidate_ms": 2.657875,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.5984631967228434
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_signed_zeros_b2_l8_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 16.889791000000002,
+          "candidate_ms": 10.6685,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6316537605468296
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_signed_zeros_b2_l8_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.23275,
+          "candidate_ms": 2.626,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6204004488807512
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_softplus_band_b2_l8_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.258084,
+          "candidate_ms": 2.715708,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6377769907780119
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_softplus_band_b2_l8_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 17.674082,
+          "candidate_ms": 10.741959999999999,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6077803644907838
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_adv_softplus_band_b2_l8_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.166916,
+          "candidate_ms": 2.613875,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.627292462819025
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b1_l1_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.120292,
+          "candidate_ms": 2.443583,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.5930606374499671
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b1_l256_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.0715,
+          "candidate_ms": 3.42075,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6745045844424726
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b1_l256_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 18.352334,
+          "candidate_ms": 11.621292,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6332323725145805
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b1_l256_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.127667,
+          "candidate_ms": 3.288459,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6413168015785737
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b1_l257_d64/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 9.019584,
+          "candidate_ms": 7.653083,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.8484962277639412
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b1_l257_d64/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 16.667251,
+          "candidate_ms": 11.978291,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.718672263350447
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b1_l257_d64/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.919167,
+          "candidate_ms": 3.621833,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.7362695757228815
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b2_l4_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 3.886,
+          "candidate_ms": 2.637542,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6787292846114256
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b2_l4_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 11.872292,
+          "candidate_ms": 7.927709,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6677488222156261
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b2_l4_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 3.793875,
+          "candidate_ms": 2.607292,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6872371915258148
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b3_l4_d64/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.294917,
+          "candidate_ms": 3.129875,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.5911093601656079
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b3_l4_d64/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 13.961166,
+          "candidate_ms": 8.468583,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6065813557406309
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_base_b3_l4_d64/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.066792,
+          "candidate_ms": 2.796167,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.5518614144807996
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_comp_b2_l257_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.151625,
+          "candidate_ms": 3.249917,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6308527891684662
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_comp_b2_l257_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 17.17775,
+          "candidate_ms": 10.25325,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.5968913274439318
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_comp_b2_l257_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.909875,
+          "candidate_ms": 3.219583,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.6557362458311057
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_comp_row0_b1_l257_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.704208,
+          "candidate_ms": 2.677209,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.5691094016250982
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_comp_row0_b1_l257_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 16.4855,
+          "candidate_ms": 9.058042,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.5494550969033394
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_comp_row0_b1_l257_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.388125,
+          "candidate_ms": 2.566083,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.5847789203817121
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_comp_row1_b1_l257_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.148125,
+          "candidate_ms": 2.557291,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.4967422119703776
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_comp_row1_b1_l257_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 15.682875,
+          "candidate_ms": 8.905916999999999,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.5678752779703976
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "arena",
+          "case": "arena/m2_comp_row1_b1_l257_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/arena/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.263709,
+          "candidate_ms": 2.509708,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "159f2e2e9fd7dc6326003be19f74fbdcd236c429e46bd84ea7a6e5145d0854bb"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.47679459483797443
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_a_near_zero_b3_l64_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 27.63175,
+          "candidate_ms": 63.37325,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 2.29349389741873
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_a_near_zero_b3_l64_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 24.242,
+          "candidate_ms": 24.823418,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0239839122184637
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_a_near_zero_b3_l64_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 7.039042,
+          "candidate_ms": 7.509625,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0668532734994336
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_dt_limit_b2_l8_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.969958,
+          "candidate_ms": 4.910416,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9880196170671864
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_dt_limit_b2_l8_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 19.456916999999997,
+          "candidate_ms": 18.502291,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9509364201944225
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_dt_limit_b2_l8_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.577708,
+          "candidate_ms": 5.825208,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.2725162898114077
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_gate_saturation_b1_l8_d64/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.473917,
+          "candidate_ms": 4.493584,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0043959241979679
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_gate_saturation_b1_l8_d64/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 17.637207,
+          "candidate_ms": 17.908957,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.01540776836151
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_gate_saturation_b1_l8_d64/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.430166,
+          "candidate_ms": 4.552708,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.027660814515754
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_signed_zeros_b2_l8_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.531792,
+          "candidate_ms": 4.568292,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0080542090193017
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_signed_zeros_b2_l8_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 17.975,
+          "candidate_ms": 18.417208000000002,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0246012795549375
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_signed_zeros_b2_l8_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.436792,
+          "candidate_ms": 4.550125,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0255439064982088
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_softplus_band_b2_l8_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.557875,
+          "candidate_ms": 4.591375,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.007349916353564
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_softplus_band_b2_l8_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 17.961083000000002,
+          "candidate_ms": 18.358249,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0221125864180907
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_adv_softplus_band_b2_l8_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.4735,
+          "candidate_ms": 4.486084,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0028130099474686
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b1_l1_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.148959,
+          "candidate_ms": 4.216,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.016158511086757
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b1_l256_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.129458,
+          "candidate_ms": 4.9995,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9746643797453846
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b1_l256_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 18.815998999999998,
+          "candidate_ms": 18.501834000000002,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9833033048099122
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b1_l256_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.225459,
+          "candidate_ms": 4.895,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.936759813826881
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b1_l257_d64/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 9.516667,
+          "candidate_ms": 9.163791,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9629202114563848
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b1_l257_d64/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 18.787292,
+          "candidate_ms": 17.547209,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9339935207266699
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b1_l257_d64/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.604459,
+          "candidate_ms": 5.197542,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9273940624777521
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b2_l4_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.128042,
+          "candidate_ms": 4.1775,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.011980982751629
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b2_l4_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 12.242,
+          "candidate_ms": 12.252625,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.000867913739585
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b2_l4_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.067459,
+          "candidate_ms": 4.283709,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0531658708790916
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b3_l4_d64/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.833208,
+          "candidate_ms": 4.906292,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.015121219695076
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b3_l4_d64/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 14.136208,
+          "candidate_ms": 13.963375,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9877737367758029
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_base_b3_l4_d64/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.601541,
+          "candidate_ms": 4.649458,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0104132506914532
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_comp_b2_l257_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.103333,
+          "candidate_ms": 5.998209,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.1753512851307175
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_comp_b2_l257_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 17.350417,
+          "candidate_ms": 17.713207,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0209095839022198
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_comp_b2_l257_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.003875,
+          "candidate_ms": 5.635708,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.1262687417251631
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_comp_row0_b1_l257_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.538625,
+          "candidate_ms": 4.433625,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9768652400231349
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_comp_row0_b1_l257_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 18.357168,
+          "candidate_ms": 17.330126,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9440522633992345
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_comp_row0_b1_l257_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 4.410292,
+          "candidate_ms": 5.19875,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.1787768247544608
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_comp_row1_b1_l257_d32/forward_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.216666,
+          "candidate_ms": 4.406167,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.8446327596974773
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_comp_row1_b1_l257_d32/decode_ms_trajectory_total",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 16.640541,
+          "candidate_ms": 16.088791,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9668430251155898
+        },
+        {
+          "id": "F10",
+          "vendor": "apple",
+          "route": "default",
+          "case": "default/m2_comp_row1_b1_l257_d32/prefix_ms",
+          "status": "MEASURED",
+          "scope": "public_caller_component",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F10/default/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 5.153333,
+          "candidate_ms": 4.282542,
+          "artifact_hashes": {
+            "baseline": "f396889faa9bbfd3d8e89be034f6fb0e8dc3d02ddb53ed56075660c4d7a49918",
+            "candidate": "5c4752055a7ab9a39a745f9c727590a591d466305aa3539787631ee76ce03ab5"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "candidate_source_sha": "67d0efb29881b46e289e885156d37bb01105e2f1",
+          "artifact_source_shas": {
+            "A": "c58945cd08380400c7b0276945c480efa0fc5398",
+            "B": "c58945cd08380400c7b0276945c480efa0fc5398"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.8310237277505647
+        }
+      ],
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "F11",
