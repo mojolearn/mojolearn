@@ -29,7 +29,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I14 | identical | PENDING_MEASUREMENT | 0 |
 | I15 | identical | NO_DISTINCT_RUNTIME_ARM | 0 |
 | I16 | identical | PARTIAL_MEASUREMENTS_RETAINED | 9 |
-| I17 | identical | PARTIAL_MEASUREMENTS_RETAINED | 6 |
+| I17 | identical | PARTIAL_MEASUREMENTS_RETAINED | 9 |
 | I18 | identical | PARTIAL_MEASUREMENTS_RETAINED | 3 |
 | I19 | identical | PARTIAL_MEASUREMENTS_RETAINED | 3 |
 | I20 | identical | PARTIAL_MEASUREMENTS_RETAINED | 4 |
@@ -564,11 +564,11 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I17 | nvidia/default | I17-candidate-5b467815b5-shape819eba2f1c/case1 | public_caller_component | MEASURED | 1.1107 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
 | I17 | nvidia/default | I17-candidate-5b467815b5-shape2f5eb1267c/case0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
 | I17 | nvidia/default | I17-candidate-5b467815b5-shape2f5eb1267c/case1 | public_caller_component | MEASURED | 1.1162 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
-| I17 | nvidia/default | I17-inherit_off-5b467815b5-shape091555ee29/case0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
+| I17 | nvidia/default | I17-inherit_off-5b467815b5-shape091555ee29/case0 | public_caller_component | MEASURED | 1.1178 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
 | I17 | nvidia/default | I17-inherit_off-5b467815b5-shape091555ee29/case1 | public_caller_component | MEASURED | 0.9967 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
-| I17 | nvidia/default | I17-inherit_off-5b467815b5-shape819eba2f1c/case0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
+| I17 | nvidia/default | I17-inherit_off-5b467815b5-shape819eba2f1c/case0 | public_caller_component | MEASURED | 1.0639 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
 | I17 | nvidia/default | I17-inherit_off-5b467815b5-shape819eba2f1c/case1 | public_caller_component | MEASURED | 0.9918 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
-| I17 | nvidia/default | I17-inherit_off-5b467815b5-shape2f5eb1267c/case0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
+| I17 | nvidia/default | I17-inherit_off-5b467815b5-shape2f5eb1267c/case0 | public_caller_component | MEASURED | 1.1061 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
 | I17 | nvidia/default | I17-inherit_off-5b467815b5-shape2f5eb1267c/case1 | public_caller_component | MEASURED | 0.9991 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
 | I18 | nvidia/default | I18-candidate-5b467815b5-shape6fc59339f5/case0 | public_caller_component | MEASURED | 0.9691 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |
 | I18 | nvidia/default | I18-candidate-5b467815b5-shapecd30427c19/case0 | public_caller_component | MEASURED | 0.9763 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/45a3229f796af308b15639961852a63dbfe1ac91553818cd9a786339f5e5aaf3.json |

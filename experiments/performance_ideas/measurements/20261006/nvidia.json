@@ -15564,12 +15564,18 @@
           "warmups": 1,
           "scored_samples": 1,
           "warmup_scope": "same_process",
-          "status": "NO_DISTINCT_RUNTIME_ARM",
+          "status": "MEASURED",
           "returncode": 0,
-          "limitation": "Resident frontier switch affects Lossguide only; Depthwise has same runtime route. Raw timing preserved.",
+          "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
           "promotion": false,
-          "policy": "Depthwise",
-          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+          "artifact_hashes": {
+            "baseline": "f4c05332f32c7a61ccb36f5f4e2d1750b15d7fbe6248386a18269aa91202ca44",
+            "candidate": "5b64c893206382fa0098f774925fc87bfaf20d790a6850b6dc703151209d5cf6"
+          },
+          "baseline_ms": 9.865096,
+          "candidate_ms": 11.027248,
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json",
+          "candidate_over_baseline": 1.11780442886719
         },
         {
           "effective_environment": {
@@ -15624,12 +15630,18 @@
           "warmups": 1,
           "scored_samples": 1,
           "warmup_scope": "same_process",
-          "status": "NO_DISTINCT_RUNTIME_ARM",
+          "status": "MEASURED",
           "returncode": 0,
-          "limitation": "Resident frontier switch affects Lossguide only; Depthwise has same runtime route. Raw timing preserved.",
+          "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
           "promotion": false,
-          "policy": "Depthwise",
-          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+          "artifact_hashes": {
+            "baseline": "f4c05332f32c7a61ccb36f5f4e2d1750b15d7fbe6248386a18269aa91202ca44",
+            "candidate": "5b64c893206382fa0098f774925fc87bfaf20d790a6850b6dc703151209d5cf6"
+          },
+          "baseline_ms": 10.463578,
+          "candidate_ms": 11.13233,
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json",
+          "candidate_over_baseline": 1.0639123634382044
         },
         {
           "effective_environment": {
@@ -15684,12 +15696,18 @@
           "warmups": 1,
           "scored_samples": 1,
           "warmup_scope": "same_process",
-          "status": "NO_DISTINCT_RUNTIME_ARM",
+          "status": "MEASURED",
           "returncode": 0,
-          "limitation": "Resident frontier switch affects Lossguide only; Depthwise has same runtime route. Raw timing preserved.",
+          "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
           "promotion": false,
-          "policy": "Depthwise",
-          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+          "artifact_hashes": {
+            "baseline": "f4c05332f32c7a61ccb36f5f4e2d1750b15d7fbe6248386a18269aa91202ca44",
+            "candidate": "5b64c893206382fa0098f774925fc87bfaf20d790a6850b6dc703151209d5cf6"
+          },
+          "baseline_ms": 9.614982,
+          "candidate_ms": 10.63468,
+          "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json",
+          "candidate_over_baseline": 1.1060530326525833
         },
         {
           "effective_environment": {

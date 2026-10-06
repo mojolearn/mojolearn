@@ -8680,6 +8680,186 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"17\", \"AB_ROWS\": \"10000\"}/{\"features\": 17, \"policy\": \"Depthwise\", \"rows\": 10000}/legacy_both_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "1fbc9ff9aea7dbd745ac24c62c1567926634c19f407da0ed0b281fe42b36ad6c"
+      },
+      "baseline_ms": 18.847639,
+      "candidate_ms": 20.571938,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "legacy_both_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"17\", \"AB_ROWS\": \"10000\"}/{\"features\": 17, \"policy\": \"Lossguide\", \"rows\": 10000}/legacy_both_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "1fbc9ff9aea7dbd745ac24c62c1567926634c19f407da0ed0b281fe42b36ad6c"
+      },
+      "baseline_ms": 20.934902,
+      "candidate_ms": 43.017705,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "legacy_both_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"18\", \"AB_ROWS\": \"10001\"}/{\"features\": 18, \"policy\": \"Depthwise\", \"rows\": 10001}/legacy_both_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "1fbc9ff9aea7dbd745ac24c62c1567926634c19f407da0ed0b281fe42b36ad6c"
+      },
+      "baseline_ms": 16.793925,
+      "candidate_ms": 21.931018,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "legacy_both_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"18\", \"AB_ROWS\": \"10001\"}/{\"features\": 18, \"policy\": \"Lossguide\", \"rows\": 10001}/legacy_both_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "1fbc9ff9aea7dbd745ac24c62c1567926634c19f407da0ed0b281fe42b36ad6c"
+      },
+      "baseline_ms": 17.612686,
+      "candidate_ms": 44.168208,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "legacy_both_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"9\", \"AB_ROWS\": \"32769\"}/{\"features\": 9, \"policy\": \"Depthwise\", \"rows\": 32769}/legacy_both_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "1fbc9ff9aea7dbd745ac24c62c1567926634c19f407da0ed0b281fe42b36ad6c"
+      },
+      "baseline_ms": 18.545676,
+      "candidate_ms": 21.320261,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "legacy_both_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"9\", \"AB_ROWS\": \"32769\"}/{\"features\": 9, \"policy\": \"Lossguide\", \"rows\": 32769}/legacy_both_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "1fbc9ff9aea7dbd745ac24c62c1567926634c19f407da0ed0b281fe42b36ad6c"
+      },
+      "baseline_ms": 21.36523,
+      "candidate_ms": 45.034559,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "legacy_both_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
       "id": "N01",
       "vendor": "nvidia",
       "route": "specific",
@@ -63717,11 +63897,16 @@
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
-      "status": "NO_DISTINCT_RUNTIME_ARM",
+      "status": "MEASURED",
       "returncode": 0,
-      "limitation": "Resident frontier switch affects Lossguide only; Depthwise has same runtime route. Raw timing preserved.",
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
       "promotion": false,
-      "policy": "Depthwise",
+      "artifact_hashes": {
+        "baseline": "f4c05332f32c7a61ccb36f5f4e2d1750b15d7fbe6248386a18269aa91202ca44",
+        "candidate": "5b64c893206382fa0098f774925fc87bfaf20d790a6850b6dc703151209d5cf6"
+      },
+      "baseline_ms": 9.865096,
+      "candidate_ms": 11.027248,
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
@@ -63776,11 +63961,16 @@
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
-      "status": "NO_DISTINCT_RUNTIME_ARM",
+      "status": "MEASURED",
       "returncode": 0,
-      "limitation": "Resident frontier switch affects Lossguide only; Depthwise has same runtime route. Raw timing preserved.",
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
       "promotion": false,
-      "policy": "Depthwise",
+      "artifact_hashes": {
+        "baseline": "f4c05332f32c7a61ccb36f5f4e2d1750b15d7fbe6248386a18269aa91202ca44",
+        "candidate": "5b64c893206382fa0098f774925fc87bfaf20d790a6850b6dc703151209d5cf6"
+      },
+      "baseline_ms": 10.463578,
+      "candidate_ms": 11.13233,
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
@@ -63835,11 +64025,16 @@
       "warmups": 1,
       "scored_samples": 1,
       "warmup_scope": "same_process",
-      "status": "NO_DISTINCT_RUNTIME_ARM",
+      "status": "MEASURED",
       "returncode": 0,
-      "limitation": "Resident frontier switch affects Lossguide only; Depthwise has same runtime route. Raw timing preserved.",
+      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
       "promotion": false,
-      "policy": "Depthwise",
+      "artifact_hashes": {
+        "baseline": "f4c05332f32c7a61ccb36f5f4e2d1750b15d7fbe6248386a18269aa91202ca44",
+        "candidate": "5b64c893206382fa0098f774925fc87bfaf20d790a6850b6dc703151209d5cf6"
+      },
+      "baseline_ms": 9.614982,
+      "candidate_ms": 10.63468,
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
     },
     {
@@ -63940,28 +64135,28 @@
   ],
   "capture_sources": {
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json": {
-      "sha256": "f6fca4c53ad962e8940e4af34030d3a097a1499997566da2ec41c4712c8dc4c2",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-f6fca4c53ad962e8940e4af34030d3a097a1499997566da2ec41c4712c8dc4c2.json"
+      "sha256": "d67f72db7ec36b60d4b62ba1f5802aff142bdeacd5a575bcbaef785da7a6d57e",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-d67f72db7ec36b60d4b62ba1f5802aff142bdeacd5a575bcbaef785da7a6d57e.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-normalized-measurements.json": {
-      "sha256": "1e68b59c059119c848d41a394825abd569ffeafa98e202abdb1c0200067b737d",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-1e68b59c059119c848d41a394825abd569ffeafa98e202abdb1c0200067b737d.json"
+      "sha256": "2f7f32e13a176504c26bfaf2dda5312a2a7fdd61d9a26aa51667d7cc1799c1c5",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-2f7f32e13a176504c26bfaf2dda5312a2a7fdd61d9a26aa51667d7cc1799c1c5.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-normalized-measurements.json": {
-      "sha256": "7dad7af89897f865d829cf42a85cc1ca0283f6cbf53ae10311084ae7a7e28ea9",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-7dad7af89897f865d829cf42a85cc1ca0283f6cbf53ae10311084ae7a7e28ea9.json"
+      "sha256": "151d0ee725a1e829577ad8f02eb0cef7b172af9ed1144271789a375de58947d6",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-151d0ee725a1e829577ad8f02eb0cef7b172af9ed1144271789a375de58947d6.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json": {
       "sha256": "802868623a18c495f992b835b3ad628fa804013fb9f68091f462cabe90e6ce90",
       "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-802868623a18c495f992b835b3ad628fa804013fb9f68091f462cabe90e6ce90.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json": {
-      "sha256": "d9f0a979cb38e660386aa5e37f2386103a75170b383103240cc44232028b41fc",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-d9f0a979cb38e660386aa5e37f2386103a75170b383103240cc44232028b41fc.json"
+      "sha256": "ed9ffde14325e3f5937fe0ebf66d6d76f76baedd953947989831e678e8719df2",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-ed9ffde14325e3f5937fe0ebf66d6d76f76baedd953947989831e678e8719df2.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json": {
-      "sha256": "37a8a3d719dddbeb1a7de07dfd7b8c67c82b1c00c88a309a70f4325e4a259bb6",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-37a8a3d719dddbeb1a7de07dfd7b8c67c82b1c00c88a309a70f4325e4a259bb6.json"
+      "sha256": "b98bab2698df3095d6c01a0c1c0df4cfc3ddc31b8f51a5f72bf4ecc4b1099785",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-b98bab2698df3095d6c01a0c1c0df4cfc3ddc31b8f51a5f72bf4ecc4b1099785.json"
     }
   },
   "decisions": [
