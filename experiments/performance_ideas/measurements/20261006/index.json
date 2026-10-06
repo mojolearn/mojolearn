@@ -8186,16 +8186,9 @@
       "measurement_stage": "streamed_driver",
       "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
       "case": "{\"AB_OBSERVATIONS\": \"4096\"}/{\"batch\": 6, \"case\": \"planted_ar1\", \"observations\": 4096}/candidate",
-      "status": "MEASURED",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
       "returncode": 0,
-      "artifact_hashes": {
-        "baseline": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35",
-        "candidate": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35"
-      },
-      "baseline_ms": 9.303893,
-      "candidate_ms": 9.355627,
-      "baseline_arm": "incumbent",
-      "candidate_arm": "candidate",
+      "reason": "ARIMA_FAST_BATCH_GRAD requires has_apple_gpu_accelerator(); AMD off/on macro builds both use sequential gradients. Raw fit timings retained; batch-gradient timing belongs on Apple.",
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
@@ -8216,16 +8209,9 @@
       "measurement_stage": "streamed_driver",
       "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
       "case": "{\"AB_OBSERVATIONS\": \"4096\"}/{\"batch\": 6, \"case\": \"planted_ma1\", \"observations\": 4096}/candidate",
-      "status": "MEASURED",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
       "returncode": 0,
-      "artifact_hashes": {
-        "baseline": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35",
-        "candidate": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35"
-      },
-      "baseline_ms": 393.859043,
-      "candidate_ms": 406.821797,
-      "baseline_arm": "incumbent",
-      "candidate_arm": "candidate",
+      "reason": "ARIMA_FAST_BATCH_GRAD requires has_apple_gpu_accelerator(); AMD off/on macro builds both use sequential gradients. Raw fit timings retained; batch-gradient timing belongs on Apple.",
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
@@ -8246,16 +8232,9 @@
       "measurement_stage": "streamed_driver",
       "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
       "case": "{\"AB_OBSERVATIONS\": \"4096\"}/{\"batch\": 6, \"case\": \"planted_arma11\", \"observations\": 4096}/candidate",
-      "status": "MEASURED",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
       "returncode": 0,
-      "artifact_hashes": {
-        "baseline": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35",
-        "candidate": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35"
-      },
-      "baseline_ms": 664.016274,
-      "candidate_ms": 692.414032,
-      "baseline_arm": "incumbent",
-      "candidate_arm": "candidate",
+      "reason": "ARIMA_FAST_BATCH_GRAD requires has_apple_gpu_accelerator(); AMD off/on macro builds both use sequential gradients. Raw fit timings retained; batch-gradient timing belongs on Apple.",
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
@@ -8276,16 +8255,9 @@
       "measurement_stage": "streamed_driver",
       "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
       "case": "{\"AB_OBSERVATIONS\": \"4097\"}/{\"batch\": 6, \"case\": \"planted_ar1\", \"observations\": 4097}/candidate",
-      "status": "MEASURED",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
       "returncode": 0,
-      "artifact_hashes": {
-        "baseline": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35",
-        "candidate": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35"
-      },
-      "baseline_ms": 9.634775,
-      "candidate_ms": 9.508614,
-      "baseline_arm": "incumbent",
-      "candidate_arm": "candidate",
+      "reason": "ARIMA_FAST_BATCH_GRAD requires has_apple_gpu_accelerator(); AMD off/on macro builds both use sequential gradients. Raw fit timings retained; batch-gradient timing belongs on Apple.",
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
@@ -8306,16 +8278,9 @@
       "measurement_stage": "streamed_driver",
       "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
       "case": "{\"AB_OBSERVATIONS\": \"4097\"}/{\"batch\": 6, \"case\": \"planted_ma1\", \"observations\": 4097}/candidate",
-      "status": "MEASURED",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
       "returncode": 0,
-      "artifact_hashes": {
-        "baseline": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35",
-        "candidate": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35"
-      },
-      "baseline_ms": 225.451931,
-      "candidate_ms": 216.57073,
-      "baseline_arm": "incumbent",
-      "candidate_arm": "candidate",
+      "reason": "ARIMA_FAST_BATCH_GRAD requires has_apple_gpu_accelerator(); AMD off/on macro builds both use sequential gradients. Raw fit timings retained; batch-gradient timing belongs on Apple.",
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
@@ -8336,16 +8301,9 @@
       "measurement_stage": "streamed_driver",
       "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
       "case": "{\"AB_OBSERVATIONS\": \"4097\"}/{\"batch\": 6, \"case\": \"planted_arma11\", \"observations\": 4097}/candidate",
-      "status": "MEASURED",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
       "returncode": 0,
-      "artifact_hashes": {
-        "baseline": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35",
-        "candidate": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35"
-      },
-      "baseline_ms": 508.115083,
-      "candidate_ms": 485.703158,
-      "baseline_arm": "incumbent",
-      "candidate_arm": "candidate",
+      "reason": "ARIMA_FAST_BATCH_GRAD requires has_apple_gpu_accelerator(); AMD off/on macro builds both use sequential gradients. Raw fit timings retained; batch-gradient timing belongs on Apple.",
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
@@ -8366,16 +8324,9 @@
       "measurement_stage": "streamed_driver",
       "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
       "case": "{\"AB_OBSERVATIONS\": \"8193\"}/{\"batch\": 6, \"case\": \"planted_ar1\", \"observations\": 8193}/candidate",
-      "status": "MEASURED",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
       "returncode": 0,
-      "artifact_hashes": {
-        "baseline": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35",
-        "candidate": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35"
-      },
-      "baseline_ms": 612.879818,
-      "candidate_ms": 612.534667,
-      "baseline_arm": "incumbent",
-      "candidate_arm": "candidate",
+      "reason": "ARIMA_FAST_BATCH_GRAD requires has_apple_gpu_accelerator(); AMD off/on macro builds both use sequential gradients. Raw fit timings retained; batch-gradient timing belongs on Apple.",
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
@@ -8396,16 +8347,9 @@
       "measurement_stage": "streamed_driver",
       "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
       "case": "{\"AB_OBSERVATIONS\": \"8193\"}/{\"batch\": 6, \"case\": \"planted_ma1\", \"observations\": 8193}/candidate",
-      "status": "MEASURED",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
       "returncode": 0,
-      "artifact_hashes": {
-        "baseline": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35",
-        "candidate": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35"
-      },
-      "baseline_ms": 1137.596179,
-      "candidate_ms": 1188.000953,
-      "baseline_arm": "incumbent",
-      "candidate_arm": "candidate",
+      "reason": "ARIMA_FAST_BATCH_GRAD requires has_apple_gpu_accelerator(); AMD off/on macro builds both use sequential gradients. Raw fit timings retained; batch-gradient timing belongs on Apple.",
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
@@ -8426,16 +8370,9 @@
       "measurement_stage": "streamed_driver",
       "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
       "case": "{\"AB_OBSERVATIONS\": \"8193\"}/{\"batch\": 6, \"case\": \"planted_arma11\", \"observations\": 8193}/candidate",
-      "status": "MEASURED",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
       "returncode": 0,
-      "artifact_hashes": {
-        "baseline": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35",
-        "candidate": "990ca15649587e838efe3e7e7ae00cb8a303cd47bdd3ed0edfef089caad93c35"
-      },
-      "baseline_ms": 6450.233071,
-      "candidate_ms": 6708.445115,
-      "baseline_arm": "incumbent",
-      "candidate_arm": "candidate",
+      "reason": "ARIMA_FAST_BATCH_GRAD requires has_apple_gpu_accelerator(); AMD off/on macro builds both use sequential gradients. Raw fit timings retained; batch-gradient timing belongs on Apple.",
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
@@ -8494,6 +8431,70 @@
       },
       "baseline_ms": 5.700761,
       "candidate_ms": 4.620121,
+      "baseline_arm": "baseline",
+      "candidate_arm": "candidate",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I06",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "e80a1d0a0467d6c0723ba8cd233b66247832c63e",
+      "baseline_source_sha": "e80a1d0a0467d6c0723ba8cd233b66247832c63e",
+      "candidate_source_sha": "e80a1d0a0467d6c0723ba8cd233b66247832c63e",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Generated attention component; macro alone does not prove reuse. Ratio2 fixtures satisfy inspected source dispatch guards; runtime reuse count not exported. Full caller qualification remains pending.",
+      "promotion": false,
+      "dispatch_evidence": "Source guard requires an even query-head/KV-head ratio and admitted32-row Q-resident preflushed schedule; raw measurements retain actual heads/kv_heads/ran_arm. No dedicated reuse counter is exported by this driver.",
+      "case": "{\"AB_HEADS\": \"8\", \"AB_KV_HEADS\": \"4\", \"AB_LENGTH\": \"1024\"}/{\"heads\": 8, \"kv_heads\": 4, \"length\": 1024}/candidate",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "a60bb30c28554b742b067dd25130e55a098b91774bc4eab36d42b8f3506d96ad",
+        "candidate": "8b08fbfb0c6281bdda003f15cd48ee8de089289eb8d5911951ad7589e9e9c04d"
+      },
+      "baseline_ms": 2.433894,
+      "candidate_ms": 2.947202,
+      "baseline_arm": "baseline",
+      "candidate_arm": "candidate",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I06",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "e80a1d0a0467d6c0723ba8cd233b66247832c63e",
+      "baseline_source_sha": "e80a1d0a0467d6c0723ba8cd233b66247832c63e",
+      "candidate_source_sha": "e80a1d0a0467d6c0723ba8cd233b66247832c63e",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Generated attention component; macro alone does not prove reuse. Ratio2 fixtures satisfy inspected source dispatch guards; runtime reuse count not exported. Full caller qualification remains pending.",
+      "promotion": false,
+      "dispatch_evidence": "Source guard requires an even query-head/KV-head ratio and admitted32-row Q-resident preflushed schedule; raw measurements retain actual heads/kv_heads/ran_arm. No dedicated reuse counter is exported by this driver.",
+      "case": "{\"AB_HEADS\": \"8\", \"AB_KV_HEADS\": \"4\", \"AB_LENGTH\": \"1536\"}/{\"heads\": 8, \"kv_heads\": 4, \"length\": 1536}/candidate",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "a60bb30c28554b742b067dd25130e55a098b91774bc4eab36d42b8f3506d96ad",
+        "candidate": "8b08fbfb0c6281bdda003f15cd48ee8de089289eb8d5911951ad7589e9e9c04d"
+      },
+      "baseline_ms": 3.581291,
+      "candidate_ms": 4.341665,
       "baseline_arm": "baseline",
       "candidate_arm": "candidate",
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
@@ -61373,6 +61374,156 @@
     },
     {
       "effective_environment": {
+        "AB_OBSERVATIONS": "4096"
+      },
+      "id": "I23",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I23-candidate-5b467815b5-shape63d0f2e177",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
+      "returncode": 0,
+      "limitation": "ARIMA_FAST_BATCH_GRAD is guarded by has_apple_gpu_accelerator(); Linux flag arms share the same sequential route. Raw timing retained without ratios.",
+      "promotion": false,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_OBSERVATIONS": "4097"
+      },
+      "id": "I23",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I23-candidate-5b467815b5-shape7e580bfa3b",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
+      "returncode": 0,
+      "limitation": "ARIMA_FAST_BATCH_GRAD is guarded by has_apple_gpu_accelerator(); Linux flag arms share the same sequential route. Raw timing retained without ratios.",
+      "promotion": false,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_OBSERVATIONS": "8193"
+      },
+      "id": "I23",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I23-candidate-5b467815b5-shape552f54f753",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
+      "returncode": 0,
+      "limitation": "ARIMA_FAST_BATCH_GRAD is guarded by has_apple_gpu_accelerator(); Linux flag arms share the same sequential route. Raw timing retained without ratios.",
+      "promotion": false,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_OBSERVATIONS": "4096"
+      },
+      "id": "I23",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I23-incumbent-5b467815b5-shape63d0f2e177",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
+      "returncode": 0,
+      "limitation": "ARIMA_FAST_BATCH_GRAD is guarded by has_apple_gpu_accelerator(); Linux flag arms share the same sequential route. Raw timing retained without ratios.",
+      "promotion": false,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_OBSERVATIONS": "4097"
+      },
+      "id": "I23",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I23-incumbent-5b467815b5-shape7e580bfa3b",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
+      "returncode": 0,
+      "limitation": "ARIMA_FAST_BATCH_GRAD is guarded by has_apple_gpu_accelerator(); Linux flag arms share the same sequential route. Raw timing retained without ratios.",
+      "promotion": false,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
+        "AB_OBSERVATIONS": "8193"
+      },
+      "id": "I23",
+      "vendor": "nvidia",
+      "route": "default",
+      "case": "I23-incumbent-5b467815b5-shape552f54f753",
+      "scope": "public_caller_component",
+      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "status": "NO_DISTINCT_RUNTIME_ARM",
+      "returncode": 0,
+      "limitation": "ARIMA_FAST_BATCH_GRAD is guarded by has_apple_gpu_accelerator(); Linux flag arms share the same sequential route. Raw timing retained without ratios.",
+      "promotion": false,
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
+    },
+    {
+      "effective_environment": {
         "AB_ROWS": "100000",
         "AB_FEATURES": "32",
         "AB_CLUSTERS": "32"
@@ -63014,285 +63165,6 @@
     },
     {
       "effective_environment": {
-        "AB_OBSERVATIONS": "4096"
-      },
-      "id": "I23",
-      "vendor": "nvidia",
-      "route": "default",
-      "case": "I23-candidate-5b467815b5-shape63d0f2e177/case0",
-      "scope": "public_caller_component",
-      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
-      "warmups": 1,
-      "scored_samples": 1,
-      "warmup_scope": "same_process",
-      "status": "MEASURED",
-      "returncode": 0,
-      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
-      "promotion": false,
-      "artifact_hashes": {
-        "baseline": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77",
-        "candidate": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77"
-      },
-      "baseline_ms": 3.760231,
-      "candidate_ms": 3.758301,
-      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
-    },
-    {
-      "effective_environment": {
-        "AB_OBSERVATIONS": "4096"
-      },
-      "id": "I23",
-      "vendor": "nvidia",
-      "route": "default",
-      "case": "I23-candidate-5b467815b5-shape63d0f2e177/case1",
-      "scope": "public_caller_component",
-      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
-      "warmups": 1,
-      "scored_samples": 1,
-      "warmup_scope": "same_process",
-      "status": "MEASURED",
-      "returncode": 0,
-      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
-      "promotion": false,
-      "artifact_hashes": {
-        "baseline": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77",
-        "candidate": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77"
-      },
-      "baseline_ms": 72.54637,
-      "candidate_ms": 72.517819,
-      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
-    },
-    {
-      "effective_environment": {
-        "AB_OBSERVATIONS": "4096"
-      },
-      "id": "I23",
-      "vendor": "nvidia",
-      "route": "default",
-      "case": "I23-candidate-5b467815b5-shape63d0f2e177/case2",
-      "scope": "public_caller_component",
-      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
-      "warmups": 1,
-      "scored_samples": 1,
-      "warmup_scope": "same_process",
-      "status": "MEASURED",
-      "returncode": 0,
-      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
-      "promotion": false,
-      "artifact_hashes": {
-        "baseline": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77",
-        "candidate": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77"
-      },
-      "baseline_ms": 124.897428,
-      "candidate_ms": 124.921848,
-      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
-    },
-    {
-      "effective_environment": {
-        "AB_OBSERVATIONS": "4097"
-      },
-      "id": "I23",
-      "vendor": "nvidia",
-      "route": "default",
-      "case": "I23-candidate-5b467815b5-shape7e580bfa3b/case0",
-      "scope": "public_caller_component",
-      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
-      "warmups": 1,
-      "scored_samples": 1,
-      "warmup_scope": "same_process",
-      "status": "MEASURED",
-      "returncode": 0,
-      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
-      "promotion": false,
-      "artifact_hashes": {
-        "baseline": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77",
-        "candidate": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77"
-      },
-      "baseline_ms": 4.23459,
-      "candidate_ms": 4.183669,
-      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
-    },
-    {
-      "effective_environment": {
-        "AB_OBSERVATIONS": "4097"
-      },
-      "id": "I23",
-      "vendor": "nvidia",
-      "route": "default",
-      "case": "I23-candidate-5b467815b5-shape7e580bfa3b/case1",
-      "scope": "public_caller_component",
-      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
-      "warmups": 1,
-      "scored_samples": 1,
-      "warmup_scope": "same_process",
-      "status": "MEASURED",
-      "returncode": 0,
-      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
-      "promotion": false,
-      "artifact_hashes": {
-        "baseline": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77",
-        "candidate": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77"
-      },
-      "baseline_ms": 47.664959,
-      "candidate_ms": 47.272532,
-      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
-    },
-    {
-      "effective_environment": {
-        "AB_OBSERVATIONS": "4097"
-      },
-      "id": "I23",
-      "vendor": "nvidia",
-      "route": "default",
-      "case": "I23-candidate-5b467815b5-shape7e580bfa3b/case2",
-      "scope": "public_caller_component",
-      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
-      "warmups": 1,
-      "scored_samples": 1,
-      "warmup_scope": "same_process",
-      "status": "MEASURED",
-      "returncode": 0,
-      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
-      "promotion": false,
-      "artifact_hashes": {
-        "baseline": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77",
-        "candidate": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77"
-      },
-      "baseline_ms": 100.554108,
-      "candidate_ms": 100.419936,
-      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
-    },
-    {
-      "effective_environment": {
-        "AB_OBSERVATIONS": "8193"
-      },
-      "id": "I23",
-      "vendor": "nvidia",
-      "route": "default",
-      "case": "I23-candidate-5b467815b5-shape552f54f753/case0",
-      "scope": "public_caller_component",
-      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
-      "warmups": 1,
-      "scored_samples": 1,
-      "warmup_scope": "same_process",
-      "status": "MEASURED",
-      "returncode": 0,
-      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
-      "promotion": false,
-      "artifact_hashes": {
-        "baseline": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77",
-        "candidate": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77"
-      },
-      "baseline_ms": 311.547822,
-      "candidate_ms": 311.443199,
-      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
-    },
-    {
-      "effective_environment": {
-        "AB_OBSERVATIONS": "8193"
-      },
-      "id": "I23",
-      "vendor": "nvidia",
-      "route": "default",
-      "case": "I23-candidate-5b467815b5-shape552f54f753/case1",
-      "scope": "public_caller_component",
-      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
-      "warmups": 1,
-      "scored_samples": 1,
-      "warmup_scope": "same_process",
-      "status": "MEASURED",
-      "returncode": 0,
-      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
-      "promotion": false,
-      "artifact_hashes": {
-        "baseline": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77",
-        "candidate": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77"
-      },
-      "baseline_ms": 228.88483,
-      "candidate_ms": 228.883082,
-      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
-    },
-    {
-      "effective_environment": {
-        "AB_OBSERVATIONS": "8193"
-      },
-      "id": "I23",
-      "vendor": "nvidia",
-      "route": "default",
-      "case": "I23-candidate-5b467815b5-shape552f54f753/case2",
-      "scope": "public_caller_component",
-      "machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "baseline_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "candidate_machine": "NVIDIA L40S, GPU-b808c2a0-9b50-7d0c-00ca-5f2cba4b89a4, 580.167.08, 8.9, 46068 MiB",
-      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
-      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json",
-      "warmups": 1,
-      "scored_samples": 1,
-      "warmup_scope": "same_process",
-      "status": "MEASURED",
-      "returncode": 0,
-      "limitation": "Representative production operation; synthetic inputs, not full board dataset qualification.",
-      "promotion": false,
-      "artifact_hashes": {
-        "baseline": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77",
-        "candidate": "c45dd602da2f889ad86de515dcbe107c7a3d2f6daa27a72cce4b8b8609d0cd77"
-      },
-      "baseline_ms": 1244.738798,
-      "candidate_ms": 1244.702268,
-      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json"
-    },
-    {
-      "effective_environment": {
         "AB_LENGTH": "1024",
         "AB_HEADS": "8",
         "AB_KV_HEADS": "4"
@@ -63394,28 +63266,28 @@
   ],
   "capture_sources": {
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json": {
-      "sha256": "7e44790991659124fe43a75880dcc20256c5c27325eaf59eea8a796f3c9a043d",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-7e44790991659124fe43a75880dcc20256c5c27325eaf59eea8a796f3c9a043d.json"
+      "sha256": "3773206df812fccef821f23b938e552c548a77de4659dfc14c31c4b8a6e18e76",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-3773206df812fccef821f23b938e552c548a77de4659dfc14c31c4b8a6e18e76.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-normalized-measurements.json": {
-      "sha256": "43aa4362e77b7e7137afdaecfc25de0b5518aed923b31ae6cdf781810309496c",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-43aa4362e77b7e7137afdaecfc25de0b5518aed923b31ae6cdf781810309496c.json"
+      "sha256": "4f673deb450e30403bae4b2565971865c69e82e4cbb647394b055197efd36816",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-4f673deb450e30403bae4b2565971865c69e82e4cbb647394b055197efd36816.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-normalized-measurements.json": {
-      "sha256": "146e64f7f029644d2800c63f06cccd1d3ad693fa2db746513791fb589d78c3b5",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-146e64f7f029644d2800c63f06cccd1d3ad693fa2db746513791fb589d78c3b5.json"
+      "sha256": "effbdcd9f28607e04b9bf1e44fa1835643c0268ae7e9c2a62e154a6f697fc673",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-effbdcd9f28607e04b9bf1e44fa1835643c0268ae7e9c2a62e154a6f697fc673.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json": {
       "sha256": "3eed454368c13a7ff3e2e83f0d6ff95b185a5f70d5e30cc92f847ff48cfe7c55",
       "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-3eed454368c13a7ff3e2e83f0d6ff95b185a5f70d5e30cc92f847ff48cfe7c55.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json": {
-      "sha256": "3d39526272b104b1c210d09189b54f304fe1fd186c9db50575d27ff02cd27615",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-3d39526272b104b1c210d09189b54f304fe1fd186c9db50575d27ff02cd27615.json"
+      "sha256": "ccfc2d6de80153ec8df8ae6db4da5a2a51f3d7b71c01ea92c5beb844a0b3096e",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-ccfc2d6de80153ec8df8ae6db4da5a2a51f3d7b71c01ea92c5beb844a0b3096e.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json": {
-      "sha256": "1feb12806704099653825dd72905c56359051a9412d2fcf5d534f5aa7593cd18",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-1feb12806704099653825dd72905c56359051a9412d2fcf5d534f5aa7593cd18.json"
+      "sha256": "cb38fb8a240dadc3419b143a0a49bf94f91ab82385fb1adeb180ed95d2f421e0",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-cb38fb8a240dadc3419b143a0a49bf94f91ab82385fb1adeb180ed95d2f421e0.json"
     }
   },
   "decisions": [
