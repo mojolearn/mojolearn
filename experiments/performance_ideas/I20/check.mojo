@@ -7,6 +7,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from kde.checks.kde_check import _train_fixture, _query_fixture, _weight_fixture, _scores_by_path, _all_kernels, check_kde_tiled_equals_staged
 from kde.impl.neighbors.kernel_density import DIST_L2_SQRT_UNEXPANDED, DIST_L1, DIST_LINF
+from kde.checks.reused_workspace_check import run_checks
 
 def main() raises:
     var ctx = DeviceContext()
@@ -28,4 +29,5 @@ def main() raises:
                                 raise Error("I20 tiled LSE changed density bits")
                     cases+=1
     check_kde_tiled_equals_staged()
+    run_checks()
     print("I20 PASS bandwidth_metric_kernel_weight_cases=",cases,"independent_schedules=3")

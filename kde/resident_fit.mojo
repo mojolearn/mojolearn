@@ -48,12 +48,15 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.identity_trace import IdentityTrace
 from core.device_fold import device_sum_f32_fixed
 from kde.impl.kde import score_samples
+from kde.impl.chunk_workspace import KDE_CHUNK_POOL_ON,KdeChunkWorkspace
 from kde.impl.neighbors.kernel_density import (
     KDE2_SAMPLE_FUSED,
     KDE_ELEM_TPB,
     KDE_FUSED_TILE_FLOATS,
     KDE_LSE_TPB,
     kde2_score_samples_fast_apple_to_host,
+    kde_chunk_lse_metric_applies,
+    kde_score_samples_chunk_lse_reused,
     host_sum_weights,
     kde_fit_validate,
     kde_validate_data_ptr,
@@ -83,6 +86,7 @@ struct ResidentKdeFit(Movable):
     var kernel: Int
     var metric: Int
     var bandwidth: Float32
+    var partial_pool: Optional[KdeChunkWorkspace]
 
     def __init__(
         out self,
@@ -129,6 +133,10 @@ struct ResidentKdeFit(Movable):
         self.kernel = kernel
         self.metric = metric
         self.bandwidth = bandwidth
+        self.partial_pool=Optional[KdeChunkWorkspace]()
+        comptime if KDE_CHUNK_POOL_ON:
+            if kde_chunk_lse_metric_applies(metric):
+                self.partial_pool=KdeChunkWorkspace()
         self.has_weights = has_weights
         self.sum_w = sum_w
         self.train = train^
@@ -136,6 +144,15 @@ struct ResidentKdeFit(Movable):
         self.ctx = ctx^
 
     def __deinit__(deinit self):
+        # I20 explicit owning-context drain/release before the fit buffers
+        # and context, including an incomplete/failed score consumer.
+        comptime if KDE_CHUNK_POOL_ON:
+            if self.partial_pool:
+                try:
+                    self.partial_pool.value().close(self.ctx)
+                except:
+                    pass
+        _ = self.partial_pool^
         # The buffers before the context they were created on (DEVIATION 1946).
         _ = self.weights^
         _ = self.train^
@@ -274,11 +291,21 @@ def kde_score_samples_resident(
             _ = dquery^
             _ = dout^
             return Float32(0)
-    score_samples(
-        entry.ctx, dquery, entry.train, entry.weights, entry.has_weights, dout,
-        n_query, entry.n_train, n_features, bandwidth, entry.sum_w, k, m,
-        metric_arg, trace, elem_tpb, lse_tpb,
-    )
+    var pooled=False
+    comptime if KDE_CHUNK_POOL_ON:
+        if entry.partial_pool and not trace.enabled and kde_chunk_lse_metric_applies(m):
+            ref pool=entry.partial_pool.value()
+            # The registry's never-reused immutable handle owns the uploaded
+            # fit and weights. Queries change freely; all outputs recompute.
+            pooled=kde_score_samples_chunk_lse_reused(entry.ctx,entry.train,dquery,entry.weights,
+                entry.has_weights,entry.sum_w,entry.n_train,n_query,n_features,bandwidth,k,m,dout,
+                pool,UInt64(handle),elem_tpb,lse_tpb)
+    if not pooled:
+        score_samples(
+            entry.ctx, dquery, entry.train, entry.weights, entry.has_weights, dout,
+            n_query, entry.n_train, n_features, bandwidth, entry.sum_w, k, m,
+            metric_arg, trace, elem_tpb, lse_tpb,
+        )
     var total = Float32(0)
     if want_total:
         total = device_sum_f32_fixed(entry.ctx, dout, n_query)

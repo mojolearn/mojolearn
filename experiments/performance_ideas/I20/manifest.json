@@ -1,21 +1,25 @@
 {
   "schema": 1,
   "id": "I20",
-  "title": "qualify bounded KDE schedules under bandwidth extremes and sparse kernels",
+  "title": "Retain bounded source-owned KDE partial storage under the existing chunked fold",
   "mode": "identical",
   "vendors": [
     "nvidia",
     "amd",
     "apple"
   ],
-  "status": "source_ready",
+  "status": "build_passed",
   "implementation_paths": [
-    "experiments/performance_ideas/I20/check.mojo"
+    "experiments/performance_ideas/I20/check.mojo",
+    "kde/impl/chunk_workspace.mojo",
+    "kde/impl/neighbors/kernel_density.mojo",
+    "kde/resident_fit.mojo",
+    "kde/checks/reused_workspace_check.mojo"
   ],
-  "candidate_defines": [],
-  "baseline_defines": [
-    "MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF=1"
+  "candidate_defines": [
+    "MOJOLEARN_IDN_KDE_PARTIAL_POOL=1"
   ],
+  "baseline_defines": [],
   "build_argv": [
     "{python}",
     "{repo}/gemm/experiments/native_build.py",
@@ -29,19 +33,26 @@
     "--mojo",
     "{mojo}",
     "--output",
-    "{output}"
+    "{output}",
+    "--define",
+    "MOJOLEARN_IDN_KDE_PARTIAL_POOL=1"
   ],
   "run_argv": [
     "{output}"
   ],
   "validation_paths": [
-    "experiments/performance_ideas/I20/check.mojo"
+    "experiments/performance_ideas/I20/check.mojo",
+    "kde/checks/reused_workspace_check.mojo"
   ],
   "depends_on": [],
   "quality_gates": [
     "same-version NVIDIA/AMD/Apple/host exact output bits",
     "public semantics and canonical tie order retained",
-    "NVIDIA+AMD combined faster and neither materially slower"
+    "NVIDIA+AMD combined faster and neither materially slower",
+    "Current numerical profile unchanged in pool baseline/candidate; partials and logweights recompute on every call",
+    "Actual resident score_samples pool allocation/reuse/source-key counters and every density bit must pass for supported metrics",
+    "Small/large/small budget bound, malformed source descriptor, foreign-key refusal, in-flight refusal, explicit rebind invalidation, release and closed-pool gates must pass",
+    "An atomic lease protects retained scratch across released-GIL callers; overlap falls back to original temporaries and exact scores rather than overwriting the pool"
   ],
   "timing_contract": "Frozen source; compile once on cheap boxes; device runs only; full public-operation timing includes all scratch/preparation/readback. Apple IDENTICAL bit check only. Native builds explicitly bind device column and accelerator; independent host replay remains a separate identity gate, not a DeviceContext execution vendor.",
   "blocker": null,
@@ -58,8 +69,9 @@
     "--mojo",
     "{mojo}",
     "--output",
-    "{output}",
-    "--define",
-    "MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF=1"
+    "{output}"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
