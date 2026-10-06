@@ -42,6 +42,8 @@ def fill_kernel(flags: MutPointer[Int32,MutAnyOrigin],positions: MutPointer[Int3
         indices.unsafe_store(Int(positions.unsafe_load(cell)),Int32(cell%Int(cols)))
 
 
+# N08 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# Explicit threshold-CSR adapter only; complete caller device/host bits owed.
 def threshold_graph[FUSED: Bool](ctx: DeviceContext,mut q: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],mut distances: DeviceBuffer[DType.float32],
     mut flags: DeviceBuffer[DType.int32],mut positions: DeviceBuffer[DType.int32],
