@@ -59,5 +59,15 @@
     "core"
   ],
   "build_uses_compile_slot": true,
-  "paired_build": true
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F05",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
 }
