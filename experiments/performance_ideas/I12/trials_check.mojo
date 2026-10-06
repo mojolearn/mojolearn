@@ -74,7 +74,8 @@ def run_trial(ctx: DeviceContext,case: Int,control: Bool) raises -> TrialResult:
     var active=download_f32(ctx,f.slots,3)
     var words=List[UInt32]()
     words.append(bitcast[DType.uint32](fx)); words.append(bitcast[DType.uint32](step))
-    words.append(bitcast[DType.uint32](f.gnorm_raw))
+    if ret!=LS_INVALID_DIR:
+        words.append(bitcast[DType.uint32](f.gnorm_raw))
     for value in hw:
         words.append(bitcast[DType.uint32](value))
     for value in hg:
