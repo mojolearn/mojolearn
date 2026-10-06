@@ -1387,7 +1387,13 @@ default resolves to: `_launch_fwd_r2_keep[64, 32, True, True, False]` and
 of the trial tree (the sabotage copies stay trial-only, like
 `ATTN_SHIPPED_BWD_KV`'s)."""
 
-# NEVER RUN — PENDING MEASUREMENT
+# I07 2026-10-06 source cbcc8dcd3303: NO DISTINCT RUNTIME ARM measured.
+# The driver requested a no-estash word; both variants reported ran_arm1030
+# and kept_cells0. Raw candidate/base AMD1.002/1.003 and NVIDIA0.993/1.005
+# at length1024/1536, heads12/kv_heads4/hd64 are same-route controls, not a
+# retained-vs-recomputed result. One same-process warmup/score; identity reused.
+# Fix the measurement selector before judging this toggle; defaults unchanged.
+# Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurement receipts.
 comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
 comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
 comptime ATTN_V1_ALIAS_Y_ESTASH = (
