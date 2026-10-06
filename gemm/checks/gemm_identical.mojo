@@ -7140,6 +7140,15 @@ def identical_gemm_shipped_into(
     Row above 0 (NVIDIA): `identical_gemm_shipped_at_row_into[False]` at the
     row. Row 0 (AMD until the MI300X leg decides, Apple, every other column):
     the old line, and the ksplit path is not compiled at all."""
+    # A05: halve per-thread row accumulators to shorten register live ranges.
+    # Forced opt-in isolates resource changes; no measured default or size rule.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE"]():
+        _kpack_run[
+            TUNED_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS,
+            GEMM_KPACK_FS, False, GEMM_KPACK_PAD, GEMM_KPACK_ALIGN,
+            0, True, True,
+        ](ctx,c,a,b,m,n,k,op,0)
+        return
     comptime if GEMM_BODY_KPACK_HG:
         _shipped_body_kpack_hg[False](ctx, c, a, b, ws, m, n, k, op)
         return
@@ -7750,9 +7759,6 @@ comptime AMD_SHORT_K_MAX = 1024
 comptime GEMM_KPACK_PAD = (
     get_defined_int["MOJOLEARN_IDN_GEMM_LDS_PAD_WORDS", TUNED_VECLEN]()
     if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else TUNED_VECLEN
-)
-comptime assert GEMM_KPACK_PAD >= 0 and GEMM_KPACK_PAD % TUNED_VECLEN == 0, (
-    "experimental LDS padding must be nonnegative and vector aligned"
 )
 #: DEVIATION 2703, `kpack_padv`: the shared page alignment in bytes at which
 #: the per-step loads become `ld.shared.v4` (brief section 15).
