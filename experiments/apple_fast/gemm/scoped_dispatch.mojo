@@ -226,12 +226,12 @@ def try_scoped_gemm[SPLIT: Bool, ROUTE: Int](
             state[].last[14] = Int(nt)
         if arm == 1:
             ctx.enqueue_function[scoped_kernel[64, 64, SPLIT]](
-                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
+                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(n),
                 grid_dim=(((m + 63) // 64) * ((n + 63) // 64), splits, 1), block_dim=(128, 1, 1),
             )
         elif arm == 2:
             ctx.enqueue_function[scoped_kernel[32, 32, SPLIT]](
-                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
+                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(n),
                 grid_dim=(((m + 31) // 32) * ((n + 31) // 32), splits, 1), block_dim=(128, 1, 1),
             )
         return arm != 0
