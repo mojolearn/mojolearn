@@ -1,0 +1,127 @@
+{
+  "schema": 1,
+  "id": "I14",
+  "mode": "identical",
+  "qualification": "pending_device_validation",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "GPU DeviceContext fixture; host qualification is an independent owed gate, not this executable.",
+  "default_policy": "New candidates default off; existing promoted controls unchanged.",
+  "arms": [
+    {
+      "name": "incumbent",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1",
+        "MOJOLEARN_IDN_HDB_ONE_SYNC_OFF=1",
+        "MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF=1",
+        "MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF=1",
+        "MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF=1",
+        "MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF=1",
+        "MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF=1",
+        "MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF=1"
+      ]
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK16=1"
+      ]
+    },
+    {
+      "name": "cc_chunk4",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK4=1"
+      ]
+    },
+    {
+      "name": "cc_chunk32",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK32=1"
+      ]
+    },
+    {
+      "name": "cc_split4",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT4=1"
+      ]
+    },
+    {
+      "name": "cc_split8",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT8=1"
+      ]
+    },
+    {
+      "name": "cc_split16",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT16=1"
+      ]
+    },
+    {
+      "name": "cc_ungated",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1"
+      ]
+    },
+    {
+      "name": "one_sync",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_ONE_SYNC_OFF=1"
+      ]
+    },
+    {
+      "name": "condense_two_reads",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF=1"
+      ]
+    },
+    {
+      "name": "select_one_read",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF=1"
+      ]
+    },
+    {
+      "name": "mr_fused_guard",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF=1"
+      ]
+    },
+    {
+      "name": "soft_lean",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF=1"
+      ]
+    },
+    {
+      "name": "predict_device_cast",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF=1"
+      ]
+    },
+    {
+      "name": "predict_lean",
+      "source": "experiments/performance_ideas/I14/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF=1"
+      ]
+    }
+  ]
+}
