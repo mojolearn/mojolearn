@@ -70,5 +70,8 @@
     "{output}",
     "--define",
     "MOJOLEARN_STEP_GLUE_TRIAL=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
