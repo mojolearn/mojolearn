@@ -57,11 +57,21 @@ def capture_model(runner, expected_paths=None):
     if model is None:return dict(status='UNAVAILABLE',reason='Runner exposes no public model owner',missing_state=['model owner'])
     if callable(getattr(model,'state_dict',None)):
         return capture(model.state_dict(),'public state_dict',expected_paths=expected_paths)
-    # Existing save receipts remain useful historical capture, but absence of a
-    # typed manifest cannot be upgraded to complete state identity.
-    from bench_board_state import model_receipt
-    receipt=model_receipt(model)
-    return dict(status='UNAVAILABLE',reason='No typed complete public state_dict capture; retained partial export is separate',missing_state=['typed complete model-state manifest'],partial_export=receipt)
+    # Only explicitly reviewed public save schemas can establish complete
+    # fitted-state coverage. Generic prediction-only exports remain partial.
+    # Existing receipts are never rewritten or upgraded by this future capture.
+    from bench_board_state import public_fitted_state
+    state,provenance=public_fitted_state(model)
+    if state is None:return provenance
+    paths=provenance['contract_paths']
+    result=capture(state,'complete public fitted state: '+provenance['contract'],expected_paths=paths)
+    if expected_paths is not None and set(expected_paths)!=set(paths):
+        result['completeness']='scope_not_qualified'
+        result['missing_state']=sorted(set(paths)-set(expected_paths))
+        result['unexpected_declared_paths']=sorted(set(expected_paths)-set(paths))
+        result['reason']='Recipe model-state paths differ from the complete reviewed export contract'
+    result['provenance']=provenance
+    return result
 
 
 def validate_master_result(data,job,config,arm,phase):
