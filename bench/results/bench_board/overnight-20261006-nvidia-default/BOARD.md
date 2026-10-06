@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T08:54:27Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T08:55:14Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T08:54:27Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 105 done, 3 failed, 0 unsupported, 5 pending. Cells: 238 (REFUSED 10, ok 228).
+Races: 113 planned, 106 done, 3 failed, 0 unsupported, 4 pending. Cells: 242 (REFUSED 12, ok 230).
 
-Inference cells: 158 (REFUSED 6, ok 152).
+Inference cells: 162 (REFUSED 6, ok 156).
 
 ## Quality at a glance
 
@@ -190,6 +190,9 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | trees | gbdt-multiclass | istella | accuracy (higher is better) | - | - | catboost-gpu 0.907780; xgboost-gpu 0.910140; catboost-cpu -; xgboost-cpu -; lightgbm-cuda 0.911402 |
 | trees | gbdt-ordered | istella | logloss (lower is better) | - | - | catboost-gpu 0.190474; catboost-cpu - |
 | trees | gbdt-ordered | istella | auc (higher is better) | - | - | catboost-gpu 0.979432; catboost-cpu - |
+| trees | gbdt-rank-pairlogit | istella | ndcg10 (higher is better) | - | - | catboost-gpu 0.719621; xgboost-gpu 0.738397; catboost-cpu -; xgboost-cpu - |
+| trees | gbdt-rank-pairlogit | istella | ndcg5 (higher is better) | - | - | catboost-gpu 0.650025; xgboost-gpu 0.670093; catboost-cpu -; xgboost-cpu - |
+| trees | gbdt-rank-pairlogit | istella | map (higher is better) | - | - | catboost-gpu 0.853929; xgboost-gpu 0.872796; catboost-cpu -; xgboost-cpu - |
 
 ## Inference at a glance
 
@@ -261,6 +264,8 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | trees | gbdt-multiclass | istella | large | - | - | - | - | catboost-gpu 339.0 ms (IDENTICAL/arm -); xgboost-gpu 1004.5 ms (IDENTICAL/arm -); lightgbm-cuda - ms (IDENTICAL/arm -) |
 | trees | gbdt-ordered | istella | test | - | - | - | - | catboost-gpu 758.6 ms (IDENTICAL/arm -) |
 | trees | gbdt-ordered | istella | large | - | - | - | - | catboost-gpu 1396.8 ms (IDENTICAL/arm -) |
+| trees | gbdt-rank-pairlogit | istella | test | - | - | - | - | catboost-gpu 113.5 ms (IDENTICAL/arm -); xgboost-gpu 59.8 ms (IDENTICAL/arm -) |
+| trees | gbdt-rank-pairlogit | istella | large | - | - | - | - | catboost-gpu 151.8 ms (IDENTICAL/arm -); xgboost-gpu 86.7 ms (IDENTICAL/arm -) |
 
 ## Trees
 
@@ -502,6 +507,75 @@ Inference (each arm predicts with its own model from the fit rounds above):
 | catboost-gpu | large | 1000000 | 1396.8 | 1396.8..1396.8 | 1 | - | - | - | yes | UNKNOWN | ok |
 
 inference call, catboost-gpu: catboost predict_proba(X, task_type GPU, thread_count -1), column 1
+
+### gbdt-rank-pairlogit / istella (rows full, shape istellarank-2043304x220)
+
+race: done, driver rc 0, log `raw/trees/gbdt-rank-pairlogit.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| catboost-gpu | catboost | gpu | opponent | 4241.3 | 4241.3..4241.3 | 1 | - | - | 6504.8 | 556.0 | map=0.853929, ndcg10=0.719621, ndcg5=0.650025 | yes | COMPARABLE | - | ok (measured this run) |
+| xgboost-gpu | xgboost | gpu | opponent | 5040.9 | 5040.9..5040.9 | 1 | - | - | 7300.1 | 556.0 | map=0.872796, ndcg10=0.738397, ndcg5=0.670093 | yes | COMPARABLE | - | ok (measured this run) |
+| catboost-cpu | catboost | cpu | opponent | - | - | 0 | - | - | - | - | - | - | COMPARABLE | - | REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against) (measured this run) |
+| xgboost-cpu | xgboost | cpu | opponent | - | - | 0 | - | - | - | - | - | - | COMPARABLE | - | REFUSED(GPU-PATH-ONLY: xgboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against ) (measured this run) |
+
+memory, catboost-gpu, xgboost-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+
+memory, catboost-cpu, xgboost-cpu: host not sampled; GPU not sampled
+
+FSPEED-FIT-VERDICT: `lane=gbdt-rank-pairlogit arms=catboost-gpu,xgboost-gpu leaves=catboost-gpu:6400,xgboost-gpu:6395 spread=0.0008 verdict=COMPARABLE`
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `catboost-gpu`, seed 7): MATCHED
+
+| parameter | catboost-gpu | xgboost-gpu |
+|---|---||---|---|
+| library (source) | catboost (get_params) | xgboost (get_params) |
+| boosting_type | "Plain" | "gbtree" |
+| bootstrap_type | "No" | - |
+| feature_border_type | "GreedyLogSum" | - |
+| feature_fraction | - | 1.0 |
+| feature_fraction_bynode | - | 1.0 |
+| grow_policy | "SymmetricTree" | "depthwise" |
+| leaf_estimation_iterations | 1 | - |
+| leaf_estimation_method | "Newton" | - |
+| learning_rate | 0.1 | 0.1 |
+| loss | "PairLogit" | - |
+| max_bin | 255 | 255 |
+| max_depth | 6 | 6 |
+| max_leaves | 64 | 64 |
+| min_child_weight | - | 0.0 |
+| min_samples_leaf | 1 | - |
+| min_split_gain | - | 0.0 |
+| n_estimators | 100 | 100 |
+| nan_mode | "Min" | - |
+| random_strength | 1.0 | - |
+| reg_alpha | - | 0.0 |
+| reg_lambda | 1.0 | 1.0 |
+| scale_pos_weight | - | 1.0 |
+| score_function | "Cosine" | - |
+| seed | 7 | 7 |
+| subsample | null | 1.0 |
+
+accepted difference: xgboost-gpu boosting_type: different vocabularies: ours and CatBoost 'Plain' (not Ordered), XGBoost booster 'gbtree'; both plain gradient boosting
+
+accepted difference: xgboost-gpu grow_policy: ours and CatBoost fit this loss on the symmetric grower only; XGBoost has none and runs depthwise at the same depth
+
+accepted difference: xgboost-gpu subsample: no row sampling on any arm: ours and CatBoost bootstrap_type 'No' (neither accepts subsample beside it, so it stays unset), XGBoost and LightGBM subsample 1.0
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| catboost-gpu | test | 681250 | 113.5 | 113.5..113.5 | 1 | - | - | map=0.853929, map_matches_fit=True, ndcg10=0.719621, ndcg10_matches_fit=True, ndcg5=0.650025, ndcg5_matches_fit=True | yes | COMPARABLE | ok |
+| xgboost-gpu | test | 681250 | 59.8 | 59.8..59.8 | 1 | - | - | map=0.872796, map_matches_fit=True, ndcg10=0.738397, ndcg10_matches_fit=True, ndcg5=0.670093, ndcg5_matches_fit=True | yes | COMPARABLE | ok |
+| catboost-gpu | large | 1000000 | 151.8 | 151.8..151.8 | 1 | - | - | - | yes | COMPARABLE | ok |
+| xgboost-gpu | large | 1000000 | 86.7 | 86.7..86.7 | 1 | - | - | - | yes | COMPARABLE | ok |
+
+inference call, catboost-gpu: catboost CatBoostRanker.predict(X, thread_count -1) (no task_type on the ranker: a host apply on every box), raw ranking scores
+
+inference call, xgboost-gpu: xgboost Booster.inplace_predict(cupy.asarray(X)) then cupy.asnumpy, raw ranking scores
 
 ## Classical
 
