@@ -1,0 +1,582 @@
+{
+  "schema": 1,
+  "campaign": "ab-overnight-20261006",
+  "source_tree": "/Users/andrewhendel/mojolearn-wt/consolidated-perf-ideas",
+  "inventory_commit": "c80b1dde537e495bbaa064d8c16ef6e873d0ed03",
+  "original_artifact_source": "c58945cd08380400c7b0276945c480efa0fc5398",
+  "settings": {
+    "warmups": 1,
+    "scored_samples": 1,
+    "cloud_idle_delete_seconds": 1800,
+    "m3_delete": false,
+    "opponents": "missing_gpu_only_after_candidates",
+    "repairs": "only_actual_measurement_failures",
+    "identity_retest": false,
+    "compilation_retest": false
+  },
+  "owners": {
+    "apple": "m3_capture_measure",
+    "amd": "amd_measure",
+    "nvidia": "nvidia_measure"
+  },
+  "candidates": [
+    {
+      "id": "A01",
+      "title": "Isolate AMD smaller MFMA and band routing",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "A02",
+      "title": "Compare production one/two-page staging and bounded one/two/four-plane resource controls",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "A03",
+      "title": "Vary vector-aligned LDS operand strides",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "A04",
+      "title": "Pair independent logical groups with supported XOR membership",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "A05",
+      "title": "Halve the packed body row accumulator live range",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "A06",
+      "title": "Qualify AMD exact fused low-dimensional neighbor selection",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "A07",
+      "title": "Qualify bounded degree graph and exact integer node histogram tasks",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "A08",
+      "title": "Requalify promoted 256-row accumulation with fit interactions",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "F01",
+      "title": "Actual PCA caller GEMM geometry",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F02",
+      "title": "Share GEMM infrastructure through independent fused and unfused caller adapters",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F03",
+      "title": "Actual LM bounded resident session versus stateless calls",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F04",
+      "title": "Pair independent gather completions with owned buffers",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F05",
+      "title": "Narrow softmax at full optimizer and line-search caller",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F06",
+      "title": "Independent MCD batch bounds, active-candidate compaction and exact-support covariance reuse",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F07",
+      "title": "FLASH and true GQA caller qualification with reach counters",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F08",
+      "title": "Independent LM backward fusion and view A/B training task",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F09",
+      "title": "Memory-bounded LM head in a fixed actual SGD task",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F10",
+      "title": "Independent SSD MMA and Mamba fusion caller arms",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F11",
+      "title": "Apple FAST opt-in TSQR norm and grid scheduling",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F12",
+      "title": "Qualify resident boosting partition and leaf-input reuse",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F13",
+      "title": "FAST-only shared row forest layout at divergent public callers",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F14",
+      "title": "Compare exact grouped query rows and fixed-probe bounded IVF list tasks",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F15",
+      "title": "Independent mini-batch labeling and bounded stopping work",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F16",
+      "title": "Integrate compensated production Kalman tail with independent gradient prerequisite",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F17",
+      "title": "Actual panel search A/B for stacked candidates and held evaluation state",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F18",
+      "title": "Resident KDE immutable input ownership and direct preparation",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F19",
+      "title": "Coalesced tiled gather with GPU-generated indices and direct owned outputs",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "F20",
+      "title": "Task-level optimizer fusion and FAST blocked LayerNorm qualification",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "id": "I01",
+      "title": "Attribute existing GEMM schedules",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I02",
+      "title": "Bound session GEMM scratch retention",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I03",
+      "title": "Batch independent products on separate grid jobs",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I04",
+      "title": "Qualify a coherently shared opt-in 64-element IDENTICAL leaf version",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I05",
+      "title": "Fuse bias after the explicit rounded product seam",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I06",
+      "title": "qualify attention KV grid reuse across GQA tails",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I07",
+      "title": "exercise retained and recomputed attention backward lifetimes",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I08",
+      "title": "attribute SSD tile reuse on multiple state cases and chunk tails",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I09",
+      "title": "gate token-parallel recurrence on prefix and decode boundaries",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I10",
+      "title": "reduce ordered training status from per-tile contributions",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I11",
+      "title": "qualify canonical radix embedding updates under skew and vocabulary reuse",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I12",
+      "title": "gate solver pass fusion on accepted iterates and refusal semantics",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I13",
+      "title": "implement compact degree buckets for bounded RBC stable merges",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I14",
+      "title": "qualify gated convergence at first fixed point on graph topologies",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I15",
+      "title": "qualify streaming exact neighbor merge at ties and batch tails",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I16",
+      "title": "attribute IVF grouped and staged scans under skewed list occupancy",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I17",
+      "title": "qualify loss-guide frontier retention at varying live leaf capacities",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I18",
+      "title": "Retain bounded exact forest histograms and subtract compatible siblings",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I19",
+      "title": "qualify reusable stable radix scratch and bounded key widths",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I20",
+      "title": "Retain bounded source-owned KDE partial storage under the existing chunked fold",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I21",
+      "title": "gate fused GMM components on complete EM state and likelihood",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I22",
+      "title": "qualify blocked TSQR factors and retained reflector applies across tails",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I23",
+      "title": "qualify independent time-series fits and batch-gradient selection state",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "I24",
+      "title": "fuse resident confusion and PRF input counts in one device pass",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "N01",
+      "title": "Isolate packed64 body tiles and their interaction",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "N02",
+      "title": "Prove and dispatch a two-level logical fold stack",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "N03",
+      "title": "Pipeline supported asynchronous operand loads with explicit completion",
+      "mode": "identical",
+      "vendors": [
+        "nvidia"
+      ]
+    },
+    {
+      "id": "N04",
+      "title": "Separate contiguous and gather staging with counted caller passes",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "N05",
+      "title": "Batch compatible launches with fixed-address changing inputs",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "N06",
+      "title": "Keep compact feature gradients in registers without query barriers",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "N07",
+      "title": "Stream bounded feature chunks with exact private integer histograms",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    },
+    {
+      "id": "N08",
+      "title": "Fuse canonical radius distance decisions into device CSR scan/fill",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ]
+    }
+  ]
+}

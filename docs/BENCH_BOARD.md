@@ -1,5 +1,9 @@
 # The benchmark board
 
+The [60-candidate A/B measurement board](../experiments/performance_ideas/measurements/20261006/BOARD.md)
+records the overnight candidate campaign, including pending and failed cases,
+component versus full-workload scope, and retained per-device evidence.
+
 `tools/bench_board.py` is one script, the same file on every box. It times
 mojolearn from the installed PyPI wheel against the opponent libraries on the
 same box, in the same run, with the same settings, interleaved round by round,
