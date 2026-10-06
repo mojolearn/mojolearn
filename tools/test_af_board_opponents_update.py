@@ -43,3 +43,13 @@ def test_idempotent_cells_and_resource_proof():
     assert second['races']['r']['cells'][-1]['resource_policy']['available_logical_cpus']==28
     resources['thread_caps']['OMP_NUM_THREADS']='1'
     with pytest.raises(AssertionError):merge(board,source,resources,'hash','snapshot.json')
+
+
+def test_failed_missing_shape_is_evidence_without_comparison():
+    board,source,resources=fixtures()
+    board['races']['r']['cells'][0].pop('shape')
+    source['races']['r']['cells'][0].update(status='REFUSED(unsupported MPS)',median_ms=None,times_ms=[],rounds=0)
+    source['races']['r']['cells'][0].pop('shape')
+    result,count=merge(board,source,resources,'hash','snapshot.json')
+    assert count['failed']==1 and count['successful']==0
+    assert result['races']['r']['cells'][-1]['median_ms'] is None

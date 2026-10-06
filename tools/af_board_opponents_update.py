@@ -23,7 +23,11 @@ def merge(board, snapshot, resources, digest, evidence):
         own=[c for c in target['cells'] if render.is_ours(c)]
         for cell in cells:
             # Exact race ID is necessary but not sufficient to compare old own rows.
-            assert all(c.get('shape') and c['shape']==cell.get('shape') for c in own),('shape mismatch',rid)
+            # Refusals have no admitted timing and some old drivers omit
+            # their shape. Preserve them visibly; successful comparisons still
+            # require matching, explicit workload shapes.
+            if cell['status']=='ok':
+                assert all(c.get('shape') and c['shape']==cell.get('shape') for c in own),('shape mismatch',rid)
             c=copy.deepcopy(cell);old=next((x for x in target['cells'] if x['arm']==c['arm'] and not render.is_ours(x)),None)
             if isinstance((old or {}).get('source'),dict) and old['source'].get('opponent_snapshot_sha256')==digest:
                 counts['already_current']+=1;continue
