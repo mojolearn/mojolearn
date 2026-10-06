@@ -22,6 +22,69 @@ coherently and the declared quality gates pass. FAST candidates require their
 real caller's quality rule; a dispatch hit or kernel-only error check is
 insufficient.
 
+## Required candidate measurements: full datasets
+
+Owner clarification, 2026-10-06: **ALWAYS run candidate A/B measurements on
+the full dataset for each affected estimator, through its complete operation.**
+This covers AMD, both NVIDIA routes, and applicable Apple FAST candidates.
+Compilation, bitwise identity, component timings, tiny caller fixtures, and
+opponent-only results do not replace those measurements. Reuse already accepted
+compilation and identity evidence; repair actual measurement failures only.
+
+Map every candidate to affected estimators and their full-workload recipes
+before timing. Record the recipe/source version, dataset hash and split, actual
+dimensions, settings, numeric mode, baseline/candidate defines, and complete
+timed boundary. These existing files save the per-estimator workload definitions:
+
+| Workloads | Saved definitions |
+| --- | --- |
+| Board roster, datasets and tree tasks | [`tools/bench_board.py`](../../tools/bench_board.py): `plan_races`, `TREE_LANES`, `TREE_TASK_DATASETS`; tree driver [`bench/speed/forest_speed_arm.py`](../../bench/speed/forest_speed_arm.py) |
+| Classical estimators | [`tools/classical_two_datasets.py`](../../tools/classical_two_datasets.py): `LANES`, `BLOCK_OF`, dataset preparation and lane row constants |
+| Additional classical estimators | [`tools/bench_board_more.py`](../../tools/bench_board_more.py): `LANES`, `LANE_CONFIG`, preparation and workload constants |
+| Expanded algorithms | [`tools/bench_board_algos.py`](../../tools/bench_board_algos.py): `LANES`, preparation, task settings and timed spans |
+| Neural workloads | [`tools/bench_board_neural.py`](../../tools/bench_board_neural.py): full LM/GEMM/block/Samba/MLP shapes and corpus definitions |
+| Nearest-neighbor dataset blocks | [`tools/knn_datasets.py`](../../tools/knn_datasets.py): index/query rows and dataset preparation |
+| Candidate controls and intended timing contract | Each `<ID>/manifest.json`; these recipes may still contain diagnostic-sized drivers and do not themselves prove full-dataset coverage |
+
+Audit the actual inputs: some existing lane recipes contain fixed dataset
+blocks or row caps. `--rows full` and `--neural-shape full` are selectors, not
+proof that the intended full workload was executed. Record all such limits;
+if the full-dataset mapping is missing or ambiguous, leave qualification pending
+and resolve the recipe instead of silently using a reduced substitute. Established
+synthetic-only lanes must use their full declared workload, not a smaller fixture.
+
+Time the complete declared operation, including required preparation,
+synchronization and output consumption. Keep fit/training, inference, cold use
+and repeated use distinguishable. Test relevant interacting toggle combinations
+and the proposed complete default configuration: independent component gains do
+not imply a combined gain. IDENTICAL promotion still requires the joint NVIDIA
+and AMD acceptance rule; Apple timings do not vote on IDENTICAL defaults.
+
+Keep every winner, loser, neutral result and failure, with source/hardware
+provenance and sample counts, both in the boards and beside the applicable
+switch. Component screening may guide diagnosis but cannot qualify defaults or
+close the full measurement board. Report its scope explicitly and keep missing
+full-workload measurements pending.
+
+### Audit of the 2026-10-06 campaign
+
+The retained candidate A/B records are component/public-caller screening;
+the complete candidate-to-full-dataset estimator campaign remains unfinished.
+The separately captured opponent runs do not fill that gap. No AMD or NVIDIA
+defaults were flipped in this campaign. Three Apple FAST source defaults **were**
+changed from OFF to ON using small caller workloads:
+
+| Default | Source | Promotion commit |
+| --- | --- | --- |
+| Byte-LM backward no-sync | [`training/byte_lm_afn.mojo`](../../training/byte_lm_afn.mojo), `AFN_LM_BWD_NOSYNC` | `b953bc9a2` |
+| HDBSCAN device linkage | [`hdbscan/impl/detail/fast_apple.mojo`](../../hdbscan/impl/detail/fast_apple.mojo), `HDB_LINKAGE_DEVICE` | `429622bef` |
+| KDE direct preparation | [`kde/resident_fit.mojo`](../../kde/resident_fit.mojo), `KDE_FAST_DIRECT_PREP` | `709f43abb` |
+
+Those promotions lack the full-dataset and interaction qualification required
+above. As of this documentation update they remain ON in source, with explicit
+OFF switches; this update does not revert them. Existing enabled defaults that
+were merely retained must not be described as newly promoted or newly qualified.
+
 ## Inspect recipes
 
 Run from the repository root:

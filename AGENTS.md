@@ -48,6 +48,27 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 
 ## Measurement process (owner, 2026-10-05)
 
+### Full-dataset candidate evaluation (owner clarification, 2026-10-06)
+
+- ALWAYS evaluate performance candidates with end-to-end A/B measurements on the full dataset for each affected
+  estimator. This applies to AMD, NVIDIA default, NVIDIA architecture-specific, and applicable Apple FAST candidates.
+  Component timings, synthetic substitutes, tiny public-caller fixtures, and opponent-only runs do not complete this work.
+- Before timing, map each candidate to its affected estimators and saved full-workload recipes: dataset/version/hash,
+  actual rows/features/classes or sequence dimensions, estimator settings, numeric mode, A/B toggles, and timed boundary.
+  See `experiments/performance_ideas/README.md` for the recipe locations. Audit intrinsic lane caps: `--rows full` alone
+  does not prove the full intended dataset was measured. Missing or ambiguous coverage stays pending; do not silently
+  substitute a smaller case and report completion.
+- Include preparation, fit/training, required synchronization, and consumed outputs in the declared whole-operation
+  boundary; report fit, inference, cold and repeated use separately where applicable. Measure relevant toggle combinations
+  and the proposed complete default configuration: independent component wins can interact and regress a full workload.
+- Do not promote a default from component or reduced-workload gains. Require the full-dataset evidence above and the
+  existing vendor/quality acceptance rules. Record winners AND losers beside switches and in the boards, with scope,
+  sample counts and pending coverage. Say "component screening complete" when only screening is complete, never
+  "measurement campaign complete" or "full board complete".
+- Reuse accepted compilation and identity evidence. Do not repeat compilation/identity validation merely to evaluate
+  performance; repair only actual measurement failures, preserving completed cells and original failure evidence.
+
+
 1. Freeze one commit per A/B round. Compile it once on cheap boxes (Apple on the M2; NVIDIA/AMD on cheap fast-CPU boxes).
    Only a green frozen build goes to the timing GPUs. New code waits for the next freeze.
 2. IDENTICAL switches are decided by NVIDIA and AMD together: combined faster, and neither vendor materially slower.
@@ -71,8 +92,9 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
   Update the experiment board and applicable main/vendor boards through board tools immediately. Pending, unsupported,
   failed or unqualified cells must remain visibly separate from admitted measurements; preserve the original evidence.
   Do not invent opponent ratios from own-only A/B runs or overwrite incomparable historical opponent measurements.
-- Evaluate each candidate as soon as its required baseline/candidate measurements and correctness checks are available
-  on BOTH NVIDIA and AMD across the planned representative cases. Do not wait for unrelated candidates or the entire
+- Evaluate each candidate as soon as its required full-dataset, end-to-end baseline/candidate measurements and accepted
+  quality evidence are available on BOTH NVIDIA and AMD for all affected estimator workloads and relevant combinations.
+  Do not wait for unrelated candidates or the entire
   campaign to finish. Apply the existing rule: combined improvement, neither vendor materially slower, required identity
   and quality preserved. A single partial cell, compile pass or synthetic-only gain is not enough to flip a default.
 - When that evidence supports a change, flip the applicable switch promptly and commit/push it to `main`. Put the reason
