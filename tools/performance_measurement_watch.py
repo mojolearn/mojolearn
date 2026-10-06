@@ -90,6 +90,7 @@ def main():
         (state / 'watch.pid').write_text(str(os.getpid()))
         while not (state / 'STOP').exists():
             try:
+                config = read(args.config)
                 tick(config, state)
             except Exception as exc:
                 atomic(state / 'error.json', {'at': time.time(), 'error': repr(exc)})

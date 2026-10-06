@@ -5567,6 +5567,20 @@
       "decision": "RETAIN OFF for evaluated experimental arms: mixed/regressing measured cases; see source for each scoped outcome",
       "commit": "b953bc9a2",
       "evidence": "Inline toggle annotations retain case timing and quality counts"
+    },
+    {
+      "candidate": "F12 / ordered-storage",
+      "vendor": "apple",
+      "decision": "CONFIRMED EXISTING DEFAULT: fit+first prediction B/A0.7802,0.8846; repeated0.9203,0.9955; same task error",
+      "commit": "9ad011c2a",
+      "evidence": "gbdt/methods/ordered_fast_switches.mojo ORD_ALL; 511x11 and1023x17 24-tree M3 tasks"
+    },
+    {
+      "candidate": "F15 / HDBSCAN linkage",
+      "vendor": "apple",
+      "decision": "PROMOTED: Apple FAST only with OFF escape; all3 planned fits faster, matching task quality. Download combination pending; downloads stays OFF.",
+      "commit": "429622bef",
+      "evidence": "hdbscan/impl/detail/fast_apple.mojo:77; M3 cold B/A0.8085,0.6857,0.6613; repeated0.6957,0.6656,0.6698"
     }
   ]
 }
