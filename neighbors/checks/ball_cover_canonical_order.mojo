@@ -298,6 +298,8 @@ def rbc_canonicalize_row_order(
     if n_queries <= 0 or nnz <= 0:
         return
 
+    # I13 new candidate remains default off. Qualification is pending: native
+    # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
     comptime if is_defined["MOJOLEARN_RBC_CANON_DEGREE_BUCKETS"]():
         rbc_canonicalize_degree_buckets(ctx, adj_ia, adj_ja, n_queries, nnz)
         return
