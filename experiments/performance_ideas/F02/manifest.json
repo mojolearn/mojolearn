@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "F02",
-  "title": "Share GEMM fragments with strided fused LU subtract",
+  "title": "Share strided GEMM with fused LU and lower-triangle Cholesky subtract",
   "mode": "fast",
   "vendors": [
     "apple"
@@ -10,7 +10,10 @@
   "implementation_paths": [
     "experiments/apple_fast/gemm/scoped_dispatch.mojo",
     "x_decomp/lu_fast_mma.mojo",
-    "experiments/performance_ideas/F02/caller.py"
+    "experiments/performance_ideas/F02/caller.py",
+    "cholesky/checks/fast_trsm.mojo",
+    "bindings/_mojolearn_gp.mojo",
+    "bindings/_mojolearn_x_decomp.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_LU_FAST_SHARED_SUB"
@@ -43,7 +46,7 @@
   "quality_gates": [
     "factor/solve residual against FAST incumbent",
     "retain strided subtract epilogue without extra pass",
-    "Cholesky triangular and MCD batching adapters still require independent integration"
+    "Cholesky factor/solve and exact upper-triangle preservation; MCD/SDK adapters separately owed"
   ],
   "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
   "blocker": null,
@@ -52,5 +55,13 @@
   "prerequisite_bindings": [
     "core"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "variants": {
+    "cholesky": [
+      "MOJOLEARN_CHOL_FAST_SHARED_SUB"
+    ]
+  },
+  "variant_bindings": {
+    "cholesky": "gp"
+  }
 }

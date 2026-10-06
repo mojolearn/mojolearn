@@ -54,10 +54,11 @@ def main():
         digest=build(prerequisite,[],destination)
         dependencies[name]=dict(source_sha=source,numeric_mode='fast',vendor='apple',defines=[],sha256=digest)
     hashes={}
-    for arm,defines in (('A',card['baseline_defines']),('B',candidate)):
+    baseline=card.get('variant_baseline_defines',{}).get(a.variant,card['baseline_defines'])
+    for arm,defines in (('A',baseline),('B',candidate)):
         hashes[arm]=build(binding,defines,a.output/(arm+'.so'))
     manifest=dict(source_sha=source,binding=binding,numeric_mode='fast',vendor='apple',
-        defines_A=flags(card['baseline_defines']),defines_B=flags(candidate),hashes=hashes,
+        defines_A=flags(baseline),defines_B=flags(candidate),hashes=hashes,
         dependencies=dependencies,builder='existing M2 Pro',status='OK')
     (a.output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print('APPLE_FAST_BUILD status=OK source='+source+' binding='+binding+' artifacts='+str(a.output))

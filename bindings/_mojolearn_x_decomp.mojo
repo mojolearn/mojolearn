@@ -20,6 +20,11 @@ from x_decomp.fa_fast import FA_FAST_APPLE, fa_defines_py, fa_em_py, fa_gram_py,
 from std.sys.info import has_apple_gpu_accelerator
 from x_decomp.mcd_bmma import mcd_fast_batch_count, MCD_G1_GRAM, MCD_G1_AUDIT, mcd_g1_count, mcd_g1_last
 
+from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
+
+def x_decomp_shared_sub_count_py() raises -> PythonObject:
+    return PythonObject(shared_sub_count(False))
+
 def mcd_fast_batch_count_py() raises -> PythonObject:
     return PythonObject(mcd_fast_batch_count())
 
@@ -92,7 +97,8 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
         comptime if MCD_G1_AUDIT:
-            m.def_function[mcd_g1_gram_on_py]("mcd_g1_gram_on")
+            m.def_function[x_decomp_shared_sub_count_py]("x_decomp_shared_sub_count")
+        m.def_function[mcd_g1_gram_on_py]("mcd_g1_gram_on")
             m.def_function[mcd_g1_gram_count_py]("mcd_g1_gram_count")
             m.def_function[mcd_g1_gram_last_py]("mcd_g1_gram_last")
         m.def_function[gemm_py[DevExec]]("x_decomp_gemm")

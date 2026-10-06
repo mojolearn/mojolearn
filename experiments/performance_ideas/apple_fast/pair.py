@@ -41,7 +41,7 @@ def main():
     if defines is None:
         assert args.variant == 'default'
         defines = card['candidate_defines']
-    assert [token for token in manifest['defines_A'].split() if token != '-D'] == card['baseline_defines']
+    assert [token for token in manifest['defines_A'].split() if token != '-D'] == card.get('variant_baseline_defines', {}).get(args.variant, card['baseline_defines'])
     assert [token for token in manifest['defines_B'].split() if token != '-D'] == defines
     hashes = {arm: sha(args.arms / (arm + '.so')) for arm in ('A', 'B')}
     assert hashes == manifest['hashes']
