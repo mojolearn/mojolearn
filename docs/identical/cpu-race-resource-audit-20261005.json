@@ -1,0 +1,38 @@
+{
+  "scope": "Retained f867 Apple IDENTICAL board; FAST repeats the same stored opponent set. Not an audit of every historical repository benchmark.",
+  "races_in_current_manifest": 456,
+  "planned_cpu_cells": 411,
+  "planned_cpu_races": 378,
+  "historical_cpu_cells": 335,
+  "historical_timed_cpu_cells": 324,
+  "historical_failed_or_untimed_cpu_cells": 11,
+  "stored_commits": {
+    "26cdf0767744c104ac7486f650bd2774e2c90cfc": 256,
+    "a19d159d7d3a7322d0159e6c3482de29c4464109": 32,
+    "028f6cf4382f582dbb41232beaea8f15b222b737": 47
+  },
+  "history_findings": [
+    "a7bc88b97 (2026-09-26) board child_env clears inherited five standard CPU thread caps.",
+    "ff1031194 (2026-09-11) classical race protocol explicitly gives sklearn all cores and records worker pools.",
+    "All three source commits on the 335 retained opponent entries clear standard inherited thread caps.",
+    "dceb50bd8/dc4a99344 (2026-10-01) added Linux cgroup sizing and MOJOLEARN_BENCH_THREADS override; hardening removes that override for race workers."
+  ],
+  "confirmed_globally_one_core_cells_from_inspected_evidence": 0,
+  "worker_thread_provenance_limitation": "The retained board cells do not contain effective worker thread pools; code history and controller env cannot prove each historical runtime. No claim that all324timedcells were worker-verified uncapped.",
+  "historical_estimator_thread_parameters": [],
+  "current_readback": {
+    "torch_threads": 20,
+    "torch_interop_threads": 28,
+    "pools": [
+      {
+        "user_api": "openmp",
+        "internal_api": "openmp",
+        "num_threads": 20,
+        "prefix": "libomp",
+        "filepath": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/torch/lib/libomp.dylib",
+        "version": null
+      }
+    ]
+  },
+  "conclusion": "No evidence of blanket one-core CPU opponent measurements. Fresh411-cell CPU sweep is broader than the demonstrated resource problem; remains user-authorized and unchanged. Unrestricted availability does not force serial libraries to use every core."
+}

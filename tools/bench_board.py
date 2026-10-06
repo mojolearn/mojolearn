@@ -787,7 +787,6 @@ def child_env(ctx, extra=None):
     env = dict(os.environ)
     for k in THREAD_ENV:              # a cap inherited from a shell throttles CPU arms silently
         env.pop(k, None)
-    _load_tool("cpu_quota").apply_cpu_quota(env)     # but a cgroup quota below the visible CPUs throttles the defaults
     env.pop("PYTHONPATH", None)       # nothing may shadow the installed wheel
     env["MOJOLEARN_BENCH_INSTALLED"] = "1"
     env["GBM_BENCH_DATA"] = ctx["data_root"]
@@ -802,6 +801,8 @@ def child_env(ctx, extra=None):
             env["MOJOLEARN_BOARD_RECEIPTS"] = ctx["receipt_dir"]
     if extra:
         env.update(extra)
+    # Resource policy wins over shell and per-run diagnostic overrides.
+    _load_tool("cpu_quota").apply_cpu_quota(env)
     return env
 
 
