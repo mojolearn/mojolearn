@@ -46,7 +46,7 @@ def check_descriptors() raises:
     print("A07_TASK_MAP_PASS tasks", n, "bound", HIST_WORKLOAD_GRANULARITY)
 
 
-def main() raises:
+def run_checks() raises:
     check_descriptors()
     var ctx = DeviceContext()
     var fails = arm_a_zero_weight_drop(ctx)
@@ -56,3 +56,7 @@ def main() raises:
     if fails != 0:
         raise Error("A07 complete weighted fit/failure contract failed")
     print("A07_PRODUCTION_PASS weighted_fits validation bootstrap objective_contract")
+
+
+def main() raises:
+    run_checks()

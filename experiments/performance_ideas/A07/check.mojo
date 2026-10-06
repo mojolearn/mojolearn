@@ -8,11 +8,13 @@ integer arithmetic, skewed node row spans, and refused malformed offsets.
 Neither primitive qualification substitutes for a complete forest fit.
 """
 from max.gpu.host import DeviceContext
+from experiments.performance_ideas.A07.production_check import run_checks as check_production
 from neighbors.checks.rbc_canonical_merge_check import check
 from experiments.performance_ideas.A07.histogram_check import run_checks
 
 
 def main() raises:
+    check_production()
     var ctx=DeviceContext()
     check(ctx,[0,1,2,7,31,257,3,513,2,1025,0],False,False)
     check(ctx,[0,1,2,7,31,257,3,513,2,1025,0],True,False)
