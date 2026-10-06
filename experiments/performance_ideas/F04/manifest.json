@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "id": "F04",
+  "title": "Pair independent gather completions with owned buffers",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "resample/estimator.mojo",
+    "experiments/performance_ideas/F04/caller.py"
+  ],
+  "candidate_defines": [
+    "-D",
+    "MOJOLEARN_RESAMPLE_FAST_GATHER",
+    "-D",
+    "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+  ],
+  "baseline_defines": [
+    "-D",
+    "MOJOLEARN_RESAMPLE_FAST_GATHER"
+  ],
+  "build_argv": [
+    "bash",
+    "bindings/build_resample.sh"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F04",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F04/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "all-Mojo GPU draw/gather reach",
+    "single completion retains every source/output buffer",
+    "asymmetric multi-array sampling semantics",
+    "refusal and retained-output ownership"
+  ],
+  "timing_contract": "Whole public resample through first read of every output; direct transport counted; no packed extra copy",
+  "blocker": null
+}

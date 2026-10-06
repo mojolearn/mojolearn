@@ -2303,6 +2303,35 @@ comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER"]())
 
 
+# Pair independent array transfers on one stream. Source/output DeviceBuffers
+# remain owned until the single completion; direct host transport avoids a
+# second packed copy. This is default-off and applies to the supported
+# float32 all-GPU gather entrance, never the hybrid narrow route.
+comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"]())
+
+def resample_gather_grouped(
+    ctx: DeviceContext, rows: DeviceBuffer[DType.int32], n: Int, count: Int,
+    srcs: List[Int], dsts: List[Int], widths: List[Int],
+) raises:
+    var keep = List[DeviceBuffer[DType.float32]]()
+    for a in range(len(srcs)):
+        var d = widths[a]
+        var source = ctx.enqueue_create_buffer[DType.float32](n * d)
+        var output = ctx.enqueue_create_buffer[DType.float32](count * d)
+        ctx.enqueue_copy(dst_buf=source, src_ptr=f32_ptr(srcs[a]))
+        ctx.enqueue_function[gather_rows_f32_kernel](
+            output.unsafe_ptr(), source.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
+            grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=f32_ptr(dsts[a]), src_buf=output)
+        keep.append(source^)
+        keep.append(output^)
+    ctx.synchronize()
+    _ = keep^
+
+
 def resample_gather_gpu(
     n: Int, count: Int, seed: UInt64, srcs: List[Int],
     dsts: List[Int], widths: List[Int],
@@ -2317,7 +2346,7 @@ def resample_gather_gpu(
         if count <= 0:
             return False
         for a in range(len(widths)):
-            if widths[a] <= 0 or widths[a] > 2147483647:
+            if widths[a] <= 0 or max(n * widths[a], count * widths[a]) > 2147483647:
                 return False
         var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE)
         var ctx = process_ctx[_DEVCTX_SLOT]()
@@ -2328,6 +2357,12 @@ def resample_gather_gpu(
             Int32(n), Int32(count), Int32(1),
             grid_dim=(ceildiv(count, 256), 1, 1), block_dim=(256, 1, 1),
         )
+        comptime if RESAMPLE_FAST_WAIT_PAIR:
+            resample_gather_grouped(ctx, rows, n, count, srcs, dsts, widths)
+            _ = rows^
+            _ = keys^
+            _ = ctx^
+            return True
         for a in range(len(srcs)):
             var d = widths[a]
             var src = f32_ptr(srcs[a])
