@@ -1,0 +1,517 @@
+{
+  "schema": "mojolearn.apple-full-opponent-quality-queue/1",
+  "budget_seconds": 7200,
+  "start_budget": "After exclusive shared gpu.lock acquisition; all14cells, setup and failure overhead share one immutable deadline",
+  "cell_count": 14,
+  "cells": [
+    {
+      "race": "classical/ols/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "classical",
+      "block": "big",
+      "dataset": "taxi",
+      "fit_shape": [
+        5250086,
+        11
+      ],
+      "eval_shape": [
+        500000,
+        11
+      ],
+      "historical_reduced_reference": {
+        "shape": "4000000x11",
+        "fit_seconds": 0.2740208339819219,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "fit_intercept": true
+        }
+      }
+    },
+    {
+      "race": "classical/pca/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "classical",
+      "block": "big",
+      "dataset": "taxi",
+      "fit_shape": [
+        5250086,
+        11
+      ],
+      "eval_shape": [
+        500000,
+        11
+      ],
+      "historical_reduced_reference": {
+        "shape": "4000000x11",
+        "fit_seconds": 0.1196127499861177,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "n_components": 10,
+          "whiten": false,
+          "svd_solver": "covariance_eigh",
+          "tol": 0.0,
+          "iterated_power": "auto",
+          "n_oversamples": 10,
+          "power_iteration_normalizer": "auto",
+          "random_state": 7
+        }
+      }
+    },
+    {
+      "race": "classical/kmeans/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "classical",
+      "block": "big",
+      "dataset": "taxi",
+      "fit_shape": [
+        5250086,
+        11
+      ],
+      "eval_shape": [
+        500000,
+        11
+      ],
+      "historical_reduced_reference": {
+        "shape": "4000000x11",
+        "fit_seconds": 2.0579757500090636,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "n_clusters": 8,
+          "init": "k-means++",
+          "n_init": 1,
+          "max_iter": 300,
+          "tol": 1e-07,
+          "random_state": 7,
+          "init_centroids": null,
+          "metric": "euclidean",
+          "oversampling_factor": 0.0
+        }
+      }
+    },
+    {
+      "race": "classical/kmeans/taxi/rows=full",
+      "arm": "torch-gpu",
+      "seconds": 120,
+      "family": "classical",
+      "block": "big",
+      "dataset": "taxi",
+      "fit_shape": [
+        5250086,
+        11
+      ],
+      "eval_shape": [
+        500000,
+        11
+      ],
+      "historical_reduced_reference": {
+        "shape": "4000000x11",
+        "fit_seconds": 2.3236074580054265,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "n_clusters": 8,
+          "init": "k-means++",
+          "n_init": 1,
+          "max_iter": 300,
+          "tol": 1e-07,
+          "random_state": 7,
+          "init_centroids": null,
+          "metric": "euclidean",
+          "oversampling_factor": 0.0
+        }
+      }
+    },
+    {
+      "race": "classical2/ridge/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "classical2",
+      "block": "reg",
+      "dataset": "taxi",
+      "fit_shape": [
+        5250086,
+        11
+      ],
+      "eval_shape": [
+        500000,
+        11
+      ],
+      "historical_reduced_reference": {
+        "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+        "fit_seconds": 0.03605841699754819,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "alpha": 1.0,
+          "solver": "eig",
+          "fit_intercept": true,
+          "normalize": false
+        }
+      }
+    },
+    {
+      "race": "classical2/ridge/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "classical2",
+      "block": "reg",
+      "dataset": "istella",
+      "fit_shape": [
+        2043304,
+        220
+      ],
+      "eval_shape": [
+        500000,
+        220
+      ],
+      "historical_reduced_reference": {
+        "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+        "fit_seconds": 5.980974499951117,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "alpha": 1.0,
+          "solver": "eig",
+          "fit_intercept": true,
+          "normalize": false
+        }
+      }
+    },
+    {
+      "race": "classical2/lasso/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "classical2",
+      "block": "reg",
+      "dataset": "taxi",
+      "fit_shape": [
+        5250086,
+        11
+      ],
+      "eval_shape": [
+        500000,
+        11
+      ],
+      "historical_reduced_reference": {
+        "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+        "fit_seconds": 0.047872208000626415,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "alpha": 0.01,
+          "fit_intercept": true,
+          "max_iter": 1000,
+          "tol": 0.0001,
+          "solver": "cd",
+          "selection": "cyclic",
+          "precompute": false,
+          "positive": false,
+          "random_state": null
+        }
+      }
+    },
+    {
+      "race": "classical2/lasso/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "classical2",
+      "block": "reg",
+      "dataset": "istella",
+      "fit_shape": [
+        2043304,
+        220
+      ],
+      "eval_shape": [
+        500000,
+        220
+      ],
+      "historical_reduced_reference": {
+        "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+        "fit_seconds": 3.8786758329952136,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "alpha": 0.01,
+          "fit_intercept": true,
+          "max_iter": 1000,
+          "tol": 0.0001,
+          "solver": "cd",
+          "selection": "cyclic",
+          "precompute": false,
+          "positive": false,
+          "random_state": null
+        }
+      }
+    },
+    {
+      "race": "classical2/elasticnet/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "classical2",
+      "block": "reg",
+      "dataset": "taxi",
+      "fit_shape": [
+        5250086,
+        11
+      ],
+      "eval_shape": [
+        500000,
+        11
+      ],
+      "historical_reduced_reference": {
+        "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+        "fit_seconds": 0.040331666998099536,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "alpha": 0.1,
+          "l1_ratio": 0.5,
+          "fit_intercept": true,
+          "max_iter": 1000,
+          "tol": 0.0001,
+          "solver": "cd",
+          "selection": "cyclic",
+          "precompute": false,
+          "positive": false,
+          "random_state": null
+        }
+      }
+    },
+    {
+      "race": "classical2/elasticnet/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "classical2",
+      "block": "reg",
+      "dataset": "istella",
+      "fit_shape": [
+        2043304,
+        220
+      ],
+      "eval_shape": [
+        500000,
+        220
+      ],
+      "historical_reduced_reference": {
+        "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+        "fit_seconds": 1.8193929169792682,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "alpha": 0.1,
+          "l1_ratio": 0.5,
+          "fit_intercept": true,
+          "max_iter": 1000,
+          "tol": 0.0001,
+          "solver": "cd",
+          "selection": "cyclic",
+          "precompute": false,
+          "positive": false,
+          "random_state": null
+        }
+      }
+    },
+    {
+      "race": "algos/resample/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "algos",
+      "block": "reg",
+      "dataset": "taxi",
+      "fit_shape": [
+        5250086,
+        11
+      ],
+      "eval_shape": [
+        500000,
+        11
+      ],
+      "historical_reduced_reference": {
+        "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+        "fit_seconds": 0.05190445800690213,
+        "timing_admission": false
+      },
+      "settings": {
+        "replace": true,
+        "n_samples": null,
+        "random_state": 7
+      }
+    },
+    {
+      "race": "algos/resample/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 120,
+      "family": "algos",
+      "block": "reg",
+      "dataset": "istella",
+      "fit_shape": [
+        2043304,
+        220
+      ],
+      "eval_shape": [
+        500000,
+        220
+      ],
+      "historical_reduced_reference": {
+        "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+        "fit_seconds": 0.335809625001275,
+        "timing_admission": false
+      },
+      "settings": {
+        "replace": true,
+        "n_samples": null,
+        "random_state": 7
+      }
+    },
+    {
+      "race": "classical2/linearsvr/taxi/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 1500,
+      "family": "classical2",
+      "block": "reg",
+      "dataset": "taxi",
+      "fit_shape": [
+        5250086,
+        11
+      ],
+      "eval_shape": [
+        500000,
+        11
+      ],
+      "historical_reduced_reference": {
+        "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+        "fit_seconds": 85.77038045803783,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "epsilon": 0.0,
+          "penalty": "l2",
+          "loss": "epsilon_insensitive",
+          "C": 1.0,
+          "fit_intercept": true,
+          "penalized_intercept": false,
+          "tol": 0.0001,
+          "max_iter": 1000,
+          "linesearch_max_iter": 100,
+          "lbfgs_memory": 5
+        }
+      }
+    },
+    {
+      "race": "classical2/linearsvr/istella/rows=full",
+      "arm": "sklearn-cpu",
+      "seconds": 3600,
+      "family": "classical2",
+      "block": "reg",
+      "dataset": "istella",
+      "fit_shape": [
+        2043304,
+        220
+      ],
+      "eval_shape": [
+        500000,
+        220
+      ],
+      "historical_reduced_reference": {
+        "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+        "fit_seconds": 710.2619850839837,
+        "timing_admission": false
+      },
+      "settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "epsilon": 0.0,
+          "penalty": "l2",
+          "loss": "epsilon_insensitive",
+          "C": 1.0,
+          "fit_intercept": true,
+          "penalized_intercept": false,
+          "tol": 0.0001,
+          "max_iter": 1000,
+          "linesearch_max_iter": 100,
+          "lbfgs_memory": 5
+        }
+      }
+    }
+  ],
+  "order": "Short cells first; two full LinearSVR workloads last",
+  "expected_elapsed": "Approximately60\u201390minutes from historical fit timing\u00d7row ratios\u00d7two fits, highly uncertain for iterative solvers;2hourhardwallcap. Existing thread-resource claims not retroactively strengthened.",
+  "compile": false,
+  "install": false,
+  "verification_rerun": false,
+  "warmups": 1,
+  "scored_samples": 1,
+  "full_machine_cpu": "Clear inherited library thread caps and MOJOLEARN_* overrides; existing worker records effective pools. CPU/GPUarmsserial under sharedgpu.lock.",
+  "reused_quality": [
+    "FullIstella PCA/OLS/KMeans historicalsame-arrayhashsame-settings opponents",
+    "Fulltaxi GMMsklearn repaired2hbatch"
+  ],
+  "blocked_roster": [
+    {
+      "race": "classical/ols/taxi/rows=full",
+      "arm": "torch-gpu",
+      "status": "BLOCKED_UNSUPPORTED_MPS_OPERATOR",
+      "reason": "Prior retained torchMPS linear algebra NotImplementedError; unchanged backend is not retried"
+    },
+    {
+      "race": "classical/pca/taxi/rows=full",
+      "arm": "torch-gpu",
+      "status": "BLOCKED_UNSUPPORTED_MPS_OPERATOR",
+      "reason": "Prior retained torchMPS linear algebra NotImplementedError; unchanged backend is not retried"
+    }
+  ],
+  "data_policy": "Only private symlinks to accepted existing NPZ+JSON. Never generate, shrink, restandardize or alter dataset. Each expected fullshape and same source-array hashes attested before race.",
+  "promotions": false
+}
