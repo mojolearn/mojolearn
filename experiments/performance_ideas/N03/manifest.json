@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "id": "N03",
+  "title": "Pipeline supported asynchronous operand loads with explicit completion",
+  "mode": "identical",
+  "vendors": [
+    "nvidia"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "gemm/experiments/async_operand_pipeline.mojo",
+    "gemm/experiments/async_operand_pipeline_check.mojo",
+    "gemm/experiments/async_api_probe.mojo"
+  ],
+  "candidate_defines": [],
+  "baseline_defines": [],
+  "build_argv": [
+    "pixi",
+    "run",
+    "mojo",
+    "build",
+    "-j1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_NVIDIA=1",
+    "--target-accelerator",
+    "sm_89",
+    "-I",
+    "{repo}",
+    "{repo}/gemm/experiments/async_operand_pipeline_check.mojo",
+    "-o",
+    "{output}"
+  ],
+  "run_argv": [
+    "{output}"
+  ],
+  "validation_paths": [
+    "gemm/checks/gemm_step_arms_check.mojo",
+    "core/gemm_identity_check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host output bits",
+    "exact intermediate outputs and poison control",
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Report is_nvidia_gpu reach; Apple plain-load compile cannot qualify NVIDIA async path"
+  ],
+  "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
+  "blocker": null
+}
