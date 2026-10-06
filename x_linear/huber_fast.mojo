@@ -16,13 +16,14 @@ minimizer's state (theta, the trial point, both gradients, the direction,
 the pair ring, f, slope, the step) lives in one device buffer, and each
 evaluation is a fixed unit of four launches: the map (a thread per row,
 `huber_map_row`), the block partials (a thread per (block, task),
-`_huber_part`), the fold (`hg_fold_kernel`, a thread per task) and
+`_huber_part`), the fold (a thread per task; `hg_fold_kernel` for the
+incumbent, `hf_compensated_fold_kernel` under AFCL_L04) and
 `hf_step_kernel`, one block that finishes the objective (huber_finish's
 statements), takes the line-search decision, updates the pair ring, builds
 the next direction and writes the next trial point. The host enqueues
 HF_BATCH units at a time and reads the stop word once per batch; units
-after the stop are no-ops. The same objective and the same FOLD_BLOCK
-partials as the grid path, with the source's ascending dots on the lead
+after the stop are no-ops. The same objective and partial expressions as
+the grid path, with the block sizes below and ascending dots on the lead
 (`_hf_dot`). A batch is one
 guarded unit under the Metal witness (x_linear/witness.mojo): the state is
 snapshotted before it and restored before a rerun. Recovery note: main's
@@ -48,6 +49,7 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.huber import huber_map_row, _huber_part
 from x_linear.huber_grid import hg_fold_kernel, HG_TPB
 from x_linear.lbfgs import LBFGS_M
+from x_linear.ff import ff_of, ff_add_f
 
 #: (FAST + Apple, default ON since 2026-10-04) HuberRegressor's fit with the line search,
 #: the pair ring and the stop test in one device step kernel per evaluation
@@ -84,10 +86,18 @@ comptime HUBER_DEVICE_LBFGS = (
 comptime HUBER_FAST_BLOCK512 = HUBER_DEVICE_LBFGS and not is_defined["MOJOLEARN_HUBER_FAST_BLOCK512_OFF"]()
 #: Rows per partial of the fast fit: FOLD_BLOCK (the grid fit's order) or
 #: 512 under HUBER_FAST_BLOCK512.
-# AFCL-L04: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# AFCL-L04: default OFF; compensated-final-v1 repair, NOT COMPILED/TESTED.
 # 256 rows shorten each partial chain and expose twice the row parallelism
-# of the existing 512-row schedule; scratch and final folds grow accordingly.
-# Solver tolerance, line-search budget and stopping observations are unchanged.
+# of the existing 512-row schedule, but double the final chain length. Carry
+# its rounding residual in a second Float32 before forming the objective and
+# gradient used by L-BFGS. This applies to every shape, including signed
+# gradient sums; count words remain integer sums. No solver policy changes.
+# Prior combined A/B (2026-10-06, one scored sample/arm, full Huber/Istella)
+# failed quality: A/B r2 -0.00708934291/-0.00595218973, rmse
+# 0.8373928001/0.8369198963. The longer uncorrected fold is a source-based
+# numerical risk, not an isolated causal diagnosis. Keep that failure; this
+# revision needs a new frozen binding and full Taxi + Istella A/B. See
+# experiments/six_lane_integration/repairs/AFCL_L04_HUBER_FOLD.json.
 comptime AFCL_L04 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                     and is_defined["MOJOLEARN_AFCL_L04"]())
 comptime HF_FOLD = 256 if AFCL_L04 else (512 if HUBER_FAST_BLOCK512 else FOLD_BLOCK)
@@ -170,6 +180,38 @@ def hf_part_kernel(x: FP, y: FP, n: Int32, d: Int32, p: Int32, cells: Int32, lb:
         var lo = bk * HF_FOLD
         st(scr, o * nb + bk, _huber_part(o, Int(cells), Int(d), x, y, nn, rows, rows + nn, thr, sw != 0, lo,
                                          min(HF_FOLD, nn - lo)))
+    witness_end(wf, woff, nonce)
+
+
+def hf_compensated_fold_kernel(scr: FP, nbk: Int32, cells: Int32, g: FP, sums: FP,
+                              wf: IP, woff: Int32, nonce: Int32):
+    """L04's final fold: ascending partials with a Float32 rounding residual.
+
+    Reuse the lane's TwoSum-based float-float addition for every gradient
+    and loss/weight sum. The number of row partials grows with n; carrying
+    the residual avoids the uncorrected final chain introduced by L04's
+    shorter blocks. This does not recover rounding within each partial or
+    alter the objective, line-search thresholds, or stopping budget.
+    The last slot contains bitcast Int32 counts, never floating values.
+    Grid, scratch layout, and witness slots are the incumbent fold's.
+    """
+    var o = Int(block_idx.x) * HG_TPB + Int(thread_idx.x)
+    var c = Int(cells)
+    var nb = Int(nbk)
+    if o < c + 4:
+        var acc = ff_of(Float32(0))
+        for bk in range(nb):
+            acc = ff_add_f(acc, ld(scr, o * nb + bk))
+        var v = fa(acc.hi, acc.lo)
+        if o < c:
+            st(g, o, v)
+        else:
+            st(sums, o - c, v)
+    elif o == c + 4:
+        var k = 0
+        for bk in range(nb):
+            k += Int(bitcast[DType.int32](ld(scr, o * nb + bk)))
+        st(sums, 4, bitcast[DType.float32](Int32(k)))
     witness_end(wf, woff, nonce)
 
 
@@ -432,10 +474,16 @@ def huber_fit_fast(
                     wit.p(), Int32(wo), nonce, grid_dim=b2, block_dim=HG_TPB,
                 )
                 wo += b2
-                ctx.enqueue_function[hg_fold_kernel](
-                    dscr.unsafe_ptr(), Int32(nbk), Int32(cells), dgc.unsafe_ptr(), dsums.unsafe_ptr(),
-                    wit.p(), Int32(wo), nonce, grid_dim=b3, block_dim=HG_TPB,
-                )
+                comptime if AFCL_L04:
+                    ctx.enqueue_function[hf_compensated_fold_kernel](
+                        dscr.unsafe_ptr(), Int32(nbk), Int32(cells), dgc.unsafe_ptr(), dsums.unsafe_ptr(),
+                        wit.p(), Int32(wo), nonce, grid_dim=b3, block_dim=HG_TPB,
+                    )
+                else:
+                    ctx.enqueue_function[hg_fold_kernel](
+                        dscr.unsafe_ptr(), Int32(nbk), Int32(cells), dgc.unsafe_ptr(), dsums.unsafe_ptr(),
+                        wit.p(), Int32(wo), nonce, grid_dim=b3, block_dim=HG_TPB,
+                    )
                 wo += b3
                 ctx.enqueue_function[hf_step_kernel](
                     dlb.unsafe_ptr(), dls.unsafe_ptr(), dgc.unsafe_ptr(), dsums.unsafe_ptr(), nf, Int32(d),

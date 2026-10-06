@@ -1,0 +1,651 @@
+{
+  "schema": "mojolearn.six-lane-source-repair/1",
+  "implementation_id": "AF.C.AFCL-L04",
+  "revision_id": "AF.C.AFCL-L04:compensated-final-v1",
+  "base_main": "551d71ad5ac4e77ea516caf26b4744ed099c0802",
+  "branch": "repair/apple-fast-huber-fold-20261006",
+  "source": {
+    "path": "x_linear/huber_fast.mojo",
+    "before_sha256": "80208b97942b6d9c4fd895cacee57869863e8c88eb3d0b9d211b3a4467d05f9e",
+    "after_sha256": "24873b530e9a39565c46d9ad90a975f0571deb6a57c9360d09adfbcd411ee7af",
+    "shared_arithmetic": "x_linear/ff.mojo:ff_add_f",
+    "arithmetic_sha256": "f78f8d7209589468f51c2a06883ab06036aa6deec0ee5c9ae7a9e09e31f3ea5d",
+    "production_caller": "x_linear/device.mojo:fit_device -> huber_fit_fast",
+    "candidate_caller": "huber_fit_fast -> hf_compensated_fold_kernel",
+    "incumbent_caller": "huber_fit_fast -> hg_fold_kernel",
+    "changed_binding": "bindings/_mojolearn_x_linear.mojo"
+  },
+  "implementation": {
+    "programmed": true,
+    "production_wired": "source branch under AFCL_L04",
+    "harness_selection": "existing MOJOLEARN_AFCL_L04=1 and master AF.C.AFCL-L04:default; new binaries required",
+    "runtime_reach": "NOT VERIFIED",
+    "compiled": []
+  },
+  "qualification": {
+    "timing": "UNMEASURED",
+    "quality": "NOT VERIFIED",
+    "identity": "NOT VERIFIED",
+    "acceptance": "PENDING",
+    "promoted": false,
+    "default_enabled": false
+  },
+  "cause_status": "Source-based roundoff amplifier identified; sole causality and repair sufficiency are NOT established by the old combined A/B.",
+  "mechanism": "Retain 256-row partials and compensate the final ascending floating sums with two Float32 words; integer outlier counts retain their existing sum. No estimator or line-search policy changes.",
+  "retained_failure": {
+    "source_audit": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/huber-istella-candidate-source-audit.json",
+      "sha256": "bcba07d8532d652f60e712a5af502335dd9c42a2c559dc69171d3a4fad8bb429",
+      "committed_copy": "experiments/six_lane_integration/measurements/20261006/apple-huber-istella-source-audit.json"
+    },
+    "receipt": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/expanded-reg/runs/4fa48ab7783acc171486/attempts/attempt-0001/receipt.json",
+      "sha256": "6e77defcc4b744f1db1334e299761ea8b9d8236350374aa071da4397067f04c5"
+    },
+    "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+    "status": "QUALITY_FAILED",
+    "workload_id": "algos/huber@dataset=istella",
+    "metrics": {
+      "A": {
+        "ours-fast": {
+          "finite": true,
+          "r2": -0.007089342908900065,
+          "rmse": 0.8373928001448464
+        }
+      },
+      "B": {
+        "ours-fast": {
+          "finite": true,
+          "r2": -0.005952189726329049,
+          "rmse": 0.836919896299495
+        }
+      }
+    },
+    "runs": [
+      {
+        "phase": "warmup",
+        "arm": "A",
+        "excluded": true,
+        "returncode": 0,
+        "timings": {
+          "cold_seconds": 2.399515875033103,
+          "consumed_output_seconds": 0.01220087509136647,
+          "fit_or_training_seconds": 1.5769409169442952,
+          "full_operation_seconds": 2.399515875033103,
+          "inference_seconds": 0.05130125000141561,
+          "preparation_seconds": 0.7590722079621628
+        },
+        "result_sha256": "71b5161125ed4ae1546f13a6aed874e11e6648874773c02ad215d7ce12549605",
+        "model_identity_available": false
+      },
+      {
+        "phase": "warmup",
+        "arm": "B",
+        "excluded": true,
+        "returncode": 0,
+        "timings": {
+          "cold_seconds": 2.398088666028343,
+          "consumed_output_seconds": 0.011602082988247275,
+          "fit_or_training_seconds": 1.5738396249944344,
+          "full_operation_seconds": 2.398088666028343,
+          "inference_seconds": 0.05420595803298056,
+          "preparation_seconds": 0.7584352910052985
+        },
+        "result_sha256": "e1428fca783c54bddfe1facaf1087445117162d8bd9f69691216c50f278e5a31",
+        "model_identity_available": false
+      },
+      {
+        "phase": "scored",
+        "arm": "A",
+        "excluded": false,
+        "returncode": 0,
+        "timings": {
+          "cold_seconds": 2.4091830409597605,
+          "consumed_output_seconds": 0.0118514159694314,
+          "fit_or_training_seconds": 1.5852589999558404,
+          "full_operation_seconds": 2.4091830409597605,
+          "inference_seconds": 0.05227500002365559,
+          "preparation_seconds": 0.7597933749202639
+        },
+        "result_sha256": "f22af153233ad851ff1787efa70ed2ee42b1e43abd67a20a15d85ba70922ab8d",
+        "model_identity_available": false
+      },
+      {
+        "phase": "scored",
+        "arm": "B",
+        "excluded": false,
+        "returncode": 0,
+        "timings": {
+          "cold_seconds": 2.404323499999009,
+          "consumed_output_seconds": 0.011709957965649664,
+          "fit_or_training_seconds": 1.5802997919963673,
+          "full_operation_seconds": 2.404323499999009,
+          "inference_seconds": 0.05352533294353634,
+          "preparation_seconds": 0.7587881670333445
+        },
+        "result_sha256": "56070642731a58e1fc7cf2e2dc5d41ff30a2a884252c24af786ac1f4d9c2b38f",
+        "model_identity_available": false
+      }
+    ],
+    "sample_counts_per_arm": {
+      "excluded_warmups": 1,
+      "scored": 1
+    },
+    "attribution": "Combined configuration; L04 not isolated. These observations do not qualify repaired source.",
+    "model_state_status": "UNAVAILABLE"
+  },
+  "recipe_source": {
+    "path": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-next-workloads/apple-expanded-inputs.json",
+    "sha256": "9759d9c7fdb44bab997244328cd740217a1ba0cb3804f5098181d6bfe017d824",
+    "scope": "Retained metadata only; no arrays loaded for repair."
+  },
+  "full_workload_recipes": {
+    "algos/huber@dataset=taxi": {
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "estimator_settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "epsilon": 1.35,
+          "max_iter": 100,
+          "alpha": 0.0001,
+          "fit_intercept": true,
+          "tol": 1e-05
+        }
+      },
+      "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
+      "intrinsic_caps": [],
+      "full_dataset_coverage": true,
+      "workload": {
+        "harness": "tools/bench_board_algos.py",
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "lane": "huber",
+        "dataset": "taxi",
+        "data_directory": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data/rows-full",
+        "input_files": [
+          {
+            "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data/rows-full/reg-taxi.npz",
+            "sha256": "ec1b39f38b116f78dff51d67f41c7bbdfcd56508562445274d4c4dfb7bb2387f"
+          },
+          {
+            "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data/rows-full/reg-taxi.json",
+            "sha256": "d0434339bed6f38495de319097654bbafff56579343eb69db183c96b4c949037"
+          }
+        ],
+        "actual_shapes": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "epsilon": 1.35,
+            "max_iter": 100,
+            "alpha": 0.0001,
+            "fit_intercept": true,
+            "tol": 1e-05
+          }
+        },
+        "intrinsic_cap_audit": {
+          "reviewed": true,
+          "unresolved": [],
+          "evidence": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-next-workloads/apple-huber-taxi-full-audit.json"
+        },
+        "inference": "separate",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "split": {
+          "fit": [
+            0,
+            5250086
+          ],
+          "evaluation_rows": 500000
+        },
+        "seed": 7,
+        "output_paths": [
+          "$.pred"
+        ],
+        "runtime_vendor": "metal",
+        "quality_gate_source": "tools/bench_board_algos.py:quality(huber); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+        "repeated_operations": 1
+      },
+      "coverage_resolutions": {
+        "Full dataset/version/hash, dimensions, settings, cap audit and accepted artifacts must be supplied from the frozen saved recipe.": {
+          "path": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-next-workloads/apple-huber-taxi-full-audit.json",
+          "sha256": "b044b320c16dac37c7bd5e5ec93c7a181382dafe884faf1cd8a39ea71ebbd19a",
+          "conclusion": "Exact retained full train/query arrays and split; unchanged saved harness constructor/settings and target preparation, no lane subset; scored worker checks shapes/settings/loaded artifacts. Runtime reach, constituent coverage, full model state and qualification remain unverified."
+        }
+      },
+      "resource_policy": {
+        "policy": "full allocated dedicated worker; actual affinity/cgroup/effective pools captured; arms serial; Apple CPU libraries unrestricted; no inherited diagnostic caps"
+      }
+    },
+    "algos/huber@dataset=istella": {
+      "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "estimator_settings": {
+        "__record__": true,
+        "library": "mojolearn",
+        "source": "get_params",
+        "params": {
+          "epsilon": 1.35,
+          "max_iter": 100,
+          "alpha": 0.0001,
+          "fit_intercept": true,
+          "tol": 1e-05
+        }
+      },
+      "timed_boundary": "load exact saved full standardized inputs + unchanged lane preprocessing + estimator construction + full fit + separate predict every saved query + required synchronization + consumed prediction outputs; independent quality and hashing outside timer",
+      "intrinsic_caps": [],
+      "full_dataset_coverage": true,
+      "workload": {
+        "harness": "tools/bench_board_algos.py",
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "lane": "huber",
+        "dataset": "istella",
+        "data_directory": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data/rows-full",
+        "input_files": [
+          {
+            "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data/rows-full/reg-istella.npz",
+            "sha256": "f1708d9b22fa874af0ee9b2dfb00de1f5d2dea848c910332ee496775dfc2f724"
+          },
+          {
+            "path": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data/rows-full/reg-istella.json",
+            "sha256": "090cbfba29a11e0fa362b66ebb421022caa47d87aa365b5a349f121dbbfa5060"
+          }
+        ],
+        "actual_shapes": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "estimator_settings_record": {
+          "__record__": true,
+          "library": "mojolearn",
+          "source": "get_params",
+          "params": {
+            "epsilon": 1.35,
+            "max_iter": 100,
+            "alpha": 0.0001,
+            "fit_intercept": true,
+            "tol": 1e-05
+          }
+        },
+        "intrinsic_cap_audit": {
+          "reviewed": true,
+          "unresolved": [],
+          "evidence": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-next-workloads/apple-huber-istella-full-audit.json"
+        },
+        "inference": "separate",
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "split": {
+          "fit": [
+            0,
+            2043304
+          ],
+          "evaluation_rows": 500000
+        },
+        "seed": 7,
+        "output_paths": [
+          "$.pred"
+        ],
+        "runtime_vendor": "metal",
+        "quality_gate_source": "tools/bench_board_algos.py:quality(huber); unchanged reg R2/RMSE and independent matching full opponent gate; pending",
+        "repeated_operations": 1
+      },
+      "coverage_resolutions": {
+        "Full dataset/version/hash, dimensions, settings, cap audit and accepted artifacts must be supplied from the frozen saved recipe.": {
+          "path": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-next-workloads/apple-huber-istella-full-audit.json",
+          "sha256": "8906615d24f5cafa6b2b0cd28c77f7e4391754f41f46149d8e8c1ff0636e3510",
+          "conclusion": "Exact retained full train/query arrays and split; unchanged saved harness constructor/settings and target preparation, no lane subset; scored worker checks shapes/settings/loaded artifacts. Runtime reach, constituent coverage, full model state and qualification remain unverified."
+        }
+      },
+      "resource_policy": {
+        "policy": "full allocated dedicated worker; actual affinity/cgroup/effective pools captured; arms serial; Apple CPU libraries unrestricted; no inherited diagnostic caps"
+      }
+    }
+  },
+  "configurations": {
+    "isolated_l04": {
+      "A": {
+        "defines": [
+          "MOJOLEARN_AFCL_L04=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "fast"
+        },
+        "runtime": {}
+      },
+      "B": {
+        "defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "fast"
+        },
+        "runtime": {}
+      },
+      "selection_id": "AF.C.AFCL-L04:default"
+    },
+    "complete_proposed": {
+      "A": {
+        "defines": [
+          "MOJOLEARN_AFCL_G01=1",
+          "MOJOLEARN_AFCL_G03=1",
+          "MOJOLEARN_AFCL_G04=1",
+          "MOJOLEARN_AFCL_G05=1",
+          "MOJOLEARN_AFCL_G06=1",
+          "MOJOLEARN_AFCL_G07=1",
+          "MOJOLEARN_AFCL_G08=1",
+          "MOJOLEARN_AFCL_G09=1",
+          "MOJOLEARN_AFCL_G10=1",
+          "MOJOLEARN_AFCL_G11=1",
+          "MOJOLEARN_AFCL_G12=1",
+          "MOJOLEARN_AFCL_G13=1",
+          "MOJOLEARN_AFCL_G14=1",
+          "MOJOLEARN_AFCL_L01=1",
+          "MOJOLEARN_AFCL_L02=1",
+          "MOJOLEARN_AFCL_L03=1",
+          "MOJOLEARN_AFCL_L04=1",
+          "MOJOLEARN_AFCL_L05=1",
+          "MOJOLEARN_AFCL_L06=1",
+          "MOJOLEARN_AFCL_L07=1",
+          "MOJOLEARN_AFCL_L08=1",
+          "MOJOLEARN_AFCL_L09=1",
+          "MOJOLEARN_AFCL_L10=1",
+          "MOJOLEARN_AFCL_L11=1",
+          "MOJOLEARN_AFCL_L12=1",
+          "MOJOLEARN_AFCL_L13=1",
+          "MOJOLEARN_AFCL_L14=1",
+          "MOJOLEARN_AFCL_P01=1",
+          "MOJOLEARN_AFCL_P02=1",
+          "MOJOLEARN_AFCL_P03=1",
+          "MOJOLEARN_AFCL_P04=1",
+          "MOJOLEARN_AFCL_P05=1",
+          "MOJOLEARN_AFCL_P06=1",
+          "MOJOLEARN_AFCL_P07=1",
+          "MOJOLEARN_AFCL_P08=1",
+          "MOJOLEARN_AFCL_P09=1",
+          "MOJOLEARN_AFCL_P10=1",
+          "MOJOLEARN_AFCL_P11=1",
+          "MOJOLEARN_AFCL_P12=1",
+          "MOJOLEARN_AFCL_P13=1",
+          "MOJOLEARN_AFCL_P14=1",
+          "MOJOLEARN_AFCL_T01=1",
+          "MOJOLEARN_AFCL_T02=1",
+          "MOJOLEARN_AFCL_T03=1",
+          "MOJOLEARN_AFCL_T04=1",
+          "MOJOLEARN_AFCL_T05=1",
+          "MOJOLEARN_AFCL_T06=1",
+          "MOJOLEARN_AFCL_T07=1",
+          "MOJOLEARN_AFCL_T08=1",
+          "MOJOLEARN_AFCL_T09=1",
+          "MOJOLEARN_AFCL_T10=1",
+          "MOJOLEARN_AFCL_T11=1",
+          "MOJOLEARN_AFCL_T12=1",
+          "MOJOLEARN_AFN26_ATTN_FLASH_BK16=1",
+          "MOJOLEARN_AFN26_ATTN_FLASH_TQ16=1",
+          "MOJOLEARN_AFN26_ATTN_NORM_TPB128=1",
+          "MOJOLEARN_AFN26_ATTN_PROJ_BM32=1",
+          "MOJOLEARN_AFN26_ATTN_PROJ_KB16=1",
+          "MOJOLEARN_AFN26_CNN_CHANNELS16=1",
+          "MOJOLEARN_AFN26_CNN_COLS_ONCE=1",
+          "MOJOLEARN_AFN26_CNN_K16=1",
+          "MOJOLEARN_AFN26_CNN_ROWS32=1",
+          "MOJOLEARN_AFN26_EMB_GATHER8=1",
+          "MOJOLEARN_AFN26_EMB_RESIDENT=1",
+          "MOJOLEARN_AFN26_EMB_SCRATCH=1",
+          "MOJOLEARN_AFN26_EMB_THREADS64=1",
+          "MOJOLEARN_AFN26_LM_BWD_FUSE=1",
+          "MOJOLEARN_AFN26_LM_CE_BLOCK128=1",
+          "MOJOLEARN_AFN26_LM_HEAD_FUSE=1",
+          "MOJOLEARN_AFN26_LM_NOSYNC=1",
+          "MOJOLEARN_AFN26_LM_PARAM_VIEWS=1",
+          "MOJOLEARN_AFN26_LM_WGRAD_MIN128=1",
+          "MOJOLEARN_AFN26_LM_WGRAD_SPLIT=1",
+          "MOJOLEARN_AFN26_MAMBA1_CHUNKS16=1",
+          "MOJOLEARN_AFN26_MAMBA2_SSD_K16=1",
+          "MOJOLEARN_AFN26_MAMBA3_THREADS64=1",
+          "MOJOLEARN_AFN26_MAMBA_REFUSAL_THREADS128=1",
+          "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4=1",
+          "MOJOLEARN_AFN26_MLP_FUSED_STEP=1",
+          "MOJOLEARN_AFN26_MLP_RESIDENT=1",
+          "MOJOLEARN_AFN26_MLP_ROWS32=1",
+          "MOJOLEARN_AFN26_OPT_BLOCK128=1",
+          "MOJOLEARN_AFN26_OPT_FUSE_SCAN=1",
+          "MOJOLEARN_AFN_ATTN_ARENA=1",
+          "MOJOLEARN_AFN_ATTN_FLASH=1",
+          "MOJOLEARN_AFN_ATTN_FUSE_MLP=1",
+          "MOJOLEARN_AFN_ATTN_FUSE_PRE=1",
+          "MOJOLEARN_AFN_ATTN_GQA_TILE=1",
+          "MOJOLEARN_AFN_ATTN_NORM_SG=1",
+          "MOJOLEARN_AFN_ATTN_ROPE_CACHE=1",
+          "MOJOLEARN_AFN_CNN_DIRECT=1",
+          "MOJOLEARN_AFN_EMB_ATOMIC_BWD=1",
+          "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN=1",
+          "MOJOLEARN_AFN_MAMBA1_FUSE_IN=1",
+          "MOJOLEARN_AFN_MAMBA2_SSD_MMA=1",
+          "MOJOLEARN_AFN_MAMBA3_SISO_FUSED=1",
+          "MOJOLEARN_AFN_MAMBA_ARENA=1",
+          "MOJOLEARN_AFT_F01=1",
+          "MOJOLEARN_AFT_F02=1",
+          "MOJOLEARN_AFT_F03=1",
+          "MOJOLEARN_AFT_F04=1",
+          "MOJOLEARN_AFT_F05=1",
+          "MOJOLEARN_AFT_F06=1",
+          "MOJOLEARN_AFT_F07=1",
+          "MOJOLEARN_AFT_F08=1",
+          "MOJOLEARN_AFT_F09=1",
+          "MOJOLEARN_AFT_F10=1",
+          "MOJOLEARN_AFT_F11=1",
+          "MOJOLEARN_AFT_F12=1",
+          "MOJOLEARN_AFT_G01=1",
+          "MOJOLEARN_AFT_G02=1",
+          "MOJOLEARN_AFT_G04=1",
+          "MOJOLEARN_AFT_G05=1",
+          "MOJOLEARN_AFT_G07=1",
+          "MOJOLEARN_AFT_G08=1",
+          "MOJOLEARN_AFT_G09=1",
+          "MOJOLEARN_AFT_G10=1",
+          "MOJOLEARN_AFT_G11=1",
+          "MOJOLEARN_AFT_G12=1",
+          "MOJOLEARN_AFT_N01=1",
+          "MOJOLEARN_AFT_N02=1",
+          "MOJOLEARN_AFT_N03=1",
+          "MOJOLEARN_AFT_N04=1",
+          "MOJOLEARN_AFT_N05=1",
+          "MOJOLEARN_AFT_N06=1",
+          "MOJOLEARN_AFT_N07=1",
+          "MOJOLEARN_AFT_N08=1",
+          "MOJOLEARN_AFT_N09=1",
+          "MOJOLEARN_AFT_N10=1",
+          "MOJOLEARN_AFT_N11=1",
+          "MOJOLEARN_AFT_N12=1",
+          "MOJOLEARN_AFT_P01=1",
+          "MOJOLEARN_AFT_P03=1",
+          "MOJOLEARN_AFT_P04=1",
+          "MOJOLEARN_AFT_P05=1",
+          "MOJOLEARN_AFT_P06=1",
+          "MOJOLEARN_AFT_P07=1",
+          "MOJOLEARN_AFT_P08=1",
+          "MOJOLEARN_AFT_P09=1",
+          "MOJOLEARN_AFT_P10=1",
+          "MOJOLEARN_AFT_P11=1",
+          "MOJOLEARN_AFT_P12=1",
+          "MOJOLEARN_DECOMP_FAST_GEMM_TILED=1",
+          "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1",
+          "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1",
+          "MOJOLEARN_GBDT_PREDICT_PACKED=1",
+          "MOJOLEARN_HDB_CORE_TILE=1",
+          "MOJOLEARN_NB_CAT_ATOMIC=1",
+          "MOJOLEARN_PCA_FAST_COMPENSATED_COV=1",
+          "MOJOLEARN_QN_FAST_COALESCED_OFF=1",
+          "MOJOLEARN_QR_FAST_DEV=1",
+          "MOJOLEARN_RESAMPLE_FAST_GATHER=1",
+          "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER=1",
+          "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR=1",
+          "MOJOLEARN_SYM_RESOLVE_BLOCK=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "fast",
+          "MOJOLEARN_X_LINEAR_ENETCV_FAST": "1",
+          "MOJOLEARN_X_PREP_FAST_II_CONV": "1"
+        },
+        "runtime": {}
+      },
+      "B": {
+        "defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "selection_id": "AF.X.complete-proposed",
+      "configuration_origin": "Exact prior retained bundle controls, to be attached to a new source freeze by the measurement owner; baseline worker defaults to fast as in the retained run."
+    }
+  },
+  "future_pairs": [
+    {
+      "workload_id": "algos/huber@dataset=taxi",
+      "configuration": "isolated_l04",
+      "vendor": "apple",
+      "mode": "fast",
+      "revision_id": "AF.C.AFCL-L04:compensated-final-v1",
+      "status": "PENDING_NEW_SOURCE_FREEZE_AND_ACCEPTED_CANDIDATE_BUILDS",
+      "sample_counts_per_arm": {
+        "excluded_warmups": 1,
+        "scored": 1
+      }
+    },
+    {
+      "workload_id": "algos/huber@dataset=istella",
+      "configuration": "isolated_l04",
+      "vendor": "apple",
+      "mode": "fast",
+      "revision_id": "AF.C.AFCL-L04:compensated-final-v1",
+      "status": "PENDING_NEW_SOURCE_FREEZE_AND_ACCEPTED_CANDIDATE_BUILDS",
+      "sample_counts_per_arm": {
+        "excluded_warmups": 1,
+        "scored": 1
+      }
+    },
+    {
+      "workload_id": "algos/huber@dataset=taxi",
+      "configuration": "complete_proposed",
+      "vendor": "apple",
+      "mode": "fast",
+      "revision_id": "AF.C.AFCL-L04:compensated-final-v1",
+      "status": "PENDING_NEW_SOURCE_FREEZE_AND_ACCEPTED_CANDIDATE_BUILDS",
+      "sample_counts_per_arm": {
+        "excluded_warmups": 1,
+        "scored": 1
+      }
+    },
+    {
+      "workload_id": "algos/huber@dataset=istella",
+      "configuration": "complete_proposed",
+      "vendor": "apple",
+      "mode": "fast",
+      "revision_id": "AF.C.AFCL-L04:compensated-final-v1",
+      "status": "PENDING_NEW_SOURCE_FREEZE_AND_ACCEPTED_CANDIDATE_BUILDS",
+      "sample_counts_per_arm": {
+        "excluded_warmups": 1,
+        "scored": 1
+      }
+    }
+  ],
+  "execution_authorized_by_this_record": false,
+  "build_handoff": {
+    "targets": [
+      "apple"
+    ],
+    "mode": "fast",
+    "changed_candidate_bindings": [
+      "bindings/_mojolearn_x_linear.mojo"
+    ],
+    "candidate_configurations": [
+      "isolated_l04:A",
+      "complete_proposed:A"
+    ],
+    "dependents": "Include actual changed import-closure dependents; retain unaffected accepted evidence.",
+    "source_freeze": "Measurement owner chooses new commit after review; do not alter active packages/queues.",
+    "baseline": "Preserve genuine incumbent configuration/provenance; never relabel B or an old A as repaired source.",
+    "unsupported_or_unbuilt": [
+      "No builds executed for this repair on Apple, host, NVIDIA or AMD."
+    ]
+  },
+  "coverage_gaps": [
+    "Sample-weighted Huber is not selected by the retained recipes.",
+    "fit_intercept=False is not selected by the retained recipes.",
+    "No reviewed complete fitted-state export.",
+    "No per-trial objective, gradient or line-search trace.",
+    "Outlier diagnostics are not retained by these recipe outputs.",
+    "Compensation cannot recover rounding inside each partial or remaining optimizer operations."
+  ],
+  "preserved": [
+    "original full data and hashes",
+    "split and seed",
+    "constructor settings",
+    "quality metrics and thresholds",
+    "timing boundaries",
+    "incumbent defaults",
+    "integer count encoding",
+    "scratch layout and launch/witness counts",
+    "other candidates and all IDENTICAL paths",
+    "original failure receipts and historical results"
+  ],
+  "validation_scope": "Source review, metadata consistency and whitespace only. No build, binding import, data-array load, numerical fixture, estimator, quality, identity or timing execution.",
+  "handoff_log_policy": "Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output."
+}
