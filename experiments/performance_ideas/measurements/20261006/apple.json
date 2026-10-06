@@ -22113,8 +22113,306 @@
         "amd",
         "apple"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "I23",
+          "vendor": "apple",
+          "route": "apple-batched-gradient",
+          "case": "apple-batched-gradient/planted_ar1-4096-batch6/public_ms",
+          "status": "MEASURED",
+          "scope": "component",
+          "scope_description": "component",
+          "mode": "identical",
+          "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 16.989,
+          "candidate_ms": 18.633,
+          "artifact_hashes": {
+            "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+            "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "artifact_source_shas": {
+            "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+            "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0967684972629348
+        },
+        {
+          "id": "I23",
+          "vendor": "apple",
+          "route": "apple-batched-gradient",
+          "case": "apple-batched-gradient/planted_ma1-4096-batch6/public_ms",
+          "status": "MEASURED",
+          "scope": "component",
+          "scope_description": "component",
+          "mode": "identical",
+          "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 61.85,
+          "candidate_ms": 64.87,
+          "artifact_hashes": {
+            "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+            "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "artifact_source_shas": {
+            "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+            "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0488278092158447
+        },
+        {
+          "id": "I23",
+          "vendor": "apple",
+          "route": "apple-batched-gradient",
+          "case": "apple-batched-gradient/planted_arma11-4096-batch6/public_ms",
+          "status": "MEASURED",
+          "scope": "component",
+          "scope_description": "component",
+          "mode": "identical",
+          "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 102.587,
+          "candidate_ms": 103.01,
+          "artifact_hashes": {
+            "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+            "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "artifact_source_shas": {
+            "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+            "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0041233294666965
+        },
+        {
+          "id": "I23",
+          "vendor": "apple",
+          "route": "apple-batched-gradient",
+          "case": "apple-batched-gradient/planted_ar1-4097-batch6/public_ms",
+          "status": "MEASURED",
+          "scope": "component",
+          "scope_description": "component",
+          "mode": "identical",
+          "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 14.798,
+          "candidate_ms": 15.174,
+          "artifact_hashes": {
+            "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+            "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "artifact_source_shas": {
+            "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+            "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0254088390323017
+        },
+        {
+          "id": "I23",
+          "vendor": "apple",
+          "route": "apple-batched-gradient",
+          "case": "apple-batched-gradient/planted_ma1-4097-batch6/public_ms",
+          "status": "MEASURED",
+          "scope": "component",
+          "scope_description": "component",
+          "mode": "identical",
+          "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 54.32,
+          "candidate_ms": 56.349,
+          "artifact_hashes": {
+            "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+            "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "artifact_source_shas": {
+            "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+            "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0373527245949925
+        },
+        {
+          "id": "I23",
+          "vendor": "apple",
+          "route": "apple-batched-gradient",
+          "case": "apple-batched-gradient/planted_arma11-4097-batch6/public_ms",
+          "status": "MEASURED",
+          "scope": "component",
+          "scope_description": "component",
+          "mode": "identical",
+          "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 108.612,
+          "candidate_ms": 108.53,
+          "artifact_hashes": {
+            "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+            "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "artifact_source_shas": {
+            "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+            "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9992450189665968
+        },
+        {
+          "id": "I23",
+          "vendor": "apple",
+          "route": "apple-batched-gradient",
+          "case": "apple-batched-gradient/planted_ar1-8193-batch6/public_ms",
+          "status": "MEASURED",
+          "scope": "component",
+          "scope_description": "component",
+          "mode": "identical",
+          "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 731.452,
+          "candidate_ms": 736.574,
+          "artifact_hashes": {
+            "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+            "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "artifact_source_shas": {
+            "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+            "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.007002510075849
+        },
+        {
+          "id": "I23",
+          "vendor": "apple",
+          "route": "apple-batched-gradient",
+          "case": "apple-batched-gradient/planted_ma1-8193-batch6/public_ms",
+          "status": "MEASURED",
+          "scope": "component",
+          "scope_description": "component",
+          "mode": "identical",
+          "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 223.204,
+          "candidate_ms": 223.057,
+          "artifact_hashes": {
+            "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+            "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "artifact_source_shas": {
+            "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+            "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 0.9993414096521567
+        },
+        {
+          "id": "I23",
+          "vendor": "apple",
+          "route": "apple-batched-gradient",
+          "case": "apple-batched-gradient/planted_arma11-8193-batch6/public_ms",
+          "status": "MEASURED",
+          "scope": "component",
+          "scope_description": "component",
+          "mode": "identical",
+          "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+          "machine": "M3 Ultra 54.157.1.251",
+          "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "returncode": 0,
+          "baseline_ms": 1173.285,
+          "candidate_ms": 1192.619,
+          "artifact_hashes": {
+            "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+            "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+          },
+          "baseline_machine": "M3 Ultra 54.157.1.251",
+          "candidate_machine": "M3 Ultra 54.157.1.251",
+          "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+          "artifact_source_shas": {
+            "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+            "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+          },
+          "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json",
+          "candidate_over_baseline": 1.0164785197117494
+        }
+      ],
+      "status": "PARTIAL_MEASUREMENTS_RETAINED"
     },
     {
       "id": "I24",

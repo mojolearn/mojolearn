@@ -8500,6 +8500,186 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
     },
     {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"17\", \"AB_ROWS\": \"10000\"}/{\"features\": 17, \"policy\": \"Depthwise\", \"rows\": 10000}/inherit_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "025e399b1d15ffedd797724b720af5e29e3b83eae16746d0fa1f2cea0c11e1f9"
+      },
+      "baseline_ms": 18.847639,
+      "candidate_ms": 17.176147,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "inherit_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"17\", \"AB_ROWS\": \"10000\"}/{\"features\": 17, \"policy\": \"Lossguide\", \"rows\": 10000}/inherit_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "025e399b1d15ffedd797724b720af5e29e3b83eae16746d0fa1f2cea0c11e1f9"
+      },
+      "baseline_ms": 20.934902,
+      "candidate_ms": 17.130457,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "inherit_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"18\", \"AB_ROWS\": \"10001\"}/{\"features\": 18, \"policy\": \"Depthwise\", \"rows\": 10001}/inherit_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "025e399b1d15ffedd797724b720af5e29e3b83eae16746d0fa1f2cea0c11e1f9"
+      },
+      "baseline_ms": 16.793925,
+      "candidate_ms": 20.615414,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "inherit_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"18\", \"AB_ROWS\": \"10001\"}/{\"features\": 18, \"policy\": \"Lossguide\", \"rows\": 10001}/inherit_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "025e399b1d15ffedd797724b720af5e29e3b83eae16746d0fa1f2cea0c11e1f9"
+      },
+      "baseline_ms": 17.612686,
+      "candidate_ms": 20.875028,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "inherit_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"9\", \"AB_ROWS\": \"32769\"}/{\"features\": 9, \"policy\": \"Depthwise\", \"rows\": 32769}/inherit_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "025e399b1d15ffedd797724b720af5e29e3b83eae16746d0fa1f2cea0c11e1f9"
+      },
+      "baseline_ms": 18.545676,
+      "candidate_ms": 17.570218,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "inherit_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
+      "id": "I17",
+      "vendor": "amd",
+      "route": "gfx942",
+      "scope": "public_caller_component",
+      "machine": "DigitalOcean-606508222-MI325X",
+      "baseline_machine": "DigitalOcean-606508222-MI325X",
+      "candidate_machine": "DigitalOcean-606508222-MI325X",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json",
+      "warmups": 1,
+      "scored_samples": 1,
+      "warmup_scope": "same_process",
+      "measurement_stage": "streamed_driver",
+      "limitation": "Representative generated production caller/components; named-dataset full-board promotion is separate",
+      "case": "{\"AB_FEATURES\": \"9\", \"AB_ROWS\": \"32769\"}/{\"features\": 9, \"policy\": \"Lossguide\", \"rows\": 32769}/inherit_off",
+      "status": "MEASURED",
+      "returncode": 0,
+      "artifact_hashes": {
+        "baseline": "96794daf343919ac898fd816e5a55c3a3e8411b7f00272a6e2c2066a35df87bd",
+        "candidate": "025e399b1d15ffedd797724b720af5e29e3b83eae16746d0fa1f2cea0c11e1f9"
+      },
+      "baseline_ms": 21.36523,
+      "candidate_ms": 17.837712,
+      "baseline_arm": "incumbent",
+      "candidate_arm": "inherit_off",
+      "producer": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json"
+    },
+    {
       "id": "N01",
       "vendor": "nvidia",
       "route": "specific",
@@ -46416,6 +46596,294 @@
       "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
     },
     {
+      "id": "I23",
+      "vendor": "apple",
+      "route": "apple-batched-gradient",
+      "case": "apple-batched-gradient/planted_ar1-4096-batch6/public_ms",
+      "status": "MEASURED",
+      "scope": "component",
+      "scope_description": "component",
+      "mode": "identical",
+      "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+      "machine": "M3 Ultra 54.157.1.251",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "warmups": 1,
+      "scored_samples": 1,
+      "returncode": 0,
+      "baseline_ms": 16.989,
+      "candidate_ms": 18.633,
+      "artifact_hashes": {
+        "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+        "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+      },
+      "baseline_machine": "M3 Ultra 54.157.1.251",
+      "candidate_machine": "M3 Ultra 54.157.1.251",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "artifact_source_shas": {
+        "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+      },
+      "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+    },
+    {
+      "id": "I23",
+      "vendor": "apple",
+      "route": "apple-batched-gradient",
+      "case": "apple-batched-gradient/planted_ma1-4096-batch6/public_ms",
+      "status": "MEASURED",
+      "scope": "component",
+      "scope_description": "component",
+      "mode": "identical",
+      "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+      "machine": "M3 Ultra 54.157.1.251",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "warmups": 1,
+      "scored_samples": 1,
+      "returncode": 0,
+      "baseline_ms": 61.85,
+      "candidate_ms": 64.87,
+      "artifact_hashes": {
+        "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+        "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+      },
+      "baseline_machine": "M3 Ultra 54.157.1.251",
+      "candidate_machine": "M3 Ultra 54.157.1.251",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "artifact_source_shas": {
+        "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+      },
+      "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+    },
+    {
+      "id": "I23",
+      "vendor": "apple",
+      "route": "apple-batched-gradient",
+      "case": "apple-batched-gradient/planted_arma11-4096-batch6/public_ms",
+      "status": "MEASURED",
+      "scope": "component",
+      "scope_description": "component",
+      "mode": "identical",
+      "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+      "machine": "M3 Ultra 54.157.1.251",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "warmups": 1,
+      "scored_samples": 1,
+      "returncode": 0,
+      "baseline_ms": 102.587,
+      "candidate_ms": 103.01,
+      "artifact_hashes": {
+        "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+        "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+      },
+      "baseline_machine": "M3 Ultra 54.157.1.251",
+      "candidate_machine": "M3 Ultra 54.157.1.251",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "artifact_source_shas": {
+        "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+      },
+      "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+    },
+    {
+      "id": "I23",
+      "vendor": "apple",
+      "route": "apple-batched-gradient",
+      "case": "apple-batched-gradient/planted_ar1-4097-batch6/public_ms",
+      "status": "MEASURED",
+      "scope": "component",
+      "scope_description": "component",
+      "mode": "identical",
+      "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+      "machine": "M3 Ultra 54.157.1.251",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "warmups": 1,
+      "scored_samples": 1,
+      "returncode": 0,
+      "baseline_ms": 14.798,
+      "candidate_ms": 15.174,
+      "artifact_hashes": {
+        "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+        "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+      },
+      "baseline_machine": "M3 Ultra 54.157.1.251",
+      "candidate_machine": "M3 Ultra 54.157.1.251",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "artifact_source_shas": {
+        "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+      },
+      "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+    },
+    {
+      "id": "I23",
+      "vendor": "apple",
+      "route": "apple-batched-gradient",
+      "case": "apple-batched-gradient/planted_ma1-4097-batch6/public_ms",
+      "status": "MEASURED",
+      "scope": "component",
+      "scope_description": "component",
+      "mode": "identical",
+      "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+      "machine": "M3 Ultra 54.157.1.251",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "warmups": 1,
+      "scored_samples": 1,
+      "returncode": 0,
+      "baseline_ms": 54.32,
+      "candidate_ms": 56.349,
+      "artifact_hashes": {
+        "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+        "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+      },
+      "baseline_machine": "M3 Ultra 54.157.1.251",
+      "candidate_machine": "M3 Ultra 54.157.1.251",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "artifact_source_shas": {
+        "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+      },
+      "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+    },
+    {
+      "id": "I23",
+      "vendor": "apple",
+      "route": "apple-batched-gradient",
+      "case": "apple-batched-gradient/planted_arma11-4097-batch6/public_ms",
+      "status": "MEASURED",
+      "scope": "component",
+      "scope_description": "component",
+      "mode": "identical",
+      "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+      "machine": "M3 Ultra 54.157.1.251",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "warmups": 1,
+      "scored_samples": 1,
+      "returncode": 0,
+      "baseline_ms": 108.612,
+      "candidate_ms": 108.53,
+      "artifact_hashes": {
+        "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+        "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+      },
+      "baseline_machine": "M3 Ultra 54.157.1.251",
+      "candidate_machine": "M3 Ultra 54.157.1.251",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "artifact_source_shas": {
+        "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+      },
+      "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+    },
+    {
+      "id": "I23",
+      "vendor": "apple",
+      "route": "apple-batched-gradient",
+      "case": "apple-batched-gradient/planted_ar1-8193-batch6/public_ms",
+      "status": "MEASURED",
+      "scope": "component",
+      "scope_description": "component",
+      "mode": "identical",
+      "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+      "machine": "M3 Ultra 54.157.1.251",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "warmups": 1,
+      "scored_samples": 1,
+      "returncode": 0,
+      "baseline_ms": 731.452,
+      "candidate_ms": 736.574,
+      "artifact_hashes": {
+        "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+        "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+      },
+      "baseline_machine": "M3 Ultra 54.157.1.251",
+      "candidate_machine": "M3 Ultra 54.157.1.251",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "artifact_source_shas": {
+        "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+      },
+      "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+    },
+    {
+      "id": "I23",
+      "vendor": "apple",
+      "route": "apple-batched-gradient",
+      "case": "apple-batched-gradient/planted_ma1-8193-batch6/public_ms",
+      "status": "MEASURED",
+      "scope": "component",
+      "scope_description": "component",
+      "mode": "identical",
+      "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+      "machine": "M3 Ultra 54.157.1.251",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "warmups": 1,
+      "scored_samples": 1,
+      "returncode": 0,
+      "baseline_ms": 223.204,
+      "candidate_ms": 223.057,
+      "artifact_hashes": {
+        "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+        "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+      },
+      "baseline_machine": "M3 Ultra 54.157.1.251",
+      "candidate_machine": "M3 Ultra 54.157.1.251",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "artifact_source_shas": {
+        "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+      },
+      "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+    },
+    {
+      "id": "I23",
+      "vendor": "apple",
+      "route": "apple-batched-gradient",
+      "case": "apple-batched-gradient/planted_arma11-8193-batch6/public_ms",
+      "status": "MEASURED",
+      "scope": "component",
+      "scope_description": "component",
+      "mode": "identical",
+      "qualification": "Apple-only component contract; prior identity assumed, no cross-vendor IDENTICAL vote",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json",
+      "machine": "M3 Ultra 54.157.1.251",
+      "source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "warmups": 1,
+      "scored_samples": 1,
+      "returncode": 0,
+      "baseline_ms": 1173.285,
+      "candidate_ms": 1192.619,
+      "artifact_hashes": {
+        "baseline": "8373e3f7f1f8ec254df682be66d017531d2e899b1e9d39c4015c5719a745623e",
+        "candidate": "a062e0a868b8e81bb0e18b7d879d51266f08c0cd8bc46c396159451fce273999"
+      },
+      "baseline_machine": "M3 Ultra 54.157.1.251",
+      "candidate_machine": "M3 Ultra 54.157.1.251",
+      "baseline_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "candidate_source_sha": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+      "artifact_source_shas": {
+        "A": "5b467815b51bed90ca9755c847e4ceb60e98229d",
+        "B": "5b467815b51bed90ca9755c847e4ceb60e98229d"
+      },
+      "producer": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json"
+    },
+    {
       "id": "F02",
       "vendor": "apple",
       "route": "mcd",
@@ -63266,28 +63734,28 @@
   ],
   "capture_sources": {
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/normalized-measurements.json": {
-      "sha256": "3773206df812fccef821f23b938e552c548a77de4659dfc14c31c4b8a6e18e76",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-3773206df812fccef821f23b938e552c548a77de4659dfc14c31c4b8a6e18e76.json"
+      "sha256": "f6fca4c53ad962e8940e4af34030d3a097a1499997566da2ec41c4712c8dc4c2",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-f6fca4c53ad962e8940e4af34030d3a097a1499997566da2ec41c4712c8dc4c2.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-normalized-measurements.json": {
-      "sha256": "4f673deb450e30403bae4b2565971865c69e82e4cbb647394b055197efd36816",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-4f673deb450e30403bae4b2565971865c69e82e4cbb647394b055197efd36816.json"
+      "sha256": "ac567020b80ac66ae81d17c910afec69621f37b6c5a61afcd9f061762cd440f0",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-ac567020b80ac66ae81d17c910afec69621f37b6c5a61afcd9f061762cd440f0.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-normalized-measurements.json": {
-      "sha256": "effbdcd9f28607e04b9bf1e44fa1835643c0268ae7e9c2a62e154a6f697fc673",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-effbdcd9f28607e04b9bf1e44fa1835643c0268ae7e9c2a62e154a6f697fc673.json"
+      "sha256": "5b1f5a2a4f16e62c0faca05a3fa5095bc416474bb43f525018af7c0f78944190",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-5b1f5a2a4f16e62c0faca05a3fa5095bc416474bb43f525018af7c0f78944190.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/normalized-measurements.json": {
-      "sha256": "3eed454368c13a7ff3e2e83f0d6ff95b185a5f70d5e30cc92f847ff48cfe7c55",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-3eed454368c13a7ff3e2e83f0d6ff95b185a5f70d5e30cc92f847ff48cfe7c55.json"
+      "sha256": "802868623a18c495f992b835b3ad628fa804013fb9f68091f462cabe90e6ce90",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-802868623a18c495f992b835b3ad628fa804013fb9f68091f462cabe90e6ce90.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json": {
-      "sha256": "ccfc2d6de80153ec8df8ae6db4da5a2a51f3d7b71c01ea92c5beb844a0b3096e",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-ccfc2d6de80153ec8df8ae6db4da5a2a51f3d7b71c01ea92c5beb844a0b3096e.json"
+      "sha256": "0c916b0afec1d51c1ad27be2e0f41bf8ad246454a3399c54cab69faa03eaffd3",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-0c916b0afec1d51c1ad27be2e0f41bf8ad246454a3399c54cab69faa03eaffd3.json"
     },
     "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json": {
-      "sha256": "cb38fb8a240dadc3419b143a0a49bf94f91ab82385fb1adeb180ed95d2f421e0",
-      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-cb38fb8a240dadc3419b143a0a49bf94f91ab82385fb1adeb180ed95d2f421e0.json"
+      "sha256": "5190e0a6dc0321362c6c41b103b190fb0b87d37b874824ea71563eeabf170296",
+      "snapshot": "/Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/board-watch/snapshot-5190e0a6dc0321362c6c41b103b190fb0b87d37b874824ea71563eeabf170296.json"
     }
   },
   "decisions": [

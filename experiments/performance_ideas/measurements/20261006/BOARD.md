@@ -49,13 +49,13 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I14 | identical | PENDING_MEASUREMENT | 0 |
 | I15 | identical | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 | I16 | identical | PARTIAL_MEASUREMENTS_RETAINED | 27 |
-| I17 | identical | PARTIAL_MEASUREMENTS_RETAINED | 6 |
+| I17 | identical | PARTIAL_MEASUREMENTS_RETAINED | 12 |
 | I18 | identical | PARTIAL_MEASUREMENTS_RETAINED | 6 |
 | I19 | identical | PARTIAL_MEASUREMENTS_RETAINED | 6 |
 | I20 | identical | PARTIAL_MEASUREMENTS_RETAINED | 8 |
 | I21 | identical | PARTIAL_MEASUREMENTS_RETAINED | 6 |
 | I22 | identical | PARTIAL_MEASUREMENTS_RETAINED | 6 |
-| I23 | identical | NO_DISTINCT_RUNTIME_ARM | 0 |
+| I23 | identical | PARTIAL_MEASUREMENTS_RETAINED | 9 |
 | I24 | identical | PARTIAL_MEASUREMENTS_RETAINED | 8 |
 | N01 | identical | PARTIAL_MEASUREMENTS_RETAINED | 288 |
 | N02 | identical | PARTIAL_MEASUREMENTS_RETAINED | 240 |
@@ -1474,6 +1474,12 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I17 | amd/gfx942 | {"AB_FEATURES": "18", "AB_ROWS": "10001"}/{"features": 18, "policy": "Lossguide", "rows": 10001}/candidate | public_caller_component | MEASURED | 1.2920 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I17 | amd/gfx942 | {"AB_FEATURES": "9", "AB_ROWS": "32769"}/{"features": 9, "policy": "Depthwise", "rows": 32769}/candidate | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I17 | amd/gfx942 | {"AB_FEATURES": "9", "AB_ROWS": "32769"}/{"features": 9, "policy": "Lossguide", "rows": 32769}/candidate | public_caller_component | MEASURED | 1.0825 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I17 | amd/gfx942 | {"AB_FEATURES": "17", "AB_ROWS": "10000"}/{"features": 17, "policy": "Depthwise", "rows": 10000}/inherit_off | public_caller_component | MEASURED | 0.9113 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I17 | amd/gfx942 | {"AB_FEATURES": "17", "AB_ROWS": "10000"}/{"features": 17, "policy": "Lossguide", "rows": 10000}/inherit_off | public_caller_component | MEASURED | 0.8183 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I17 | amd/gfx942 | {"AB_FEATURES": "18", "AB_ROWS": "10001"}/{"features": 18, "policy": "Depthwise", "rows": 10001}/inherit_off | public_caller_component | MEASURED | 1.2276 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I17 | amd/gfx942 | {"AB_FEATURES": "18", "AB_ROWS": "10001"}/{"features": 18, "policy": "Lossguide", "rows": 10001}/inherit_off | public_caller_component | MEASURED | 1.1852 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I17 | amd/gfx942 | {"AB_FEATURES": "9", "AB_ROWS": "32769"}/{"features": 9, "policy": "Depthwise", "rows": 32769}/inherit_off | public_caller_component | MEASURED | 0.9474 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I17 | amd/gfx942 | {"AB_FEATURES": "9", "AB_ROWS": "32769"}/{"features": 9, "policy": "Lossguide", "rows": 32769}/inherit_off | public_caller_component | MEASURED | 0.8349 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I17 | nvidia/default | I17-candidate-5b467815b5-f0/case0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json |
 | I17 | nvidia/default | I17-candidate-5b467815b5-f0/case1 | public_caller_component | MEASURED | 1.1138 | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json |
 | I17 | nvidia/default | I17-candidate-5b467815b5-shape819eba2f1c/case0 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json |
@@ -1527,6 +1533,15 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I23 | amd/gfx942 | {"AB_OBSERVATIONS": "8193"}/{"batch": 6, "case": "planted_ar1", "observations": 8193}/candidate | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I23 | amd/gfx942 | {"AB_OBSERVATIONS": "8193"}/{"batch": 6, "case": "planted_ma1", "observations": 8193}/candidate | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
 | I23 | amd/gfx942 | {"AB_OBSERVATIONS": "8193"}/{"batch": 6, "case": "planted_arma11", "observations": 8193}/candidate | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/repairs/results.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ar1-4096-batch6/public_ms | component | MEASURED | 1.0968 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ma1-4096-batch6/public_ms | component | MEASURED | 1.0488 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_arma11-4096-batch6/public_ms | component | MEASURED | 1.0041 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ar1-4097-batch6/public_ms | component | MEASURED | 1.0254 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ma1-4097-batch6/public_ms | component | MEASURED | 1.0374 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_arma11-4097-batch6/public_ms | component | MEASURED | 0.9992 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ar1-8193-batch6/public_ms | component | MEASURED | 1.0070 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ma1-8193-batch6/public_ms | component | MEASURED | 0.9993 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_arma11-8193-batch6/public_ms | component | MEASURED | 1.0165 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
 | I23 | nvidia/default | I23-candidate-5b467815b5-shape63d0f2e177 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json |
 | I23 | nvidia/default | I23-candidate-5b467815b5-shape7e580bfa3b | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json |
 | I23 | nvidia/default | I23-candidate-5b467815b5-shape552f54f753 | public_caller_component | NO_DISTINCT_RUNTIME_ARM | — | /Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-repair-snapshots/9df6d74e2abb751bf4464b32dc0c4baea873c8f9767793b0f73c63e77c44f1d4.json |

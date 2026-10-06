@@ -55,7 +55,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | I20 | identical | PENDING_MEASUREMENT | 0 |
 | I21 | identical | PENDING_MEASUREMENT | 0 |
 | I22 | identical | PENDING_MEASUREMENT | 0 |
-| I23 | identical | PENDING_MEASUREMENT | 0 |
+| I23 | identical | PARTIAL_MEASUREMENTS_RETAINED | 9 |
 | I24 | identical | PENDING_MEASUREMENT | 0 |
 | N01 | identical | PENDING_MEASUREMENT | 0 |
 | N02 | identical | PENDING_MEASUREMENT | 0 |
@@ -733,6 +733,15 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F20 | apple/status | status | public_caller_component | FAILED | — | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F20/status/result.json |
 | I15 | apple/apple-certified-mma | apple-certified-mma/100000-2000-8-8/public_ms | public_caller_component | MEASURED | 0.5231 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i15-f32549d28/results/I15/apple-certified-mma/result.json |
 | I15 | apple/apple-certified-mma | apple-certified-mma/131071-1024-17-16/public_ms | public_caller_component | MEASURED | 0.7055 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i15-f32549d28/results/I15/apple-certified-mma/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ar1-4096-batch6/public_ms | component | MEASURED | 1.0968 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ma1-4096-batch6/public_ms | component | MEASURED | 1.0488 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_arma11-4096-batch6/public_ms | component | MEASURED | 1.0041 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ar1-4097-batch6/public_ms | component | MEASURED | 1.0254 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ma1-4097-batch6/public_ms | component | MEASURED | 1.0374 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_arma11-4097-batch6/public_ms | component | MEASURED | 0.9992 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ar1-8193-batch6/public_ms | component | MEASURED | 1.0070 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_ma1-8193-batch6/public_ms | component | MEASURED | 0.9993 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
+| I23 | apple/apple-batched-gradient | apple-batched-gradient/planted_arma11-8193-batch6/public_ms | component | MEASURED | 1.0165 | /Users/andrewhendel/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23/apple-batched-gradient/result.json |
 
 ## Campaign notes
 
