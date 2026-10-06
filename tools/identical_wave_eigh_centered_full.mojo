@@ -3,7 +3,8 @@ from std.memory import bitcast
 from x_decomp.rr_solve import host_eigh_rb_sorted
 
 def main() raises:
-    for n in (64, 65, 96):
+    var sizes: List[Int] = [64, 65, 96]
+    for n in sizes:
         var a = List[Float32](length=n * n, fill=Float32(0.0))
         for i in range(n):
             for j in range(n):
