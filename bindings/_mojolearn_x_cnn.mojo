@@ -4,6 +4,8 @@
 Host addresses in, host addresses out; the work is x_cnn/device.mojo. The CPU
 twin is bindings/_mojolearn_x_cnn_host.mojo, same names, same contract."""
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
+from x_cnn.training import TrainingSpec
+from x_cnn.training_device import fit_epochs as native_fit_epochs
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -1500,6 +1502,66 @@ def fit_epoch_d_binding(
     return PythonObject(steps)
 
 
+
+def fit_epochs_d_binding(
+    spec: PythonObject, losses_addr: PythonObject, curve_addr: PythonObject,
+    params: PythonObject, fparams: PythonObject,
+) raises -> PythonObject:
+    """Transitional test/API adapter to the typed native complete-training entry.
+
+    params extends fit_epoch_d with epochs at index8; curve is float64[epochs].
+    Python objects are decoded once before native code owns all training loops.
+    The adapter is migration debt under the no-Python product rule, not proof
+    that the public Python model is compliant.
+    """
+    if Int(py=len(params)) != 9 or Int(py=len(fparams)) != 6:
+        raise Error("x_cnn fit epochs: nine integer and six optimizer parameters required")
+    var blocks = spec["blocks"]
+    var nb = Int(py=len(blocks))
+    var bh = List[List[Int]]()
+    for j in range(nb):  # small-loop(nb: conv blocks of the network): one handle list per block, not data
+        var h = _ints(blocks[j])
+        if len(h) != 9:
+            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
+        bh.append(h^)
+    var head = _ints(spec["head"])
+    var a = _ints(spec["a"])
+    var data = _ints(spec["data"])
+    var dims = _ints(spec["dims"])
+    var opt = spec["opt"]
+    var t = _many(opt[0], opt[1], opt[2], opt[3])
+    var hp = t[0].copy()
+    var hg = t[1].copy()
+    var hb = t[2].copy()
+    var cnt = t[3].copy()
+    var cs = List[List[List[Int32]]]()
+    var ps = List[List[List[Int32]]]()
+    var pools = List[List[Bool]]()
+    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
+    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
+    var native_spec = TrainingSpec(
+        bh^, head^, a^, data^, dims^, hp^, hg^, hb^, cnt^, cs^, ps^, pools^,
+    )
+    var scalars = List[Float64]()
+    for i in range(6):
+        scalars.append(Float64(py=fparams[i]))
+    var n = Int(py=params[0])
+    var batch = Int(py=params[1])
+    var adam = Int(py=params[2]) != 0
+    var done = Int(py=params[3])
+    var first_epoch = Int(py=params[4])
+    var shuffle = Int(py=params[5]) != 0
+    var seed = _seed64(params[6], params[7])
+    var epochs = Int(py=params[8])
+    var losses = Int(py=losses_addr)
+    var curve = Int(py=curve_addr)
+    var completed = 0
+    with GILReleased(Python()):
+        completed = native_fit_epochs(native_spec, losses, curve, n, batch, adam,
+                                      done, first_epoch, epochs, shuffle, seed, scalars)
+    return PythonObject(completed)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -1581,6 +1643,7 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
         m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
         m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
+        m.def_function[fit_epochs_d_binding]("x_cnn_fit_epochs_d")
         m.def_function[adaptive_pool_m_binding]("x_cnn_adaptive_pool_m")
         m.def_function[graph_op_m_binding]("x_cnn_graph_op_m")
         m.def_function[gcn_norm_m_binding]("x_cnn_gcn_norm_m")

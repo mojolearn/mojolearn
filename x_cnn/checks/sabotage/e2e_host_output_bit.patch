@@ -1,8 +1,7 @@
 diff --git a/bindings/_mojolearn_x_cnn_host.mojo b/bindings/_mojolearn_x_cnn_host.mojo
-index 370e845a0..a9c1594fb 100644
 --- a/bindings/_mojolearn_x_cnn_host.mojo
 +++ b/bindings/_mojolearn_x_cnn_host.mojo
-@@ -3,7 +3,17 @@
+@@ -3,7 +3,16 @@
  """CPU binding for `_mojolearn_x_cnn` (the CNN expansion lane). HOST ONLY;
  the GPU binding's export names and address contract, the work is
  x_cnn/host/ops_host.mojo."""
@@ -13,23 +12,45 @@ index 370e845a0..a9c1594fb 100644
 +
 +
 +def copy_f32[so: Origin, do: MutOrigin, //](src: Pointer[Float32, so], dst: MutPointer[Float32, do], n: Int):
-+    """SABOTAGE (end to end): every word the CPU column returns has its low bit flipped (a function of the
-+    value alone, so each column stays batch-consistent and only the cross-column diff can see it)."""
++    """SABOTAGE: every word the CPU column returns has its low bit flipped."""
 +    _copy_f32_real(src, dst, n)
 +    for i in range(n):
 +        dst.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](dst.unsafe_load(i)) ^ UInt32(1)))
+ from x_cnn.training import TrainingSpec
+ from x_cnn.host.training_host import fit_epochs as native_fit_epochs
  from std.os import abort
- from std.python import Python, PythonObject
- from std.python._cpython import GILReleased
-@@ -59,8 +69,9 @@ def out_f32(p: FP, n: Int):
+@@ -100,8 +109,9 @@
      production it does nothing. The end-to-end sabotage arm
      (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
      bit here, and in `copy_f32` for the entries that still copy a result."""
 -    _ = p
 -    _ = n
-+    # SABOTAGE (end to end): the address-out entries' words, low bit flipped.
++    # SABOTAGE: include the typed native trainer as well as legacy entries.
 +    for i in range(n):
 +        p.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](p.unsafe_load(i)) ^ UInt32(1)))
- 
- 
+
+
  def _ints(params: PythonObject) raises -> List[Int]:
+diff --git a/x_cnn/host/training_host.mojo b/x_cnn/host/training_host.mojo
+--- a/x_cnn/host/training_host.mojo
++++ b/x_cnn/host/training_host.mojo
+@@ -1,6 +1,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """Compiled host CNN multi-epoch training; no Python runtime dependency."""
+-from std.memory import memcpy
++from std.memory import memcpy, bitcast
+ from bindings.hostptr import f64_ptr
+ from x_cnn.training import TrainingSpec, training_steps, validate_spec, optimizer_base, epoch_loss_mean
+ from x_cnn.ops import (
+@@ -21,8 +21,9 @@
+
+ def out_f32(p: FP, n: Int):
+     # Native trainer output seam; production is a no-op like the binding seam.
+-    _ = p
+-    _ = n
++    # SABOTAGE: include the typed native trainer as well as legacy entries.
++    for i in range(n):
++        p.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](p.unsafe_load(i)) ^ UInt32(1)))
+
+
+ def _pool_counts(prm: List[Int32]) -> Tuple[Int, Int]:

@@ -4,6 +4,8 @@
 the GPU binding's export names and address contract, the work is
 x_cnn/host/ops_host.mojo."""
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
+from x_cnn.training import TrainingSpec
+from x_cnn.host.training_host import fit_epochs as native_fit_epochs
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -32,10 +34,47 @@ from x_cnn.host.ops_host import pad2d_forward_host as pad2d_forward_impl
 from x_cnn.host.ops_host import pad2d_backward_host as pad2d_backward_impl
 from x_cnn.host.ops_host import spmm_host as spmm_impl
 from x_cnn.host.ops_host import gcn_norm_host as gcn_norm_impl
-from x_cnn.host.ops_host import csr_build_host_binding
-from x_cnn.host.ops_host import gcn_loops_host_binding
+from x_cnn.host.ops_host import csr_build_host
+from x_cnn.host.ops_host import gcn_loops_host
 # lane fam2-neural (2026-10-04): the device epoch's element functions, looped
 from x_cnn.ops import idn2_flags, epoch_key, epoch_rows_prm, epoch_rows_at, adam_hyper_base, adam_hyper_at, AH_ROW, neural_tape_budget_bytes, neural_numerical_profile
+
+
+def csr_build_host_binding(rows_addr: PythonObject, cols_addr: PythonObject, csr_addr: PythonObject, order_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`x_cnn_csr_build` for the host binding (`bindings/_mojolearn_x_cnn.mojo`'s
+    `csr_build_binding`, same arguments, same words)."""
+    var n = Int(py=params[0])
+    var nnz = Int(py=params[1])
+    if n <= 0 or nnz < 0:
+        raise Error("x_cnn csr_build: positive n and nnz >= 0 required")
+    var pc = i32_ptr(Int(py=csr_addr)).unsafe_origin_cast[MutAnyOrigin]()
+    var rows = i32_ptr(Int(py=rows_addr)).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else pc
+    var cols = i32_ptr(Int(py=cols_addr)).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else pc
+    var order = i32_ptr(Int(py=order_addr)).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else pc
+    with GILReleased(Python()):
+        csr_build_host(rows, cols, nnz, n, pc, order)
+    return PythonObject(n + 1 + 2 * nnz)
+
+
+
+def gcn_loops_host_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`x_cnn_gcn_loops` for the host binding (`bindings/_mojolearn_x_cnn.mojo`'s
+    `gcn_loops_binding`, same arguments, same words)."""
+    var n = Int(py=params[0])
+    var nnz = Int(py=params[1])
+    var fill = Float32(2.0) if Int(py=params[2]) != 0 else Float32(1.0)
+    if n <= 0 or nnz < 0 or Int(py=len(addrs)) != 6:
+        raise Error("x_cnn gcn_loops: addrs [src, dst, w, src_out, dst_out, w_out], positive n and nnz >= 0 required")
+    var so = i32_ptr(Int(py=addrs[3])).unsafe_origin_cast[MutAnyOrigin]()
+    var dso = i32_ptr(Int(py=addrs[4])).unsafe_origin_cast[MutAnyOrigin]()
+    var wo = f32_ptr(Int(py=addrs[5])).unsafe_origin_cast[MutAnyOrigin]()
+    var src = i32_ptr(Int(py=addrs[0])).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else so
+    var dst = i32_ptr(Int(py=addrs[1])).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else so
+    var w = f32_ptr(Int(py=addrs[2])).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else wo
+    var k = 0
+    with GILReleased(Python()):
+        k = gcn_loops_host(src, dst, w, nnz, n, fill, so, dso, wo)
+    return PythonObject(k)
 
 
 def fp(addr: PythonObject) raises -> FP:
@@ -1105,6 +1144,65 @@ def fit_epoch_d_binding(
     return out
 
 
+
+def fit_epochs_d_binding(
+    spec: PythonObject, losses_addr: PythonObject, curve_addr: PythonObject,
+    params: PythonObject, fparams: PythonObject,
+) raises -> PythonObject:
+    """Transitional test/API adapter to the typed native complete-training entry.
+
+    params extends fit_epoch_d with epochs at index8; curve is float64[epochs].
+    Python objects are decoded once before native code owns all training loops.
+    The adapter is migration debt under the no-Python product rule, not proof
+    that the public Python model is compliant.
+    """
+    if Int(py=len(params)) != 9 or Int(py=len(fparams)) != 6:
+        raise Error("x_cnn fit epochs: nine integer and six optimizer parameters required")
+    var blocks = spec["blocks"]
+    var nb = Int(py=len(blocks))
+    var bh = List[List[Int]]()
+    for j in range(nb):
+        var h = _ints(blocks[j])
+        if len(h) != 9:
+            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
+        bh.append(h^)
+    var head = _ints(spec["head"])
+    var a = _ints(spec["a"])
+    var data = _ints(spec["data"])
+    var dims = _ints(spec["dims"])
+    var opt = spec["opt"]
+    var cnt = _list_counts(opt[0], opt[1], opt[2], opt[3])
+    var hp = _ints(opt[0])
+    var hg = _ints(opt[1])
+    var hb = _ints(opt[2])
+    var cs = List[List[List[Int32]]]()
+    var ps = List[List[List[Int32]]]()
+    var pools = List[List[Bool]]()
+    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
+    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
+    var native_spec = TrainingSpec(
+        bh^, head^, a^, data^, dims^, hp^, hg^, hb^, cnt^, cs^, ps^, pools^,
+    )
+    var scalars = List[Float64]()
+    for i in range(6):
+        scalars.append(Float64(py=fparams[i]))
+    var n = Int(py=params[0])
+    var batch = Int(py=params[1])
+    var adam = Int(py=params[2]) != 0
+    var done = Int(py=params[3])
+    var first_epoch = Int(py=params[4])
+    var shuffle = Int(py=params[5]) != 0
+    var seed = _seed64(params[6], params[7])
+    var epochs = Int(py=params[8])
+    var losses = Int(py=losses_addr)
+    var curve = Int(py=curve_addr)
+    var completed = 0
+    with GILReleased(Python()):
+        completed = native_fit_epochs(native_spec, losses, curve, n, batch, adam,
+                                      done, first_epoch, epochs, shuffle, seed, scalars)
+    return PythonObject(completed)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -1175,6 +1273,7 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
         m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
         m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
+        m.def_function[fit_epochs_d_binding]("x_cnn_fit_epochs_d")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn_host: ", e))

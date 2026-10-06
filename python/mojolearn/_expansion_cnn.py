@@ -1202,12 +1202,8 @@ class _Res:
 #: two gathers, one pass over all rows); never set in production.
 _PREDICT_ROWS = 2048
 _LEGACY_STEP = False
-#: lane/py-misc (2026-09-28): with X resident, fit runs each epoch's steps in
-#: ONE binding call (`x_cnn_fit_epoch_r`: the same entries' work in the same
-#: order, looped in Mojo). False is the measurement arm's before side (the
-#: Python step loop, also `MOJOLEARN_XCNN_PY_STEPS=1` for a whole-process
-#: arm such as the identity harness); never cleared in production.
-_EPOCH_ENTRY = __import__("os").environ.get("MOJOLEARN_XCNN_PY_STEPS", "") != "1"
+# Training epochs and minibatch orchestration are native-only. The historical
+# MOJOLEARN_XCNN_PY_STEPS path is removed; old A/B evidence stays at its freeze.
 
 
 class CNNClassifier(_Layer):
@@ -1348,9 +1344,10 @@ class CNNClassifier(_Layer):
     def fit(self, X, y):
         """Every step on the binding's resident arrays (DEVIATION 5718): the
         weights, optimizer state, activations and gradients stay on the
-        device for the whole fit; each step uploads its batch and labels and
-        downloads its loss. The same entries' kernels on the same values in
-        the same order as the per-layer calls: the bits do not move."""
+        device for the whole fit. Native Mojo owns all epochs/minibatches;
+        each epoch reads back its losses and computes their ordered mean.
+        The Python construction/input/output shell remains migration debt.
+        Cross-vendor identity of this new source still requires validation."""
         np = _np()
         x = self._images(X)
         y = np.asarray(y)
@@ -1385,9 +1382,6 @@ class CNNClassifier(_Layer):
                     self._rw[id(layer)] = (hp[i], hp[i + 1], hg[i], hg[i + 1])
             a = self._resident(R, cap, save=True)
             sizes = [int(getattr(layer, attr).size) for layer, attr, _ in params]  # glue: sizes of the layer parameter arrays
-            # the list forms (one optimizer call, one gather per step) on the
-            # GPU binding only: the host twin's list forms are unmeasured
-            lists = (not _LEGACY_STEP) and str(b.x_cnn_vendor()) != "cpu"
             # the whole X and its labels resident once, at every size (lane
             # cpu3-python: the >1 GiB route that gathered each batch's rows on
             # the host with `gather_rows_bytes` and uploaded them is gone; GPU
@@ -1397,122 +1391,40 @@ class CNNClassifier(_Layer):
             xall, yall = R.new(x.size), R.new(n)
             R.put(xall, x)
             R.put(yall, yi)
-            step = 0
-            epoch_entry = (_EPOCH_ENTRY and not _LEGACY_STEP and hasattr(b, "x_cnn_fit_epoch_r"))
-            if epoch_entry:
-                bs = self.batch_size
-                nsteps = (n + bs - 1) // bs
-                m_last = n - (nsteps - 1) * bs
-                hw_, hb_, hgw_, hgb_ = self._rw[id(self.head_)]
-                blocks = []
-                for j, (conv, _) in enumerate(self._blocks):  # glue: walks the conv block list
-                    w_, b_, gw_, gb_ = self._rw[id(conv)]
-                    blocks.append([w_, b_, gw_, gb_, a["out"][j], a["idx"][j], a["gout"][j]] + a["saved"][j])
-                spec = dict(blocks=blocks, head=[hw_, hb_, hgw_, hgb_],
-                            a=[a["x"], a["y"], a["logits"], a["glog"], a["proba"], a.get("ghead", 0)],
-                            opt=[hp, hg, hbuf, sizes], data=[xall, yall, row], dims=[self._flat, k],
-                            plan_full=[[list(p[0]), list(p[1])] for p in self._plan(cap)[0]],  # glue: launch plan of every conv block
-                            plan_last=[[list(p[0]), list(p[1])] for p in self._plan(m_last)[0]])  # glue: launch plan of every conv block
-                sgd_row = [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
-                           1.0 if self.nesterov else 0.0, 0.0]
-            # lane fam2-neural: the order, Adam's scalars and the losses on the
-            # device. Lane cpu3-python: on every build (the `_F2_EPOCH_DEV`
-            # bit only reports the define now): the host Fisher-Yates order
-            # (`epoch_order_i32`) and the host Adam scalars (`adam_hyper_f64`)
-            # are off the GPU route, no `_OFF` arm (owner rule, 2026-10-04).
-            dev_epoch = True
+            # Transitional Python model shell: the complete training loop now
+            # belongs to typed Mojo. No Python epoch/minibatch fallback, even
+            # when a retained old extension lacks the new entry point.
+            if not hasattr(b, "x_cnn_fit_epochs_d"):
+                raise RuntimeError("CNN training requires the native multi-epoch binding; rebuild in the next authorized freeze")
+            bs = self.batch_size
+            nsteps = (n + bs - 1) // bs
+            m_last = n - (nsteps - 1) * bs
+            hw_, hb_, hgw_, hgb_ = self._rw[id(self.head_)]
+            blocks = []
+            for j, (conv, _) in enumerate(self._blocks):  # glue: walks the conv block list
+                w_, b_, gw_, gb_ = self._rw[id(conv)]
+                blocks.append([w_, b_, gw_, gb_, a["out"][j], a["idx"][j], a["gout"][j]] + a["saved"][j])
+            spec = dict(blocks=blocks, head=[hw_, hb_, hgw_, hgb_],
+                        a=[a["x"], a["y"], a["logits"], a["glog"], a["proba"], a.get("ghead", 0)],
+                        opt=[hp, hg, hbuf, sizes], data=[xall, yall, row], dims=[self._flat, k],
+                        plan_full=[[list(p[0]), list(p[1])] for p in self._plan(cap)[0]],  # glue: launch plan of every conv block
+                        plan_last=[[list(p[0]), list(p[1])] for p in self._plan(m_last)[0]])  # glue: launch plan of every conv block
             seed64 = int(order_state[0])
             seed_lo, seed_hi = seed64 & 0xFFFFFFFF, seed64 >> 32
-            ep = -1
-            for _ in range(self.max_iter):  # glue: drives the device epochs (max_iter-sized: epochs)
-                ep += 1
-                if epoch_entry and dev_epoch:
-                    losses = np.empty(nsteps, dtype=np.float64)
-                    if self.optimizer == "sgd":
-                        fpar = [float(self.learning_rate), float(self.momentum), float(self.weight_decay),
-                                float(self.dampening), 1.0 if self.nesterov else 0.0, 0.0]
-                    else:
-                        fpar = [float(self.learning_rate), float(self.betas[0]), float(self.betas[1]),
-                                float(self.eps), float(self.weight_decay),
-                                1.0 if self.optimizer == "adamw" else 0.0]
-                    b.x_cnn_fit_epoch_d(spec, losses.ctypes.data,
-                                        [n, bs, 0 if self.optimizer == "sgd" else 1, step, ep,
-                                         1 if self.shuffle else 0, seed_lo, seed_hi], fpar)
-                    step += nsteps
-                    epoch = losses.tolist()
-                    self.losses_.extend(epoch)
-                    self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
-                    continue
-                order = np.empty(n, dtype=np.int32)
-                b.x_cnn_epoch_rows(order.ctypes.data, [n, ep, 1 if self.shuffle else 0, seed_lo, seed_hi])
-                if epoch_entry:
-                    rows = np.ascontiguousarray(order, dtype=np.int32)
-                    if self.optimizer == "sgd":
-                        hyper = np.tile(np.asarray(sgd_row, dtype=np.float64), (nsteps, 1))  # glue: builds the per-step hyperparameter table (nsteps-sized: optimizer steps)
-                        if step == 0:
-                            hyper[0, 5] = 1.0
-                    else:
-                        hyper = np.ascontiguousarray(_adam_hyper_block(
-                            step + 1, nsteps, self.learning_rate, self.betas, self.eps, self.weight_decay,
-                            self.optimizer == "adamw", b))
-                    losses = np.empty(nsteps, dtype=np.float64)
-                    b.x_cnn_fit_epoch_r(spec, rows.ctypes.data, hyper.ctypes.data, losses.ctypes.data,
-                                        [n, bs, 0 if self.optimizer == "sgd" else 1])
-                    step += nsteps
-                    epoch = losses.tolist()
-                    self.losses_.extend(epoch)
-                    # the same `_pm.nsum` as the step loop below (DEVIATION 6901; py-consolidated)
-                    self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
-                    continue
-                epoch = []
-                for s in range(0, n, self.batch_size):  # glue: drives the device minibatch steps (batch_size-sized: minibatches)
-                    idx = order[s:s + self.batch_size]
-                    m = len(idx)
-                    rows = np.ascontiguousarray(idx, dtype=np.int32)
-                    if not lists:
-                        b.x_cnn_res_gather(a["x"], xall, rows.ctypes.data, [m, row])
-                        b.x_cnn_res_gather(a["y"], yall, rows.ctypes.data, [m, 1])
-                    else:
-                        b.x_cnn_res_gather([a["x"], a["y"]], [xall, yall], rows.ctypes.data, [m, row, 1])
-                    plans = self._forward_r(b, a, m)
-                    loss = float(b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k]))
-                    hw, _, hgw, hgb = self._rw[id(self.head_)]
-                    last = a["out"][-1] if plans else a["x"]
-                    glast = a["gout"][-1] if plans else a["ghead"]
-                    b.x_cnn_linear_backward_r(last, hw, a["glog"], glast, hgw, hgb, [m, self._flat, k])
-                    for j in range(len(self._blocks) - 1, -1, -1):  # glue: drives the backward launch per conv block
-                        conv = self._blocks[j][0]
-                        prm, pprm = plans[j][:2]
-                        w_, b_, gw_, gb_ = self._rw[id(conv)]
-                        src = a["out"][j - 1] if j > 0 else a["x"]
-                        dx = a["gout"][j - 1] if j > 0 else 0
-                        b.x_cnn_conv_block_backward_r(src, w_, b_, a["gout"][j], a["idx"][j],
-                                                      [dx, gw_, gb_] + a["saved"][j], prm, pprm)
-                    step += 1
-                    if lists:
-                        # every parameter in one binding call, the same launches in the same order
-                        if self.optimizer == "sgd":
-                            b.x_cnn_sgd_r(hp, hg, hbuf, sizes,
-                                          [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
-                                           1.0 if self.nesterov else 0.0, 1.0 if step == 1 else 0.0])
-                        else:
-                            b.x_cnn_adam_r(hp, hg, hbuf, sizes, _adam_hyper(step, self.learning_rate, self.betas,
-                                                                            self.eps, self.weight_decay,
-                                                                            self.optimizer == "adamw", b))
-                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if not lists else ():  # glue: one optimizer launch per parameter array
-                        size = getattr(layer, attr).size
-                        if self.optimizer == "sgd":
-                            b.x_cnn_sgd_r(p_, g_, buf, [size],
-                                          [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
-                                           1.0 if self.nesterov else 0.0, 1.0 if step == 1 else 0.0])
-                        else:
-                            b.x_cnn_adam_r(p_, g_, buf, [size], _adam_hyper(step, self.learning_rate, self.betas,
-                                                                            self.eps, self.weight_decay,
-                                                                            self.optimizer == "adamw", b))
-                    epoch.append(loss)
-                self.losses_.extend(epoch)
-                # CPython 3.12+'s sum spelled out: the same bits on every Python (DEVIATION 6901)
-                self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
+            losses = np.empty(self.max_iter * nsteps, dtype=np.float64)
+            curve = np.empty(self.max_iter, dtype=np.float64)
+            if self.optimizer == "sgd":
+                fpar = [float(self.learning_rate), float(self.momentum), float(self.weight_decay),
+                        float(self.dampening), 1.0 if self.nesterov else 0.0, 0.0]
+            else:
+                fpar = [float(self.learning_rate), float(self.betas[0]), float(self.betas[1]),
+                        float(self.eps), float(self.weight_decay),
+                        1.0 if self.optimizer == "adamw" else 0.0]
+            b.x_cnn_fit_epochs_d(spec, losses.ctypes.data, curve.ctypes.data,
+                                [n, bs, 0 if self.optimizer == "sgd" else 1, 0, 0,
+                                 1 if self.shuffle else 0, seed_lo, seed_hi, self.max_iter], fpar)
+            self.losses_ = losses.tolist()
+            self.loss_curve_ = curve.tolist()
             for (layer, attr, gattr), p_, g_, buf in zip(params, hp, hg, hbuf):  # glue: reads back each parameter array handle
                 arr = getattr(layer, attr)
                 setattr(layer, attr, R.get(p_, arr.shape))
