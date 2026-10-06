@@ -67,16 +67,19 @@
       "MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"
     ],
     "hdbscan-downloads": [
-      "MOJOLEARN_HDB_ONE_SYNC"
+      "MOJOLEARN_HDB_ONE_SYNC",
+      "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
     ],
     "hdbscan-linkage": [
       "MOJOLEARN_HDB_LINKAGE_DEVICE"
     ],
     "hdbscan-selection": [
-      "MOJOLEARN_HDB_SELECT_DEVICE"
+      "MOJOLEARN_HDB_SELECT_DEVICE",
+      "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
     ],
     "hdbscan-core": [
-      "MOJOLEARN_HDB_CORE_TILE"
+      "MOJOLEARN_HDB_CORE_TILE",
+      "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
     ],
     "center-accumulation": [],
     "scratch-reuse": []
@@ -105,6 +108,19 @@
     ],
     "scratch-reuse": [
       "MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"
+    ],
+    "hdbscan-linkage": [
+      "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
+    ],
+    "hdbscan-downloads": [
+      "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
+    ],
+    "hdbscan-selection": [
+      "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
+    ],
+    "hdbscan-core": [
+      "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
     ]
-  }
+  },
+  "measurement_decision": "2026-10-06: promote Apple FAST device linkage; explicit LINKAGE_DEVICE_OFF preserves old baseline and independent other HDBSCAN variants; combined ONE_SYNC timing pending; active original artifacts unchanged."
 }
