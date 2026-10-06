@@ -102,7 +102,7 @@ comptime MAX_LABEL = Int32(2147483647)
 comptime IDN_DBSCAN_CC_GATED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
-        # I14 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+        # I14 measured gated+shortcut chunk16 versus ungated below; default retained.
         is_defined["MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
@@ -110,14 +110,20 @@ comptime IDN_DBSCAN_CC_GATED = (
 
 #: Passes per flag read under `IDN_DBSCAN_CC_GATED`. CANDIDATE ARMS (default
 #: 8): `-D MOJOLEARN_IDN_DBSCAN_CC_CHUNK4=1`, `..._CHUNK16=1`, `..._CHUNK32=1`.
-# I14 experiment qualification pending: compile/fixtures do not establish
-# four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
-# defaults stay unchanged; this campaign attributes explicit experiment arms.
+# I14 sourcecbcc8dcd33 (2026-10-06), weak_cc_batched component on disconnected
+# 17-vertex cliques, rows100000/131071, two logical convergence passes:
+# gated+shortcut chunk16 versus ungated baseline, NOT chunk16 versus default8.
+# NVIDIA1.841165->4.569126ms (2.482x LOSS),5.566404->2.284453ms
+# (0.410x WIN); AMD1.321677->1.554933ms (1.176x LOSS),
+# 1.658742->1.623151ms (0.979x near-neutral). MIXED: retain gated/default8.
+# One same-process warmup/score; graph convergence component only, no full
+# DBSCAN/HDBSCAN or arbitrary-topology speed claim; accepted identity reused.
+# Evidence: overnight-ab-20261006/{amd,nvidia} normalized I14 receipts.
 comptime IDN_DBSCAN_CC_CHUNK = (
     # NEVER RUN — PENDING MEASUREMENT
     4 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK4"]()
     else (
-        # NEVER RUN — PENDING MEASUREMENT
+        # Chunk16 bundle measured above; isolated chunk-width comparison pending.
         16 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK16"]()
         # NEVER RUN — PENDING MEASUREMENT
         else (32 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK32"]() else 8)
