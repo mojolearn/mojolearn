@@ -1079,6 +1079,16 @@ comptime GMM_COMPONENT_BATCH = (
 )
 comptime GMM_COMPONENT_BATCH_FLOATS = 1 << 22  # all extra scratch <=16 MiB
 
+def gmm_component_batch_workspace(n: Int,d: Int,width: Int) -> Int:
+    # The selected GEMM workspace need not be monotone in its shape. Bound
+    # every admitted tail width rather than extrapolating from the full batch.
+    var cells=0
+    for tail in range(1,9):
+        if tail<=width:
+            cells=max(cells,identical_gemm_workspace_max_floats(n,tail*d,d))
+            cells=max(cells,identical_gemm_workspace_max_floats(tail,tail*d,d))
+    return cells
+
 def gmm_component_batch_width(n: Int,d: Int,k: Int) -> Int:
     # Buffer-index admission independent of device/dataset identity. Include
     # precision pack, sample projection, mean projection and GEMM workspace.
@@ -1088,9 +1098,7 @@ def gmm_component_batch_width(n: Int,d: Int,k: Int) -> Int:
         if d>2147483647//width or n>2147483647//(width*d):
             continue
         var kd = width*d
-        var w1 = identical_gemm_workspace_max_floats(n,kd,d)
-        var w2 = identical_gemm_workspace_max_floats(width,kd,d)
-        var cells = d*kd+n*kd+width*kd+max(w1,w2)
+        var cells = d*kd+n*kd+width*kd+gmm_component_batch_workspace(n,d,width)
         if cells<=GMM_COMPONENT_BATCH_FLOATS:
             return width
     return 0
@@ -1261,7 +1269,7 @@ def gmm_e_step(
             var pbatch = ctx.enqueue_create_buffer[DType.float32](d*kdmax)
             var ybatch = ctx.enqueue_create_buffer[DType.float32](n*kdmax)
             var mbatch = ctx.enqueue_create_buffer[DType.float32](width*kdmax)
-            var wsmax = max(identical_gemm_workspace_max_floats(n,kdmax,d),identical_gemm_workspace_max_floats(width,kdmax,d))
+            var wsmax = gmm_component_batch_workspace(n,d,width)
             var bws = ctx.enqueue_create_buffer[DType.float32](wsmax)
             for first in range(0,ncomp,width):
                 var count = min(width,ncomp-first)
