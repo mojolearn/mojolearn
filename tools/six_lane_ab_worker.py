@@ -14,7 +14,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from six_lane_ab import ROOT, check_benchmark, digest, git, write, THREAD_ENV
+from six_lane_ab import ROOT, check_benchmark, digest, git, write, THREAD_ENV, runtime_requirements, STORE
 from six_lane_evidence import capture, capture_model
 
 HARNESS_FAMILIES={
@@ -122,7 +122,8 @@ def run(args):
     if not recipe.get('execution_authorized'):raise ValueError('Later measurement authorization must be recorded in the resolved recipe')
     if job.get('blocked') or not job.get('full_dataset_coverage'):raise ValueError('Incomplete full workload recipe')
     if recipe.get('changes_frozen_race') or work.get('overrides') or work.get('adapter'):raise ValueError('Frozen race settings cannot change to reach a candidate')
-    if cfg['runtime'] or job['master_selection'].get('runtime_by_member'):raise ValueError('Supplemental public operation has no unchanged incumbent race adapter; coverage remains missing')
+    configs={c['id']:c for c in json.loads((STORE/'matrix.json').read_text())['configurations']}
+    if runtime_requirements(job['master_selection'],job['workload_id'],configs):raise ValueError('Supplemental public operation has no unchanged incumbent race adapter; coverage remains missing')
     harness=work['harness'];family=HARNESS_FAMILIES[harness]
     if digest(ROOT/harness)!=work['harness_sha256']:raise ValueError('Harness drift')
     if work.get('shape','full')!='full' or work['inference'] not in ('separate','included_in_operation','not_applicable'):raise ValueError('Full workload and inference boundary required')
@@ -189,6 +190,7 @@ def run(args):
         timings=timings,repeated_use=repeated,missing_timing_scopes=[] if repeated else ['repeated use'],outputs=output,retained_output_values=str(values_path),output_sha256=output['sha256'],model_state=state,loaded_artifacts=loaded,configuration=cfg,implementation_ids=job['implementation_ids'],workload_id=job['workload_id'],hashing_outside_timing=True,
         hardware=hardware_record(runner),declared_hardware=recipe.get('hardware'),compiler=[a['compiler'] for a in expected],thread_environment={k:os.environ.get(k) for k in THREAD_ENV},resource_policy=actual_resources,declared_resource_policy=recipe['resource_policy'],effective_pools=pools,harness_sha256=work['harness_sha256'],sample_counts=counts,
         task_quality=dict(status='PENDING',metrics=metrics,gate_source=work['quality_gate_source'],reason='Existing independent gate assessment remains required; no acceptance inferred from metrics alone'),runtime_reach=info)
+    if recipe['source_sha']!=git('rev-parse','HEAD') or git('status','--porcelain','--untracked-files=all'):raise ValueError('Worker source freeze changed during operation')
     write(args.output,result)
 
 
