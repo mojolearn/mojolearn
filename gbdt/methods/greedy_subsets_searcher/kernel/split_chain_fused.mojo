@@ -37,6 +37,7 @@ schedule change against the FAST path it replaces.
 
 from gbdt.gpu_data.gpu_structures import CFeature
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from gbdt.apple_fast_tree_experiments import AFT_N05
 from std.gpu.intrinsics import ldg
 from std.memory import bitcast
 from max.gpu.primitives.block import broadcast as block_broadcast
@@ -292,7 +293,11 @@ def fused_copy_back_kernel[GUARD: Bool = False](
 
 # ---- DW_NO_LEVEL_SYNC (FAST, Apple; default) -----------------------------
 #: `dw_select_splits_kernel`'s block (one thread per scored leaf).
-comptime DW_SELECT_BLOCK = 64
+# N05: four simdgroups select/pack leaf split descriptors per block,
+# amortizing threadgroup scheduling across more independent leaves. The
+# strict gain test and prefix rank defining creation order stay unchanged.
+# No performance/quality evidence; source only, default OFF.
+comptime DW_SELECT_BLOCK = 128 if AFT_N05 else 64
 #: Words per `CFeature` record in the split payload (`CFEATURE_BYTES // 4`).
 comptime DW_FEAT_WORDS = 6
 #: The fold's record layout (`split_resolve.WINNER_RECORD_WORDS` and

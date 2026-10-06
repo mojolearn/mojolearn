@@ -40,6 +40,12 @@ point it at. Recorded so that gap is visible.
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from checks.numerics import identical_mul_add
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G08
+
+# G08: four independent row stores share leaf metadata and loop control.
+# The grid-stride tile is complete at every leaf size; no shape targeting.
+# Uncompiled, unverified, unmeasured; arithmetic and learning rate unchanged.
+comptime AFT_LEAF_ROWS = 4 if AFT_G08 else 1
 
 
 def add_model_value_kernel(
@@ -84,24 +90,27 @@ def add_model_value_kernel(
 
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
+    # IDENTITY_PATHS row 9, the CURSOR UPDATE seam (E1 2026-08-22:
+    # with tree 0 fully bit-identical Apple<->AMD under RMSE, the
+    # first divergence moved to tree 1's FIRST histogram -- the only
+    # arithmetic in between is this `cursor + leaf*rate`, which HIP's
+    # default contraction may fuse per row while Metal's baseline is
+    # measured unfused). `identical_mul_add` is an explicit fma under
+    # IDENTICAL (one rounding, every vendor) and the naive chain
+    # under FAST -- same operands, same ops, Apple FAST bits unchanged.
     while i < size:
-        var row = plane + Int(row_index.unsafe_load(offset + i))
-        # IDENTITY_PATHS row 9, the CURSOR UPDATE seam (E1 2026-08-22:
-        # with tree 0 fully bit-identical Apple<->AMD under RMSE, the
-        # first divergence moved to tree 1's FIRST histogram -- the only
-        # arithmetic in between is this `cursor + leaf*rate`, which HIP's
-        # default contraction may fuse per row while Metal's baseline is
-        # measured unfused). `identical_mul_add` is an explicit fma under
-        # IDENTICAL (one rounding, every vendor) and the naive chain
-        # under FAST -- same operands, same ops, Apple FAST bits
-        # unchanged.
-        cursor.unsafe_store(
-            row,
-            identical_mul_add(
-                raw, learning_rate, cursor.unsafe_load(row)
-            ),
-        )
-        i += stride
+        comptime for lane in range(AFT_LEAF_ROWS):
+            var position = i + lane * stride
+            if position < size:
+                var row = plane + Int(row_index.unsafe_load(offset + position))
+                # Same IDENTITY_PATHS row 9 arithmetic; independent rows share
+                # the leaf value already loaded above and never share writes.
+                cursor.unsafe_store(
+                    row,
+                    identical_mul_add(raw, learning_rate, cursor.unsafe_load(row)),
+                )
+        i += stride * AFT_LEAF_ROWS
+
 
 
 comptime ABMV_BLOCK = 256

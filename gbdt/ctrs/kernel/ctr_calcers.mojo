@@ -73,6 +73,16 @@ from gbdt.ctrs.index_wrapper import (
 )
 
 
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G09, AFT_G10
+
+# G09: eight numerator rows amortize target predicate/segment-sign setup;
+# the exact scan and prefix exclusion run unchanged. No performance/quality
+# evidence. Keep the separate frequency kernel's four-row tile unchanged.
+comptime AFT_CTR_TARGET_DOCS = 8 if AFT_G09 else 4
+# G10: four coalesced independent lookups per lane amortize prior/map setup.
+# Uncompiled/unverified/unmeasured; no category/prefix approximation.
+comptime AFT_CTR_LOOKUP_DOCS = 4 if AFT_G10 else 1
+
 comptime CTR_BLOCK_SIZE = 256
 """`const ui32 blockSize = 256`, every launcher in `ctr_calcers.cu`."""
 
@@ -229,19 +239,21 @@ def weighted_bin_freq_ctrs_kernel(
     `Full` counts every row.
     """
     var size = Int(size_in)
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < size:
-        var dst_idx: Int
-        if has_write_indices != Int32(0):
-            dst_idx = Int(index_of(write_indices.unsafe_load(i)))
-        else:
-            dst_idx = i
-        var bin = Int(bins.unsafe_load(i))
-        dst.unsafe_store(
-            dst_idx,
-            (bin_sums.unsafe_load(bin) + prior)
-            / (total_weight + prior_observations),
-        )
+    var first = Int(block_idx.x) * Int(block_dim.x) * AFT_CTR_LOOKUP_DOCS + Int(thread_idx.x)
+    comptime for lane in range(AFT_CTR_LOOKUP_DOCS):
+        var i = first + lane * Int(block_dim.x)
+        if i < size:
+            var dst_idx: Int
+            if has_write_indices != Int32(0):
+                dst_idx = Int(index_of(write_indices.unsafe_load(i)))
+            else:
+                dst_idx = i
+            var bin = Int(bins.unsafe_load(i))
+            dst.unsafe_store(
+                dst_idx,
+                (bin_sums.unsafe_load(bin) + prior)
+                / (total_weight + prior_observations),
+            )
 
 
 def launch_compute_weighted_bin_freq_ctr(
@@ -257,7 +269,7 @@ def launch_compute_weighted_bin_freq_ctr(
     size: Int,
 ) raises:
     """`ComputeWeightedBinFreqCtr` (`ctr_calcers.cu:104-115`)."""
-    var num_blocks = _ceil_divide(size, CTR_BLOCK_SIZE)
+    var num_blocks = _ceil_divide(size, CTR_BLOCK_SIZE * AFT_CTR_LOOKUP_DOCS)
     if num_blocks == 0:
         return
     ctx.enqueue_function[weighted_bin_freq_ctrs_kernel](
@@ -585,10 +597,10 @@ def fill_binarized_targets_stats_kernel(
     var size = Int(size_in)
     var i = (
         Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    ) * CTR_DOCS_PER_THREAD
+    ) * AFT_CTR_TARGET_DOCS
 
-    var local_samples = InlineArray[Float32, CTR_DOCS_PER_THREAD](fill=0)
-    for k in range(CTR_DOCS_PER_THREAD):
+    var local_samples = InlineArray[Float32, AFT_CTR_TARGET_DOCS](fill=0)
+    for k in range(AFT_CTR_TARGET_DOCS):
         var idx = i + k
         var v = Float32(0.0)
         if idx < size:
@@ -606,7 +618,7 @@ def fill_binarized_targets_stats_kernel(
                 v = -v
         local_samples[k] = v
 
-    for k in range(CTR_DOCS_PER_THREAD):
+    for k in range(AFT_CTR_TARGET_DOCS):
         var idx = i + k
         if idx < size:
             dst.unsafe_store(idx, local_samples[k])
@@ -622,7 +634,7 @@ def launch_fill_binarized_targets_stats(
     borders: Bool,
 ) raises:
     """`FillBinarizedTargetsStats` (`ctr_calcers.cu:258-271`)."""
-    var num_blocks = _ceil_divide(size, CTR_DOCS_PER_THREAD * CTR_BLOCK_SIZE)
+    var num_blocks = _ceil_divide(size, AFT_CTR_TARGET_DOCS * CTR_BLOCK_SIZE)
     if num_blocks == 0:
         return
     ctx.enqueue_function[fill_binarized_targets_stats_kernel](
@@ -712,18 +724,20 @@ def make_means_and_scatter_kernel(
     same `0x3FFFFFFF`.
     """
     var size = Int(size_in)
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < size:
-        var m: Int
-        if has_map != Int32(0):
-            m = Int(map_ptr.unsafe_load(i) & mask)
-        else:
-            m = i
-        dst.unsafe_store(
-            m,
-            (sums.unsafe_load(i) + sum_prior)
-            / (weights.unsafe_load(i) + weight_prior),
-        )
+    var first = Int(block_idx.x) * Int(block_dim.x) * AFT_CTR_LOOKUP_DOCS + Int(thread_idx.x)
+    comptime for lane in range(AFT_CTR_LOOKUP_DOCS):
+        var i = first + lane * Int(block_dim.x)
+        if i < size:
+            var m: Int
+            if has_map != Int32(0):
+                m = Int(map_ptr.unsafe_load(i) & mask)
+            else:
+                m = i
+            dst.unsafe_store(
+                m,
+                (sums.unsafe_load(i) + sum_prior)
+                / (weights.unsafe_load(i) + weight_prior),
+            )
 
 
 def launch_make_means_and_scatter(
@@ -739,7 +753,7 @@ def launch_make_means_and_scatter(
     mut dst: DeviceBuffer[DType.float32],
 ) raises:
     """`MakeMeansAndScatter` (`ctr_calcers.cu:309-322`)."""
-    var num_blocks = _ceil_divide(size, CTR_BLOCK_SIZE)
+    var num_blocks = _ceil_divide(size, CTR_BLOCK_SIZE * AFT_CTR_LOOKUP_DOCS)
     if num_blocks == 0:
         return
     ctx.enqueue_function[make_means_and_scatter_kernel](

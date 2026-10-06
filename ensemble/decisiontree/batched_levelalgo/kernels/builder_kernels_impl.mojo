@@ -1572,6 +1572,17 @@ def node_split_copy_back_sampled_kernel[
             ]
 
 
+# AFT F04: double only the scan's cooperative width. The ops retain the
+# original TPB-grained work map, so segment boundaries and row multiplicity
+# do not change; fewer scan aggregates trade for more shared memory/block.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_RF_SCAN_WIDTH_SCALE = 2 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F04"]()
+) else 1
+
+
 struct NodeSplitScratch[
     dtype: DType,
     TPB: Int,
@@ -1639,7 +1650,8 @@ struct NodeSplitScratch[
         max_work_items: Int,
         max_rows: Int = 1,
     ) raises:
-        var n_blocks = ceildiv(max_slots, Self.TPB)
+        comptime SCAN_TPB = Self.TPB * AFT_RF_SCAN_WIDTH_SCALE
+        var n_blocks = ceildiv(max_slots, SCAN_TPB)
         # DEVIATION 2001: the staging trio holds whichever functor the
         # flag selects. `OPS_BYTES == size_of[Ops]()` when the flag is
         # off, so the default arm's sizes are untouched.
@@ -1650,11 +1662,11 @@ struct NodeSplitScratch[
             max_work_items if max_work_items > 0 else 1
         )
         self.states = ctx.enqueue_create_buffer[DType.uint8](
-            scan_by_key_temp_bytes[Self.Ops, Self.TPB](max_slots) + 1
+            scan_by_key_temp_bytes[Self.Ops, SCAN_TPB](max_slots) + 1
         )
         self.heads = ctx.enqueue_create_buffer[DType.uint8](max_slots + 1)
         self.block_agg = ctx.enqueue_create_buffer[DType.uint8](
-            scan_by_key_block_agg_bytes[Self.Ops, Self.TPB](max_slots) + 1
+            scan_by_key_block_agg_bytes[Self.Ops, SCAN_TPB](max_slots) + 1
         )
         self.block_head = ctx.enqueue_create_buffer[DType.uint8](
             n_blocks + 1
@@ -1881,7 +1893,7 @@ def launch_node_split_kernel[
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[OpsST]()
         )
-        launch_inclusive_scan_by_key[OpsST, TPB, scan_sab](
+        launch_inclusive_scan_by_key[OpsST, TPB * AFT_RF_SCAN_WIDTH_SCALE, scan_sab](
             ctx,
             ops_ptr,
             n_slots,
@@ -1927,7 +1939,7 @@ def launch_node_split_kernel[
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[OpsT]()
         )
-        launch_inclusive_scan_by_key[OpsT, TPB, scan_sab](
+        launch_inclusive_scan_by_key[OpsT, TPB * AFT_RF_SCAN_WIDTH_SCALE, scan_sab](
             ctx,
             ops_ptr,
             n_slots,
@@ -2010,6 +2022,18 @@ def launch_node_split_kernel[
 # ===========================================================================
 
 
+# AFT F05: four coalesced row stripes/lane in the existing label+weight
+# gather, preserving each sampled position and the sampler's entire stream.
+# The tile amortizes lane scheduling and keeps adjacent lanes on adjacent
+# positions; no sorting or sample-selection change is part of the candidate.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_RF_GATHER_ROWS = 4 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F05"]()
+) else 1
+
+
 def gather_sampled_order_kernel[
     label_dtype: DType, TPB: Int, sabotage: Int = 0
 ](
@@ -2024,20 +2048,21 @@ def gather_sampled_order_kernel[
     """DEVIATION 2001's once-per-tree gather (see the block above). One
     thread per sampled position; `gather_weights` is the runtime
     `has_sample_weight` (Int32 per the kernel-scalar rule)."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(n_sampled_rows):
-        return
-    var src = Int(row_ids[unsafe_offset=i])
-    comptime if sabotage == 1:
-        # SABOTAGE: broadcast position 0's row -- every label collapses.
-        src = Int(row_ids[unsafe_offset=0])
-    labels_s[unsafe_offset=i] = labels[unsafe_offset=src]
-    if gather_weights != Int32(0):
-        var w = sample_weight[unsafe_offset=src]
-        comptime if sabotage == 1:
-            # SABOTAGE: multiplicative, exact in fp32.
-            w = w * Float32(2.0)
-        sample_weight_s[unsafe_offset=i] = w
+    var first = Int(block_idx.x) * Int(block_dim.x) * AFT_RF_GATHER_ROWS + Int(thread_idx.x)
+    comptime for r in range(AFT_RF_GATHER_ROWS):
+        var i = first + r * Int(block_dim.x)
+        if i < Int(n_sampled_rows):
+            var src = Int(row_ids[unsafe_offset=i])
+            comptime if sabotage == 1:
+                # SABOTAGE: broadcast position 0's row -- every label collapses.
+                src = Int(row_ids[unsafe_offset=0])
+            labels_s[unsafe_offset=i] = labels[unsafe_offset=src]
+            if gather_weights != Int32(0):
+                var w = sample_weight[unsafe_offset=src]
+                comptime if sabotage == 1:
+                    # SABOTAGE: multiplicative, exact in fp32.
+                    w = w * Float32(2.0)
+                sample_weight_s[unsafe_offset=i] = w
 
 
 def launch_gather_sampled_order_kernel[
@@ -2067,7 +2092,7 @@ def launch_gather_sampled_order_kernel[
         sample_weight_s.unsafe_origin_cast[MutAnyOrigin](),
         Int32(n_sampled_rows),
         Int32(1) if gather_weights else Int32(0),
-        grid_dim=ceildiv(n_sampled_rows, TPB),
+        grid_dim=ceildiv(n_sampled_rows, TPB * AFT_RF_GATHER_ROWS),
         block_dim=TPB,
     )
 
@@ -3505,7 +3530,16 @@ lane's bins, and lane 0 publishes through the same `_publish_to_global`.
 At depth a level holds hundreds of thousands of (node, column) cells, each
 of which paid a 128-thread block and a barrier-bound scan."""
 
-comptime FBS_WARP_CELLS = 4
+# AFT F03: two small-histogram split cells per block instead of four.
+# This is the device-loop-reachable small-work split scheduler: the older
+# small_node_split path only runs host-staged batches. Halving cells halves
+# this kernel's shared carve and changes occupancy, not candidate coverage.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime FBS_WARP_CELLS = 2 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F03"]()
+) else 4
 
 
 def find_best_splits_warp_kernel[

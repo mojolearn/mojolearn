@@ -3176,6 +3176,18 @@ def _device_tpb() -> Int:
     must alternate arms inside one window, not assume independence.
     ==================================================================
     """
+    # AFT F06: two 32-lane SIMD groups per block reduces the live score
+    # reduction footprint. Keep range/partition work-map geometry coupled
+    # through DEVICE_TPB, as the stable scatter consumes that same map.
+    # This is a new 64-thread arm, not the rejected Apple 256-thread retry
+    # recorded above. experiments/apple_fast_trees/IDEAS.md; no quality or
+    # speed evidence; opt-in and uncompiled/unverified/unmeasured.
+    if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and has_apple_gpu_accelerator()
+        and is_defined["MOJOLEARN_AFT_F06"]()
+    ):
+        return 64
     if is_defined["MOJOLEARN_ET_TPB_1024"]():
         return 1024
     if is_defined["MOJOLEARN_ET_TPB_512"]():
@@ -3399,7 +3411,17 @@ def search_grid(row_blocks: Int, k: Int) -> Tuple[Int, Int, Int]:
     return (row_blocks, k, 1)
 
 
-comptime PART_ROWS_PER_THREAD = (
+# AFT F07: double the partition's rows/lane relative to the search work
+# budget. At the shipped Apple geometry this is 4096 rows/block, reducing
+# count/scan/scatter workgroup count without changing stable row order.
+# The existing separate search/partition workload maps handle unequal tiles.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_F07 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F07"]()
+)
+comptime PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD if AFT_F07 else (
     SEARCH_ROWS_PER_THREAD
     if (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -3612,7 +3634,17 @@ def print_stage_times(clock: PhaseClock, what: StringSlice) raises:
     print("  total ->", Float64(total) / 1e9, "s")
 
 
-comptime FOREST_ROW_SLOT_CAP = 1 << 26
+# AFT F08: permit 1 GiB total for the two Int32 row-slot planes, versus
+# the default 512 MiB. More whole trees then expose independent nodes in
+# one frontier; each tree retains its feature RNG and node growth policy.
+# This is a byte budget, unrelated to any dataset dimension. Other per-tree
+# scratch adds to this budget, so peak memory is a later qualification gate.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime FOREST_ROW_SLOT_CAP = (1 << 27) if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F08"]()
+) else (1 << 26)
 """Ceiling on `in-flight trees * n_rows` row SLOTS one group of the batched
 forest trainer (DEVIATION 211) may hold: 2^26 slots = 256 MB in `d_row_ids`
 plus the same again in the partition's alternate buffer. Trees beyond the cap

@@ -56,6 +56,7 @@ list is not a function of the grades.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from gbdt.apple_fast_tree_experiments import AFT_N07, AFT_N08
 from std.math import isfinite
 from std.memory import stack_allocation
 from std.sys import is_defined
@@ -184,7 +185,11 @@ comptime PL_PAIRS_ONCE = pl_pairs_once_for[TARGET_COLUMN]()
 comptime PL_GROUP_NARROW = pl_group_narrow_for[TARGET_COLUMN]()
 #: the group kernel's block: 128 under `PL_GROUP_NARROW`, else `PLG_THREADS`
 #: (`MSE_BLOCK_SIZE`, 256)
-comptime PLG_LAUNCH_THREADS = 128 if PL_GROUP_NARROW else MSE_BLOCK_SIZE
+# N07: two simdgroups per query block trade more serial query tiles for
+# smaller register/shared reservations. Every document and unlike-grade pair
+# remains present; queries wider than the block keep the complete tile loop.
+# New 64-lane arm, not the historical 256-vs-128 experiment. No evidence.
+comptime PLG_LAUNCH_THREADS = 64 if AFT_N07 else (128 if PL_GROUP_NARROW else MSE_BLOCK_SIZE)
 
 #: threads per group block, one document per thread per chunk; the value
 #: and magnitude partials use `pinned_block_sum` at this width
@@ -237,176 +242,183 @@ def pair_logit_group_setup_kernel(
             if tile_n > PLG_THREADS:
                 tile_n = PLG_THREADS
             if in_range:
-                for k in range(tile_n):
-                    if sh_grade.unsafe_load(k) != g_i:
-                        count += 1
-        if in_range:
-            var rw = ftz(identical_mul(w, Float32(count)))
-            grades.unsafe_store(i, g_i)
-            row_weights.unsafe_store(i, rw)
-            endpoints += Float32(count)
-    barrier()
-    # the weight rewrite, after every chunk's reads of the first row's weight
-    for c in range(n_chunks):
-        var i = begin + c * PLG_THREADS + tid
-        if i < end:
-            weights.unsafe_store(i, row_weights.unsafe_load(i))
-    var total = pinned_block_sum[block_size=PLG_THREADS](endpoints)
-    if tid == 0:
-        var pairs = total * Float32(0.5)
-        group_w.unsafe_store(g, w)
-        group_pairs.unsafe_store(g, pairs)
-        group_wsum.unsafe_store(g, identical_mul(w, pairs))
-
-
-def pair_logit_group_kernel[
-    estimation: Bool,
-    second_order: Bool,
-    store_acc: Bool,
-    threads: Int = PLG_THREADS,
-    pairs_once: Bool = False,
-](
-    point: MutPointer[Float32, MutAnyOrigin],
-    grades: MutPointer[Float32, MutAnyOrigin],
-    group_offsets: MutPointer[UInt32, MutAnyOrigin],
-    acc: MutPointer[Float32, MutAnyOrigin],
-    group_w_at: Int32,
-    row_weights: MutPointer[Float32, MutAnyOrigin],
-    n_rows_in: Int32,
-    write_map: MutPointer[UInt32, MutAnyOrigin],
-    has_write_map: Int32,
-    stats: MutPointer[Float32, MutAnyOrigin],
-    function_value: MutPointer[Float32, MutAnyOrigin],
-    compute_fv: Int32,
-    plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
-    compute_magnitudes: Int32,
-    der_acc_at: Int32,
-    der2_acc_at: Int32,
-    fv_acc_at: Int32,
-):
-    """One block per group, a thread per document per 256-document chunk,
-    the group's point and grades tiled through shared memory. The planes
-    are `pair_logit_row_kernel`'s: SEARCH `[weight-or-der2, der]` at the
-    row, ESTIMATION `[der, der2]` at `write_map[row]`. `function_value`
-    takes one partial per group, `plane_magnitudes` two per group. With
-    `store_acc` the row sums and the group's value partial are also kept
-    in the accumulators for `PAIRLOGIT_EST_REUSE`. Every loop bound and
-    every barrier is uniform over the block. The group weights and the
-    three accumulators are regions of the ONE `acc` buffer, passed once
-    with offsets: `enqueue_function` refuses two mutable arguments derived
-    from one allocation as aliasing. `threads` is the block
-    (`PLG_LAUNCH_THREADS`, lane af-sym-multi `PL_GROUP_NARROW`) and
-    `pairs_once` the each-pair-once path for groups that fit one block
-    (`PL_PAIRS_ONCE`); at their defaults this is the kernel as merged."""
-    var group_w = acc + Int(group_w_at)
-    var der_acc = acc + Int(der_acc_at)
-    var der2_acc = acc + Int(der2_acc_at)
-    var fv_acc = acc + Int(fv_acc_at)
-    comptime assert not (estimation and second_order), (
-        "second_order is a SEARCH-mode flag"
-    )
-    var sh_point = stack_allocation[
-        threads, Scalar[DType.float32], address_space = AddressSpace.SHARED
-    ]()
-    var sh_grade = stack_allocation[
-        threads, Scalar[DType.float32], address_space = AddressSpace.SHARED
-    ]()
-    var n_rows = Int(n_rows_in)
-    var g = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var begin = Int(group_offsets.unsafe_load(g))
-    var end = Int(group_offsets.unsafe_load(g + 1))
-    var size = end - begin
-    var w = group_w.unsafe_load(g)
-    var n_chunks = (size + threads - 1) // threads
-    var fv_local = Float32(0.0)
-    var w_abs = Float32(0.0)
-    var g_abs = Float32(0.0)
-    # `PL_PAIRS_ONCE`: a group that fits the block, every pair once
-    var once_done = False
-    comptime if pairs_once:
-        if size <= threads:
-            var sh_o_der = stack_allocation[
-                threads, Scalar[DType.float32], address_space = AddressSpace.SHARED
-            ]()
-            var sh_o_der2 = stack_allocation[
-                threads, Scalar[DType.float32], address_space = AddressSpace.SHARED
-            ]()
-            var in_range = tid < size
-            var i = begin + tid
-            var p_i = Float32(0.0)
-            var g_i = Float32(0.0)
-            if in_range:
-                p_i = point.unsafe_load(i)
-                g_i = grades.unsafe_load(i)
-                sh_point.unsafe_store(tid, p_i)
-                sh_grade.unsafe_store(tid, g_i)
+                # N08: unroll two ascending endpoint visits to expose
+                # independent shared loads. Keep addition and pair order;
+                # this is not the rejected each-pair-once route. No evidence.
+                for pair_base in range(0, tile_n, 2 if AFT_N08 else 1):
+                    comptime for pair_lane in range(2 if AFT_N08 else 1):
+                        var k = pair_base + pair_lane
+                        if k < tile_n:
+                            if sh_grade.unsafe_load(k) != g_i:
+                                count += 1
+                if in_range:
+                    var rw = ftz(identical_mul(w, Float32(count)))
+                    grades.unsafe_store(i, g_i)
+                    row_weights.unsafe_store(i, rw)
+                    endpoints += Float32(count)
             barrier()
-            var acc_der = Float32(0.0)
-            var acc_der2 = Float32(0.0)
-            var half = (size - 1) // 2
-            # rounds 1..half, then the half round of an even size: the
-            # loop bound is uniform over the block
-            var n_rounds = half
-            if size % 2 == 0 and size >= 2:
-                n_rounds = half + 1
-            for r in range(1, n_rounds + 1):
-                var full_round = r <= half
-                # the half round pairs only the threads below size / 2
-                var active = in_range and (full_round or tid < r)
-                var j = tid + r
-                if j >= size:
-                    j -= size
-                var o_der = Float32(0.0)
-                var o_der2 = Float32(0.0)
-                if active:
-                    var g_j = sh_grade.unsafe_load(j)
-                    if g_j != g_i:
-                        # `pair_logit.cu:25-40` for the pair (winner, loser)
-                        var winner_side = g_i > g_j
-                        var p_j = sh_point.unsafe_load(j)
-                        var diff = p_i - p_j
-                        if not winner_side:
-                            diff = p_j - p_i
-                        var exp_diff = routed_exp(diff)
-                        var p = Float32(1.0)
-                        if isfinite(Float32(1.0) + exp_diff):
-                            p = exp_diff / (Float32(1.0) + exp_diff)
-                        p = max(
-                            min(p, Float32(1.0) - Float32(1e-40)),
-                            Float32(1e-40),
-                        )
-                        var direction = Float32(1.0) - p
-                        var scale = ftz(p * (Float32(1.0) - p))
-                        var wd = ftz(w * direction)
-                        var ws = ftz(w * scale)
-                        if winner_side:
-                            acc_der = acc_der + wd
-                            o_der = -wd
-                        else:
-                            acc_der = acc_der + (-wd)
-                            o_der = wd
-                        acc_der2 = acc_der2 + ws
-                        o_der2 = ws
-                        if compute_fv != Int32(0):
-                            var log_exp_val_plus_one = diff
-                            if isfinite(Float32(1.0) + exp_diff):
-                                log_exp_val_plus_one = routed_log(
-                                    Float32(1.0) + exp_diff
+            # the weight rewrite, after every chunk's reads of the first row's weight
+            for c in range(n_chunks):
+                var i = begin + c * PLG_THREADS + tid
+                if i < end:
+                    weights.unsafe_store(i, row_weights.unsafe_load(i))
+            var total = pinned_block_sum[block_size=PLG_THREADS](endpoints)
+            if tid == 0:
+                var pairs = total * Float32(0.5)
+                group_w.unsafe_store(g, w)
+                group_pairs.unsafe_store(g, pairs)
+                group_wsum.unsafe_store(g, identical_mul(w, pairs))
+        
+        
+        def pair_logit_group_kernel[
+            estimation: Bool,
+            second_order: Bool,
+            store_acc: Bool,
+            threads: Int = PLG_THREADS,
+            pairs_once: Bool = False,
+        ](
+            point: MutPointer[Float32, MutAnyOrigin],
+            grades: MutPointer[Float32, MutAnyOrigin],
+            group_offsets: MutPointer[UInt32, MutAnyOrigin],
+            acc: MutPointer[Float32, MutAnyOrigin],
+            group_w_at: Int32,
+            row_weights: MutPointer[Float32, MutAnyOrigin],
+            n_rows_in: Int32,
+            write_map: MutPointer[UInt32, MutAnyOrigin],
+            has_write_map: Int32,
+            stats: MutPointer[Float32, MutAnyOrigin],
+            function_value: MutPointer[Float32, MutAnyOrigin],
+            compute_fv: Int32,
+            plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
+            compute_magnitudes: Int32,
+            der_acc_at: Int32,
+            der2_acc_at: Int32,
+            fv_acc_at: Int32,
+        ):
+            """One block per group, a thread per document per 256-document chunk,
+            the group's point and grades tiled through shared memory. The planes
+            are `pair_logit_row_kernel`'s: SEARCH `[weight-or-der2, der]` at the
+            row, ESTIMATION `[der, der2]` at `write_map[row]`. `function_value`
+            takes one partial per group, `plane_magnitudes` two per group. With
+            `store_acc` the row sums and the group's value partial are also kept
+            in the accumulators for `PAIRLOGIT_EST_REUSE`. Every loop bound and
+            every barrier is uniform over the block. The group weights and the
+            three accumulators are regions of the ONE `acc` buffer, passed once
+            with offsets: `enqueue_function` refuses two mutable arguments derived
+            from one allocation as aliasing. `threads` is the block
+            (`PLG_LAUNCH_THREADS`, lane af-sym-multi `PL_GROUP_NARROW`) and
+            `pairs_once` the each-pair-once path for groups that fit one block
+            (`PL_PAIRS_ONCE`); at their defaults this is the kernel as merged."""
+            var group_w = acc + Int(group_w_at)
+            var der_acc = acc + Int(der_acc_at)
+            var der2_acc = acc + Int(der2_acc_at)
+            var fv_acc = acc + Int(fv_acc_at)
+            comptime assert not (estimation and second_order), (
+                "second_order is a SEARCH-mode flag"
+            )
+            var sh_point = stack_allocation[
+                threads, Scalar[DType.float32], address_space = AddressSpace.SHARED
+            ]()
+            var sh_grade = stack_allocation[
+                threads, Scalar[DType.float32], address_space = AddressSpace.SHARED
+            ]()
+            var n_rows = Int(n_rows_in)
+            var g = Int(block_idx.x)
+            var tid = Int(thread_idx.x)
+            var begin = Int(group_offsets.unsafe_load(g))
+            var end = Int(group_offsets.unsafe_load(g + 1))
+            var size = end - begin
+            var w = group_w.unsafe_load(g)
+            var n_chunks = (size + threads - 1) // threads
+            var fv_local = Float32(0.0)
+            var w_abs = Float32(0.0)
+            var g_abs = Float32(0.0)
+            # `PL_PAIRS_ONCE`: a group that fits the block, every pair once
+            var once_done = False
+            comptime if pairs_once:
+                if size <= threads:
+                    var sh_o_der = stack_allocation[
+                        threads, Scalar[DType.float32], address_space = AddressSpace.SHARED
+                    ]()
+                    var sh_o_der2 = stack_allocation[
+                        threads, Scalar[DType.float32], address_space = AddressSpace.SHARED
+                    ]()
+                    var in_range = tid < size
+                    var i = begin + tid
+                    var p_i = Float32(0.0)
+                    var g_i = Float32(0.0)
+                    if in_range:
+                        p_i = point.unsafe_load(i)
+                        g_i = grades.unsafe_load(i)
+                        sh_point.unsafe_store(tid, p_i)
+                        sh_grade.unsafe_store(tid, g_i)
+                    barrier()
+                    var acc_der = Float32(0.0)
+                    var acc_der2 = Float32(0.0)
+                    var half = (size - 1) // 2
+                    # rounds 1..half, then the half round of an even size: the
+                    # loop bound is uniform over the block
+                    var n_rounds = half
+                    if size % 2 == 0 and size >= 2:
+                        n_rounds = half + 1
+                    for r in range(1, n_rounds + 1):
+                        var full_round = r <= half
+                        # the half round pairs only the threads below size / 2
+                        var active = in_range and (full_round or tid < r)
+                        var j = tid + r
+                        if j >= size:
+                            j -= size
+                        var o_der = Float32(0.0)
+                        var o_der2 = Float32(0.0)
+                        if active:
+                            var g_j = sh_grade.unsafe_load(j)
+                            if g_j != g_i:
+                                # `pair_logit.cu:25-40` for the pair (winner, loser)
+                                var winner_side = g_i > g_j
+                                var p_j = sh_point.unsafe_load(j)
+                                var diff = p_i - p_j
+                                if not winner_side:
+                                    diff = p_j - p_i
+                                var exp_diff = routed_exp(diff)
+                                var p = Float32(1.0)
+                                if isfinite(Float32(1.0) + exp_diff):
+                                    p = exp_diff / (Float32(1.0) + exp_diff)
+                                p = max(
+                                    min(p, Float32(1.0) - Float32(1e-40)),
+                                    Float32(1e-40),
                                 )
-                            fv_local += w * (diff - log_exp_val_plus_one)
-                # the previous round's reads of the slots are done
-                barrier()
-                if active:
-                    sh_o_der.unsafe_store(j, o_der)
-                    sh_o_der2.unsafe_store(j, o_der2)
-                barrier()
-                # the other side: in a full round every thread was a target
-                # once; in the half round only the threads from size / 2 up
-                if in_range and (full_round or tid >= r):
-                    acc_der = acc_der + sh_o_der.unsafe_load(tid)
-                    acc_der2 = acc_der2 + sh_o_der2.unsafe_load(tid)
-            var der = ftz(acc_der)
+                                var direction = Float32(1.0) - p
+                                var scale = ftz(p * (Float32(1.0) - p))
+                                var wd = ftz(w * direction)
+                                var ws = ftz(w * scale)
+                                if winner_side:
+                                    acc_der = acc_der + wd
+                                    o_der = -wd
+                                else:
+                                    acc_der = acc_der + (-wd)
+                                    o_der = wd
+                                acc_der2 = acc_der2 + ws
+                                o_der2 = ws
+                                if compute_fv != Int32(0):
+                                    var log_exp_val_plus_one = diff
+                                    if isfinite(Float32(1.0) + exp_diff):
+                                        log_exp_val_plus_one = routed_log(
+                                            Float32(1.0) + exp_diff
+                                        )
+                                    fv_local += w * (diff - log_exp_val_plus_one)
+                        # the previous round's reads of the slots are done
+                        barrier()
+                        if active:
+                            sh_o_der.unsafe_store(j, o_der)
+                            sh_o_der2.unsafe_store(j, o_der2)
+                        barrier()
+                        # the other side: in a full round every thread was a target
+                        # once; in the half round only the threads from size / 2 up
+                        if in_range and (full_round or tid >= r):
+                            acc_der = acc_der + sh_o_der.unsafe_load(tid)
+                            acc_der2 = acc_der2 + sh_o_der2.unsafe_load(tid)
+            
+        var der = ftz(acc_der)
             var der2 = ftz(acc_der2)
             var weight = Float32(0.0)
             if in_range:

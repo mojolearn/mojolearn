@@ -1,0 +1,522 @@
+{
+  "schema": 1,
+  "lane": "P",
+  "base_commit": "07f2b3c00",
+  "status": "source_only",
+  "cards": [
+    {
+      "id": "P01",
+      "title": "Two logical forest groves per block",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P01"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "core/forest_inference.mojo"
+      ],
+      "affected_estimators": [
+        "RandomForestClassifier",
+        "RandomForestRegressor",
+        "ExtraTreesClassifier",
+        "ExtraTreesRegressor",
+        "exported forest parallel_groves engine"
+      ],
+      "mechanism": "64 rather than 128 threads for lane-grove kernels; scratch, item mapping and launch geometry use the same constant.",
+      "quality_gates": [
+        "P",
+        "C",
+        "R"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "Only public callers selecting the grove inference engine reach this candidate.",
+        "Existing row-thread schedule overrides still route to their original kernel."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P02",
+      "title": "Paired ordered forest output traversal",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P02"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "core/forest_inference.mojo"
+      ],
+      "affected_estimators": [
+        "exported forest ordered engine",
+        "tree wrappers selecting ordered forest inference"
+      ],
+      "mechanism": "Two row/output items share the tree loop, with independent ordered accumulators and a guarded second plane.",
+      "quality_gates": [
+        "P",
+        "C",
+        "R"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "Requires ordered inference, not parallel_groves.",
+        "Does not change traversal representation or node thresholds."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P03",
+      "title": "Forest shared rows with a two KiB block budget",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P03"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "core/forest_inference.mojo"
+      ],
+      "affected_estimators": [
+        "RandomForestClassifier",
+        "RandomForestRegressor",
+        "ExtraTreesClassifier",
+        "ExtraTreesRegressor",
+        "exported forest parallel_groves engine"
+      ],
+      "mechanism": "Enable shared-row staging with capacity derived from 2048 bytes divided by Float32 size and groves per block; overflow rows use direct loads.",
+      "quality_gates": [
+        "P",
+        "C",
+        "R"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "Extends existing staging code with a different storage budget; existing 256-feature staging outcome is not claimed as new evidence.",
+        "With P01, per-row capacity increases because fewer rows share the same fixed byte budget.",
+        "Scalar-output staging is applicable only to one-output leaves; vector leaves have the existing capacity dispatch."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P04",
+      "title": "Paired row forest class argmax",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P04"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "core/forest_inference.mojo"
+      ],
+      "affected_estimators": [
+        "forest classifiers through launch_forest_argmax"
+      ],
+      "mechanism": "Two row planes per worker call a shared first-max helper; nonfinite sentinel and class order remain unchanged.",
+      "quality_gates": [
+        "P",
+        "C"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "No effect for regression or raw/probability requests that do not consume class codes."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P05",
+      "title": "Two rows reuse packed GBDT split descriptors",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_GBDT_PREDICT_PACKED",
+        "MOJOLEARN_AFT_P05"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_GBDT_PREDICT_PACKED"
+      ],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "gbdt/models/kernel/add_bin_values.mojo",
+        "gbdt/resident_model.mojo"
+      ],
+      "affected_estimators": [
+        "oblivious GradientBoosting resident prediction"
+      ],
+      "mechanism": "Each worker loads a tree/split descriptor once for two independent rows; the grid and stride account for two row planes.",
+      "quality_gates": [
+        "P",
+        "C",
+        "R",
+        "Q"
+      ],
+      "prerequisites": [
+        "MOJOLEARN_GBDT_PREDICT_PACKED"
+      ],
+      "limitations": [
+        "Prerequisite is held equal in both arms; no packed-prediction default is changed.",
+        "Non-symmetric fallback keeps its original kernel.",
+        "Packed path preparation and its synchronization remain in the future cold-use timed boundary."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P06",
+      "title": "Smaller GBDT resident link block",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P06"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "gbdt/models/kernel/resident_link.mojo",
+        "gbdt/resident_model.mojo"
+      ],
+      "affected_estimators": [
+        "GradientBoosting resident raw/proba/class prediction"
+      ],
+      "mechanism": "LINK_BLOCK is 128 rather than 256; the existing grid-stride kernel and its callers share the constant.",
+      "quality_gates": [
+        "P",
+        "C",
+        "R"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "Same software binary64 exp/div; this is a scheduling experiment, not reduced precision.",
+        "Standalone users of the shared resident-link constant are also affected and need future coverage."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P07",
+      "title": "TreeSHAP four-row tree tiles",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P07"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/shap_device.mojo"
+      ],
+      "affected_estimators": [
+        "TreeExplainer tree_shap_values"
+      ],
+      "mechanism": "Four adjacent rows per tree worker in direct, leaf-table and decision-table paths, with exact row-tail guards.",
+      "quality_gates": [
+        "S"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "Mutually exclusive with MOJOLEARN_SHAP_FAST_ROW_PAIR.",
+        "Existing pair audit counter is not used to claim quartet execution.",
+        "Sequential unit calls change work mapping; no new persistent model cache is claimed."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P08",
+      "title": "TreeSHAP smaller worker block",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P08"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/shap_device.mojo"
+      ],
+      "affected_estimators": [
+        "TreeExplainer preparation and tree_shap_values"
+      ],
+      "mechanism": "TPB is 64 rather than 128 for SHAP preparation, table, row and fold kernels.",
+      "quality_gates": [
+        "S"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "Requires full preparation-plus-explanation coverage, not only the row kernel."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P09",
+      "title": "TreeSHAP contribution scratch budget",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P09"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/shap_device.mojo"
+      ],
+      "affected_estimators": [
+        "TreeExplainer tree_shap_values"
+      ],
+      "mechanism": "Contribution scratch budget becomes 64 MiB instead of 128 MiB, with unchanged per-tree units cap and complete row coverage.",
+      "quality_gates": [
+        "S"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "Can increase chunk count and lose performance; no win claimed.",
+        "The full output and leaf table allocations retain existing sizes, so this is not a bound on total GPU memory."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P10",
+      "title": "Paired TreeSHAP output-cell folding",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P10"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/shap_device.mojo"
+      ],
+      "affected_estimators": [
+        "TreeExplainer tree_shap_values"
+      ],
+      "mechanism": "Two independent flattened attribution output cells per worker; each still folds every original tree contribution in the original order.",
+      "quality_gates": [
+        "S"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "Refines initial row-tiling idea to output-cell tiling matching the existing fold layout.",
+        "No cross-cell reduction or discarded feature attribution."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P11",
+      "title": "Paired DART residual and prediction scheduling",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P11"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/dart_device.mojo"
+      ],
+      "affected_estimators": [
+        "DARTClassifier",
+        "DARTRegressor"
+      ],
+      "mechanism": "Two contiguous lane planes per worker in dart_row_kernel and dart_predict_kernel; launch grids and grid strides use the same tile.",
+      "quality_gates": [
+        "C",
+        "R",
+        "P"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "Dropout draws and unit functions are unchanged.",
+        "For prediction a work unit is a class/row cell, not always an entire multiclass row."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    },
+    {
+      "id": "P12",
+      "title": "Paired DART score addition scheduling",
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "mode": "fast",
+      "vendor": "apple",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_P12"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "core/apple_fast_tree_experiments.mojo",
+        "xtrees/dart_device.mojo"
+      ],
+      "affected_estimators": [
+        "DARTClassifier",
+        "DARTRegressor"
+      ],
+      "mechanism": "Two row planes per worker in dart_add_kernel, preserving factor, shrinkage and leaf lookup in the existing unit.",
+      "quality_gates": [
+        "C",
+        "R",
+        "P"
+      ],
+      "prerequisites": [],
+      "limitations": [
+        "Does not fuse Newton reduction with score addition or change normalization."
+      ],
+      "default_enabled": false,
+      "compile_status": "not_run_owner_instruction",
+      "verification_status": "not_run_owner_instruction",
+      "measurement_status": "not_run_owner_instruction",
+      "quality_status": "pending",
+      "samples": 0,
+      "recipes": [
+        "tools/bench_board.py",
+        "bench/speed/forest_speed_arm.py",
+        "tools/speed_gbdt_arm.py",
+        "tools/bench_board_algos.py"
+      ],
+      "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+  ]
+}

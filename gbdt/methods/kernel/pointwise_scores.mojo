@@ -298,6 +298,13 @@ comptime POINTWISE_SCORE_BLOCK = 128
 #: it by `leafCount` to get features per block.
 comptime POINTWISE_WIDE_BLOCK = 1024
 
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G04
+
+# G04: halve the partition reduction's thread and shared-slab footprint;
+# each lane still walks its complete stripe in all three planes. Preserve
+# the gather geometry above. Uncompiled/unverified/unmeasured, FAST only.
+comptime AFT_PARTITION_BLOCK = 512 if AFT_G04 else POINTWISE_WIDE_BLOCK
+
 #: `FLT_MAX`. Their "this candidate is unusable" sentinel (`:44-45`,
 #: `score_calcers.cuh:161`). NOT negated here -- see the sign section.
 comptime FLOAT32_MAX = Float32(3.4028234663852886e38)
@@ -2055,7 +2062,7 @@ def update_partition_props(
     """
     if parts_count == 0:
         return
-    ctx.enqueue_function[partition_update_kernel[POINTWISE_WIDE_BLOCK]](
+    ctx.enqueue_function[partition_update_kernel[AFT_PARTITION_BLOCK]](
         target.unsafe_ptr(),
         weights.unsafe_ptr(),
         counts.unsafe_ptr(),
@@ -2065,5 +2072,5 @@ def update_partition_props(
         parts.unsafe_ptr(),
         part_stats.unsafe_ptr(),
         grid_dim=(parts_count, 1, 1),
-        block_dim=(POINTWISE_WIDE_BLOCK, 1, 1),
+        block_dim=(AFT_PARTITION_BLOCK, 1, 1),
     )

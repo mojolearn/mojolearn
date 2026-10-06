@@ -702,6 +702,19 @@ def et_snap_code(
     return Int(lo) - 1
 
 
+# AFT F09: gather two row addresses before scanning the feature tile, then
+# reuse each feature descriptor for both independent rows. Preserve FT (and
+# especially the accepted 8-code tile); this does NOT retry the slower
+# 16/32-code feature tiles recorded in builder.mojo. Adjacent lanes still
+# read adjacent row-id slots, and the guarded second row preserves tails.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_ET_RANGE_ROW_TILE = 2 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F09"]()
+) else 1
+
+
 def node_feature_range_tiled_kernel[
     TPB: Int, FT: Int, DT: DType = DType.float32
 ](
@@ -755,18 +768,24 @@ def node_feature_range_tiled_kernel[
     var stride = TPB * num_blocks
     var i = range_start + Int(thread_idx.x) + offset_blockid * TPB
     while i < end:
-        var base = Int(row_ids[unsafe_offset=i]) * n
+        var bases = SIMD[DType.int64, AFT_ET_RANGE_ROW_TILE](0)
+        comptime for r in range(AFT_ET_RANGE_ROW_TILE):
+            if i + r * stride < end:
+                bases[r] = Int64(Int(row_ids[unsafe_offset=i + r * stride]) * n)
         comptime for j in range(FT):
             if j < nf:
-                var v = Float32(data_rm[unsafe_offset = base + Int(cols[j])])
-                if v != v:
-                    lmiss[j] += 1
-                else:
-                    if range_key(v) < range_key(lmin[j]):
-                        lmin[j] = v
-                    if range_key(v) > range_key(lmax[j]):
-                        lmax[j] = v
-        i += stride
+                var col = Int(cols[j])
+                comptime for r in range(AFT_ET_RANGE_ROW_TILE):
+                    if i + r * stride < end:
+                        var v = Float32(data_rm[unsafe_offset = Int(bases[r]) + col])
+                        if v != v:
+                            lmiss[j] += 1
+                        else:
+                            if range_key(v) < range_key(lmin[j]):
+                                lmin[j] = v
+                            if range_key(v) > range_key(lmax[j]):
+                                lmax[j] = v
+        i += stride * AFT_ET_RANGE_ROW_TILE
     # One barrier for the whole tile: each warp folds its FT features with
     # shuffles, lane 0 parks them in shared memory, and thread j folds
     # feature j across the warps. Same min, max and count as the block

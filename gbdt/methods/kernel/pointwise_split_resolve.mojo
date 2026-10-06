@@ -39,6 +39,7 @@ from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G03
 
 from gbdt.methods.kernel.sym_fast import SYM_RESOLVE_BLOCK
 from gbdt.methods.pointwise_optimization_subsets import SPLIT_BLOCK_SIZE
@@ -501,7 +502,31 @@ def pw_resolve_pack_bins_kernel(
     var g_bin = UInt32(0)
     var g_score = FLOAT32_MAX
     var g_gain = FLOAT32_MAX
-    comptime if SYM_RESOLVE_BLOCK:
+    comptime if AFT_G03:
+        # G03: preserve the original serial record order, but only lane 0
+        # performs it. Broadcast costs one barrier and sixteen shared bytes,
+        # avoiding both per-row folds and the older block-tree reduction.
+        # Uncompiled/unverified/unmeasured; original tie comparison retained.
+        var ids = stack_allocation[
+            2, UInt32, address_space=AddressSpace.SHARED
+        ]()
+        var scores = stack_allocation[
+            2, Float32, address_space=AddressSpace.SHARED
+        ]()
+        if Int(thread_idx.x) == 0:
+            _fold_winner_kern(r0_ids, r0_scores, Int(n0_in), g_fid, g_bin, g_score, g_gain)
+            _fold_winner_kern(r1_ids, r1_scores, Int(n1_in), g_fid, g_bin, g_score, g_gain)
+            _fold_winner_kern(r2_ids, r2_scores, Int(n2_in), g_fid, g_bin, g_score, g_gain)
+            ids[unsafe_offset=0] = g_fid
+            ids[unsafe_offset=1] = g_bin
+            scores[unsafe_offset=0] = g_score
+            scores[unsafe_offset=1] = g_gain
+        barrier()
+        g_fid = ids[unsafe_offset=0]
+        g_bin = ids[unsafe_offset=1]
+        g_score = scores[unsafe_offset=0]
+        g_gain = scores[unsafe_offset=1]
+    elif SYM_RESOLVE_BLOCK:
         _fold_block(
             r0_ids, r0_scores, Int(n0_in),
             r1_ids, r1_scores, Int(n1_in),

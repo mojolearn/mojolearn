@@ -152,7 +152,15 @@ comptime IDN_RF_COLS40 = (
     )
 )
 
-comptime N_BLKS_FOR_COLS = 40 if (
+# AFT F01: a power-of-two 32-column pass bounds workspace and reduces the
+# per-pass live histogram bytes versus 40 while retaining every column.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_F01 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F01"]()
+)
+comptime N_BLKS_FOR_COLS = 32 if AFT_F01 else (40 if (
     (
         (
             GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -167,7 +175,7 @@ comptime N_BLKS_FOR_COLS = 40 if (
     20 if is_defined["MOJOLEARN_RF_TRIAL_COLS20"]() else (
         40 if is_defined["MOJOLEARN_RF_TRIAL_COLS40"]() else 10
     )
-)
+))
 
 @always_inline
 def blk_cols_for(n_sampled_cols: Int) -> Int:
@@ -216,7 +224,15 @@ comptime ALIGN_VALUE = 512
 # One warmup/score, <1.1% difference; default512 retained.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 comptime IDN_RF_TASK_ROWS256 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_TASK_ROWS256"]()
-comptime HIST_ITEMS_PER_THREAD = 2 if IDN_RF_TASK_ROWS256 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4)
+# AFT F02: eight rows/lane amortizes each histogram work descriptor over
+# 1024 rows at the fixed 128-lane block, without changing bins or samples.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_F02 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F02"]()
+)
+comptime HIST_ITEMS_PER_THREAD = 8 if AFT_F02 else (2 if IDN_RF_TASK_ROWS256 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4))
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
 
 

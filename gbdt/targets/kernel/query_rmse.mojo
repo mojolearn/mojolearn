@@ -62,6 +62,8 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
+from std.math import fma
+from gbdt.apple_fast_tree_experiments import AFT_N12
 from gbdt.data.group_layout import device_group_layout
 from gbdt.gpu_data.kernel.query_helper import (
     launch_compute_group_ids,
@@ -336,7 +338,7 @@ def launch_approximate_query_rmse[estimation: Bool](
         grid_dim=(t_blocks, 1, 1),
         block_dim=(TRANSFORM_BLOCK_SIZE, 1, 1),
     )
-    launch_compute_group_means(
+    launch_aft_group_means(
         ctx, mse_der, weights, has_weights, q_offsets, UInt32(0), q_sizes,
         q_count, query_means,
     )
@@ -354,3 +356,69 @@ def launch_approximate_query_rmse[estimation: Bool](
         grid_dim=(blocks, 1, 1),
         block_dim=(MSE_BLOCK_SIZE, 1, 1),
     )
+
+
+# N12: one four-simdgroup block per complete query exposes four times the
+# independent row loads of the existing 32-lane query reducer. There is no
+# query-size threshold and no truncated group. Weighted terms are unchanged;
+# the reduction order changes, so FAST quality requires later qualification.
+# Default OFF; no performance/quality evidence, uncompiled/unverified/unmeasured.
+comptime AFT_QUERY_MEAN_THREADS = 128
+
+
+def aft_query_mean_kernel(
+    target: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    has_weights: Int32,
+    q_offsets: MutPointer[UInt32, MutAnyOrigin],
+    offsets_bias: UInt32,
+    q_sizes: MutPointer[UInt32, MutAnyOrigin],
+    query_means: MutPointer[Float32, MutAnyOrigin],
+):
+    var qid = Int(block_idx.x)
+    var begin = Int(q_offsets.unsafe_load(qid) - offsets_bias)
+    var size = Int(q_sizes.unsafe_load(qid))
+    var sum_target = Float32(0.0)
+    var sum_weight = Float32(0.0)
+    var row = Int(thread_idx.x)
+    while row < size:
+        var w = Float32(1.0)
+        if has_weights != Int32(0):
+            w = weights.unsafe_load(begin + row)
+        sum_target = fma(target.unsafe_load(begin + row), w, sum_target)
+        sum_weight += w
+        row += AFT_QUERY_MEAN_THREADS
+    var total = pinned_block_sum[block_size=AFT_QUERY_MEAN_THREADS](sum_target)
+    var weight = pinned_block_sum[block_size=AFT_QUERY_MEAN_THREADS](sum_weight)
+    if thread_idx.x == 0:
+        var mean = Float32(0.0)
+        if weight != Float32(0.0):
+            mean = total / weight
+        query_means.unsafe_store(qid, ftz(mean))
+
+
+def launch_aft_group_means(
+    ctx: DeviceContext,
+    mut target: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    mut q_offsets: DeviceBuffer[DType.uint32],
+    offsets_bias: UInt32,
+    mut q_sizes: DeviceBuffer[DType.uint32],
+    q_count: Int,
+    mut query_means: DeviceBuffer[DType.float32],
+) raises:
+    comptime if AFT_N12:
+        if q_count > 0:
+            ctx.enqueue_function[aft_query_mean_kernel](
+                target.unsafe_ptr(), weights.unsafe_ptr(),
+                Int32(1) if has_weights else Int32(0),
+                q_offsets.unsafe_ptr(), offsets_bias, q_sizes.unsafe_ptr(),
+                query_means.unsafe_ptr(), grid_dim=(q_count, 1, 1),
+                block_dim=(AFT_QUERY_MEAN_THREADS, 1, 1),
+            )
+    else:
+        launch_compute_group_means(
+            ctx, target, weights, has_weights, q_offsets, offsets_bias,
+            q_sizes, q_count, query_means,
+        )

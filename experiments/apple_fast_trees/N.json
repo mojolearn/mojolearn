@@ -1,0 +1,400 @@
+{
+  "schema": 1,
+  "lane": "N",
+  "status": "source_added_uncompiled_unverified_unmeasured",
+  "branch": "ideas/apple-fast-trees-20261006",
+  "default_policy": "All twelve MOJOLEARN_AFT_Nxx defines are absent by default and require both NUMERIC_FAST and has_apple_gpu_accelerator(). No promotion.",
+  "evidence": "Source implementation only. No compilation, syntax/import checks, verification, tests, lint, diff checks, timing, benchmarking, queue launch or quality measurement performed.",
+  "future_qualification": "Not authorized in this session. Map all reachable estimator/representation paths to retained full datasets, versions/hashes, actual dimensions/settings and timed boundaries. Full fit/preparation/synchronization/consumed-output A/B plus neighboring shapes/non-board data and applicable quality gates remain pending.",
+  "interactions": [
+    "N01 through N06 per non-symmetric grow policy",
+    "N03 plus N06 partition/copy geometry",
+    "N07 plus N08 for implicit-group and explicit-pair representations separately",
+    "N09 plus N10 on the default block32k Yeti route",
+    "N11 plus N12 and relevant tree-growth candidates"
+  ],
+  "cards": [
+    {
+      "id": "N01",
+      "title": "Exact Lossguide speculative batch width 256",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N01"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT Lossguide classifier/regressor",
+        "Lossguide categorical, multiclass and ranking callers"
+      ],
+      "mechanism": "Select LG_EXACT_BATCH_WIDTH=256 instead of the Apple FAST default128. Existing exact speculative scoring, strict winner order, rollback/replay and final leaf budget remain in control; extra slots trade scratch footprint for fewer batch rounds.",
+      "prerequisites": [
+        "Apple FAST",
+        "LG_EXACT_BATCH active; legacy approximate batch switch must remain off in both arms"
+      ],
+      "limitations": [
+        "More candidate scratch may regress memory pressure",
+        "Only workloads that use the additional speculative width can change work scheduling",
+        "No compile, quality or timing evidence"
+      ],
+      "quality_gates": [
+        "C",
+        "R",
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured"
+    },
+    {
+      "id": "N02",
+      "title": "Halve occupancy-derived non-symmetric histogram replicas",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N02"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT Depthwise classifier/regressor",
+        "GBDT Lossguide classifier/regressor",
+        "categorical/multiclass/ranking callers reaching the shared non-symmetric driver"
+      ],
+      "mechanism": "The non-symmetric driver passes nonsymmetric_work to the standard histogram launcher. With N02, halve the existing hardware/group/leaf-derived replica count, rounding upward to at least one; each replica retains the exhaustive strided row traversal. Explicit replicas_override retains precedence.",
+      "prerequisites": [
+        "Apple FAST",
+        "Standard launch_histograms_for_blocks path, not quantized_hist_launcher",
+        "No explicit replicas_override for the measured arm"
+      ],
+      "limitations": [
+        "Already-one-replica work is unchanged",
+        "Reduced parallelism may lose on sparse active-leaf sets",
+        "Floating accumulation order can change",
+        "Alternative quantized-histogram route is outside this candidate"
+      ],
+      "quality_gates": [
+        "C",
+        "R",
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured"
+    },
+    {
+      "id": "N03",
+      "title": "Eight-simdgroup vector partition blocks",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N03"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT Depthwise and exact-Lossguide callers reaching the DW2 fused row-index partition chain"
+      ],
+      "mechanism": "Use DW2_PART_BLOCK=256 instead of512 with four contiguous rows per lane. DW2_PART_CHUNK, chunk-table sizing, flag counts, prefix scans and stable scatters derive from the same constant. All rows and both children remain present.",
+      "prerequisites": [
+        "Apple FAST",
+        "DW_FUSED_CHAIN and DW2_PART_VEC4 active",
+        "Existing row-index-only routing must select this path"
+      ],
+      "limitations": [
+        "More chunk records/scan work may offset occupancy gains",
+        "Legacy scalar/stat-moving partition is unchanged",
+        "No partition-order or quality evidence has been collected"
+      ],
+      "quality_gates": [
+        "C",
+        "R",
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured"
+    },
+    {
+      "id": "N04",
+      "title": "Eight-feature non-symmetric histogram prefix tiles",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N04"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT Depthwise classifier/regressor",
+        "GBDT Lossguide classifier/regressor",
+        "categorical/multiclass/ranking callers reaching the shared non-symmetric driver"
+      ],
+      "mechanism": "DW2_SCAN_FT changes16 to8 and its shared slab changes4096+8 to2048+8 floats. Each feature still folds every bin in its original order; more independent leaf/stat/feature tiles trade launch count against shared memory residency.",
+      "prerequisites": [
+        "Apple FAST",
+        "DW2_SCAN_SMEM active"
+      ],
+      "limitations": [
+        "This is prefix-scan work decomposition, not a replacement for partition-statistics reduction",
+        "Noncontiguous or oversized spans retain the existing fallback",
+        "Small feature sets can receive no parallelism benefit"
+      ],
+      "quality_gates": [
+        "C",
+        "R",
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "idea_revision": "N04 is narrowed to the non-symmetric shared histogram prefix scan; shared partition-statistics ownership stays in lane G."
+    },
+    {
+      "id": "N05",
+      "title": "Four-simdgroup leaf split descriptor selection blocks",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N05"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/methods/greedy_subsets_searcher/kernel/split_chain_fused.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT Depthwise callers using the device winner-selection/no-level-sync route"
+      ],
+      "mechanism": "DW_SELECT_BLOCK changes64 to128. Each worker performs the existing strict-gain leaf selection and ordered prefix rank, then packs its split descriptor. The complete multi-leaf list and creation-order tie semantics stay intact.",
+      "prerequisites": [
+        "Apple FAST",
+        "DW_NO_LEVEL_SYNC/device split descriptor selection active"
+      ],
+      "limitations": [
+        "This changes descriptor selection/packing geometry; it does not fuse partition or alter which leaves split",
+        "Little benefit expected when very few leaves need descriptors",
+        "Larger blocks may lose occupancy"
+      ],
+      "quality_gates": [
+        "C",
+        "R",
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "idea_revision": "The final N05 experiment targets the multi-leaf split descriptor stage rather than adding another already-fused row application kernel."
+    },
+    {
+      "id": "N06",
+      "title": "Two vector groups per row-index cursor copy iteration",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N06"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo"
+      ],
+      "affected_estimators": [
+        "Non-symmetric GBDT callers reaching dw2_copy_back_kernel"
+      ],
+      "mechanism": "dw2_copy_back_kernel unrolls two existing strided four-row vector groups per worker iteration under N06. The leaf descriptor and stride are reused, and each group retains its exact boundary guards and copy destination.",
+      "prerequisites": [
+        "Apple FAST",
+        "DW2_PART_VEC4 row-index partition chain active"
+      ],
+      "limitations": [
+        "This copies the searcher row-index cursor, not numerical prediction values",
+        "Each copy keeps four-wide alignment and scalar boundary stores",
+        "Register/code size may outweigh reduced loop control"
+      ],
+      "quality_gates": [
+        "C",
+        "R",
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured",
+      "idea_revision": "N06 revised with root approval to searcher row-index cursor copy tiling; numerical leaf prediction application is owned by lane G/root."
+    },
+    {
+      "id": "N07",
+      "title": "PairLogit smaller pair/query worker tiles",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N07"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/targets/kernel/pair_logit_group.mojo",
+        "gbdt/targets/kernel/pair_logit.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT PairLogit ranker; all grow policies reaching PairwiseTargetBuffers"
+      ],
+      "mechanism": "The default implicit-group path selects64 physical threads rather than128 per complete-query block. Explicit-pair buffers select128 threads rather than256 for pair derivatives and function-value partials; pair_blocks and the pair reduction/launch widths use the same constant. Every pair, weight and query is retained.",
+      "prerequisites": [
+        "Apple FAST",
+        "Implicit-group or explicit-pair path selected by the existing public target setup"
+      ],
+      "limitations": [
+        "The two representations are separate affected workloads; both need later full-recipe coverage",
+        "Function-value partial layout changes for explicit pairs; consumers use pair_blocks/q.blocks",
+        "Group function-value/magnitude reduction order may change",
+        "The64-lane group arm differs from the historical256-versus128 experiment"
+      ],
+      "quality_gates": [
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured"
+    },
+    {
+      "id": "N08",
+      "title": "PairLogit ordered endpoint pair unrolling",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N08"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/targets/kernel/pair_logit_group.mojo",
+        "gbdt/targets/kernel/pair_logit.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT PairLogit ranker; all grow policies reaching PairwiseTargetBuffers"
+      ],
+      "mechanism": "Group kernels unroll two ascending shared-memory opponent visits per loop; explicit row accumulation unrolls two ascending endpoint records. Each add, pair multiplicity, endpoint sign and tail visit remains in the original order. This is not the historical rejected each-pair-once algorithm.",
+      "prerequisites": [
+        "Apple FAST",
+        "For implicit groups keep PL_PAIRS_ONCE disabled equally in A and B"
+      ],
+      "limitations": [
+        "Compiler may already perform similar unrolling",
+        "Repeated document endpoints and extreme margins need later quality coverage",
+        "Legacy pairs-once group arm bypasses the modified inner loop for fitting groups"
+      ],
+      "quality_gates": [
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured"
+    },
+    {
+      "id": "N09",
+      "title": "Two complete Yeti tasks per scheduled threadgroup",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N09"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/targets/kernel/yeti_rank.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT YetiRank ranker; all grow policies reaching launch_yeti_rank_with"
+      ],
+      "mechanism": "Nonfused32KiB and16KiB block kernels compile-unroll two whole tasks per block with a grid of ceil(task_count/2). Shared allocation is reused with a barrier between tasks. Task IDs, task-derived seeds, four-lane ownership, number of permutations and query boundaries are unchanged; the odd last task is guarded.",
+      "prerequisites": [
+        "Apple FAST",
+        "YETI_BLOCK_PARALLEL active",
+        "YETI_TASK_FUSED disabled equally in both arms (current default)"
+      ],
+      "limitations": [
+        "Reducing concurrent task blocks may regress short workloads",
+        "Sequential fallback and legacy task-fused kernel are unchanged",
+        "Legacy direct kernel callers omitting n_tasks_in retain one task per block",
+        "No RNG or identity validation performed"
+      ],
+      "quality_gates": [
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured"
+    },
+    {
+      "id": "N10",
+      "title": "Eight-output exact Yeti merge tiles",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N10"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/targets/kernel/yeti_rank.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT YetiRank ranker; all grow policies reaching launch_yeti_rank_with"
+      ],
+      "mechanism": "After the existing128-key register sort, each active worker emits eight merged composite keys instead of four. Half of the workers perform co-rank searches; all workers still participate in every inter-pass barrier. The256-worker RNG and pair ownership is unchanged. Implemented in the32KiB block and task-fused kernels.",
+      "prerequisites": [
+        "Apple FAST",
+        "YETI_FAST_SORT active (current default)",
+        "32KiB block kernel or existing task-fused route"
+      ],
+      "limitations": [
+        "The16KiB rank-merge and sequential fallbacks are unchanged",
+        "More serial merge outputs per worker can lose throughput",
+        "Unique composite keys retain the original tie definition, but that argument is unverified"
+      ],
+      "quality_gates": [
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured"
+    },
+    {
+      "id": "N11",
+      "title": "Two-row ranking estimation/search scatter tile",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N11"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/targets/kernel/yeti_rank.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT YetiRank ranker; all grow policies reaching launch_yeti_rank_with"
+      ],
+      "mechanism": "yeti_rank_row_kernel uses128 physical workers for each original256-row logical partial tile, with two row stores per worker. Estimation/search plane layouts and function-value partial count are unchanged. The two-row magnitude sums feed a128-worker reduction, so their FAST fold order can change.",
+      "prerequisites": [
+        "Apple FAST",
+        "Row-scatter path used by nonfused target evaluation or YETI_EST_REUSE_SEARCH estimation"
+      ],
+      "limitations": [
+        "Task-fused target evaluation bypasses this row scatter",
+        "No estimation iteration, backtracking evaluation or pair sample is skipped",
+        "Magnitude fold changes need end-to-end quality qualification"
+      ],
+      "quality_gates": [
+        "Q"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured"
+    },
+    {
+      "id": "N12",
+      "title": "Four-simdgroup complete-query mean reductions",
+      "candidate_defines": [
+        "MOJOLEARN_AFT_N12"
+      ],
+      "baseline_defines": [],
+      "source_paths": [
+        "gbdt/apple_fast_tree_experiments.mojo",
+        "gbdt/targets/kernel/query_rmse.mojo",
+        "gbdt/targets/kernel/yeti_rank.mojo"
+      ],
+      "affected_estimators": [
+        "GBDT QueryRMSE regressor/ranker",
+        "GBDT YetiRank ranker, nonfused query centering"
+      ],
+      "mechanism": "A local launch_aft_group_means wrapper selects one128-thread block per complete query. Lanes retain all weighted target terms with strided FMA, then reduce target and weight sums and preserve zero-total-weight behavior. QueryRMSE evaluation and nonfused Yeti centering call the wrapper; the baseline delegates to the original query helper.",
+      "prerequisites": [
+        "Apple FAST",
+        "Nonfused query mean computation; task-fused Yeti mean computation is unchanged"
+      ],
+      "limitations": [
+        "A query remains whole regardless of length; no query-size cap or routing threshold",
+        "More blocks and idle workers can regress singleton/short queries",
+        "Weighted mean reduction order changes, including Yeti centering and downstream sort keys",
+        "All full-query quality coverage remains pending"
+      ],
+      "quality_gates": [
+        "Q",
+        "R"
+      ],
+      "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+  ]
+}

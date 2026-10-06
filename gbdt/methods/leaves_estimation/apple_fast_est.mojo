@@ -57,6 +57,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul_add
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G07
 from core.identity_trace import IdentityTrace
 from gbdt.gpu_util.kernel.partition_stats_gather import (
     compute_partition_stats_gather,
@@ -162,7 +163,12 @@ comptime EST_APPLE_ANY = (
 )
 
 #: one block, one thread per leaf (looping past 256 leaves)
-comptime EST_WALK_BLOCK = 256
+# G07: four Apple SIMD groups rather than eight reduce objective partials
+# and traverse every leaf. Shared partition-statistics/fused block contracts
+# remain untouched. Uncompiled/unverified/unmeasured; changed FAST rounding
+# can affect a line-search acceptance boundary, so weighted/multi-iteration
+# quality remains required before any decision.
+comptime EST_WALK_BLOCK = 128 if AFT_G07 else 256
 #: the walker's never-accepted cap, `iteration < 100` (`descent_helpers.cpp:179`)
 comptime EST_WALK_TRY_CAP = 100
 #: their `1e-20f` (`descent_helpers.cpp:87`), the f32 literal
