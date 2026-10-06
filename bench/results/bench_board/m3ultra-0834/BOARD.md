@@ -42,9 +42,9 @@ Generated 2026-10-05T08:38:43Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 1 planned, 415 done, 29 failed, 0 unsupported, 0 pending. Cells: 1533 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 70, ok 1457).
+Races: 1 planned, 416 done, 29 failed, 0 unsupported, 0 pending. Cells: 1534 (HOST-MEMORY 1, MODE-MISMATCH 5, REFUSED 70, ok 1458).
 
-Inference cells: 913 (REFUSED 102, ok 811).
+Inference cells: 914 (REFUSED 102, ok 812).
 
 ## Quality at a glance
 
@@ -513,6 +513,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | select-r-regression | taxi | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
 | algos | sgd-clf | istella | accuracy (higher is better) | 0.920350 | - | sklearn-cpu - |
 | algos | sgd-clf | taxi | accuracy (higher is better) | 0.755330 | - | sklearn-cpu - |
+| algos | sgd-clf | taxi | accuracy (higher is better) | - | - | sklearn-cpu 0.752520 |
 | algos | sgd-ocsvm | istella | fraction_flagged | 0.040420 | 0.00044 | sklearn-cpu 0.093340 |
 | algos | sgd-ocsvm | istella | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
 | algos | sgd-ocsvm | taxi | fraction_flagged | 0.055570 | 0.027950 | sklearn-cpu 0.007020 |
@@ -656,8 +657,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | lasso | taxi | rmse (lower is better) | 4.804740 | 4.804745 | sklearn-cpu 4.804745 |
 | classical2 | linearsvc | istella | accuracy (higher is better) | 0.923120 | 0.923470 | sklearn-cpu 0.923540 |
 | classical2 | linearsvc | taxi | accuracy (higher is better) | 0.763330 | 0.763330 | sklearn-cpu 0.763570 |
-| classical2 | linearsvr | istella | r2 (higher is better) | -0.106761 | -0.106761 | sklearn-cpu -0.025730 |
-| classical2 | linearsvr | istella | rmse (lower is better) | 0.878794 | 0.878794 | sklearn-cpu - |
+| classical2 | linearsvr | istella | r2 (higher is better) | -0.106761 | -0.106761 | sklearn-cpu -0.025729 |
+| classical2 | linearsvr | istella | rmse (lower is better) | 0.878794 | 0.878794 | sklearn-cpu 0.846012 |
 | classical2 | linearsvr | taxi | r2 (higher is better) | 0.899807 | 0.899814 | sklearn-cpu 0.899803 |
 | classical2 | linearsvr | taxi | rmse (lower is better) | 5.041440 | 5.041273 | sklearn-cpu 5.041552 |
 | classical2 | logreg | istella | accuracy (higher is better) | 0.924560 | 0.924590 | sklearn-cpu 0.924470 |
@@ -1025,6 +1026,7 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | rnn-reg | taxi-hourly | Xq | - | 11.2 | 12.1 | - | torch-compile-bf16 - ms (IDENTICAL/arm -); torch-compile-fp32 - ms (IDENTICAL/arm -); torch-eager-bf16 - ms (IDENTICAL/arm -); torch-eager-fp32 - ms (IDENTICAL/arm -) |
 | algos | robust-scaler | istella | Xq | - | 80.3 | 64.2 | - | sklearn-cpu 19.7 ms (IDENTICAL/arm 3.261) |
 | algos | robust-scaler | taxi | Xq | - | 3.0 | 3.0 | - | sklearn-cpu 1.9 ms (IDENTICAL/arm 2.360) |
+| algos | sgd-clf | taxi | Xq | - | - | - | - | sklearn-cpu 1.0 ms (IDENTICAL/arm -) |
 | algos | sgd-ocsvm | istella | Xq | - | 17.6 | 16.7 | - | sklearn-cpu 4.2 ms (IDENTICAL/arm 3.937) |
 | algos | sgd-ocsvm | taxi | Xq | - | 8.9 | 11.3 | - | sklearn-cpu 0.6 ms (IDENTICAL/arm 19.362) |
 | algos | simple-imputer | istella | Xq | - | 65.6 | 59.0 | - | sklearn-cpu 94.2 ms (IDENTICAL/arm 0.646) |
@@ -4215,11 +4217,11 @@ race: done, driver rc 0, log `logs/classical2.linearsvr.istella.rows-full.log`, 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | identical | 198.1 | 198.1..198.1 | 1 | - | - | 2098.1 | - | finite=True, r2=-0.106761, rmse=0.878794 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'sweep': 'race-idn5-linearsvr-istella', 'head': 'af93ebe0a', 'finished': '2026-10-05T07:16:07Z', 'previous_median_ms': 186.09495903365314, 'previous_hash': '2f7f9222368a6c0e', 'previous_status': 'ok'}) |
 | mojolearn FAST | mojolearn | gpu | fast | 217.0 | 217.0..217.0 | 1 | - | - | 2098.8 | - | r2=-0.106761, rmse=0.878794 | - | LIKE-FOR-LIKE-SPAN | wheel | ok ({'tag': 'M3 FAST refresh (tools/af_board_merge.py runs listed on the page)', 'kind': 'refresh', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'synced': '2026-10-04', 'previous_median_ms': 939.5995420054533, 'previous_quality': {'finite': True, 'r2': -0.10675414731194754, 'rmse': 0.8787918219479569}, 'previous_status': 'ok', 'previous_hash': 'b38a64c6fc8b0c88', 'baseline_ms': 939.5995420054533, 'baseline_quality_text': 'r2=-0.1067, rmse=0.8788', 'display_rounded': True}) |
-| sklearn-cpu | scikit-learn | cpu | opponent | 704105.0 | 704105.0..704105.0 | 1 | 0.0002814 | 0.0003082 | - | - | r2=-0.025730 | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True, 'replaced_status': 'REFUSED(timeout: null)'}) |
+| sklearn-cpu | scikit-learn | cpu | opponent | 710262.0 | 710262.0..710262.0 | 1 | 0.0002789 | 0.0003055 | 6139.4 | - | finite=True, r2=-0.025729, rmse=0.846012 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '7f59e022c95f52d89b24fed3b1071d20ef73b880ac2af09b64f63b308a3da623', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261006-update/snapshot.json', 'finished': '2026-10-06T04:14:16Z', 'original_source': 'measured this run'}) |
 
 memory, ours, ours-fast: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
 
-memory, sklearn-cpu: host not sampled; GPU not sampled
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
 settings: penalty='l2', loss='epsilon_insensitive', epsilon=0.0, C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True. Rows: 1000000 fit and 100000 held-out stride rows (standardized by the fit rows). Timed: fit.
 
@@ -17502,6 +17504,51 @@ race: None, driver rc None, log `None`, ran on ip-172-31-43-215.ec2.internal
 | sklearn-cpu | scikit-learn | cpu | opponent | 5435.0 | 5435.0..5435.0 | 1 | - | - | - | - | - | - | None | - | ok ({'fill': 'M3 opponent fill (tools/opp_only_board.py)', 'from': 'docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)', 'display_rounded': True}) |
 
 parameters: NOT CHECKED
+
+### sgd-clf / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc 0, log `logs/algos.sgd-clf.taxi.rows-full.log`, ran on ip-172-31-43-215.ec2.internal
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | scikit-learn | cpu | opponent | 5438.7 | 5438.7..5438.7 | 1 | - | - | 212.7 | - | accuracy=0.752520 | - | LIKE-FOR-LIKE-SPAN | - | ok ({'opponent_snapshot_sha256': '7f59e022c95f52d89b24fed3b1071d20ef73b880ac2af09b64f63b308a3da623', 'evidence': 'bench/results/bench_board/m3ultra-opponents-20261006-update/snapshot.json', 'finished': '2026-10-06T04:15:04Z', 'original_source': 'measured this run'}) |
+
+memory, sklearn-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
+
+settings: {'alpha': 0.0001, 'average': False, 'early_stopping': False, 'epsilon': 0.1, 'eta0': 0.005, 'fit_intercept': True, 'l1_ratio': 0.15, 'learning_rate': 'constant', 'loss': 'hinge', 'max_iter': 100, 'n_iter_no_change': 5, 'penalty': 'l2', 'power_t': 0.5, 'random_state': 7, 'shuffle': True, 'tol': None}. Rows: None. Timed: None.
+
+mismatch: cuML MBSGD is mini-batch SGD (batch_size 4096); scikit-learn and ours are per-sample SGD (the reference)
+
+mismatch: cuML reads epochs=100, the others max_iter=100
+
+config: cuML benchmark (RAPIDS), MBSGDClassifier (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `sklearn-cpu`, seed 7): MATCHED
+
+| parameter | sklearn-cpu |
+|---|---|
+| library (source) | sklearn (get_params) |
+| alpha | 0.0001 |
+| class_weight | null |
+| epsilon | 0.1 |
+| eta0 | 0.005 |
+| fit_intercept | true |
+| l1_ratio | 0.15 |
+| learning_rate | "constant" |
+| loss | "hinge" |
+| max_iter | 100 |
+| penalty | "l2" |
+| seed | 7 |
+| shuffle | true |
+| tol | null |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sklearn-cpu | Xq | - | 1.0 | 1.0..1.0 | 1 | - | - | - | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, sklearn-cpu: predict(Xq)(Xq)
 
 ### sgd-ocsvm / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 

@@ -1,0 +1,4511 @@
+{
+ "box": {
+  "env": {
+   "MKL_NUM_THREADS": null,
+   "MODULAR_NVPTX_COMPILER_PATH": null,
+   "NUMEXPR_NUM_THREADS": null,
+   "OMP_NUM_THREADS": null,
+   "OPENBLAS_NUM_THREADS": null,
+   "VECLIB_MAXIMUM_THREADS": null
+  },
+  "gpu": {
+   "api": "metal",
+   "cores": "60",
+   "driver": "macOS 26.6",
+   "metal": "spdisplays_metal4",
+   "name": "Apple M3 Ultra",
+   "vendor": "apple"
+  },
+  "host": {
+   "cpu_count": 28,
+   "cpu_model": "Apple M3 Ultra",
+   "hostname": "ip-172-31-43-215.ec2.internal",
+   "machine": "arm64",
+   "memory_bytes": 274877906944
+  },
+  "mojolearn": {
+   "requested": null,
+   "version": "0.8.34",
+   "wheel": null
+  },
+  "os": {
+   "name": "macOS 26.6",
+   "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+   "release": "25.6.0",
+   "system": "Darwin"
+  },
+  "packages": {
+   "adagio": "0.2.6",
+   "aiohappyeyeballs": "2.7.1",
+   "aiohttp": "3.14.3",
+   "aiosignal": "1.4.0",
+   "anyio": "4.15.1",
+   "arch": "8.0.0",
+   "attrs": "26.1.0",
+   "catboost": "1.2.10",
+   "certifi": "2026.7.22",
+   "charset-normalizer": "3.5.2",
+   "click": "8.5.0",
+   "cloudpickle": "3.1.2",
+   "cmdstanpy": "1.3.0",
+   "contourpy": "1.4.0",
+   "coreforecast": "0.0.18",
+   "cycler": "0.12.1",
+   "einops": "0.8.1",
+   "faiss-cpu": "1.15.1",
+   "filelock": "4.0.7",
+   "fonttools": "4.66.1",
+   "formulaic": "1.2.2",
+   "frozenlist": "1.8.0",
+   "fsspec": "2026.9.0",
+   "fugue": "0.9.7",
+   "gpytorch": "1.15.2",
+   "graphviz": "0.21",
+   "h11": "0.16.0",
+   "hf-xet": "1.6.0",
+   "holidays": "0.105",
+   "httpcore": "1.0.9",
+   "httpx": "0.28.1",
+   "huggingface_hub": "1.33.0",
+   "idna": "3.20",
+   "implicit": "0.7.3",
+   "interface_meta": "2.0.1",
+   "jinja2": "3.1.6",
+   "joblib": "1.6.0",
+   "kiwisolver": "1.5.1",
+   "lightgbm": "4.7.0",
+   "linear_operator": "0.6.1",
+   "llvmlite": "0.49.0",
+   "markupsafe": "3.0.3",
+   "matplotlib": "3.11.2",
+   "mojolearn": "0.8.34",
+   "mpmath": "1.3.0",
+   "multidict": "6.9.1",
+   "narwhals": "2.26.0",
+   "networkx": "3.6.1",
+   "numba": "0.67.0",
+   "numpy": "2.5.3",
+   "packaging": "26.3",
+   "pandas": "2.3.3",
+   "patsy": "1.0.3",
+   "pillow": "12.3.0",
+   "pip": "26.2.1",
+   "plotly": "7.1.0",
+   "propcache": "0.5.4",
+   "prophet": "1.4.0",
+   "psutil": "7.2.2",
+   "pyarrow": "25.0.1",
+   "pynndescent": "0.6.0",
+   "pyparsing": "3.3.3",
+   "python-dateutil": "2.9.0.post0",
+   "pytz": "2026.4",
+   "pyyaml": "6.0.3",
+   "requests": "2.34.2",
+   "scikit-learn": "1.7.2",
+   "scipy": "1.18.1",
+   "setuptools": "84.0.0",
+   "shap": "0.51.0",
+   "six": "1.17.0",
+   "slicer": "0.0.8",
+   "stanio": "0.5.1",
+   "statsforecast": "2.1.1",
+   "statsmodels": "0.15.0",
+   "sympy": "1.14.0",
+   "threadpoolctl": "3.7.0",
+   "tokenizers": "0.23.2",
+   "torch": "2.13.0",
+   "torch-geometric": "2.8.0.post1",
+   "tqdm": "4.70.1",
+   "triad": "1.0.2",
+   "typing_extensions": "4.16.0",
+   "tzdata": "2026.4",
+   "umap-learn": "0.5.12",
+   "urllib3": "2.8.0",
+   "utilsforecast": "0.2.16",
+   "wrapt": "2.5.0",
+   "xgboost": "3.2.0",
+   "xxhash": "4.0.1",
+   "yarl": "1.25.1"
+  },
+  "python": {
+   "executable": "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+   "orchestrator": "3.13.15",
+   "version": "3.13.15 CPython"
+  },
+  "repo": {
+   "commit": "b0f5242d244ef75cd9ba7d78ca92e10008d75510",
+   "script": "tools/bench_board.py",
+   "script_sha256": "615996edeeb86ea33e0d81a8a5ff9bc6f13ce66853eac57b7455c7007f2d5f2c",
+   "sync": null
+  }
+ },
+ "box_history": [
+  {
+   "packages": {
+    "adagio": "0.2.6",
+    "aiohappyeyeballs": "2.7.1",
+    "aiohttp": "3.14.3",
+    "aiosignal": "1.4.0",
+    "anyio": "4.15.1",
+    "arch": "8.0.0",
+    "attrs": "26.1.0",
+    "catboost": "1.2.10",
+    "certifi": "2026.7.22",
+    "charset-normalizer": "3.5.2",
+    "click": "8.5.0",
+    "cloudpickle": "3.1.2",
+    "cmdstanpy": "1.3.0",
+    "contourpy": "1.4.0",
+    "coreforecast": "0.0.18",
+    "cycler": "0.12.1",
+    "einops": "0.8.1",
+    "faiss-cpu": "1.15.1",
+    "filelock": "4.0.7",
+    "fonttools": "4.66.1",
+    "formulaic": "1.2.2",
+    "frozenlist": "1.8.0",
+    "fsspec": "2026.9.0",
+    "fugue": "0.9.7",
+    "gpytorch": "1.15.2",
+    "graphviz": "0.21",
+    "h11": "0.16.0",
+    "hf-xet": "1.6.0",
+    "holidays": "0.105",
+    "httpcore": "1.0.9",
+    "httpx": "0.28.1",
+    "huggingface_hub": "1.33.0",
+    "idna": "3.20",
+    "implicit": "0.7.3",
+    "interface_meta": "2.0.1",
+    "jinja2": "3.1.6",
+    "joblib": "1.6.0",
+    "kiwisolver": "1.5.1",
+    "lightgbm": "4.7.0",
+    "linear_operator": "0.6.1",
+    "llvmlite": "0.49.0",
+    "markupsafe": "3.0.3",
+    "matplotlib": "3.11.2",
+    "mojolearn": "0.8.34",
+    "mpmath": "1.3.0",
+    "multidict": "6.9.1",
+    "narwhals": "2.26.0",
+    "networkx": "3.6.1",
+    "numba": "0.67.0",
+    "numpy": "2.5.3",
+    "packaging": "26.3",
+    "pandas": "2.3.3",
+    "patsy": "1.0.3",
+    "pillow": "12.3.0",
+    "pip": "26.2.1",
+    "plotly": "7.1.0",
+    "propcache": "0.5.4",
+    "prophet": "1.4.0",
+    "psutil": "7.2.2",
+    "pyarrow": "25.0.1",
+    "pynndescent": "0.6.0",
+    "pyparsing": "3.3.3",
+    "python-dateutil": "2.9.0.post0",
+    "pytz": "2026.4",
+    "pyyaml": "6.0.3",
+    "requests": "2.34.2",
+    "scikit-learn": "1.7.2",
+    "scipy": "1.18.1",
+    "setuptools": "84.0.0",
+    "shap": "0.51.0",
+    "six": "1.17.0",
+    "slicer": "0.0.8",
+    "stanio": "0.5.1",
+    "statsforecast": "2.1.1",
+    "statsmodels": "0.15.0",
+    "sympy": "1.14.0",
+    "threadpoolctl": "3.7.0",
+    "tokenizers": "0.23.2",
+    "torch": "2.13.0",
+    "torch-geometric": "2.8.0.post1",
+    "tqdm": "4.70.1",
+    "triad": "1.0.2",
+    "typing_extensions": "4.16.0",
+    "tzdata": "2026.4",
+    "umap-learn": "0.5.12",
+    "urllib3": "2.8.0",
+    "utilsforecast": "0.2.16",
+    "wrapt": "2.5.0",
+    "xgboost": "3.2.0",
+    "xxhash": "4.0.1",
+    "yarl": "1.25.1"
+   },
+   "resumed": "2026-10-06T03:50:30Z"
+  }
+ ],
+ "config": {
+  "artifact_identity": null,
+  "data": {
+   "istella": {
+    "bytes": 2248281826,
+    "path": "/Users/ec2-user/datasets/gbm-bench/istella/istella_speed.npz",
+    "pinned_bytes": 2248281826,
+    "pinned_sha256": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+    "present": true,
+    "r2_key": "gbm-bench/istella/istella_speed.npz",
+    "sha256_ok": true,
+    "size_ok": true
+   },
+   "istella-rank": {
+    "bytes": 624022440,
+    "path": "/Users/ec2-user/datasets/gbm-bench/istella/istella_rank.npz",
+    "pinned_bytes": 624022440,
+    "pinned_sha256": "7d2be6c13f3930a026561eea5fa629644bf52c2295d5a5f8c15ff84e3cec3fd4",
+    "present": true,
+    "r2_key": "gbm-bench/istella/istella_rank.npz",
+    "sha256_ok": true,
+    "size_ok": true
+   },
+   "taxi": {
+    "bytes": 419757252,
+    "path": "/Users/ec2-user/datasets/gbm-bench/taxi/taxi_speed.npz",
+    "pinned_bytes": 419757252,
+    "pinned_sha256": "10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+    "present": true,
+    "r2_key": "gbm-bench/taxi/taxi_speed.npz",
+    "sha256_ok": true,
+    "size_ok": true
+   }
+  },
+  "data_root": "/Users/ec2-user/datasets/gbm-bench",
+  "data_sha256": {
+   "istella": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+   "taxi": "10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15"
+  },
+  "datasets": [
+   "taxi",
+   "istella"
+  ],
+  "families": [
+   "trees",
+   "classical",
+   "classical2",
+   "algos",
+   "neural"
+  ],
+  "harness_sha256": "16c1c2f8e1170de320d32d49c4ed253d5479f5e21dace01c36349e376c3a5b5c",
+  "infer": true,
+  "lanes": null,
+  "modes": [
+   "identical"
+  ],
+  "neural_shape": "full",
+  "opponent_store": "/private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/opponent-store.jsonl",
+  "opponents_only": true,
+  "retime_cpu_opponents": false,
+  "retime_opponents": false,
+  "rounds": 1,
+  "rows": null,
+  "seed": 7,
+  "shard": null,
+  "smoke": false,
+  "smoke_check": false,
+  "smoke_gate": "overridden (--no-smoke-gate)",
+  "vendor": "apple"
+ },
+ "created": "2026-10-06T00:12:40Z",
+ "plan": [
+  "trees/gbdt-symmetric/taxi/rows=full",
+  "trees/gbdt-symmetric/istella/rows=full",
+  "trees/gbdt-symmetric-1000/taxi/rows=full",
+  "trees/gbdt-symmetric-1000/istella/rows=full",
+  "trees/gbdt-depthwise/taxi/rows=full",
+  "trees/gbdt-depthwise/istella/rows=full",
+  "trees/gbdt-lossguide/taxi/rows=full",
+  "trees/gbdt-lossguide/istella/rows=full",
+  "trees/rf/taxi/rows=full",
+  "trees/rf/istella/rows=full",
+  "trees/et/taxi/rows=full",
+  "trees/et/istella/rows=full",
+  "trees/iforest/taxi/rows=full",
+  "trees/iforest/istella/rows=full",
+  "trees/gbdt-rank-yetirank/istella/rows=full",
+  "trees/gbdt-rank-pairlogit/istella/rows=full",
+  "trees/gbdt-multiclass/taxi/rows=full",
+  "trees/gbdt-multiclass/istella/rows=full",
+  "trees/gbdt-categorical/taxi/rows=full",
+  "trees/gbdt-ordered/taxi/rows=full",
+  "trees/gbdt-ordered/istella/rows=full",
+  "classical/kmeans/taxi/rows=full",
+  "classical/kmeans/istella/rows=full",
+  "classical/pca/taxi/rows=full",
+  "classical/pca/istella/rows=full",
+  "classical/ols/taxi/rows=full",
+  "classical/ols/istella/rows=full",
+  "classical/knn/taxi/rows=full",
+  "classical/knn/istella/rows=full",
+  "classical/kde/taxi/rows=full",
+  "classical/kde/istella/rows=full",
+  "classical/svc/taxi/rows=full",
+  "classical/svc/istella/rows=full",
+  "classical/dbscan/taxi/rows=full",
+  "classical/dbscan/istella/rows=full",
+  "classical/hdbscan/taxi/rows=full",
+  "classical/hdbscan/istella/rows=full",
+  "classical2/umap/taxi/rows=full",
+  "classical2/umap/istella/rows=full",
+  "classical2/spectral-embedding/taxi/rows=full",
+  "classical2/spectral-embedding/istella/rows=full",
+  "classical2/gmm/taxi/rows=full",
+  "classical2/gmm/istella/rows=full",
+  "classical2/logreg/taxi/rows=full",
+  "classical2/logreg/istella/rows=full",
+  "classical2/linearsvc/taxi/rows=full",
+  "classical2/linearsvc/istella/rows=full",
+  "classical2/ridge/taxi/rows=full",
+  "classical2/ridge/istella/rows=full",
+  "classical2/lasso/taxi/rows=full",
+  "classical2/lasso/istella/rows=full",
+  "classical2/elasticnet/taxi/rows=full",
+  "classical2/elasticnet/istella/rows=full",
+  "classical2/linearsvr/taxi/rows=full",
+  "classical2/linearsvr/istella/rows=full",
+  "classical2/tsvd/taxi/rows=full",
+  "classical2/tsvd/istella/rows=full",
+  "classical2/knn-clf/taxi/rows=full",
+  "classical2/knn-clf/istella/rows=full",
+  "classical2/knn-reg/taxi/rows=full",
+  "classical2/knn-reg/istella/rows=full",
+  "classical2/spectral/taxi/rows=full",
+  "classical2/spectral/istella/rows=full",
+  "classical2/agglomerative/taxi/rows=full",
+  "classical2/agglomerative/istella/rows=full",
+  "classical2/gpr/taxi/rows=full",
+  "classical2/gpr/istella/rows=full",
+  "classical2/gpc/taxi/rows=full",
+  "classical2/gpc/istella/rows=full",
+  "classical2/svr/taxi/rows=full",
+  "classical2/svr/istella/rows=full",
+  "classical2/kernel-ridge/taxi/rows=full",
+  "classical2/kernel-ridge/istella/rows=full",
+  "classical2/nystroem/taxi/rows=full",
+  "classical2/nystroem/istella/rows=full",
+  "classical2/rbf-sampler/taxi/rows=full",
+  "classical2/rbf-sampler/istella/rows=full",
+  "classical2/arima/synthetic/rows=full",
+  "classical2/ets/synthetic/rows=full",
+  "classical2/ivf/taxi/rows=full",
+  "classical2/ivf/istella/rows=full",
+  "algos/sgd-clf/taxi/rows=full",
+  "algos/sgd-clf/istella/rows=full",
+  "algos/sgd-reg/taxi/rows=full",
+  "algos/sgd-reg/istella/rows=full",
+  "algos/poisson/taxi/rows=full",
+  "algos/poisson/istella/rows=full",
+  "algos/gamma/taxi/rows=full",
+  "algos/gamma/istella/rows=full",
+  "algos/tweedie/taxi/rows=full",
+  "algos/tweedie/istella/rows=full",
+  "algos/huber/taxi/rows=full",
+  "algos/huber/istella/rows=full",
+  "algos/bayesian-ridge/taxi/rows=full",
+  "algos/bayesian-ridge/istella/rows=full",
+  "algos/ard/taxi/rows=full",
+  "algos/ard/istella/rows=full",
+  "algos/lars/taxi/rows=full",
+  "algos/lars/istella/rows=full",
+  "algos/lasso-lars/taxi/rows=full",
+  "algos/lasso-lars/istella/rows=full",
+  "algos/quantile/taxi/rows=full",
+  "algos/quantile/istella/rows=full",
+  "algos/perceptron/taxi/rows=full",
+  "algos/perceptron/istella/rows=full",
+  "algos/pa-clf/taxi/rows=full",
+  "algos/pa-clf/istella/rows=full",
+  "algos/pa-reg/taxi/rows=full",
+  "algos/pa-reg/istella/rows=full",
+  "algos/ridge-clf/taxi/rows=full",
+  "algos/ridge-clf/istella/rows=full",
+  "algos/sgd-ocsvm/taxi/rows=full",
+  "algos/sgd-ocsvm/istella/rows=full",
+  "algos/ridge-cv/taxi/rows=full",
+  "algos/ridge-cv/istella/rows=full",
+  "algos/lasso-cv/taxi/rows=full",
+  "algos/lasso-cv/istella/rows=full",
+  "algos/enet-cv/taxi/rows=full",
+  "algos/enet-cv/istella/rows=full",
+  "algos/logreg-cv/taxi/rows=full",
+  "algos/logreg-cv/istella/rows=full",
+  "algos/isotonic/taxi/rows=full",
+  "algos/isotonic/istella/rows=full",
+  "algos/minibatch-kmeans/taxi/rows=full",
+  "algos/minibatch-kmeans/istella/rows=full",
+  "algos/bisecting-kmeans/taxi/rows=full",
+  "algos/bisecting-kmeans/istella/rows=full",
+  "algos/meanshift/taxi/rows=full",
+  "algos/meanshift/istella/rows=full",
+  "algos/optics/taxi/rows=full",
+  "algos/optics/istella/rows=full",
+  "algos/affinity-prop/taxi/rows=full",
+  "algos/affinity-prop/istella/rows=full",
+  "algos/bayesian-gmm/taxi/rows=full",
+  "algos/bayesian-gmm/istella/rows=full",
+  "algos/lof/taxi/rows=full",
+  "algos/lof/istella/rows=full",
+  "algos/nearest-centroid/taxi/rows=full",
+  "algos/nearest-centroid/istella/rows=full",
+  "algos/radius-neighbors/taxi/rows=full",
+  "algos/radius-neighbors/istella/rows=full",
+  "algos/ocsvm/taxi/rows=full",
+  "algos/ocsvm/istella/rows=full",
+  "algos/kernel-pca/taxi/rows=full",
+  "algos/kernel-pca/istella/rows=full",
+  "algos/poly-count-sketch/taxi/rows=full",
+  "algos/poly-count-sketch/istella/rows=full",
+  "algos/additive-chi2/taxi/rows=full",
+  "algos/additive-chi2/istella/rows=full",
+  "algos/skewed-chi2/taxi/rows=full",
+  "algos/skewed-chi2/istella/rows=full",
+  "algos/label-propagation/taxi/rows=full",
+  "algos/label-propagation/istella/rows=full",
+  "algos/label-spreading/taxi/rows=full",
+  "algos/label-spreading/istella/rows=full",
+  "algos/knn-imputer/taxi/rows=full",
+  "algos/knn-imputer/istella/rows=full",
+  "algos/pagerank/taxi/rows=full",
+  "algos/pagerank/istella/rows=full",
+  "algos/connected-components/taxi/rows=full",
+  "algos/connected-components/istella/rows=full",
+  "algos/louvain/taxi/rows=full",
+  "algos/louvain/istella/rows=full",
+  "algos/svgp/taxi/rows=full",
+  "algos/svgp/istella/rows=full",
+  "algos/incremental-pca/taxi/rows=full",
+  "algos/incremental-pca/istella/rows=full",
+  "algos/gaussian-rp/taxi/rows=full",
+  "algos/gaussian-rp/istella/rows=full",
+  "algos/sparse-rp/taxi/rows=full",
+  "algos/sparse-rp/istella/rows=full",
+  "algos/nmf/taxi/rows=full",
+  "algos/nmf/istella/rows=full",
+  "algos/fastica/taxi/rows=full",
+  "algos/fastica/istella/rows=full",
+  "algos/factor-analysis/taxi/rows=full",
+  "algos/factor-analysis/istella/rows=full",
+  "algos/lu-solve/synthetic/rows=full",
+  "algos/lstsq/taxi/rows=full",
+  "algos/lstsq/istella/rows=full",
+  "algos/randomized-svd/taxi/rows=full",
+  "algos/randomized-svd/istella/rows=full",
+  "algos/lu-factor/synthetic/rows=full",
+  "algos/cholesky/synthetic/rows=full",
+  "algos/qr/taxi/rows=full",
+  "algos/qr/istella/rows=full",
+  "algos/eigh/synthetic/rows=full",
+  "algos/svd/taxi/rows=full",
+  "algos/svd/istella/rows=full",
+  "algos/cca/taxi/rows=full",
+  "algos/cca/istella/rows=full",
+  "algos/pls-canonical/taxi/rows=full",
+  "algos/pls-canonical/istella/rows=full",
+  "algos/pls/taxi/rows=full",
+  "algos/pls/istella/rows=full",
+  "algos/sparse-pca/taxi/rows=full",
+  "algos/sparse-pca/istella/rows=full",
+  "algos/mb-sparse-pca/taxi/rows=full",
+  "algos/mb-sparse-pca/istella/rows=full",
+  "algos/dict-learning/taxi/rows=full",
+  "algos/dict-learning/istella/rows=full",
+  "algos/lda/text/rows=full",
+  "algos/lda/taxi-zones/rows=full",
+  "algos/classical-mds/taxi/rows=full",
+  "algos/classical-mds/istella/rows=full",
+  "algos/mb-dict-learning/taxi/rows=full",
+  "algos/mb-dict-learning/istella/rows=full",
+  "algos/sparse-coder/taxi/rows=full",
+  "algos/sparse-coder/istella/rows=full",
+  "algos/isomap/taxi/rows=full",
+  "algos/isomap/istella/rows=full",
+  "algos/mds/taxi/rows=full",
+  "algos/mds/istella/rows=full",
+  "algos/lle/taxi/rows=full",
+  "algos/lle/istella/rows=full",
+  "algos/elliptic-envelope/taxi/rows=full",
+  "algos/elliptic-envelope/istella/rows=full",
+  "algos/min-cov-det/taxi/rows=full",
+  "algos/min-cov-det/istella/rows=full",
+  "algos/als/taxi-zones/rows=full",
+  "algos/als/text/rows=full",
+  "algos/robust-scaler/taxi/rows=full",
+  "algos/robust-scaler/istella/rows=full",
+  "algos/maxabs-scaler/taxi/rows=full",
+  "algos/maxabs-scaler/istella/rows=full",
+  "algos/quantile-transformer/taxi/rows=full",
+  "algos/quantile-transformer/istella/rows=full",
+  "algos/power-transformer/taxi/rows=full",
+  "algos/power-transformer/istella/rows=full",
+  "algos/normalizer/taxi/rows=full",
+  "algos/normalizer/istella/rows=full",
+  "algos/binarizer/taxi/rows=full",
+  "algos/binarizer/istella/rows=full",
+  "algos/poly-features/taxi/rows=full",
+  "algos/poly-features/istella/rows=full",
+  "algos/spline/taxi/rows=full",
+  "algos/spline/istella/rows=full",
+  "algos/kbins/taxi/rows=full",
+  "algos/kbins/istella/rows=full",
+  "algos/onehot/taxi/rows=full",
+  "algos/onehot/istella/rows=full",
+  "algos/ordinal/taxi/rows=full",
+  "algos/ordinal/istella/rows=full",
+  "algos/variance-threshold/taxi/rows=full",
+  "algos/variance-threshold/istella/rows=full",
+  "algos/minmax-scaler/taxi/rows=full",
+  "algos/minmax-scaler/istella/rows=full",
+  "algos/standard-scaler/taxi/rows=full",
+  "algos/standard-scaler/istella/rows=full",
+  "algos/target-encoder/taxi/rows=full",
+  "algos/target-encoder/istella/rows=full",
+  "algos/simple-imputer/taxi/rows=full",
+  "algos/simple-imputer/istella/rows=full",
+  "algos/iterative-imputer/taxi/rows=full",
+  "algos/iterative-imputer/istella/rows=full",
+  "algos/label-encoder/taxi/rows=full",
+  "algos/label-encoder/istella/rows=full",
+  "algos/label-binarizer/taxi/rows=full",
+  "algos/label-binarizer/istella/rows=full",
+  "algos/multilabel-binarizer/taxi/rows=full",
+  "algos/multilabel-binarizer/istella/rows=full",
+  "algos/select-f-classif/taxi/rows=full",
+  "algos/select-f-classif/istella/rows=full",
+  "algos/select-chi2/taxi/rows=full",
+  "algos/select-chi2/istella/rows=full",
+  "algos/select-f-regression/taxi/rows=full",
+  "algos/select-f-regression/istella/rows=full",
+  "algos/select-mutual-info/taxi/rows=full",
+  "algos/select-mutual-info/istella/rows=full",
+  "algos/select-r-regression/taxi/rows=full",
+  "algos/select-r-regression/istella/rows=full",
+  "algos/select-mutual-info-reg/taxi/rows=full",
+  "algos/select-mutual-info-reg/istella/rows=full",
+  "algos/rfe/taxi/rows=full",
+  "algos/rfe/istella/rows=full",
+  "algos/gaussian-nb/taxi/rows=full",
+  "algos/gaussian-nb/istella/rows=full",
+  "algos/bernoulli-nb/taxi/rows=full",
+  "algos/bernoulli-nb/istella/rows=full",
+  "algos/categorical-nb/taxi/rows=full",
+  "algos/categorical-nb/istella/rows=full",
+  "algos/multinomial-nb/text/rows=full",
+  "algos/multinomial-nb/taxi/rows=full",
+  "algos/multinomial-nb/istella/rows=full",
+  "algos/complement-nb/text/rows=full",
+  "algos/complement-nb/taxi/rows=full",
+  "algos/complement-nb/istella/rows=full",
+  "algos/lda-clf/taxi/rows=full",
+  "algos/lda-clf/istella/rows=full",
+  "algos/qda/taxi/rows=full",
+  "algos/qda/istella/rows=full",
+  "algos/bootstrap/taxi/rows=full",
+  "algos/bootstrap/istella/rows=full",
+  "algos/permutation-test/taxi/rows=full",
+  "algos/permutation-test/istella/rows=full",
+  "algos/resample/taxi/rows=full",
+  "algos/resample/istella/rows=full",
+  "algos/cross-val-score/taxi/rows=full",
+  "algos/cross-val-score/istella/rows=full",
+  "algos/lstm-clf/taxi-hourly/rows=full",
+  "algos/lstm-clf/synthetic/rows=full",
+  "algos/lstm-reg/taxi-hourly/rows=full",
+  "algos/lstm-reg/synthetic/rows=full",
+  "algos/gru-clf/taxi-hourly/rows=full",
+  "algos/gru-clf/synthetic/rows=full",
+  "algos/gru-reg/taxi-hourly/rows=full",
+  "algos/gru-reg/synthetic/rows=full",
+  "algos/rnn-clf/taxi-hourly/rows=full",
+  "algos/rnn-clf/synthetic/rows=full",
+  "algos/rnn-reg/taxi-hourly/rows=full",
+  "algos/rnn-reg/synthetic/rows=full",
+  "algos/layernorm/synthetic/rows=full",
+  "algos/moe/synthetic/rows=full",
+  "algos/rmsprop/synthetic/rows=full",
+  "algos/adagrad/synthetic/rows=full",
+  "algos/adamax/synthetic/rows=full",
+  "algos/nadam/synthetic/rows=full",
+  "algos/adafactor/synthetic/rows=full",
+  "algos/lion/synthetic/rows=full",
+  "algos/lamb/synthetic/rows=full",
+  "algos/sgd/synthetic/rows=full",
+  "algos/adam/synthetic/rows=full",
+  "algos/adamw/synthetic/rows=full",
+  "algos/mlp-clf/taxi/rows=full",
+  "algos/mlp-clf/istella/rows=full",
+  "algos/mlp-reg/taxi/rows=full",
+  "algos/mlp-reg/istella/rows=full",
+  "algos/autoarima/taxi-hourly/rows=full",
+  "algos/autoarima/synthetic/rows=full",
+  "algos/stl/taxi-hourly/rows=full",
+  "algos/stl/synthetic/rows=full",
+  "algos/var/taxi-hourly/rows=full",
+  "algos/var/synthetic/rows=full",
+  "algos/theta/taxi-hourly/rows=full",
+  "algos/theta/synthetic/rows=full",
+  "algos/croston/taxi-hourly/rows=full",
+  "algos/croston/synthetic/rows=full",
+  "algos/optimized-theta/taxi-hourly/rows=full",
+  "algos/optimized-theta/synthetic/rows=full",
+  "algos/dynamic-theta/taxi-hourly/rows=full",
+  "algos/dynamic-theta/synthetic/rows=full",
+  "algos/dynamic-optimized-theta/taxi-hourly/rows=full",
+  "algos/dynamic-optimized-theta/synthetic/rows=full",
+  "algos/auto-theta/taxi-hourly/rows=full",
+  "algos/auto-theta/synthetic/rows=full",
+  "algos/croston-optimized/taxi-hourly/rows=full",
+  "algos/croston-optimized/synthetic/rows=full",
+  "algos/croston-sba/taxi-hourly/rows=full",
+  "algos/croston-sba/synthetic/rows=full",
+  "algos/damped-ets/taxi-hourly/rows=full",
+  "algos/damped-ets/synthetic/rows=full",
+  "algos/garch/taxi-hourly/rows=full",
+  "algos/garch/synthetic/rows=full",
+  "algos/prophet/taxi-hourly/rows=full",
+  "algos/prophet/synthetic/rows=full",
+  "algos/decision-tree-clf/taxi/rows=full",
+  "algos/decision-tree-clf/istella/rows=full",
+  "algos/decision-tree-reg/taxi/rows=full",
+  "algos/decision-tree-reg/istella/rows=full",
+  "algos/bagging-clf/taxi/rows=full",
+  "algos/bagging-clf/istella/rows=full",
+  "algos/bagging-reg/taxi/rows=full",
+  "algos/bagging-reg/istella/rows=full",
+  "algos/adaboost-clf/taxi/rows=full",
+  "algos/adaboost-clf/istella/rows=full",
+  "algos/adaboost-reg/taxi/rows=full",
+  "algos/adaboost-reg/istella/rows=full",
+  "algos/dart/taxi/rows=full",
+  "algos/dart/istella/rows=full",
+  "algos/dart-reg/taxi/rows=full",
+  "algos/dart-reg/istella/rows=full",
+  "algos/random-trees-embedding/taxi/rows=full",
+  "algos/random-trees-embedding/istella/rows=full",
+  "algos/voting-clf/taxi/rows=full",
+  "algos/voting-clf/istella/rows=full",
+  "algos/voting-reg/taxi/rows=full",
+  "algos/voting-reg/istella/rows=full",
+  "algos/stacking-clf/taxi/rows=full",
+  "algos/stacking-clf/istella/rows=full",
+  "algos/stacking-reg/taxi/rows=full",
+  "algos/stacking-reg/istella/rows=full",
+  "algos/multioutput-clf/taxi/rows=full",
+  "algos/multioutput-clf/istella/rows=full",
+  "algos/multioutput-reg/taxi/rows=full",
+  "algos/multioutput-reg/istella/rows=full",
+  "algos/ovr/taxi/rows=full",
+  "algos/ovr/istella/rows=full",
+  "algos/calibrated/taxi/rows=full",
+  "algos/calibrated/istella/rows=full",
+  "algos/tree-shap/taxi/rows=full",
+  "algos/tree-shap/istella/rows=full",
+  "algos/kernel-shap/taxi/rows=full",
+  "algos/kernel-shap/istella/rows=full",
+  "algos/permutation-shap/taxi/rows=full",
+  "algos/permutation-shap/istella/rows=full",
+  "algos/conv1d/synthetic/rows=full",
+  "algos/conv2d/synthetic/rows=full",
+  "algos/maxpool2d/synthetic/rows=full",
+  "algos/avgpool2d/synthetic/rows=full",
+  "algos/maxpool1d/synthetic/rows=full",
+  "algos/avgpool1d/synthetic/rows=full",
+  "algos/batchnorm1d/synthetic/rows=full",
+  "algos/cnn-clf/synthetic/rows=full",
+  "algos/batchnorm2d/synthetic/rows=full",
+  "algos/dropout2d/synthetic/rows=full",
+  "algos/global-avgpool/synthetic/rows=full",
+  "algos/global-maxpool/synthetic/rows=full",
+  "algos/resnet-block/synthetic/rows=full",
+  "algos/gcn/taxi/rows=full",
+  "algos/gcn/istella/rows=full",
+  "algos/graphsage/taxi/rows=full",
+  "algos/graphsage/istella/rows=full",
+  "algos/embedding/synthetic/rows=full",
+  "algos/ivf-pq/taxi/rows=full",
+  "algos/ivf-pq/istella/rows=full",
+  "algos/cagra/taxi/rows=full",
+  "algos/cagra/istella/rows=full",
+  "algos/tsne/taxi/rows=full",
+  "algos/tsne/istella/rows=full",
+  "algos/ivf-sq/taxi/rows=full",
+  "algos/ivf-sq/istella/rows=full",
+  "algos/ivf-rabitq/taxi/rows=full",
+  "algos/ivf-rabitq/istella/rows=full",
+  "algos/ivf-refine/taxi/rows=full",
+  "algos/ivf-refine/istella/rows=full",
+  "algos/ivf-filter/taxi/rows=full",
+  "algos/ivf-filter/istella/rows=full",
+  "algos/qn-reg/taxi/rows=full",
+  "algos/qn-reg/istella/rows=full",
+  "algos/kpss/taxi-hourly/rows=full",
+  "algos/kpss/synthetic/rows=full",
+  "algos/select-d/taxi-hourly/rows=full",
+  "algos/select-d/synthetic/rows=full",
+  "algos/clip-grad-norm/synthetic/rows=full",
+  "algos/cross-entropy/synthetic/rows=full",
+  "algos/bpe-encode/enwik8/rows=full",
+  "algos/bpe-train/enwik8/rows=full",
+  "algos/lr-step/synthetic/rows=full",
+  "algos/lr-exponential/synthetic/rows=full",
+  "algos/lr-onecycle/synthetic/rows=full",
+  "algos/lr-constant/synthetic/rows=full",
+  "algos/lr-warmup-linear/synthetic/rows=full",
+  "algos/lr-warmup-cosine/synthetic/rows=full",
+  "algos/jl-min-dim/synthetic/rows=full",
+  "neural/lm-train-step/bytes/shape=full",
+  "neural/lm-forward/bytes/shape=full",
+  "neural/gemm/gaussian/shape=full",
+  "neural/transformer-forward/gaussian/shape=full",
+  "neural/mamba1-forward/gaussian/shape=full",
+  "neural/mamba2-forward/gaussian/shape=full",
+  "neural/mamba3-forward/gaussian/shape=full",
+  "neural/samba-train-step/bytes/shape=full",
+  "neural/samba-forward/bytes/shape=full",
+  "neural/mlp-train-step/gaussian/shape=full",
+  "neural/gemm-bf16/gaussian/shape=full",
+  "neural/gemm-int8/gaussian/shape=full"
+ ],
+ "races": {
+  "algos/sgd-clf/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit(X, y)",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "algos",
+     "hash": "60705caa79896ee4",
+     "hash_stable": null,
+     "lane": "sgd-clf",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 5438.668499991763,
+     "median_ms": 5438.668499991763,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 212.7,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 203.9
+     },
+     "min_ms": 5438.668499991763,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "alpha": 0.0001,
+       "class_weight": null,
+       "epsilon": 0.1,
+       "eta0": 0.005,
+       "fit_intercept": true,
+       "l1_ratio": 0.15,
+       "learning_rate": "constant",
+       "loss": "hinge",
+       "max_iter": 100,
+       "penalty": "l2",
+       "seed": 7,
+       "shuffle": true,
+       "tol": null
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 212.7,
+     "quality": {
+      "accuracy": 0.75252
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "MBSGDClassifier",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_algos.py",
+      "interleaved": true,
+      "lane_config": {
+       "block": "cls",
+       "cuml": "cuml.linear_model:MBSGDClassifier",
+       "datasets": [
+        "taxi",
+        "istella"
+       ],
+       "expansion_lane": "linear",
+       "kind": "est",
+       "mismatches": [
+        "cuML MBSGD is mini-batch SGD (batch_size 4096); scikit-learn and ours are per-sample SGD (the reference)",
+        "cuML reads epochs=100, the others max_iter=100"
+       ],
+       "notes": [],
+       "ours_class": "mojolearn.SGDClassifier",
+       "params": {
+        "alpha": 0.0001,
+        "average": false,
+        "early_stopping": false,
+        "epsilon": 0.1,
+        "eta0": 0.005,
+        "fit_intercept": true,
+        "l1_ratio": 0.15,
+        "learning_rate": "constant",
+        "loss": "hinge",
+        "max_iter": 100,
+        "n_iter_no_change": 5,
+        "penalty": "l2",
+        "power_t": 0.5,
+        "random_state": 7,
+        "shuffle": true,
+        "tol": null
+       },
+       "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+       "sklearn": "sklearn.linear_model:SGDClassifier",
+       "task": "clf",
+       "timed_fit": "fit(X, y)",
+       "timed_infer": "predict(Xq)"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+     "source": "measured this run",
+     "status": "ok",
+     "times_ms": [
+      5438.668499991763
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 5460.090083011892
+    }
+   ],
+   "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/source/tools/bench_board_algos.py",
+    "race",
+    "--lane",
+    "sgd-clf",
+    "--dataset",
+    "taxi",
+    "--data",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full",
+    "--arms",
+    "sklearn-cpu",
+    "--rounds",
+    "1",
+    "--out",
+    "/private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/board/raw/algos/rows-full",
+    "--work",
+    "/private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/board/work",
+    "--ours-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--theirs-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--ready-seconds",
+    "3600",
+    "--warmup-seconds",
+    "3600",
+    "--round-seconds",
+    "3600"
+   ],
+   "dataset": "taxi",
+   "env": {},
+   "family": "algos",
+   "finished": "2026-10-06T04:15:04Z",
+   "host": {
+    "hostname": "ip-172-31-43-215.ec2.internal",
+    "pod_id": null
+   },
+   "id": "algos/sgd-clf/taxi/rows=full",
+   "infer_cells": [
+    {
+     "arm": "sklearn-cpu",
+     "batch": "Xq",
+     "batch_rows": null,
+     "call": "predict(Xq)(Xq)",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit(X, y)",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": [],
+      "upload_ms_untimed": null
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "family": "algos",
+     "hash": "60705caa79896ee4",
+     "hash_stable": null,
+     "lane": "sgd-clf",
+     "library": "scikit-learn",
+     "max_ms": 1.045666984282434,
+     "median_ms": 1.045666984282434,
+     "memory": {},
+     "min_ms": 1.045666984282434,
+     "mode": "opponent",
+     "neural_shape": null,
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "phase": "infer",
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "MBSGDClassifier",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_algos.py",
+      "interleaved": true,
+      "lane_config": {
+       "block": "cls",
+       "cuml": "cuml.linear_model:MBSGDClassifier",
+       "datasets": [
+        "taxi",
+        "istella"
+       ],
+       "expansion_lane": "linear",
+       "kind": "est",
+       "mismatches": [
+        "cuML MBSGD is mini-batch SGD (batch_size 4096); scikit-learn and ours are per-sample SGD (the reference)",
+        "cuML reads epochs=100, the others max_iter=100"
+       ],
+       "notes": [],
+       "ours_class": "mojolearn.SGDClassifier",
+       "params": {
+        "alpha": 0.0001,
+        "average": false,
+        "early_stopping": false,
+        "epsilon": 0.1,
+        "eta0": 0.005,
+        "fit_intercept": true,
+        "l1_ratio": 0.15,
+        "learning_rate": "constant",
+        "loss": "hinge",
+        "max_iter": 100,
+        "n_iter_no_change": 5,
+        "penalty": "l2",
+        "power_t": 0.5,
+        "random_state": 7,
+        "shuffle": true,
+        "tol": null
+       },
+       "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+       "sklearn": "sklearn.linear_model:SGDClassifier",
+       "task": "clf",
+       "timed_fit": "fit(X, y)",
+       "timed_infer": "predict(Xq)"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "status": "ok",
+     "times_ms": [
+      1.045666984282434
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 1.0402079788036644
+    }
+   ],
+   "lane": "sgd-clf",
+   "lane_config": {
+    "block": "cls",
+    "cuml": "cuml.linear_model:MBSGDClassifier",
+    "datasets": [
+     "taxi",
+     "istella"
+    ],
+    "expansion_lane": "linear",
+    "kind": "est",
+    "mismatches": [
+     "cuML MBSGD is mini-batch SGD (batch_size 4096); scikit-learn and ours are per-sample SGD (the reference)",
+     "cuML reads epochs=100, the others max_iter=100"
+    ],
+    "notes": [],
+    "ours_class": "mojolearn.SGDClassifier",
+    "params": {
+     "alpha": 0.0001,
+     "average": false,
+     "early_stopping": false,
+     "epsilon": 0.1,
+     "eta0": 0.005,
+     "fit_intercept": true,
+     "l1_ratio": 0.15,
+     "learning_rate": "constant",
+     "loss": "hinge",
+     "max_iter": 100,
+     "n_iter_no_change": 5,
+     "penalty": "l2",
+     "power_t": 0.5,
+     "random_state": 7,
+     "shuffle": true,
+     "tol": null
+    },
+    "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+    "sklearn": "sklearn.linear_model:SGDClassifier",
+    "task": "clf",
+    "timed_fit": "fit(X, y)",
+    "timed_infer": "predict(Xq)"
+   },
+   "log": "logs/algos.sgd-clf.taxi.rows-full.log",
+   "our_arms": {},
+   "params": {
+    "arms": {
+     "sklearn-cpu": {
+      "library": "sklearn",
+      "params": {
+       "alpha": 0.0001,
+       "class_weight": null,
+       "epsilon": 0.1,
+       "eta0": 0.005,
+       "fit_intercept": true,
+       "l1_ratio": 0.15,
+       "learning_rate": "constant",
+       "loss": "hinge",
+       "max_iter": 100,
+       "penalty": "l2",
+       "seed": 7,
+       "shuffle": true,
+       "tol": null
+      },
+      "source": "get_params"
+     }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/sgd-clf",
+    "problems": [],
+    "reference": "sklearn-cpu",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+   },
+   "params_check": "MATCHED",
+   "race_json": "raw/algos/rows-full/sgd-clf-taxi.json",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:52Z",
+   "status": "done",
+   "stored_arms": [],
+   "stored_now": 1,
+   "wall_s": 12.2
+  },
+  "classical2/agglomerative/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "d81f611941f210dd",
+     "hash_stable": null,
+     "lane": "agglomerative",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 4826.7108330037445,
+     "median_ms": 4826.7108330037445,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1089.1,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1087.8
+     },
+     "min_ms": 4826.7108330037445,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "linkage": "single",
+       "metric": "euclidean",
+       "n_clusters": 8,
+       "seed": "none (deterministic)"
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1089.1,
+     "quality": {
+      "ari_vs_ours": 1.0,
+      "n_clusters": 8,
+      "silhouette": 0.7167277533704434
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "cls",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "AgglomerativeClustering",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "single linkage only: ours and cuML implement no other linkage",
+        "seed: no arm has a seed argument (deterministic)"
+       ],
+       "params": "n_clusters=8, linkage='single', metric='euclidean' (ours and cuML connectivity='pairwise')",
+       "quality": "cluster count, silhouette, ARI vs ours",
+       "rows": "10000 stride rows of the cls block (standardized by the fit rows); O(n^2)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 10000x220",
+     "source": "stored (measured 2026-10-02T13:10:36Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "91941f1bf2ed9cf093e8042727e356d2923bb7c16d5e1c4fad40a698de2cb5f2",
+      "measured_at": "2026-10-02T13:10:36Z"
+     },
+     "times_ms": [
+      4826.7108330037445
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 4858.497916022316
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:33Z",
+   "id": "classical2/agglomerative/istella/rows=full",
+   "infer_cells": [],
+   "lane": "agglomerative",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:33Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.4
+  },
+  "classical2/agglomerative/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "013c4ef8fbc15713",
+     "hash_stable": null,
+     "lane": "agglomerative",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 223.84695801883936,
+     "median_ms": 223.84695801883936,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 187.9,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 188.3
+     },
+     "min_ms": 223.84695801883936,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "linkage": "single",
+       "metric": "euclidean",
+       "n_clusters": 8,
+       "seed": "none (deterministic)"
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 187.9,
+     "quality": {
+      "ari_vs_ours": 1.0,
+      "n_clusters": 8,
+      "silhouette": 0.6855242274703756
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "cls",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "AgglomerativeClustering",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "single linkage only: ours and cuML implement no other linkage",
+        "seed: no arm has a seed argument (deterministic)"
+       ],
+       "params": "n_clusters=8, linkage='single', metric='euclidean' (ours and cuML connectivity='pairwise')",
+       "quality": "cluster count, silhouette, ARI vs ours",
+       "rows": "10000 stride rows of the cls block (standardized by the fit rows); O(n^2)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 10000x11",
+     "source": "stored (measured 2026-10-02T13:10:19Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "dfcc99034ab0298cb9ee55d1702bf47944db815c203deef2cc6539b5c2f5a88e",
+      "measured_at": "2026-10-02T13:10:19Z"
+     },
+     "times_ms": [
+      223.84695801883936
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 276.2663750036154
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:31Z",
+   "id": "classical2/agglomerative/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "agglomerative",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:31Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.1
+  },
+  "classical2/arima/synthetic/rows=full": {
+   "arms": [
+    "statsmodels-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "statsmodels-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit of every series",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "synthetic",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "b2708ff825af7610",
+     "hash_stable": null,
+     "lane": "arima",
+     "library": "statsmodels",
+     "library_version": "0.15.0",
+     "max_ms": 364.0132499858737,
+     "median_ms": 364.0132499858737,
+     "memory": {
+      "children_mb": 5821.2,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 141.9,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 138.4
+     },
+     "min_ms": 364.0132499858737,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "statsmodels",
+      "params": {
+       "max_iter": 1000,
+       "order": [
+        1,
+        0,
+        1
+       ],
+       "seasonal_order": [
+        0,
+        0,
+        0,
+        0
+       ],
+       "seed": "none (deterministic)",
+       "trend": "c"
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 141.9,
+     "quality": {
+      "forecast_rmse": 1.5154226008034013,
+      "insample_rmse": 0.9993380913769139,
+      "mean_aic": 5680.95716016041,
+      "mean_llf": -2836.478580080205
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "arma",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "ours and cuML fit the whole batch in one call; statsmodels fits one series per call (the state-space model, L-BFGS), spread over every core with joblib",
+        "statsmodels enforce_stationarity and enforce_invertibility at its default (True); ours and cuML have no such parameter",
+        "seed: no arm has a seed argument (maximum likelihood)"
+       ],
+       "params": "order=(1,0,1), seasonal_order=(0,0,0,0), trend='c' (cuML fit_intercept=True), maxiter=1000, maximum likelihood",
+       "quality": "mean llf, mean AIC (2N - 2 llf, N=4 on every arm), forecast RMSE, in-sample RMSE",
+       "rows": "64 synthetic ARMA(1,1) series, 2000 fit points, 100 held out",
+       "timed": "fit of every series"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "Yfit 64x2000; Yhold 64x100",
+     "source": "stored (measured 2026-10-02T13:12:36Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "d08a8175b65f0fe179f783004047be88d804ee4b54f75513db2855b1a501bb7e",
+      "measured_at": "2026-10-02T13:12:36Z"
+     },
+     "times_ms": [
+      364.0132499858737
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 1692.3941659915727
+    }
+   ],
+   "dataset": "synthetic",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:50Z",
+   "id": "classical2/arima/synthetic/rows=full",
+   "infer_cells": [],
+   "lane": "arima",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:50Z",
+   "status": "done",
+   "stored_arms": [
+    "statsmodels-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.1
+  },
+  "classical2/ets/synthetic/rows=full": {
+   "arms": [
+    "statsmodels-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "statsmodels-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "construct + fit of every series",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "synthetic",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "410f59e0385d2c3b",
+     "hash_stable": null,
+     "lane": "ets",
+     "library": "statsmodels",
+     "library_version": "0.15.0",
+     "max_ms": 860.0269999878947,
+     "median_ms": 860.0269999878947,
+     "memory": {
+      "children_mb": 5573.6,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 139.5,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 137.2
+     },
+     "min_ms": 860.0269999878947,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "statsmodels",
+      "params": {
+       "damped_trend": false,
+       "initialization_method": "estimated",
+       "seasonal": "additive",
+       "seasonal_periods": 24,
+       "seed": "none (deterministic)",
+       "trend": "additive"
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 139.5,
+     "quality": {
+      "forecast_rmse": 0.9844182893971815,
+      "insample_rmse": 0.9918121473091908
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "seasonal",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "initialization: ours 'estimated' (its default, statsmodels' definition), statsmodels 'estimated'; cuML has only its heuristic start (start_periods=2), so its row fits the older initialization",
+        "cuML returns no in-sample predictions; that quality cell is empty",
+        "trend: ours and cuML are additive-trend with no parameter; statsmodels trend='additive'. eps is ours' and cuML's only; statsmodels fit() uses its own optimizer",
+        "seed: no arm has a seed argument"
+       ],
+       "params": "trend additive, seasonal additive, seasonal_periods=24, initialization_method='estimated'; ours and cuML start_periods=2, eps=2.24e-3; statsmodels damped_trend=False, use_boxcox=False",
+       "quality": "forecast RMSE, in-sample one-step RMSE (t >= 48)",
+       "rows": "64 synthetic hourly series, period 24, 1440 fit points, 48 held out",
+       "timed": "construct + fit of every series"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "Yfit 64x1440; Yhold 64x48",
+     "source": "stored (measured 2026-10-02T13:12:46Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "0d370a2518853a0fe496f223046149706511bbc6e64d83093e125cb645328858",
+      "measured_at": "2026-10-02T13:12:46Z"
+     },
+     "times_ms": [
+      860.0269999878947
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 2259.8009999783244
+    }
+   ],
+   "dataset": "synthetic",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:51Z",
+   "id": "classical2/ets/synthetic/rows=full",
+   "infer_cells": [],
+   "lane": "ets",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:51Z",
+   "status": "done",
+   "stored_arms": [
+    "statsmodels-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.1
+  },
+  "classical2/gpc/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "937728c4ab0ad6a5",
+     "hash_stable": null,
+     "lane": "gpc",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 1230.2546660066582,
+     "median_ms": 1230.2546660066582,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1270.5,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1666.6
+     },
+     "min_ms": 1230.2546660066582,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "kernel": "1**2 * RBF(length_scale=14.8)",
+       "max_iter_predict": 100,
+       "n_restarts_optimizer": 0,
+       "seed": 7
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1270.5,
+     "quality": {
+      "accuracy": 0.9013333333333333,
+      "logloss": 0.23259660853842087,
+      "nonfinite_proba_rows": 0
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "cls",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "seed: ours refuses random_state (optimizer=None draws nothing); scikit-learn random_state=7"
+       ],
+       "params": "kernel=ConstantKernel(1.0) * RBF(length_scale=sqrt(d)), optimizer=None, max_iter_predict=100, n_restarts_optimizer=0",
+       "quality": "held-out accuracy and log loss",
+       "rows": "3000 fit and 3000 held-out stride rows of the cls block (standardized by the fit rows); O(n^3)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 3000x220; Xq 3000x220; y 3000; yq 3000",
+     "source": "stored (measured 2026-10-02T13:11:15Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "8a879a83a4aaeb4cd2a89a1c90ada674ab1eff0bdd3bd1b4e86a4f1f14649f85",
+      "measured_at": "2026-10-02T13:11:15Z"
+     },
+     "times_ms": [
+      1230.2546660066582
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 1421.0657499788795
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:38Z",
+   "id": "classical2/gpc/istella/rows=full",
+   "infer_cells": [],
+   "lane": "gpc",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:38Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.4
+  },
+  "classical2/gpc/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "f173465caa0af2e5",
+     "hash_stable": null,
+     "lane": "gpc",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 729.1818330122624,
+     "median_ms": 729.1818330122624,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 381.5,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 781.1
+     },
+     "min_ms": 729.1818330122624,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "kernel": "1**2 * RBF(length_scale=3.32)",
+       "max_iter_predict": 100,
+       "n_restarts_optimizer": 0,
+       "seed": 7
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 381.5,
+     "quality": {
+      "accuracy": 0.761,
+      "logloss": 0.5413580838858666,
+      "nonfinite_proba_rows": 0
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "cls",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "seed: ours refuses random_state (optimizer=None draws nothing); scikit-learn random_state=7"
+       ],
+       "params": "kernel=ConstantKernel(1.0) * RBF(length_scale=sqrt(d)), optimizer=None, max_iter_predict=100, n_restarts_optimizer=0",
+       "quality": "held-out accuracy and log loss",
+       "rows": "3000 fit and 3000 held-out stride rows of the cls block (standardized by the fit rows); O(n^3)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 3000x11; Xq 3000x11; y 3000; yq 3000",
+     "source": "stored (measured 2026-10-02T13:11:01Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "94f998861a42fbb23da31b72edaf35f79f4cb74e7c245fe222a3c432e4accdff",
+      "measured_at": "2026-10-02T13:11:01Z"
+     },
+     "times_ms": [
+      729.1818330122624
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 828.2557920028921
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:36Z",
+   "id": "classical2/gpc/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "gpc",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:36Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.1
+  },
+  "classical2/gpr/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "8cf3fdf4d68d65c4",
+     "hash_stable": null,
+     "lane": "gpr",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 523.1434579764027,
+     "median_ms": 523.1434579764027,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1255.1,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1449.5
+     },
+     "min_ms": 523.1434579764027,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "alpha": 9.5367431640625e-07,
+       "kernel": "1**2 * RBF(length_scale=14.8) + WhiteKernel(noise_level=0.01)",
+       "n_restarts_optimizer": 0,
+       "seed": 7
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1255.1,
+     "quality": {
+      "finite": true,
+      "mean_log_predictive_density": -9.28714809753338,
+      "r2": 0.23536821748218517,
+      "rmse": 0.760428281500922
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "kernel: the same kernel built from each library's own classes"
+       ],
+       "params": "kernel=ConstantKernel(1.0) * RBF(length_scale=sqrt(d)) + WhiteKernel(noise_level=0.01), alpha=2**-20 (the one ridge IDENTICAL accepts beside 0; the noise lives in the WhiteKernel so the float32 factor of K exists on taxi's near-duplicate rows), optimizer=None, normalize_y=False, n_restarts_optimizer=0, random_state=7",
+       "quality": "held-out RMSE, R2, mean log predictive density (variance std^2 + alpha)",
+       "rows": "3000 fit and 3000 held-out stride rows of the reg block (standardized by the fit rows); O(n^3)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 3000x220; Xq 3000x220; y 3000; yq 3000",
+     "source": "stored (measured 2026-10-02T13:10:51Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "1b647232f319741855a83518d869adbcee6d87e560973041327d06b33047cf88",
+      "measured_at": "2026-10-02T13:10:51Z"
+     },
+     "times_ms": [
+      523.1434579764027
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 507.84066700725816
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:35Z",
+   "id": "classical2/gpr/istella/rows=full",
+   "infer_cells": [],
+   "lane": "gpr",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:35Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.4
+  },
+  "classical2/gpr/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "a14c9ee3a9ae1ed6",
+     "hash_stable": null,
+     "lane": "gpr",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 163.90641700127162,
+     "median_ms": 163.90641700127162,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 368.6,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 564.8
+     },
+     "min_ms": 163.90641700127162,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "alpha": 9.5367431640625e-07,
+       "kernel": "1**2 * RBF(length_scale=3.32) + WhiteKernel(noise_level=0.01)",
+       "n_restarts_optimizer": 0,
+       "seed": 7
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 368.6,
+     "quality": {
+      "finite": true,
+      "mean_log_predictive_density": -311.53959406054213,
+      "r2": 0.8896293891496425,
+      "rmse": 5.041652844543728
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "kernel: the same kernel built from each library's own classes"
+       ],
+       "params": "kernel=ConstantKernel(1.0) * RBF(length_scale=sqrt(d)) + WhiteKernel(noise_level=0.01), alpha=2**-20 (the one ridge IDENTICAL accepts beside 0; the noise lives in the WhiteKernel so the float32 factor of K exists on taxi's near-duplicate rows), optimizer=None, normalize_y=False, n_restarts_optimizer=0, random_state=7",
+       "quality": "held-out RMSE, R2, mean log predictive density (variance std^2 + alpha)",
+       "rows": "3000 fit and 3000 held-out stride rows of the reg block (standardized by the fit rows); O(n^3)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 3000x11; Xq 3000x11; y 3000; yq 3000",
+     "source": "stored (measured 2026-10-02T13:10:42Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "a6c15fdeb2745653779ae28c01ef022e634d9c6a1bde08e97549c29a234b073d",
+      "measured_at": "2026-10-02T13:10:42Z"
+     },
+     "times_ms": [
+      163.90641700127162
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 165.6004170072265
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:34Z",
+   "id": "classical2/gpr/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "gpr",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:34Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.1
+  },
+  "classical2/ivf/istella/rows=full": {
+   "arms": [
+    "faiss-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "faiss-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "build + search of every query",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "a6fb07df8c7bef48",
+     "hash_stable": null,
+     "lane": "ivf",
+     "library": "faiss",
+     "library_version": "1.15.1",
+     "max_ms": 5025.231542007532,
+     "median_ms": 5025.231542007532,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1538.8,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1113.8
+     },
+     "min_ms": 5025.231542007532,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "faiss",
+      "params": {
+       "metric": "sqeuclidean",
+       "n_neighbors": 10,
+       "nlist": 1024,
+       "nprobe": 32,
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1538.8,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "ivf",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "quantizer training set: each library's own (FAISS subsamples to 256 rows per list; cuVS kmeans_trainset_fraction 0.5; ours its own)",
+        "seed: ours random_state=7, faiss cp.seed=7; cuVS IndexParams takes none"
+       ],
+       "params": "IVF-Flat, n_lists=1024, n_probes=32, k=10, squared L2, k-means 20 iterations, seed 7",
+       "quality": "recall@10 against a float64 NumPy brute force",
+       "rows": "the classical knn lane's block (tools/knn_datasets.real_block): 400000 index rows, 4000 queries, raw",
+       "timed": "build + search of every query"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "index 400000x220; queries 4000x220",
+     "source": "stored (measured 2026-10-02T13:13:31Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "e57e543013a85348b61e666f96603e1991e6817b18627e5061f30a715cfa6593",
+      "measured_at": "2026-10-02T13:13:31Z"
+     },
+     "times_ms": [
+      5025.231542007532
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 5030.823374981992
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:52Z",
+   "id": "classical2/ivf/istella/rows=full",
+   "infer_cells": [],
+   "lane": "ivf",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:52Z",
+   "status": "done",
+   "stored_arms": [
+    "faiss-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 0.6
+  },
+  "classical2/ivf/taxi/rows=full": {
+   "arms": [
+    "faiss-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "faiss-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "build + search of every query",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "1f13e9c0e1312474",
+     "hash_stable": null,
+     "lane": "ivf",
+     "library": "faiss",
+     "library_version": "1.15.1",
+     "max_ms": 3750.532583973836,
+     "median_ms": 3750.532583973836,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 151.2,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 127.4
+     },
+     "min_ms": 3750.532583973836,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "faiss",
+      "params": {
+       "metric": "sqeuclidean",
+       "n_neighbors": 10,
+       "nlist": 1024,
+       "nprobe": 32,
+       "seed": 7
+      },
+      "source": "declared"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 151.2,
+     "quality": {},
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "ivf",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "quantizer training set: each library's own (FAISS subsamples to 256 rows per list; cuVS kmeans_trainset_fraction 0.5; ours its own)",
+        "seed: ours random_state=7, faiss cp.seed=7; cuVS IndexParams takes none"
+       ],
+       "params": "IVF-Flat, n_lists=1024, n_probes=32, k=10, squared L2, k-means 20 iterations, seed 7",
+       "quality": "recall@10 against a float64 NumPy brute force",
+       "rows": "the classical knn lane's block (tools/knn_datasets.real_block): 400000 index rows, 4000 queries, raw",
+       "timed": "build + search of every query"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "index 400000x11; queries 4000x11",
+     "source": "stored (measured 2026-10-02T13:13:00Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "ef2578f72b952e8a65c25257e22912a69f7b1d92b4a5748bc5cc019af2fb041f",
+      "measured_at": "2026-10-02T13:13:00Z"
+     },
+     "times_ms": [
+      3750.532583973836
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 3765.4730410140473
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:51Z",
+   "id": "classical2/ivf/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "ivf",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:51Z",
+   "status": "done",
+   "stored_arms": [
+    "faiss-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 0.4
+  },
+  "classical2/kernel-ridge/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "fa86db2ad7fb86a7",
+     "hash_stable": null,
+     "lane": "kernel-ridge",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 836.390084004961,
+     "median_ms": 836.390084004961,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 2055.6,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 2794.6
+     },
+     "min_ms": 836.390084004961,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "alpha": 1.0,
+       "coef0": 1.0,
+       "degree": 3,
+       "gamma": 0.004545454545454545,
+       "kernel": "rbf",
+       "seed": "none (deterministic)"
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 2055.6,
+     "quality": {
+      "finite": true,
+      "r2": 0.38542717947883365,
+      "rmse": 0.6464073022921879
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "KernelRidge",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "seed: no arm has a seed argument (closed-form fit)"
+       ],
+       "params": "alpha=1.0, kernel='rbf', gamma=1/d, degree=3, coef0=1.0",
+       "quality": "held-out R2 and RMSE",
+       "rows": "10000 fit and 10000 held-out stride rows of the reg block (standardized by the fit rows)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 10000x220; Xq 10000x220; y 10000; yq 10000",
+     "source": "stored (measured 2026-10-02T13:12:00Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "2e5f0d924efe09bbffcba6e181798b273d8e1afd261a2f97f99d2bb2b78263ef",
+      "measured_at": "2026-10-02T13:12:00Z"
+     },
+     "times_ms": [
+      836.390084004961
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 775.8447910018731
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:43Z",
+   "id": "classical2/kernel-ridge/istella/rows=full",
+   "infer_cells": [],
+   "lane": "kernel-ridge",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:43Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.4
+  },
+  "classical2/kernel-ridge/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "26b609f6ba165cef",
+     "hash_stable": null,
+     "lane": "kernel-ridge",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 794.3671670218464,
+     "median_ms": 794.3671670218464,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1168.4,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1917.8
+     },
+     "min_ms": 794.3671670218464,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "alpha": 1.0,
+       "coef0": 1.0,
+       "degree": 3,
+       "gamma": 0.09090909090909091,
+       "kernel": "rbf",
+       "seed": "none (deterministic)"
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1168.4,
+     "quality": {
+      "finite": true,
+      "r2": 0.7265424512242515,
+      "rmse": 8.330379635293196
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "KernelRidge",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "seed: no arm has a seed argument (closed-form fit)"
+       ],
+       "params": "alpha=1.0, kernel='rbf', gamma=1/d, degree=3, coef0=1.0",
+       "quality": "held-out R2 and RMSE",
+       "rows": "10000 fit and 10000 held-out stride rows of the reg block (standardized by the fit rows)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 10000x11; Xq 10000x11; y 10000; yq 10000",
+     "source": "stored (measured 2026-10-02T13:11:49Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "04a23f676571837315b0aa3b65c11338fd83819f38577a1e64d1d83434e00cff",
+      "measured_at": "2026-10-02T13:11:49Z"
+     },
+     "times_ms": [
+      794.3671670218464
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 760.18962499802
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:42Z",
+   "id": "classical2/kernel-ridge/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "kernel-ridge",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:42Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.1
+  },
+  "classical2/knn-clf/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit + predict of the queries",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "680b906a5f293580",
+     "hash_stable": null,
+     "lane": "knn-clf",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 292.50858299201354,
+     "median_ms": 292.50858299201354,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1314.0,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1311.4
+     },
+     "min_ms": 292.50858299201354,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "algorithm": "brute",
+       "leaf_size": 30,
+       "metric": "euclidean",
+       "n_neighbors": 10,
+       "p": 2,
+       "seed": "none (deterministic)",
+       "weights": "uniform"
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1314.0,
+     "quality": {
+      "accuracy": 0.92625
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "cls",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "KNeighborsClassifier",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "seed: no arm has a seed argument (exact search)"
+       ],
+       "params": "n_neighbors=10, weights='uniform', metric='euclidean', algorithm='brute'",
+       "quality": "held-out accuracy",
+       "rows": "200000 fit rows, 4000 queries (stride subsets of the cls block, standardized by the fit rows)",
+       "timed": "fit + predict of the queries"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 200000x220; Xq 4000x220; y 200000; yq 4000",
+     "source": "stored (measured 2026-10-02T13:09:40Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "409a2c43e5f5a30b11275dce3c684f7a70e1350b8d18764d575af2a6af80e62b",
+      "measured_at": "2026-10-02T13:09:40Z"
+     },
+     "times_ms": [
+      292.50858299201354
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 303.68870799429715
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:24Z",
+   "id": "classical2/knn-clf/istella/rows=full",
+   "infer_cells": [],
+   "lane": "knn-clf",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:24Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 2.2
+  },
+  "classical2/knn-clf/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit + predict of the queries",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "d00d645d5e8f36d3",
+     "hash_stable": null,
+     "lane": "knn-clf",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 153.86704198317602,
+     "median_ms": 153.86704198317602,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 219.1,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 216.0
+     },
+     "min_ms": 153.86704198317602,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "algorithm": "brute",
+       "leaf_size": 30,
+       "metric": "euclidean",
+       "n_neighbors": 10,
+       "p": 2,
+       "seed": "none (deterministic)",
+       "weights": "uniform"
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 219.1,
+     "quality": {
+      "accuracy": 0.74175
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "cls",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "KNeighborsClassifier",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "seed: no arm has a seed argument (exact search)"
+       ],
+       "params": "n_neighbors=10, weights='uniform', metric='euclidean', algorithm='brute'",
+       "quality": "held-out accuracy",
+       "rows": "200000 fit rows, 4000 queries (stride subsets of the cls block, standardized by the fit rows)",
+       "timed": "fit + predict of the queries"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 200000x11; Xq 4000x11; y 200000; yq 4000",
+     "source": "stored (measured 2026-10-02T13:09:32Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "5155800f451d66baa456ef3993763f827ea6a4bc400126d640a82557dab77fab",
+      "measured_at": "2026-10-02T13:09:32Z"
+     },
+     "times_ms": [
+      153.86704198317602
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 159.40145798958838
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:22Z",
+   "id": "classical2/knn-clf/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "knn-clf",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:22Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.2
+  },
+  "classical2/knn-reg/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit + predict of the queries",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "07b6900b554077fc",
+     "hash_stable": null,
+     "lane": "knn-reg",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 285.2532500110101,
+     "median_ms": 285.2532500110101,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1311.4,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1308.2
+     },
+     "min_ms": 285.2532500110101,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "algorithm": "brute",
+       "leaf_size": 30,
+       "metric": "euclidean",
+       "n_neighbors": 10,
+       "p": 2,
+       "seed": "none (deterministic)",
+       "weights": "uniform"
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1311.4,
+     "quality": {
+      "finite": true,
+      "r2": 0.418144977111617,
+      "rmse": 0.6253878797285024
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "KNeighborsRegressor",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "seed: no arm has a seed argument (exact search)"
+       ],
+       "params": "n_neighbors=10, weights='uniform', metric='euclidean', algorithm='brute'",
+       "quality": "held-out R2 and RMSE",
+       "rows": "200000 fit rows, 4000 queries (stride subsets of the reg block, standardized by the fit rows)",
+       "timed": "fit + predict of the queries"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 200000x220; Xq 4000x220; y 200000; yq 4000",
+     "source": "stored (measured 2026-10-02T13:09:54Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "9ad20780591d20219252741a69626ded78d782f068c88b605f5abf33a3fbd270",
+      "measured_at": "2026-10-02T13:09:54Z"
+     },
+     "times_ms": [
+      285.2532500110101
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 297.4655829893891
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:27Z",
+   "id": "classical2/knn-reg/istella/rows=full",
+   "infer_cells": [],
+   "lane": "knn-reg",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:27Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 2.2
+  },
+  "classical2/knn-reg/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit + predict of the queries",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "665efd3157fa7545",
+     "hash_stable": null,
+     "lane": "knn-reg",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 130.67141600186005,
+     "median_ms": 130.67141600186005,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 221.5,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 214.6
+     },
+     "min_ms": 130.67141600186005,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "algorithm": "brute",
+       "leaf_size": 30,
+       "metric": "euclidean",
+       "n_neighbors": 10,
+       "p": 2,
+       "seed": "none (deterministic)",
+       "weights": "uniform"
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 221.5,
+     "quality": {
+      "finite": true,
+      "r2": 0.9373226939479553,
+      "rmse": 3.842027586736208
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "KNeighborsRegressor",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "seed: no arm has a seed argument (exact search)"
+       ],
+       "params": "n_neighbors=10, weights='uniform', metric='euclidean', algorithm='brute'",
+       "quality": "held-out R2 and RMSE",
+       "rows": "200000 fit rows, 4000 queries (stride subsets of the reg block, standardized by the fit rows)",
+       "timed": "fit + predict of the queries"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 200000x11; Xq 4000x11; y 200000; yq 4000",
+     "source": "stored (measured 2026-10-02T13:09:46Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "2d92cfbc53f1c3e0cf4b816d1d1a75458facd4a9ff0b25fa62a2efc15dcc6e5f",
+      "measured_at": "2026-10-02T13:09:46Z"
+     },
+     "times_ms": [
+      130.67141600186005
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 329.88387500518
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:25Z",
+   "id": "classical2/knn-reg/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "knn-reg",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:25Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.2
+  },
+  "classical2/linearsvr/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "4f4864f04f86a0db",
+     "hash_stable": null,
+     "lane": "linearsvr",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 710261.9850839837,
+     "median_ms": 710261.9850839837,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 6139.4,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 5932.5
+     },
+     "min_ms": 710261.9850839837,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "C": 1.0,
+       "epsilon": 0.0,
+       "fit_intercept": true,
+       "loss": "epsilon_insensitive",
+       "max_iter": 1000,
+       "seed": 7,
+       "tol": 0.0001
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 6139.4,
+     "quality": {
+      "finite": true,
+      "r2": -0.025728614423192298,
+      "rmse": 0.8460122727355569
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "LinearSVR",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "penalty='l2' set on ours and cuML (their default is 'l1'); scikit-learn has only l2",
+        "solver: ours and cuML L-BFGS on the primal; scikit-learn liblinear dual coordinate descent (dual=True, the only form for this loss)",
+        "intercept: ours and cuML penalized_intercept=False; scikit-learn intercept_scaling=1.0 (liblinear penalizes it)",
+        "seed: ours and cuML LinearSVR have no seed argument; scikit-learn 7"
+       ],
+       "params": "penalty='l2', loss='epsilon_insensitive', epsilon=0.0, C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True",
+       "quality": "held-out R2 and RMSE",
+       "rows": "1000000 fit and 100000 held-out stride rows (standardized by the fit rows)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+     "source": "measured this run",
+     "status": "ok",
+     "times_ms": [
+      710261.9850839837
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 709713.6477500317
+    }
+   ],
+   "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/source/tools/bench_board_more.py",
+    "race",
+    "--lane",
+    "linearsvr",
+    "--dataset",
+    "istella",
+    "--data",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/cache/more-data/rows-full",
+    "--arms",
+    "sklearn-cpu",
+    "--rounds",
+    "1",
+    "--out",
+    "/private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/board/raw/classical2/rows-full",
+    "--work",
+    "/private/tmp/tmp-mount-NWd6Z2/mojolearn-recovery-20261005/all-cpu-opponents-d991/board/work",
+    "--ours-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--theirs-python",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--ready-seconds",
+    "3600",
+    "--warmup-seconds",
+    "3600",
+    "--round-seconds",
+    "3600"
+   ],
+   "dataset": "istella",
+   "env": {},
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:16Z",
+   "host": {
+    "hostname": "ip-172-31-43-215.ec2.internal",
+    "pod_id": null
+   },
+   "id": "classical2/linearsvr/istella/rows=full",
+   "infer_cells": [],
+   "lane": "linearsvr",
+   "lane_config": {
+    "mismatches": [
+     "penalty='l2' set on ours and cuML (their default is 'l1'); scikit-learn has only l2",
+     "solver: ours and cuML L-BFGS on the primal; scikit-learn liblinear dual coordinate descent (dual=True, the only form for this loss)",
+     "intercept: ours and cuML penalized_intercept=False; scikit-learn intercept_scaling=1.0 (liblinear penalizes it)",
+     "seed: ours and cuML LinearSVR have no seed argument; scikit-learn 7"
+    ],
+    "params": "penalty='l2', loss='epsilon_insensitive', epsilon=0.0, C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True",
+    "quality": "held-out R2 and RMSE",
+    "rows": "1000000 fit and 100000 held-out stride rows (standardized by the fit rows)",
+    "timed": "fit"
+   },
+   "log": "logs/classical2.linearsvr.istella.rows-full.log",
+   "our_arms": {},
+   "params": {
+    "arms": {
+     "sklearn-cpu": {
+      "library": "sklearn",
+      "params": {
+       "C": 1.0,
+       "epsilon": 0.0,
+       "fit_intercept": true,
+       "loss": "epsilon_insensitive",
+       "max_iter": 1000,
+       "seed": 7,
+       "tol": 0.0001
+      },
+      "source": "get_params"
+     }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "classical2",
+    "lane": "linearsvr",
+    "problems": [],
+    "reference": "sklearn-cpu",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+   },
+   "params_check": "MATCHED",
+   "race_json": "raw/classical2/rows-full/linearsvr-istella.json",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T03:50:34Z",
+   "status": "done",
+   "stored_arms": [],
+   "stored_now": 1,
+   "wall_s": 1425.4
+  },
+  "classical2/nystroem/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit_transform of every row",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "5da2a18a040ba6f4",
+     "hash_stable": null,
+     "lane": "nystroem",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 509.4258329991135,
+     "median_ms": 509.4258329991135,
+     "memory": {
+      "children_mb": 16.2,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1461.3,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1357.4
+     },
+     "min_ms": 509.4258329991135,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "coef0": 1.0,
+       "degree": 3,
+       "gamma": 0.004545454545454545,
+       "kernel": "rbf",
+       "n_components": 256,
+       "seed": 7
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1461.3,
+     "quality": {
+      "kernel_rel_error": 0.03895796430511047
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "the landmark rows are each library's own random draw from seed 7",
+        "degree=3, coef0=1.0 on every arm; the rbf kernel reads neither"
+       ],
+       "params": "kernel='rbf', gamma=1/d, n_components=256, random_state=7",
+       "quality": "relative Frobenius error of Z Z^T against the exact kernel on the check rows",
+       "rows": "100000 stride rows of the reg block (standardized by the fit rows); kernel check on the first 1000",
+       "timed": "fit_transform of every row"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 100000x220; Xcheck 1000x220",
+     "source": "stored (measured 2026-09-30T18:37:17Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "26cdf0767744c104ac7486f650bd2774e2c90cfc",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "1efe401f826ea2e47eb3e66ea071b3a2ed6ae213cb63eb55aeb49310232b05a1",
+      "measured_at": "2026-09-30T18:37:17Z"
+     },
+     "times_ms": [
+      509.4258329991135
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 369.14954199892236
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:46Z",
+   "id": "classical2/nystroem/istella/rows=full",
+   "infer_cells": [],
+   "lane": "nystroem",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:46Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.5
+  },
+  "classical2/nystroem/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit_transform of every row",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "e52f26f9d253467e",
+     "hash_stable": null,
+     "lane": "nystroem",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 246.13320900243707,
+     "median_ms": 246.13320900243707,
+     "memory": {
+      "children_mb": 16.0,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 495.8,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 404.8
+     },
+     "min_ms": 246.13320900243707,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "coef0": 1.0,
+       "degree": 3,
+       "gamma": 0.09090909090909091,
+       "kernel": "rbf",
+       "n_components": 256,
+       "seed": 7
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 495.8,
+     "quality": {
+      "kernel_rel_error": 0.04436950355990711
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "the landmark rows are each library's own random draw from seed 7",
+        "degree=3, coef0=1.0 on every arm; the rbf kernel reads neither"
+       ],
+       "params": "kernel='rbf', gamma=1/d, n_components=256, random_state=7",
+       "quality": "relative Frobenius error of Z Z^T against the exact kernel on the check rows",
+       "rows": "100000 stride rows of the reg block (standardized by the fit rows); kernel check on the first 1000",
+       "timed": "fit_transform of every row"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 100000x11; Xcheck 1000x11",
+     "source": "stored (measured 2026-09-30T18:37:05Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "26cdf0767744c104ac7486f650bd2774e2c90cfc",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "70b219c7253d01f0e81ce8625a089b3673bdacb38a6f4b717821114ad949539d",
+      "measured_at": "2026-09-30T18:37:05Z"
+     },
+     "times_ms": [
+      246.13320900243707
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 351.17066700331634
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:44Z",
+   "id": "classical2/nystroem/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "nystroem",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:44Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.2
+  },
+  "classical2/rbf-sampler/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit_transform of every row",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "396e606a49f1e65d",
+     "hash_stable": null,
+     "lane": "rbf-sampler",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 47.56883400841616,
+     "median_ms": 47.56883400841616,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1345.0,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1244.2
+     },
+     "min_ms": 47.56883400841616,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "gamma": 0.004545454545454545,
+       "n_components": 256,
+       "seed": 7
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1345.0,
+     "quality": {
+      "kernel_rel_error": 0.13740523636724952
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "the random Fourier features are each library's own draw from seed 7"
+       ],
+       "params": "gamma=1/d, n_components=256, random_state=7",
+       "quality": "relative Frobenius error of Z Z^T against the exact kernel on the check rows",
+       "rows": "100000 stride rows of the reg block (standardized by the fit rows); kernel check on the first 1000",
+       "timed": "fit_transform of every row"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 100000x220; Xcheck 1000x220",
+     "source": "stored (measured 2026-10-02T13:12:28Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "a660f79c05adfad472db10536c7296844293c011a2af28c0165972304a991776",
+      "measured_at": "2026-10-02T13:12:28Z"
+     },
+     "times_ms": [
+      47.56883400841616
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 48.844584001926705
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:49Z",
+   "id": "classical2/rbf-sampler/istella/rows=full",
+   "infer_cells": [],
+   "lane": "rbf-sampler",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:49Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.5
+  },
+  "classical2/rbf-sampler/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit_transform of every row",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "b71903683961f92d",
+     "hash_stable": null,
+     "lane": "rbf-sampler",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 42.218791000777856,
+     "median_ms": 42.218791000777856,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 386.3,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 285.4
+     },
+     "min_ms": 42.218791000777856,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "gamma": 0.09090909090909091,
+       "n_components": 256,
+       "seed": 7
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 386.3,
+     "quality": {
+      "kernel_rel_error": 0.08377530461949169
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": "the board's own settings (no NVIDIA harness entry)",
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "the random Fourier features are each library's own draw from seed 7"
+       ],
+       "params": "gamma=1/d, n_components=256, random_state=7",
+       "quality": "relative Frobenius error of Z Z^T against the exact kernel on the check rows",
+       "rows": "100000 stride rows of the reg block (standardized by the fit rows); kernel check on the first 1000",
+       "timed": "fit_transform of every row"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 100000x11; Xcheck 1000x11",
+     "source": "stored (measured 2026-10-02T13:12:21Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "7b1f303f121d84683b7474d1c0733b000a0c92188fdfad010641dd5d23fcbadf",
+      "measured_at": "2026-10-02T13:12:21Z"
+     },
+     "times_ms": [
+      42.218791000777856
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 42.714042006991804
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:47Z",
+   "id": "classical2/rbf-sampler/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "rbf-sampler",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:47Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.2
+  },
+  "classical2/spectral/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "91180dfc33dd4e79",
+     "hash_stable": null,
+     "lane": "spectral",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 1595.0685829739086,
+     "median_ms": 1595.0685829739086,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1199.3,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1187.5
+     },
+     "min_ms": 1595.0685829739086,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "affinity": "nearest_neighbors",
+       "assign_labels": "kmeans",
+       "coef0": 1,
+       "degree": 3,
+       "gamma": 1.0,
+       "n_clusters": 8,
+       "n_components": 8,
+       "n_init": 1,
+       "n_neighbors": 10,
+       "seed": 42
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1199.3,
+     "quality": {
+      "ari_vs_ours": 0.9998260205714563,
+      "n_clusters": 8,
+      "silhouette": 0.14769865096907211
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "cls",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "SpectralClustering",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "eigensolver: ours Lanczos eigen_tol 1e-5 (its default); scikit-learn arpack eigen_tol='auto'; each library's own k-means on the embedding",
+        "gamma, degree, coef0: not read by the nearest_neighbors affinity; ours refuses any value (None), scikit-learn holds 1.0, 3, 1"
+       ],
+       "params": "n_clusters=8, affinity='nearest_neighbors', n_neighbors=10, n_init=1, random_state=42 (the cuML benchmark's SpectralClustering), assign_labels='kmeans', n_components=8",
+       "quality": "cluster count, silhouette, ARI vs ours",
+       "rows": "10000 stride rows of the cls block (standardized by the fit rows); O(n^2) affinity",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 42,
+      "warmup_rounds": 1
+     },
+     "shape": "X 10000x220",
+     "source": "stored (measured 2026-10-02T13:10:13Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "f7d6af59ee3a3675a15d2378a8745c03d0b8a38c5f95a351dc681f84cf53ad4f",
+      "measured_at": "2026-10-02T13:10:13Z"
+     },
+     "times_ms": [
+      1595.0685829739086
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 1595.3212910098955
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:30Z",
+   "id": "classical2/spectral/istella/rows=full",
+   "infer_cells": [],
+   "lane": "spectral",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:30Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.4
+  },
+  "classical2/spectral/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "3c2f9a27074ecedd",
+     "hash_stable": null,
+     "lane": "spectral",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 922.5796670070849,
+     "median_ms": 922.5796670070849,
+     "memory": {
+      "children_mb": 16.5,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 228.9,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 220.9
+     },
+     "min_ms": 922.5796670070849,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "affinity": "nearest_neighbors",
+       "assign_labels": "kmeans",
+       "coef0": 1,
+       "degree": 3,
+       "gamma": 1.0,
+       "n_clusters": 8,
+       "n_components": 8,
+       "n_init": 1,
+       "n_neighbors": 10,
+       "seed": 42
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 228.9,
+     "quality": {
+      "ari_vs_ours": 0.5823133077234751,
+      "n_clusters": 8,
+      "silhouette": 0.08989405357276725
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "cls",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "SpectralClustering",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "eigensolver: ours Lanczos eigen_tol 1e-5 (its default); scikit-learn arpack eigen_tol='auto'; each library's own k-means on the embedding",
+        "gamma, degree, coef0: not read by the nearest_neighbors affinity; ours refuses any value (None), scikit-learn holds 1.0, 3, 1"
+       ],
+       "params": "n_clusters=8, affinity='nearest_neighbors', n_neighbors=10, n_init=1, random_state=42 (the cuML benchmark's SpectralClustering), assign_labels='kmeans', n_components=8",
+       "quality": "cluster count, silhouette, ARI vs ours",
+       "rows": "10000 stride rows of the cls block (standardized by the fit rows); O(n^2) affinity",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 42,
+      "warmup_rounds": 1
+     },
+     "shape": "X 10000x11",
+     "source": "stored (measured 2026-10-02T13:10:02Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "da54634abbcbbb061a6fb1ff2807fc046b9a4522ad8f8844d097b94526399106",
+      "measured_at": "2026-10-02T13:10:02Z"
+     },
+     "times_ms": [
+      922.5796670070849
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 934.5552500162739
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:28Z",
+   "id": "classical2/spectral/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "spectral",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:28Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.1
+  },
+  "classical2/svr/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "12075ca5418a1647",
+     "hash_stable": null,
+     "lane": "svr",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 1422.1453340142034,
+     "median_ms": 1422.1453340142034,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 1213.6,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 1256.9
+     },
+     "min_ms": 1422.1453340142034,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "C": 1.0,
+       "coef0": 0.0,
+       "degree": 3,
+       "epsilon": 0.1,
+       "gamma": 0.004545454545454545,
+       "kernel": "rbf",
+       "max_iter": -1,
+       "seed": "none (deterministic)",
+       "tol": 0.001
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 1213.6,
+     "quality": {
+      "finite": true,
+      "r2": 0.31824769835543143,
+      "rmse": 0.6808209096006409
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "SVR-RBF",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "cache_size=2000 on every arm; ours honors it at predict only (DEVIATION 871); libsvm is single-threaded; shrinking=True is scikit-learn's only",
+        "seed: no arm has a seed argument"
+       ],
+       "params": "kernel='rbf', gamma=1/d, C=1.0, epsilon=0.1, tol=1e-3, degree=3, coef0=0.0, max_iter=-1, cache_size=2000 MB",
+       "quality": "held-out R2 and RMSE",
+       "rows": "10000 fit and 10000 held-out stride rows of the reg block (standardized by the fit rows)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 10000x220; Xq 10000x220; y 10000; yq 10000",
+     "source": "stored (measured 2026-10-02T13:11:41Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "8aefc1606596b3f65d27790becce00a0d7e0f1db129adbc1757c13ba7cefcd64",
+      "measured_at": "2026-10-02T13:11:41Z"
+     },
+     "times_ms": [
+      1422.1453340142034
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 1419.1412499931175
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:40Z",
+   "id": "classical2/svr/istella/rows=full",
+   "infer_cells": [],
+   "lane": "svr",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:40Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.4
+  },
+  "classical2/svr/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "20063e857d102d0c",
+     "hash_stable": null,
+     "lane": "svr",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 1144.4756249838974,
+     "median_ms": 1144.4756249838974,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 514.7,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 601.0
+     },
+     "min_ms": 1144.4756249838974,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "C": 1.0,
+       "coef0": 0.0,
+       "degree": 3,
+       "epsilon": 0.1,
+       "gamma": 0.09090909090909091,
+       "kernel": "rbf",
+       "max_iter": -1,
+       "seed": "none (deterministic)",
+       "tol": 0.001
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 514.7,
+     "quality": {
+      "finite": true,
+      "r2": 0.7675499565606542,
+      "rmse": 7.680414365620994
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "reg",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "SVR-RBF",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "cache_size=2000 on every arm; ours honors it at predict only (DEVIATION 871); libsvm is single-threaded; shrinking=True is scikit-learn's only",
+        "seed: no arm has a seed argument"
+       ],
+       "params": "kernel='rbf', gamma=1/d, C=1.0, epsilon=0.1, tol=1e-3, degree=3, coef0=0.0, max_iter=-1, cache_size=2000 MB",
+       "quality": "held-out R2 and RMSE",
+       "rows": "10000 fit and 10000 held-out stride rows of the reg block (standardized by the fit rows)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 10000x11; Xq 10000x11; y 10000; yq 10000",
+     "source": "stored (measured 2026-10-02T13:11:27Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "7dbc97826d4ff9040d1af4c916966f924a734a38e54698010e32223c58cfc0a2",
+      "measured_at": "2026-10-02T13:11:27Z"
+     },
+     "times_ms": [
+      1144.4756249838974
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 1133.1752920232248
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:39Z",
+   "id": "classical2/svr/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "svr",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:39Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 1.1
+  },
+  "classical2/tsvd/istella/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "istella",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "77bc145104ab4e06",
+     "hash_stable": null,
+     "lane": "tsvd",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 1407.680292002624,
+     "median_ms": 1407.680292002624,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 2018.5,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 2014.6
+     },
+     "min_ms": 1407.680292002624,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "algorithm": "arpack",
+       "n_components": 10,
+       "n_iter": 5,
+       "seed": 7,
+       "tol": 0.0
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 2018.5,
+     "quality": {
+      "explained_variance_ratio_sum": 1.0000002195709012,
+      "relative_reconstruction_error": 0.00012198040527534835
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "tsvd",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "tSVD",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'"
+       ],
+       "params": "n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7",
+       "quality": "explained-variance ratio sum (TruncatedSVD's definition), relative reconstruction error",
+       "rows": "1000000 stride rows of the train split, raw (sentinel cleaned, not scaled)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 1000000x220",
+     "source": "stored (measured 2026-10-02T13:09:26Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "3b722b313f8ed223d785a76cd113e81fbd98f238add96391ac3ec44946eb7732",
+      "measured_at": "2026-10-02T13:09:26Z"
+     },
+     "times_ms": [
+      1407.680292002624
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 1398.9847079792526
+    }
+   ],
+   "dataset": "istella",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:20Z",
+   "id": "classical2/tsvd/istella/rows=full",
+   "infer_cells": [],
+   "lane": "tsvd",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:20Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 2.0
+  },
+  "classical2/tsvd/taxi/rows=full": {
+   "arms": [
+    "sklearn-cpu"
+   ],
+   "cells": [
+    {
+     "arm": "sklearn-cpu",
+     "comparability": {
+      "span": {
+       "input_home": "host",
+       "inside_clock": "fit",
+       "pre_clock_fit": false,
+       "upload_ms_untimed": null
+      },
+      "span_asymmetry": []
+     },
+     "dataset": "taxi",
+     "device": "cpu",
+     "device_name": "arm",
+     "family": "classical2",
+     "hash": "e0947ee3ae2cfa33",
+     "hash_stable": null,
+     "lane": "tsvd",
+     "library": "scikit-learn",
+     "library_version": "1.7.2",
+     "max_ms": 157.39179201773368,
+     "median_ms": 157.39179201773368,
+     "memory": {
+      "children_mb": 1.7,
+      "gpu_method": "cpu arm: no device memory",
+      "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+      "peak_gpu_mb": null,
+      "peak_host_mb": 386.8,
+      "rounds_sampled": 1,
+      "warmup_gpu_mb": null,
+      "warmup_host_mb": 380.9
+     },
+     "min_ms": 157.39179201773368,
+     "mode": "opponent",
+     "neural_shape": null,
+     "params": {
+      "library": "sklearn",
+      "params": {
+       "algorithm": "arpack",
+       "n_components": 10,
+       "n_iter": 5,
+       "seed": 7,
+       "tol": 0.0
+      },
+      "source": "get_params"
+     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": 386.8,
+     "quality": {
+      "explained_variance_ratio_sum": 0.9999647419411898,
+      "relative_reconstruction_error": 0.0032570734801221925
+     },
+     "ratio_ours_fast_over": null,
+     "ratio_ours_identical_over": null,
+     "rounds": 1,
+     "rows": null,
+     "rows_tag": "full",
+     "settings": {
+      "block": "tsvd",
+      "config": {
+       "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+       "entry": "tSVD",
+       "harness": "cuML benchmark (RAPIDS)",
+       "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+      },
+      "driver": "tools/bench_board_more.py",
+      "interleaved": true,
+      "lane_config": {
+       "mismatches": [
+        "algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'"
+       ],
+       "params": "n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7",
+       "quality": "explained-variance ratio sum (TruncatedSVD's definition), relative reconstruction error",
+       "rows": "1000000 stride rows of the train split, raw (sentinel cleaned, not scaled)",
+       "timed": "fit"
+      },
+      "rounds": 1,
+      "rows_cap": null,
+      "seed": 7,
+      "warmup_rounds": 1
+     },
+     "shape": "X 1000000x11",
+     "source": "stored (measured 2026-10-02T13:09:11Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+     "status": "ok",
+     "stored": {
+      "box": "ip-172-31-43-215.ec2.internal",
+      "commit": "028f6cf4382f582dbb41232beaea8f15b222b737",
+      "device": "cpu (Apple M3 Ultra)",
+      "key_id": "1b01969ce1d5cf510477be3ad36d904c404a30bd8157b7d63f9d044e45980e84",
+      "measured_at": "2026-10-02T13:09:11Z"
+     },
+     "times_ms": [
+      157.39179201773368
+     ],
+     "verdict": "LIKE-FOR-LIKE-SPAN",
+     "warmup_ms": 150.17383298254572
+    }
+   ],
+   "dataset": "taxi",
+   "family": "classical2",
+   "finished": "2026-10-06T04:14:18Z",
+   "id": "classical2/tsvd/taxi/rows=full",
+   "infer_cells": [],
+   "lane": "tsvd",
+   "no_execution": true,
+   "our_arms": {},
+   "params_check": "NOT APPLICABLE (public API unsupported)",
+   "rc": 0,
+   "rows": null,
+   "skipped_opponents": [],
+   "started": "2026-10-06T04:14:18Z",
+   "status": "done",
+   "stored_arms": [
+    "sklearn-cpu"
+   ],
+   "stored_now": 0,
+   "wall_s": 2.4
+  }
+ },
+ "schema": "mojolearn-bench-board/1",
+ "updated": "2026-10-06T04:15:04Z"
+}
