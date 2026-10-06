@@ -48,6 +48,7 @@ def staging_kernel[DEPTH: Int](c: MutPointer[Float32,MutAnyOrigin],a: MutPointer
     if valid:c.unsafe_store(cell,ftz(_fold_drain(stack,occ)))
 
 
+# A02 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
 # A02 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Explicit depth1/2/4 staging adapter only; existing library depth stays unchanged.
 def bounded_staging_gemm[DEPTH: Int](ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
