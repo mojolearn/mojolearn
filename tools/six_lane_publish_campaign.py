@@ -20,14 +20,19 @@ SOURCES=[('apple',ROOT/'apple/captured/runs'),
          ('apple',ROOT/'apple/captured/reg-full/runs'),
          ('apple',ROOT/'apple/captured/expanded-reg/runs'),
          ('apple',ROOT/'apple/captured/gmm-istella-full/runs'),
+         ('apple',ROOT/'apple/captured/pls-qn-full/runs'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-next-reg'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg'),
+         ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-gmm-istella'),
+         ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-pls'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements')]
 
 
 def write(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
-    path.write_text(json.dumps(value,indent=2)+'\n')
+    temp=path.with_suffix(path.suffix+'.tmp')
+    temp.write_text(json.dumps(value,indent=2)+'\n')
+    temp.replace(path)
 
 
 def main():
@@ -51,7 +56,10 @@ def main():
             samples={arm:{phase:sum(run.get('arm')==arm and run.get('phase')==phase and run.get('returncode')==0 and bool(run.get('result')) for run in receipt['runs']) for phase in ('warmup','scored')} for arm in ('A','B')}
             controller=source.relative_to(ROOT).as_posix().replace('/','--')
             target=OUT/'receipts'/vendor/controller/receipt['key']/path.parent.name/'receipt.json'
-            target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(path,target)
+            target.parent.mkdir(parents=True,exist_ok=True)
+            # Publish the exact bytes we hashed even if the capture process
+            # replaces its live receipt while this snapshot is being built.
+            temp=target.with_suffix('.tmp');temp.write_bytes(raw);temp.replace(target)
             receipt_paths[digest]=str(target.relative_to(REPO))
             row=dict(id=config,vendor=vendor,case=job['workload_id']+'/'+path.parent.name,
                      scope='full_workload',status='PENDING_ADMISSION' if complete else 'IN_PROGRESS' if execution_status=='IN_PROGRESS' else 'FAILED_OR_INCOMPLETE',
@@ -85,7 +93,7 @@ def main():
                 assessment=reviewed[digest]
                 row['quality_assessment']=assessment['quality_assessment']
                 row['quality_reason']=assessment['reason']
-                row['quality']='FAIL' if row['quality_assessment']=='FAILED_FAST_OPPONENT_GATE' else 'PASS_TASK_METRICS' if row['quality_assessment']=='TASK_METRIC_GATE_PASSED' else 'PENDING'
+                row['quality']='FAIL' if row['quality_assessment'] in ('FAILED_FAST_OPPONENT_GATE','QUALITY_FAILED') else 'PASS_TASK_METRICS' if row['quality_assessment']=='TASK_METRIC_GATE_PASSED' else 'PENDING'
                 if row['quality']=='FAIL':row['status']='QUALITY_FAILED'
                 detail['quality_assessment']=row['quality_assessment']
                 detail['quality_reason']=row['quality_reason']
@@ -110,7 +118,12 @@ def main():
     write(OUT/'quality-review.json',review)
     if next_review['rows']:write(OUT/'next-quality-review.json',next_review)
     if (ROOT/'quality-review/historical-istella-opponents.json').exists():shutil.copyfile(ROOT/'quality-review/historical-istella-opponents.json',OUT/'historical-istella-opponents.json')
-    write(OUT/'inventory.json',inventory);write(OUT/'index.json',dict(cells=cells,notes=notes,decisions=[]))
+    decisions=[dict(candidate=c['id']+'/'+c['case'],
+                    decision='NOT PROMOTED: '+c['quality_reason'],
+                    commit=c['source_sha'],evidence=c['evidence'],
+                    default_changed=False,individual_constituents='Not decided by this combined-configuration result')
+               for c in cells if c['status']=='QUALITY_FAILED']
+    write(OUT/'inventory.json',inventory);write(OUT/'index.json',dict(cells=cells,notes=notes,decisions=decisions))
     write(OUT/'retained-pairs.json',dict(updated_at=time.time(),pairs=summary))
     with (ROOT/'board-publication.log').open('a') as log:
         p=subprocess.run(['python3',str(REPO/'tools/performance_measurement_board.py'),
