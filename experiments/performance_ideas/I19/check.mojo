@@ -4,6 +4,8 @@ all-equal and high-bit keys, stable original-position carry, alternating
 live lengths and untouched capacity tails. Contract is unsigned UInt32
 keys; floating NaN/signed-zero preprocessing remains each caller's policy."""
 from max.gpu.host import DeviceContext
+from std.sys.compile import is_defined
+from core.stable_radix_digits import stable_nibble_pairs_u32
 from experiments.performance_ideas.I19.float_check import check_float_ragged
 from experiments.performance_ideas.I19.quantile_check import check_quantile_caller
 from experiments.performance_ideas.I19.categories_check import check_categories
@@ -27,10 +29,28 @@ def check(ctx: DeviceContext,n: Int,bits: Int,all_equal: Bool) raises:
         var bsum = ctx.enqueue_create_buffer[DType.int32](stable_radix_bsum_len(n))
         ctx.enqueue_copy(dst_buf=dk,src_ptr=keys.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=dv,src_ptr=values.unsafe_ptr())
-        stable_radix_sort_pairs_u32(ctx,n,32 if arm==0 else bits,dk,dv,tk,tv,counts,bsum)
+        comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
+            if arm==1:
+                comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
+                    stable_nibble_pairs_u32[128](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
+                else:
+                    stable_nibble_pairs_u32[256](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
+            else:
+                stable_radix_sort_pairs_u32(ctx,n,32,dk,dv,tk,tv,counts,bsum)
+        else:
+            stable_radix_sort_pairs_u32(ctx,n,32 if arm==0 else bits,dk,dv,tk,tv,counts,bsum)
         # Reuse the same workspace without a host roundtrip; idempotence
         # must hold, including value carry within every equal-key run.
-        stable_radix_sort_pairs_u32(ctx,n,32 if arm==0 else bits,dk,dv,tk,tv,counts,bsum)
+        comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
+            if arm==1:
+                comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
+                    stable_nibble_pairs_u32[128](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
+                else:
+                    stable_nibble_pairs_u32[256](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
+            else:
+                stable_radix_sort_pairs_u32(ctx,n,32,dk,dv,tk,tv,counts,bsum)
+        else:
+            stable_radix_sort_pairs_u32(ctx,n,32 if arm==0 else bits,dk,dv,tk,tv,counts,bsum)
         var hk = ctx.enqueue_create_host_buffer[DType.uint32](n+17)
         var hv = ctx.enqueue_create_host_buffer[DType.uint32](n+17)
         ctx.enqueue_copy(dst_ptr=hk.unsafe_ptr(),src_buf=dk)

@@ -12,3 +12,12 @@ Merge admission: new source candidates remain explicit default-off opt-ins.
 Qualification remains pending. `native_arms.json` lists independently compiled
 incumbent/candidate and available rollback arms; compilation never promotes a
 switch or supplies performance evidence. Existing promoted defaults remain unchanged.
+
+Supported original sub-arms now implemented: independent 4-bit/8-bit digits,
+128/256-row tile schedules, raw-word/category ragged keys, resident quantile,
+dictionary/ordinal encoder, and selection-only bootstrap order statistics
+using caller-supplied RNG indices. Selection emits only requested words and
+stable source indices; invalid gather indices emit mandatory refusal words.
+Embedding grouping is exercised independently by the I11 actual gather and
+grouped gradient witnesses; no floating reduction order changes here. All
+new arms remain default off and device qualification remains owed.

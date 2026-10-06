@@ -13,6 +13,7 @@ from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz
 from x_prep.common import canon,word_order
 from x_prep.dradix import radix_key,radix_word
+from core.stable_radix_digits import stable_nibble_pairs_u32
 from core.stable_radix_sort import stable_radix_sort_pairs_u32,stable_radix_counts_len,stable_radix_bsum_len
 
 def _keys(src: MutPointer[Float32,MutAnyOrigin],keys: MutPointer[UInt32,MutAnyOrigin],positions: MutPointer[UInt32,MutAnyOrigin],base: Int32,n_in: Int32,categories: Int32):
@@ -81,7 +82,13 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
             continue
         comptime if is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
             ctx.enqueue_function[_keys](src.unsafe_ptr(),keys.unsafe_ptr(),positions.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
-            stable_radix_sort_pairs_u32(ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
+            comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
+                comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
+                    stable_nibble_pairs_u32[128](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
+                else:
+                    stable_nibble_pairs_u32[256](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
+            else:
+                stable_radix_sort_pairs_u32(ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
             ctx.enqueue_function[_words](keys.unsafe_ptr(),positions.unsafe_ptr(),dst.unsafe_ptr(),permutation.unsafe_ptr(),base,n,grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
         else:
             ctx.enqueue_function[_rank_control](src.unsafe_ptr(),dst.unsafe_ptr(),permutation.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
