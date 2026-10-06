@@ -59,10 +59,10 @@ on every one):
       launch, one block per row: the row max, the sum of exponentials, the
       row loss (with label smoothing when spelled) and `dlogits` are
       written together, with the non-finite scan of the row and the target
-      range check folded into the same pass (per-row flag cells); a second
-      one-block launch folds the row losses into the scalar loss and the
-      flag cells into the gate. Two launches, one wait, two scratch
-      buffers (vs ~12 launches, 2 vendor matmuls, 5 waits, ~16 buffers and
+      range check folded into the same pass (per-row flag cells); partial
+      and final fold launches reduce the row losses into the scalar loss
+      and the flag cells into the gate. Three launches, one wait
+      (vs ~12 launches, 2 vendor matmuls, 5 waits, ~16 buffers and
       a host-built ones vector per call in main).
 """
 from std.ffi import _Global
@@ -127,27 +127,39 @@ comptime AFN_OPTIM_ALL = is_defined["MOJOLEARN_AFN_OPTIM_ALL"]()
 # one warmup+score: scan-fusion trajectory B/A1.0514, final losses equal and
 # deliberate NaN refusal preserves parameters. Remains OFF (regression).
 # Evidence ab-20261006/repairs-f20-3e19f734e/F20/status.
+# T06 AFN26 alias: not tested in this campaign; historical evidence stands.
 comptime AFN_OPT_FUSE_SCAN = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_FUSE_SCAN"]()
+    or is_defined["MOJOLEARN_AFN26_OPT_FUSE_SCAN"]()
 )
+# T06 AFN26 alias: not tested in this campaign; select clipping independently.
 comptime AFN_OPT_CLIP_FUSE = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_CLIP_FUSE"]()
+    or is_defined["MOJOLEARN_AFN26_OPT_CLIP_FUSE"]()
 )
 # Same F20 task: multitensor trajectory B/A0.8528, losses equal and refusal
 # recovery passed. One small two-tensor caller alone leaves broader optimizer
 # contract pending; remain OFF until complete intended scope is assessed.
 # Evidence ab-20261006/repairs-f20-3e19f734e/F20/default.
+# T06 AFN26 alias: not tested in this campaign; historical evidence stands.
 comptime AFN_OPT_MULTITENSOR = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_MULTITENSOR"]()
+    or is_defined["MOJOLEARN_AFN26_OPT_MULTITENSOR"]()
 )
+# T06 AFN26 alias: not tested in this campaign; retain per-element equations.
 comptime AFN_OPT_VEC4 = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_VEC4"]()
+    or is_defined["MOJOLEARN_AFN26_OPT_VEC4"]()
 )
+# T06 AFN26 alias: not tested in this campaign; retain pool ownership rules.
 comptime AFN_OPT_RESIDENT_STATE = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_RESIDENT_STATE"]()
+    or is_defined["MOJOLEARN_AFN26_OPT_RESIDENT_STATE"]()
 )
+# T06 AFN26 alias: not tested in this campaign; loss is independent of optimizer.
 comptime AFN_LOSS_FUSED = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_LOSS_FUSED"]()
+    or is_defined["MOJOLEARN_AFN26_LOSS_FUSED"]()
 )
 #: Any optimizer candidate: `identical_optimizer_step` dispatches here.
 comptime AFN_OPT_ANY = (
@@ -158,9 +170,26 @@ comptime AFN_OPT_ANY = (
     or AFN_OPT_RESIDENT_STATE
 )
 
-#: Threads per block for every launch here (Metal's threadgroup limit is
-#: 1024; 256 is the block main's optimizer and scans run at).
-comptime AFN_TPB = 256
+# T10: not tested. Optimizer scan/fold/update geometry only; powers of two
+# keep tree reductions complete. 128 trades more blocks for lower per-block
+# scratch, while 512 trades fewer blocks for larger scratch and lower possible
+# occupancy. Grid strides, shared reductions and launch dimensions use this
+# same constant. No parent mechanism is enabled by geometry alone.
+# Choose at most one BLOCK define per family (128 takes precedence if mixed).
+comptime AFN_TPB = (
+    128 if AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_OPT_BLOCK128"]()
+    else 512 if AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_OPT_BLOCK512"]()
+    else 256
+)
+# T11: not tested. Loss row/partial/final-fold geometry is independent of T10.
+# At most one Apple simdgroup of classes retains the incumbent 32-thread path;
+# beyond it these power-of-two alternatives trade loop work for occupancy.
+# The hardware boundary applies to all class counts, not a benchmark row.
+comptime AFN_CE_TPB = (
+    128 if AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_LOSS_BLOCK128"]()
+    else 512 if AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_LOSS_BLOCK512"]()
+    else 256
+)
 #: The grid cap of the scan and partial-sum launches; above it every
 #: thread grid-strides. The fold launch reads at most this many partials
 #: per buffer with one block.
@@ -1503,7 +1532,7 @@ def afn_ce_loss_resident(
     """`identical_ce_loss_resident`'s contract under MOJOLEARN_AFN_LOSS_FUSED:
     the same inputs, `dlogits` written on the device when `want_grad`,
     `row_ptr` and `loss_ptr` written on the host, the shape / non-finite /
-    target refusals raised with the oracle's messages. Two launches, one
+    target refusals raised with the oracle's messages. Three launches, one
     wait."""
     var vocab = cfg.vocab
     ce_refuse_shape(n_rows, n_rows * vocab, cfg)
@@ -1561,8 +1590,9 @@ def afn_ce_loss_resident(
         pflag = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
-    # ---- the two launches: a 32-thread block per row when the vocabulary
-    # is tiny (the MLP head), else 256.
+    # T11: not tested; one simdgroup suffices when all classes fit its lanes.
+    # Three launches: row, partial reduction, final fold. Larger vocabularies
+    # use the CE-specific geometry, independent of optimizer block geometry.
     if vocab <= 32:
         _afn_launch_ce[32](
             ctx, row, loss, bad, cells, psum, pflag, dlogits, logits, targets, n_rows,
@@ -1570,7 +1600,7 @@ def afn_ce_loss_resident(
             divisor, one_minus, cfg.eps, want_total,
         )
     else:
-        _afn_launch_ce[AFN_TPB](
+        _afn_launch_ce[AFN_CE_TPB](
             ctx, row, loss, bad, cells, psum, pflag, dlogits, logits, targets, n_rows,
             vocab, cfg.ignore_index, want_grad, smoothing, tv[0], tv[1],
             divisor, one_minus, cfg.eps, want_total,

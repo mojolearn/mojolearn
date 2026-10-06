@@ -61,6 +61,8 @@ from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
 #: runs the paths below unchanged (embedding/checks/embedding_fast_apple.mojo).
 from embedding.checks.embedding_fast_apple import (
     EMB_ATOMIC_BWD,
+    AFN26_EMB_RESIDENT,
+    AFN26_EMB_SCRATCH,
     fast_embedding_backward_into,
     fast_embedding_forward_into,
 )
@@ -144,8 +146,10 @@ comptime EMB_COPY_TASKS_MAX = 16
 #     The same kernels on the same values: no bit moves.
 #   PLAN_AUTO (embedding_identical.mojo; off: -D MOJOLEARN_EMB_AUTO_SORT_OFF).
 comptime _EMB_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime EMB_RESIDENT = _EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-comptime EMB_DEVICE_SCRATCH = _EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_DEVICE_SCRATCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# E09-E10: not tested. FAST opts into token-owned tables and fully written
+# scratch separately; the IDENTICAL controls retain their existing policy.
+comptime EMB_RESIDENT = AFN26_EMB_RESIDENT or (_EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
+comptime EMB_DEVICE_SCRATCH = AFN26_EMB_SCRATCH or (_EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_DEVICE_SCRATCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
 #: buffers kept per element type (the oldest is retired past these)
 comptime EMB_POOL_F32_KEEP = 3
 comptime EMB_POOL_I32_KEEP = 6
@@ -395,18 +399,38 @@ def _forward_run(
         # lane afn-mlp: the uploads do not wait (the caller's arrays outlive
         # the call on the one in-order queue); the W scan keeps its wait;
         # the gather; the download with the final wait. Two waits, not four.
-        var a_w = ctx.enqueue_create_buffer[DType.float32](cfg.vocab * cfg.width)
-        ctx.enqueue_copy(dst_buf=a_w, src_ptr=wp)
-        _refuse_nonfinite_device(ctx, String("W"), a_w, wp, cfg.vocab * cfg.width)
-        var a_ids = ctx.enqueue_create_buffer[DType.int32](n_positions)
+        # E09: not tested; token/address/extent own the cached table. A
+        # refused upload is never returned to the pool as valid state.
+        var a_w: DeviceBuffer[DType.float32]
+        comptime if AFN26_EMB_RESIDENT:
+            a_w = _table_take(ctx, token, w_addr, wp, cfg.vocab * cfg.width)
+        else:
+            a_w = ctx.enqueue_create_buffer[DType.float32](cfg.vocab * cfg.width)
+            ctx.enqueue_copy(dst_buf=a_w, src_ptr=wp)
+            _refuse_nonfinite_device(ctx, String("W"), a_w, wp, cfg.vocab * cfg.width)
+        # E10: not tested; all output/ID cells are overwritten before use.
+        var a_ids: DeviceBuffer[DType.int32]
+        var a_y: DeviceBuffer[DType.float32]
+        comptime if AFN26_EMB_SCRATCH:
+            a_ids = _pool_i32(ctx, n_positions)
+            a_y = _pool_f32(ctx, cells)
+        else:
+            a_ids = ctx.enqueue_create_buffer[DType.int32](n_positions)
+            a_y = ctx.enqueue_create_buffer[DType.float32](cells)
         ctx.enqueue_copy(dst_buf=a_ids, src_ptr=ids.unsafe_ptr())
-        var a_y = ctx.enqueue_create_buffer[DType.float32](cells)
         fast_embedding_forward_into(ctx, a_y, a_w, a_ids, n_positions, cfg)
         ctx.enqueue_copy(dst_ptr=yp, src_buf=a_y)
         ctx.synchronize()
-        _ = a_w^
-        _ = a_ids^
-        _ = a_y^
+        comptime if AFN26_EMB_RESIDENT:
+            _table_give(a_w^, token, w_addr, cfg.vocab * cfg.width)
+        else:
+            _ = a_w^
+        comptime if AFN26_EMB_SCRATCH:
+            _give_i32(a_ids^, n_positions)
+            _give_f32(a_y^, cells)
+        else:
+            _ = a_ids^
+            _ = a_y^
         _ = ctx^
         return
     comptime if EMB_DEVICE_SCRATCH:
@@ -454,15 +478,30 @@ def _backward_run(
         # lane afn-mlp: dY up (no wait), its scan (one wait), the carried dW
         # up when accumulating (no wait; else the device seed), the ids up,
         # the scatter-add, the padding row, the download, the final wait.
-        var a_dw = ctx.enqueue_create_buffer[DType.float32](cells)
+        # E10: not tested. Fresh gradients still execute the full device
+        # seed, and accumulated gradients still upload the caller's dW.
+        var a_dw: DeviceBuffer[DType.float32]
+        var a_dy: DeviceBuffer[DType.float32]
+        var a_ids: DeviceBuffer[DType.int32]
+        comptime if AFN26_EMB_SCRATCH:
+            a_dw = _pool_f32(ctx, cells)
+            a_dy = _pool_f32(ctx, n_positions * cfg.width)
+            a_ids = _pool_i32(ctx, n_positions)
+        else:
+            a_dw = ctx.enqueue_create_buffer[DType.float32](cells)
+            a_dy = ctx.enqueue_create_buffer[DType.float32](n_positions * cfg.width)
+            a_ids = ctx.enqueue_create_buffer[DType.int32](n_positions if n_positions > 0 else 1)
         if cfg.accumulate:
             ctx.enqueue_copy(dst_buf=a_dw, src_ptr=dwp)
-        var a_dy = ctx.enqueue_create_buffer[DType.float32](n_positions * cfg.width)
-        ctx.enqueue_copy(dst_buf=a_dy, src_ptr=dyp)
+        comptime if AFN26_EMB_SCRATCH:
+            # A zero-position call owns one dummy cell but reads no dY.
+            if n_positions > 0:
+                ctx.enqueue_copy(dst_buf=a_dy, src_ptr=dyp)
+        else:
+            ctx.enqueue_copy(dst_buf=a_dy, src_ptr=dyp)
         _refuse_nonfinite_device(ctx, String("dY"), a_dy, dyp, n_positions * cfg.width)
         if cfg.accumulate:
             _refuse_nonfinite_device(ctx, String("the carried dW"), a_dw, dwp, cells)
-        var a_ids = ctx.enqueue_create_buffer[DType.int32](n_positions if n_positions > 0 else 1)
         if n_positions > 0:
             ctx.enqueue_copy(
                 dst_buf=a_ids.create_sub_buffer[DType.int32](0, n_positions),
@@ -471,9 +510,15 @@ def _backward_run(
         fast_embedding_backward_into(ctx, a_dw, a_dy, a_ids, n_positions, cfg)
         ctx.enqueue_copy(dst_ptr=dwp, src_buf=a_dw)
         ctx.synchronize()
-        _ = a_dw^
-        _ = a_dy^
-        _ = a_ids^
+        comptime if AFN26_EMB_SCRATCH:
+            # Pool only after the consumed output's completion boundary.
+            _give_f32(a_dw^, cells)
+            _give_f32(a_dy^, n_positions * cfg.width)
+            _give_i32(a_ids^, n_positions)
+        else:
+            _ = a_dw^
+            _ = a_dy^
+            _ = a_ids^
         _ = ctx^
         return
     comptime if EMB_DEVICE_SCRATCH:

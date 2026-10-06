@@ -1,0 +1,358 @@
+{
+  "schema": 1,
+  "family": "interactions",
+  "status": "not_tested",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "execution": "prohibited_in_this_assignment",
+  "cards": [
+    {
+      "id": "X01",
+      "title": "Norm, RoPE/cache and FLASH complete forward",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo"
+      ],
+      "workloads": [
+        "full TransformerBlock, LM and Samba forward-only callers"
+      ],
+      "variants": [
+        {
+          "name": "forward",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_NORM_SG",
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN_ATTN_ROPE_CACHE"
+          ]
+        }
+      ],
+      "notes": "A01+A02+A03. Preserve inference route guards; compare cold and repeated completion separately.",
+      "kind": "interaction_recipe",
+      "status": "not_tested"
+    },
+    {
+      "id": "X02",
+      "title": "Grouped attention, fused projections and arena",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo"
+      ],
+      "workloads": [
+        "full TransformerBlock and mixed Samba forward; ByteLM only for reached non-arena pieces"
+      ],
+      "variants": [
+        {
+          "name": "fused_grouped_block",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_GQA_TILE",
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+            "MOJOLEARN_AFN_ATTN_ARENA"
+          ]
+        }
+      ],
+      "notes": "A04+A05+A06+A07. Arena is in the standalone transformer binding; declare constituent routing per consumer. No training-kernel speed claim.",
+      "kind": "interaction_recipe",
+      "status": "not_tested"
+    },
+    {
+      "id": "X03",
+      "title": "Attention and projection geometry interactions",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo"
+      ],
+      "workloads": [
+        "full transformer/LM/Samba forward-only public routes"
+      ],
+      "variants": [
+        {
+          "name": "norm128_keys16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_NORM_SG",
+            "MOJOLEARN_AFN_ATTN_FLASH"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_NORM_SG",
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN26_ATTN_NORM_TPB128",
+            "MOJOLEARN_AFN26_ATTN_FLASH_BK16"
+          ]
+        },
+        {
+          "name": "norm128_queries16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_NORM_SG",
+            "MOJOLEARN_AFN_ATTN_FLASH"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_NORM_SG",
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN26_ATTN_NORM_TPB128",
+            "MOJOLEARN_AFN26_ATTN_FLASH_TQ16"
+          ]
+        },
+        {
+          "name": "flash_keys16_queries16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN26_ATTN_FLASH_BK16",
+            "MOJOLEARN_AFN26_ATTN_FLASH_TQ16"
+          ]
+        },
+        {
+          "name": "gqa_keys16_queries16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_GQA_TILE",
+            "MOJOLEARN_AFN_ATTN_FLASH"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_GQA_TILE",
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN26_ATTN_FLASH_BK16",
+            "MOJOLEARN_AFN26_ATTN_FLASH_TQ16"
+          ]
+        },
+        {
+          "name": "projection_rows32_k16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+            "MOJOLEARN_AFN26_ATTN_PROJ_KB16",
+            "MOJOLEARN_AFN26_ATTN_PROJ_BM32"
+          ]
+        }
+      ],
+      "notes": "A08+A09/A10 and A11+A12. Identical parent defines in A/B isolate geometry. TQ16 includes its necessary thread ownership changes; full GQA mapping and smaller staging remain not tested.",
+      "kind": "interaction_recipe",
+      "status": "not_tested"
+    },
+    {
+      "id": "X04",
+      "title": "Whole LM fused training and resident parameter views",
+      "source_paths": [
+        "training/byte_lm_afn.mojo",
+        "training/byte_lm_afn_grad.mojo",
+        "training/afn_optim.mojo",
+        "training/mlp_fast.mojo"
+      ],
+      "workloads": [
+        "full LanguageModelTrainer training, checkpoint/resume, held-out evaluation, refusal and recovery"
+      ],
+      "variants": [
+        {
+          "name": "lm_full_step",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_NOSYNC",
+            "MOJOLEARN_AFN26_LM_HEAD_FUSE",
+            "MOJOLEARN_AFN26_LM_PARAM_VIEWS",
+            "MOJOLEARN_AFN26_LM_BWD_FUSE",
+            "MOJOLEARN_AFN26_LM_BWD_EPILOGUE",
+            "MOJOLEARN_AFN26_LM_BWD_NORM1_RESID"
+          ]
+        }
+      ],
+      "notes": "T01+T02+T03+T05; existing default-on backward no-sync held fixed. May bypass shared optimizer paths; qualify this actual complete configuration.",
+      "kind": "interaction_recipe",
+      "status": "not_tested"
+    },
+    {
+      "id": "X05",
+      "title": "Split weight gradients and optimizer interactions",
+      "source_paths": [
+        "training/byte_lm_afn.mojo",
+        "training/byte_lm_afn_grad.mojo",
+        "training/afn_optim.mojo",
+        "training/mlp_fast.mojo"
+      ],
+      "workloads": [
+        "full affected LM/Samba training and actual reached optimizer consumers"
+      ],
+      "variants": [
+        {
+          "name": "split_optimizer",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+            "MOJOLEARN_AFN26_LM_WGRAD_MIN128",
+            "MOJOLEARN_AFN26_LM_WGRAD_CAP8"
+          ]
+        },
+        {
+          "name": "split_geometry_with_optimizer",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+            "MOJOLEARN_AFN26_OPT_VEC4",
+            "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+            "MOJOLEARN_AFN26_LM_WGRAD_MIN128",
+            "MOJOLEARN_AFN26_LM_WGRAD_CAP8"
+          ]
+        }
+      ],
+      "notes": "T04+T09+T06. Include output zero launch, atomic partial accumulation, all optimizer refusals and updates. Parent versus geometry-only comparisons are distinct.",
+      "kind": "interaction_recipe",
+      "status": "not_tested"
+    },
+    {
+      "id": "X06",
+      "title": "Fused resident multistep MLP with smaller row tile",
+      "source_paths": [
+        "training/byte_lm_afn.mojo",
+        "training/byte_lm_afn_grad.mojo",
+        "training/afn_optim.mojo",
+        "training/mlp_fast.mojo"
+      ],
+      "workloads": [
+        "full SmallMLPTrainer ordered training trajectory, checkpoint and failure rollback"
+      ],
+      "variants": [
+        {
+          "name": "resident_multistep_rows32",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+            "MOJOLEARN_AFN26_MLP_RESIDENT",
+            "MOJOLEARN_AFN26_MLP_MULTISTEP",
+            "MOJOLEARN_AFN26_MLP_ROWS32"
+          ]
+        }
+      ],
+      "notes": "T07+T08+T12. A consumes the same minibatches through resident single steps; B batches host submission, not optimizer semantics. Include required losses/logits/state transport on both sides.",
+      "kind": "interaction_recipe",
+      "status": "not_tested"
+    },
+    {
+      "id": "X07",
+      "title": "Complete Mamba-family and Samba configurations",
+      "source_paths": [
+        "mamba/impl/modules/afn_defines.mojo",
+        "mamba/impl/modules/afn_refusal.mojo"
+      ],
+      "workloads": [
+        "full Mamba1/2/3 forward/continuation and each reached full Samba stack"
+      ],
+      "variants": [
+        {
+          "name": "mamba1",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN",
+            "MOJOLEARN_AFN_MAMBA1_FUSE_IN",
+            "MOJOLEARN_AFN_MAMBA_ARENA",
+            "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"
+          ]
+        },
+        {
+          "name": "mamba2",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_MAMBA2_SSD_MMA",
+            "MOJOLEARN_AFN_MAMBA_ARENA",
+            "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"
+          ]
+        },
+        {
+          "name": "mamba3",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_MAMBA3_SISO_FUSED",
+            "MOJOLEARN_AFN_MAMBA_ARENA",
+            "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"
+          ]
+        }
+      ],
+      "notes": "M01/M02/M03/M04+M05+M06. Baseline already uses mandatory device refusal. Compare every returned recurrent state; inference cells alone cannot qualify any affected training route.",
+      "kind": "interaction_recipe",
+      "status": "not_tested"
+    },
+    {
+      "id": "X08",
+      "title": "Complete CNN and embedding-consumer configurations",
+      "source_paths": [
+        "x_cnn/afn_direct.mojo",
+        "embedding/checks/embedding_fast_apple.mojo",
+        "bindings/_mojolearn_embedding.mojo"
+      ],
+      "workloads": [
+        "full CNNClassifier fit/inference and Conv2d backward consumers",
+        "full actual consumers of public Embedding forward/backward"
+      ],
+      "variants": [
+        {
+          "name": "cnn_complete",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT",
+            "MOJOLEARN_AFN26_CNN_ROWS32",
+            "MOJOLEARN_AFN26_CNN_CHANNELS16",
+            "MOJOLEARN_AFN26_CNN_K16",
+            "MOJOLEARN_AFN26_CNN_COLS_ONCE"
+          ]
+        },
+        {
+          "name": "cnn_geometry",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT",
+            "MOJOLEARN_AFN26_CNN_ROWS32",
+            "MOJOLEARN_AFN26_CNN_CHANNELS16",
+            "MOJOLEARN_AFN26_CNN_K16",
+            "MOJOLEARN_AFN26_CNN_COLS_ONCE"
+          ]
+        },
+        {
+          "name": "embedding_complete",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+            "MOJOLEARN_AFN26_EMB_GATHER8",
+            "MOJOLEARN_AFN26_EMB_THREADS64",
+            "MOJOLEARN_AFN26_EMB_RESIDENT",
+            "MOJOLEARN_AFN26_EMB_SCRATCH"
+          ]
+        },
+        {
+          "name": "embedding_storage_geometry",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+            "MOJOLEARN_AFN26_EMB_GATHER8",
+            "MOJOLEARN_AFN26_EMB_THREADS64",
+            "MOJOLEARN_AFN26_EMB_RESIDENT",
+            "MOJOLEARN_AFN26_EMB_SCRATCH"
+          ]
+        }
+      ],
+      "notes": "Separate E01–E05 CNN and E06–E10 embedding comparisons. Full dataset recipe mapping is pending; do not replace it with a reduced fixture. Atomic order, pooled buffer initialization, immutable-table invalidation and all output contracts remain quality gates.",
+      "kind": "interaction_recipe",
+      "status": "not_tested"
+    }
+  ]
+}
