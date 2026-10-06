@@ -44186,26 +44186,64 @@
       "cells": [
         {
           "arm": "torch-eager-fp32",
-          "comparability": {},
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
           "dataset": "bytes",
           "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
           "family": "neural",
           "hash": null,
           "hash_stable": null,
           "lane": "samba-train-step",
           "library": "torch",
-          "max_ms": null,
-          "median_ms": null,
-          "memory": {},
-          "min_ms": null,
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 135.17412200053514,
+          "median_ms": 135.17412200053514,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 432.1,
+            "peak_host_mb": 3267.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 386.1,
+            "warmup_host_mb": 3267.0
+          },
+          "min_ms": 135.17412200053514,
           "mode": "opponent",
           "neural_shape": "full",
-          "peak_gpu_mb": null,
-          "peak_host_mb": null,
-          "quality": {},
+          "params": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "dropout": 0.0,
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": 7,
+              "weight_decay": 0.01
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 432.1,
+          "peak_host_mb": 3267.0,
+          "quality": {
+            "loss_first_step": 5.635909080505371,
+            "loss_last_step": 4.8339338302612305,
+            "steps": 2
+          },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
-          "rounds": 0,
+          "rounds": 1,
           "rows": null,
           "rows_tag": "full",
           "settings": {
@@ -44248,29 +44286,60 @@
             },
             "warmup_rounds": 1
           },
+          "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
           "source": "measured this run",
-          "status": "UNKNOWN(no race json, rc 1)",
-          "store": "not stored (key fields missing: device, library_version, params_sha256, data_sha256)",
-          "times_ms": [],
-          "verdict": "UNKNOWN",
-          "warmup_ms": null
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            135.17412200053514
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 844.649175000086
         },
         {
           "arm": "torch-compile-fp32",
-          "comparability": {},
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
           "dataset": "bytes",
           "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
           "family": "neural",
           "hash": null,
           "hash_stable": null,
           "lane": "samba-train-step",
           "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
           "max_ms": null,
           "median_ms": null,
-          "memory": {},
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
           "min_ms": null,
           "mode": "opponent",
           "neural_shape": "full",
+          "params": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "dropout": 0.0,
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": 7,
+              "weight_decay": 0.01
+            },
+            "source": "declared"
+          },
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {},
@@ -44319,35 +44388,74 @@
             },
             "warmup_rounds": 1
           },
+          "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
           "source": "measured this run",
-          "status": "UNKNOWN(no race json, rc 1)",
-          "store": "not stored (key fields missing: device, library_version, params_sha256, data_sha256)",
+          "status": "REFUSED(timeout: null)",
+          "store": "not stored (key fields missing: data_sha256)",
           "times_ms": [],
-          "verdict": "UNKNOWN",
+          "verdict": "LIKE-FOR-LIKE-SPAN",
           "warmup_ms": null
         },
         {
           "arm": "torch-eager-bf16",
-          "comparability": {},
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
           "dataset": "bytes",
           "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
           "family": "neural",
           "hash": null,
           "hash_stable": null,
           "lane": "samba-train-step",
           "library": "torch",
-          "max_ms": null,
-          "median_ms": null,
-          "memory": {},
-          "min_ms": null,
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 127.61345199942298,
+          "median_ms": 127.61345199942298,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 384.6,
+            "peak_host_mb": 4934.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 340.6,
+            "warmup_host_mb": 5341.6
+          },
+          "min_ms": 127.61345199942298,
           "mode": "opponent",
           "neural_shape": "full",
-          "peak_gpu_mb": null,
-          "peak_host_mb": null,
-          "quality": {},
+          "params": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "dropout": 0.0,
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": 7,
+              "weight_decay": 0.01
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 384.6,
+          "peak_host_mb": 4934.6,
+          "quality": {
+            "loss_first_step": 5.635891914367676,
+            "loss_last_step": 4.834042549133301,
+            "steps": 2
+          },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
-          "rounds": 0,
+          "rounds": 1,
           "rows": null,
           "rows_tag": "full",
           "settings": {
@@ -44390,29 +44498,60 @@
             },
             "warmup_rounds": 1
           },
+          "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
           "source": "measured this run",
-          "status": "UNKNOWN(no race json, rc 1)",
-          "store": "not stored (key fields missing: device, library_version, params_sha256, data_sha256)",
-          "times_ms": [],
-          "verdict": "UNKNOWN",
-          "warmup_ms": null
+          "status": "ok",
+          "store": "not stored (key fields missing: data_sha256)",
+          "times_ms": [
+            127.61345199942298
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1666.0354729992832
         },
         {
           "arm": "torch-compile-bf16",
-          "comparability": {},
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "span_asymmetry": []
+          },
           "dataset": "bytes",
           "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
           "family": "neural",
           "hash": null,
           "hash_stable": null,
           "lane": "samba-train-step",
           "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
           "max_ms": null,
           "median_ms": null,
-          "memory": {},
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
           "min_ms": null,
           "mode": "opponent",
           "neural_shape": "full",
+          "params": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "dropout": 0.0,
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": 7,
+              "weight_decay": 0.01
+            },
+            "source": "declared"
+          },
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {},
@@ -44461,18 +44600,19 @@
             },
             "warmup_rounds": 1
           },
+          "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
           "source": "measured this run",
-          "status": "UNKNOWN(no race json, rc 1)",
-          "store": "not stored (key fields missing: device, library_version, params_sha256, data_sha256)",
+          "status": "REFUSED(timeout: null)",
+          "store": "not stored (key fields missing: data_sha256)",
           "times_ms": [],
-          "verdict": "UNKNOWN",
+          "verdict": "LIKE-FOR-LIKE-SPAN",
           "warmup_ms": null
         }
       ],
       "command": [
         "/root/opponent-venv/bin/python",
         "-u",
-        "/root/opponent-harness/tools/bench_board_neural.py",
+        "/root/opponent-harness-neural-3e55ba47e5/tools/bench_board_neural.py",
         "race",
         "--lane",
         "samba-train-step",
@@ -44500,27 +44640,321 @@
       "dataset": "bytes",
       "env": {},
       "family": "neural",
-      "finished": "2026-10-06T07:18:36Z",
+      "finished": "2026-10-06T08:41:28Z",
       "host": {
         "hostname": "mojolearn-steward-do-amd",
         "pod_id": null
       },
       "id": "neural/samba-train-step/bytes/shape=full",
       "infer_cells": [],
+      "inputs": {
+        "init": "SambaStack._init_tensor rules on default_rng(7)",
+        "lane": "samba-train-step",
+        "parameters": 5664944,
+        "schedule": "the LM lanes' byte schedule",
+        "seed": 7,
+        "sha256": {
+          "batches": "9228fa406a3dd38c",
+          "w:embed.weight": "540d8713e7b354aa",
+          "w:layers.0.B_bias": "4fcbec4ade9b5fcf",
+          "w:layers.0.B_norm.weight": "02722f124d0f1736",
+          "w:layers.0.C_bias": "4fcbec4ade9b5fcf",
+          "w:layers.0.C_norm.weight": "02722f124d0f1736",
+          "w:layers.0.D": "6ea78411bee8a810",
+          "w:layers.0.block_norm.weight": "702cc37cfd91cac6",
+          "w:layers.0.dt_bias": "d8e72877d64b91eb",
+          "w:layers.0.in_proj.weight": "48bb34097b6a9c5f",
+          "w:layers.0.out_proj.weight": "5172ae34002f8d44",
+          "w:layers.1.down_proj.weight": "1148da1e4f95ab17",
+          "w:layers.1.gate_proj.weight": "b6416587cad9ec3c",
+          "w:layers.1.input_layernorm.weight": "702cc37cfd91cac6",
+          "w:layers.1.k_proj.weight": "64431f5df0a31abd",
+          "w:layers.1.o_proj.weight": "0be228f877a95b4b",
+          "w:layers.1.post_attention_layernorm.weight": "702cc37cfd91cac6",
+          "w:layers.1.q_proj.weight": "a52e55fedd7a0210",
+          "w:layers.1.up_proj.weight": "faed6044fbe4a9b3",
+          "w:layers.1.v_proj.weight": "96a2de8c487c2b16",
+          "w:layers.2.B_bias": "4fcbec4ade9b5fcf",
+          "w:layers.2.B_norm.weight": "02722f124d0f1736",
+          "w:layers.2.C_bias": "4fcbec4ade9b5fcf",
+          "w:layers.2.C_norm.weight": "02722f124d0f1736",
+          "w:layers.2.D": "6ea78411bee8a810",
+          "w:layers.2.block_norm.weight": "702cc37cfd91cac6",
+          "w:layers.2.dt_bias": "f7048b7c9592a8e0",
+          "w:layers.2.in_proj.weight": "9671583a3aef641b",
+          "w:layers.2.out_proj.weight": "0c2d4ec038a30128",
+          "w:layers.3.down_proj.weight": "117bd15e3846fe4a",
+          "w:layers.3.gate_proj.weight": "ebf3c632489bb0d1",
+          "w:layers.3.input_layernorm.weight": "702cc37cfd91cac6",
+          "w:layers.3.k_proj.weight": "894f40e9497e613f",
+          "w:layers.3.o_proj.weight": "6a70eb72ec82c8b5",
+          "w:layers.3.post_attention_layernorm.weight": "702cc37cfd91cac6",
+          "w:layers.3.q_proj.weight": "ba0bd8c3c76adc2c",
+          "w:layers.3.up_proj.weight": "84335d5dd21f303b",
+          "w:layers.3.v_proj.weight": "9f3f43c14357e323",
+          "w:norm_f.weight": "702cc37cfd91cac6"
+        },
+        "shape": {
+          "batch": 2,
+          "d_model": 384,
+          "intermediate": 1024,
+          "label": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+          "layers": [
+            "mamba3",
+            "attention",
+            "mamba3",
+            "attention"
+          ],
+          "length": 512,
+          "n_heads": 6,
+          "name": "full",
+          "vocab": 256
+        },
+        "steps": 2,
+        "stream": {
+          "bytes": 14574356,
+          "files": 430,
+          "package_dir": "/root/opponent-harness-neural-3e55ba47e5/python/mojolearn",
+          "sha256": "21dc96cc73ed7a320e6a8007c6996391c5b608fd2ec8bf33c4c906bed91e7328",
+          "source": "repository mojolearn package .py sources, sorted by path, concatenated"
+        }
+      },
       "lane": "samba-train-step",
       "log": "logs/neural.samba-train-step.bytes.shape-full.log",
       "our_arms": {},
-      "params_check": "NOT CHECKED (the driver printed no BOARD-PARAMS line)",
+      "params": {
+        "arms": {
+          "torch-compile-bf16": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "dropout": 0.0,
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": 7,
+              "weight_decay": 0.01
+            },
+            "source": "declared"
+          },
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "dropout": 0.0,
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": 7,
+              "weight_decay": 0.01
+            },
+            "source": "declared"
+          },
+          "torch-eager-bf16": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "dropout": 0.0,
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": 7,
+              "weight_decay": 0.01
+            },
+            "source": "declared"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "amsgrad": false,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "dropout": 0.0,
+              "eps": 1e-08,
+              "learning_rate": 0.001,
+              "seed": 7,
+              "weight_decay": 0.01
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-compile-fp32",
+            "ours": false,
+            "param": "amsgrad",
+            "same": true,
+            "theirs": false
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.0,
+            "param": "dropout",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.01,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.01
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": false,
+            "param": "amsgrad",
+            "same": true,
+            "theirs": false
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 0.0,
+            "param": "dropout",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 0.01,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.01
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": false,
+            "param": "amsgrad",
+            "same": true,
+            "theirs": false
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 0.0,
+            "param": "dropout",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 0.01,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.01
+          }
+        ],
+        "exceptions": [],
+        "family": "neural",
+        "lane": "neural/samba-train-step",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
       "race_json": "raw/neural/shape-full/samba-train-step-bytes.json",
-      "rc": 1,
+      "rc": 0,
       "rows": null,
       "shape": "full",
       "skipped_opponents": [],
-      "started": "2026-10-06T07:18:35Z",
+      "started": "2026-10-06T07:41:13Z",
       "status": "failed",
       "stored_arms": [],
       "stored_now": 0,
-      "wall_s": 0.2
+      "wall_s": 3614.1
     },
     "neural/transformer-forward/gaussian/shape=full": {
       "arms": [
@@ -50441,5 +50875,5 @@
       "wall_s": 0.2
     }
   ],
-  "updated": "2026-10-06T07:41:13Z"
+  "updated": "2026-10-06T08:41:28Z"
 }

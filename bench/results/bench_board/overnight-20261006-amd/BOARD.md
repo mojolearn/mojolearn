@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:41:13Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T08:41:28Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T07:41:13Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 84 planned, 69 done, 15 failed, 0 unsupported, 0 pending. Cells: 217 (REFUSED 12, UNKNOWN 8, ok 197).
+Races: 84 planned, 69 done, 15 failed, 0 unsupported, 0 pending. Cells: 217 (REFUSED 14, UNKNOWN 4, ok 199).
 
 Inference cells: 152 (UNKNOWN 18, ok 134).
 
@@ -152,6 +152,9 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | neural | mlp-train-step | gaussian | loss_first_step (same init and batches on every arm) | - | - | torch-eager-fp32 1.160401; torch-compile-fp32 1.160401; torch-eager-bf16 1.160498; torch-compile-bf16 1.160367 |
 | neural | mlp-train-step | gaussian | loss_last_step (same init and batches on every arm) | - | - | torch-eager-fp32 1.123361; torch-compile-fp32 1.123361; torch-eager-bf16 1.123461; torch-compile-bf16 1.123438 |
 | neural | mlp-train-step | gaussian | steps | - | - | torch-eager-fp32 2; torch-compile-fp32 2; torch-eager-bf16 2; torch-compile-bf16 2 |
+| neural | samba-train-step | bytes | loss_first_step (same init and batches on every arm) | - | - | torch-eager-fp32 5.635909; torch-compile-fp32 -; torch-eager-bf16 5.635892; torch-compile-bf16 - |
+| neural | samba-train-step | bytes | loss_last_step (same init and batches on every arm) | - | - | torch-eager-fp32 4.833934; torch-compile-fp32 -; torch-eager-bf16 4.834043; torch-compile-bf16 - |
+| neural | samba-train-step | bytes | steps | - | - | torch-eager-fp32 2; torch-compile-fp32 -; torch-eager-bf16 2; torch-compile-bf16 - |
 
 ## Inference at a glance
 
@@ -890,20 +893,35 @@ config: the board's own settings (no NVIDIA harness entry)
 
 parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
 
-### samba-train-step / bytes (neural shape full: -)
+### samba-train-step / bytes (neural shape full: B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention)
 
-race: failed, driver rc 1, log `logs/neural.samba-train-step.bytes.shape-full.log`, ran on mojolearn-steward-do-amd
+race: failed, driver rc 0, log `logs/neural.samba-train-step.bytes.shape-full.log`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| torch-eager-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
-| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
-| torch-eager-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
-| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | UNKNOWN(no race json, rc 1) (measured this run) |
+| torch-eager-fp32 | torch | gpu | opponent | 135.2 | 135.2..135.2 | 1 | - | - | 3267.0 | 432.1 | loss_first_step=5.635909, loss_last_step=4.833934, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(timeout: null) (measured this run) |
+| torch-eager-bf16 | torch | gpu | opponent | 127.6 | 127.6..127.6 | 1 | - | - | 4934.6 | 384.6 | loss_first_step=5.635892, loss_last_step=4.834043, steps=2 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(timeout: null) (measured this run) |
+
+memory, torch-eager-fp32, torch-eager-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+memory, torch-compile-fp32, torch-compile-bf16: host not sampled; GPU not sampled
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-eager-fp32`, seed 7): MATCHED
+
+| parameter | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---|
+| library (source) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| amsgrad | false | false | false | false |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| dropout | 0.0 | 0.0 | 0.0 | 0.0 |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 |
+| seed | 7 | 7 | 7 | 7 |
+| weight_decay | 0.01 | 0.01 | 0.01 | 0.01 |
 
 ### transformer-forward / gaussian (neural shape full: B1 L2048 DM384 H6 KV6 HD64 FF1024)
 
