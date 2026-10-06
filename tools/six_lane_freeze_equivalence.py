@@ -64,9 +64,10 @@ def reviewed_source_diff(repository, anchor, other, declared):
     result = subprocess.run(cmd, capture_output=True, check=True)
     changed = sorted(x for x in result.stdout.decode().split('\0') if x)
     require(changed == declared, 'reviewed changed-file inventory differs from Git objects')
-    require(all(path in CONTROL_FILES or path.endswith('.md') or
-                path.startswith(('docs/', 'experiments/')) and not path.endswith(('.py', '.mojo', '.c', '.h'))
-                for path in changed), 'change reaches unapproved execution/source files')
+    # Recipe JSON, shell files and even Markdown can be consumed by admission
+    # or hashing. A directory/extension is not evidence of nonexecution.
+    require(all(path in CONTROL_FILES for path in changed),
+            'change reaches unapproved execution/source files')
     return changed
 
 
@@ -83,6 +84,10 @@ def compile_signature(record, artifact, column):
     files = record.get('source_files')
     require(isinstance(files, dict) and bool(files) and all(isinstance(k, str) and is_sha(v) for k, v in files.items()),
             'missing exact numerical source-file closure')
+    require(all(not Path(k).is_absolute() and '..' not in Path(k).parts for k in files),
+            'source closure paths must be repository-relative')
+    require(record.get('source_closure_sha256') == digest(files),
+            'source closure digest does not bind exact source_files')
     require(is_sha(record.get('compiler_sha256')), 'missing compiler executable hash')
     binding = record.get('binding')
     require(isinstance(binding, str) and binding in files, 'binding absent from source closure')
@@ -92,6 +97,27 @@ def compile_signature(record, artifact, column):
     require(argv.count('--target-accelerator') == 1, 'native accelerator must be explicit')
     pos = argv.index('--target-accelerator')
     require(pos + 1 < len(argv) and re.fullmatch(target_pattern, argv[pos + 1]), 'unsupported native target')
+    accelerator = argv[pos + 1]
+    hardware = record.get('hardware', {})
+    require(isinstance(hardware, dict), 'missing target hardware metadata')
+    if vendor == 'amd':
+        require(record.get('target') == 'native AMD gfx architecture on authorized worker'
+                and record.get('target_track') == 'amd-' + accelerator
+                and hardware.get('requested_native_accelerator') == accelerator,
+                'AMD target metadata differs from compile argv')
+    else:
+        legacy = 'native NVIDIA CUDA target on authorized RunPod worker'
+        modern = 'NVIDIA shipped/default or native architecture on authorized worker'
+        require(record.get('target') in (legacy, modern), 'unsupported NVIDIA target metadata')
+        require(record.get('target_track') == 'nvidia-native' or
+                record.get('target_track') is None and record.get('target') == legacy,
+                'NVIDIA target track is not native')
+        gpu = hardware.get('gpu')
+        require(isinstance(gpu, str) and gpu.strip(), 'missing observed NVIDIA compute capability')
+        capabilities = [line.rsplit(',', 1)[-1].strip() for line in gpu.splitlines() if line.strip()]
+        require(all(re.fullmatch(r'[0-9]+\.[0-9]+', cap) and
+                    'sm_' + cap.replace('.', '') == accelerator for cap in capabilities),
+                'NVIDIA compute capability differs from compile argv')
     argv[pos + 1] = '<declared-native-backend>'
     pairs = [i for i in range(len(argv)-1) if argv[i] == '-D' and argv[i+1] == backend_define]
     require(len(pairs) == 1, 'backend define is missing or ambiguous')

@@ -19,15 +19,19 @@ It requires:
   Git commits. Every column records its original `source_sha` and the exact
   sorted `reviewed_changed_files` relative to the anchor. Git computes the
   actual list. Numerical/API/worker/capture/lockfile changes are rejected.
-  Only the fixed registration/preparation allowlist in the validator and
-  documentation/evidence changes are eligible. Broad caller-supplied exclusions
+  Only the fixed registration/preparation allowlist in the validator is
+  eligible. Documentation, recipe JSON and evidence directories have no broad
+  exemption; their contents can affect admission or runtime semantics. Broad caller-supplied exclusions
   are not supported. A new allowlist entry needs a reviewed harness change.
 * `columns` containing both routes. Each entry has `receipt: {path, sha256}` for
   its selected original full result, `execution_closure: {path, sha256}`, and
   `compile_receipts: {A: {deployed_path: {path, sha256}}, B: {...}}` covering every
   declared loaded binding exactly. Evidence paths resolve from the attestation.
 * Raw successful compile receipts matching the deployed binary, numerical
-  source, compiler executable hash, source closure, target and defines. Every
+  source, compiler executable hash, source closure, target and defines. The
+  closure digest is recomputed from exact repository-relative source-file hashes.
+  Native target track and observed NVIDIA capability or requested AMD target
+  must agree with the compile argv, including legacy NVIDIA receipts. Every
   numerical source-file hash, binding set, compiler hash and compile argument
   must match within the same arm across vendors. The only argument differences
   accepted are known source/output/compiler path relocation, the single explicit

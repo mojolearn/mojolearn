@@ -24,10 +24,15 @@ class EquivalenceMetadataTest(fixtures.ComparisonMetadataTest):
             refs = {}
             for arm in ('A', 'B'):
                 artifact = receipt['workload']['artifact_provenance'][arm][0]
-                artifact.update(compiler_sha256='8'*64, source_closure_sha256='9'*64, defines=[arm])
+                files={'bindings/fixture.mojo':arm.lower()*64}
+                target=('native NVIDIA CUDA target on authorized RunPod worker' if vendor=='nvidia' else
+                        'native AMD gfx architecture on authorized worker')
+                artifact.update(compiler_sha256='8'*64, source_closure_sha256=eq.digest(files), defines=[arm],target=target)
                 record = dict(status='COMPILED', returncode=0, artifact_sha256=artifact['sha256'],
                               source_sha=artifact['numerical_source_sha'], compiler_sha256='8'*64,
-                              source_closure_sha256='9'*64, defines=[arm], vendor=vendor, target=artifact['target'],
+                              source_closure_sha256=eq.digest(files), defines=[arm], vendor=vendor, target=artifact['target'],
+                              target_track='nvidia-native' if vendor=='nvidia' else 'amd-gfx942',
+                              hardware={'gpu':'fixture GPU,9.0'} if vendor=='nvidia' else {'requested_native_accelerator':'gfx942'},
                               binding='bindings/fixture.mojo', source_files={'bindings/fixture.mojo': arm.lower()*64},
                               argv=['/compiler/mojo', 'build', '-j', '6', '--target-accelerator',
                                     'sm_90' if vendor == 'nvidia' else 'gfx942', '-D', define, '-D', arm,
@@ -98,6 +103,41 @@ class EquivalenceMetadataTest(fixtures.ComparisonMetadataTest):
         for mutation in mutations:
             self.prepare();self.change_evidence('compile',mutation)
             with self.assertRaises(ValueError): self.attest()
+
+    def test_declared_closure_hash_must_bind_exact_source_files(self):
+        self.prepare()
+        entry=self.att['columns']['amd']; artifact=self.receipts['amd']['workload']['artifact_provenance']['A'][0]
+        artifact['source_closure_sha256']='0'*64
+        entry['receipt']=self.write_ref('amd.json',self.receipts['amd'])
+        self.change_evidence('compile',lambda v:v.update(source_closure_sha256='0'*64))
+        with self.assertRaisesRegex(ValueError,'digest does not bind'):
+            record=json.loads((self.root/'amd-A-compile.json').read_text())
+            eq.compile_signature(record,artifact,'amd')
+
+    def test_target_metadata_and_argv_must_agree(self):
+        mutations=[lambda r:r.update(target_track='amd-gfx90a'),
+                   lambda r:r['hardware'].update(requested_native_accelerator='gfx90a'),
+                   lambda r:r.update(target_track='nvidia-native'),
+                   lambda r:r.update(hardware={})]
+        for mutate in mutations:
+            self.prepare();self.change_evidence('compile',mutate)
+            with self.assertRaisesRegex(ValueError,'AMD target metadata'):self.attest()
+        self.prepare()
+        record=json.loads((self.root/'nvidia-native-A-compile.json').read_text())
+        artifact=self.receipts['nvidia-native']['workload']['artifact_provenance']['A'][0]
+        for mutate in (lambda r:r.update(target_track='nvidia-default'),
+                       lambda r:r['hardware'].update(gpu='fixture GPU,8.0'),
+                       lambda r:r.update(hardware={})):
+            changed=copy.deepcopy(record);mutate(changed)
+            with self.assertRaises(ValueError):eq.compile_signature(changed,artifact,'nvidia-native')
+
+    def test_recipe_and_document_paths_are_not_automatically_exempt(self):
+        for path in ('experiments/recipe.json','experiments/run.sh','docs/settings.toml',
+                     'docs/FULL_VARIANT.md','README.md'):
+            result=type('Result',(),{'stdout':(path+'\0').encode()})()
+            with patch.object(eq.subprocess,'run',return_value=result):
+                with self.assertRaisesRegex(ValueError,'unapproved'):
+                    eq.reviewed_source_diff('.', '1'*40,'2'*40,[path])
 
     def test_tampered_reference_rejected(self):
         self.prepare();(self.root/'attestation.json').write_text('{}')
