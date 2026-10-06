@@ -15,7 +15,9 @@ def effective_environment(ident,env):
 def queue_install_command():
  tmp='/root/overnight-nvidia/repair-queue.incoming-'+str(os.getpid())+'-'+str(time.time_ns())
  return 'cat > '+tmp+' && mv '+tmp+' /root/overnight-nvidia/repair-queue.json'
-def cases(id):
+def cases(id,source_sha=""):
+ if id=="I06" and source_sha.startswith("e80a1d0a"):
+  return [dict(AB_LENGTH=str(l),AB_HEADS="8",AB_KV_HEADS="4") for l in [1024,1536]]
  if id in ['I03','I05','N03','N05']:return [dict(AB_M='257',AB_N='259',AB_K='1025'),dict(AB_M='1023',AB_N='1025',AB_K='2049')]+([dict(AB_M='1025',AB_N='513',AB_K='1025')] if id!='N03' else [])
  if id in ['I02','I04']:return [dict(AB_M='1024',AB_N='1024',AB_K='2048'),dict(AB_M='1023',AB_N='1025',AB_K='2049')]
  if id in ['I06','I07']:return [dict(AB_LENGTH='1024',AB_HEADS='12',AB_KV_HEADS='4'),dict(AB_LENGTH='1536',AB_HEADS='12',AB_KV_HEADS='4')]
@@ -53,6 +55,10 @@ def normalize(route):
   if c['candidate_id']=='I06' and c['source_sha'].startswith('cbcc8dcd3'):row.update(comparison_kind='confounded_schedule_bundle',limitation='Head-reuse flag also changed the requested backward kvgrid schedule in the original timing driver. Bundled measurement only; isolated toggle rerun uses corrected freeze.',promotion=False)
   row.update(artifact_hashes=dict(baseline=b['binary_sha256'],candidate=c['binary_sha256']),baseline_ms=bns/1e6,candidate_ms=cns/1e6);rows.append(row)
  for key,r in results.items():
+  if r['candidate_id']=='I23':
+   row=common(r,key);row.update(status='NO_DISTINCT_RUNTIME_ARM',returncode=0,limitation='ARIMA_FAST_BATCH_GRAD is guarded by has_apple_gpu_accelerator(); Linux flag arms share the same sequential route. Raw timing retained without ratios.');rows.append(row);continue
+  if r['candidate_id']=='I06' and r['source_sha'].startswith('e80a1d0a') and int(effective_environment('I06',r['environment'])['AB_HEADS'])//int(effective_environment('I06',r['environment'])['AB_KV_HEADS'])%2!=0:
+   row=common(r,key);row.update(status='NO_DISTINCT_RUNTIME_ARM',returncode=0,limitation='Query/KV head ratio3 misses shared-head reuse guard requiring an even ratio. Existing binary measured again only on new8/4 fixture.');rows.append(row);continue
   if r['candidate_id']=='I07' and r['source_sha'].startswith('cbcc8dcd3'):
    row=common(r,key);row.update(status='NO_DISTINCT_RUNTIME_ARM',returncode=0,limitation='Original timing driver selects no _estash route; both flags ran_arm1030 kept_cells0. Raw timing retained; corrected selector driver pending.');rows.append(row);continue
   if r['candidate_id']=='I15':
@@ -67,7 +73,8 @@ def normalize(route):
    bs=[x for x in measurements if str(x.get('arm'))=='0'];cs=[x for x in measurements if str(x.get('arm'))=='1']
    for ix,(b,c) in enumerate(zip(bs,cs)):put(r,r,b.get('elapsed_ns'),c.get('elapsed_ns'),r['key']+'/runtime'+str(ix))
  for key,c in results.items():
-  if c['candidate_id']=='I15' or (c['candidate_id']=='I07' and c['source_sha'].startswith('cbcc8dcd3')):continue
+  if c['candidate_id'] in ['I15','I23'] or (c['candidate_id']=='I07' and c['source_sha'].startswith('cbcc8dcd3')):continue
+  if c['candidate_id']=='I06' and c['source_sha'].startswith('e80a1d0a') and int(effective_environment('I06',c['environment'])['AB_HEADS'])//int(effective_environment('I06',c['environment'])['AB_KV_HEADS'])%2!=0:continue
   if c['status']!='MEASURED' or c.get('paired') or c['arm'] in ['baseline','incumbent','current','current256','production_default512']:continue
   candidates=[b for b in results.values() if b['status']=='MEASURED' and b['candidate_id']==c['candidate_id'] and b['source_sha']==c['source_sha'] and effective_environment(b['candidate_id'],b['environment'])==effective_environment(c['candidate_id'],c['environment']) and b['arm'] in ['baseline','incumbent','current','current256','production_default512']]
   if not candidates:continue
@@ -100,7 +107,7 @@ print(json.dumps(rows))
    for ident in ids:
     route='specific' if ident.startswith('N') else 'default';cfg=json.loads((E/(route+'-owner/config.json')).read_text());ssh=['ssh',*cfg['ssh']]
     job=pathlib.Path(meta['_binary_path']).name+'-'+meta['source_sha'][:10];queuefile=E/(route+'-repair-queue.json');queue=json.loads(queuefile.read_text()) if queuefile.exists() else [];new=[]
-    for i,env in enumerate(cases(ident)):
+    for i,env in enumerate(cases(ident,meta['source_sha'])):
      if name=='paired':env=dict(env,AB_KIND=str({'I05':0,'N03':1,'I03':2,'N05':3}[ident]))
      effective=effective_environment(ident,env)
      binary_hash=meta.get('binary_sha256',meta.get('sha256'))
