@@ -905,6 +905,11 @@ def ivf_flat_search_prepared(
                             # I16 new candidate remains default off. Qualification is pending: native
                             # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
                             # NEVER RUN — PENDING MEASUREMENT
+                            # I16 NVIDIA L40S 2026-10-06 representative caller LOSS across
+                            # rows100000,queries128,features7/33/65 and three occupancy cases:
+                            # balanced candidate/baseline1.20x-4.17x time. One warmup/score;
+                            # IDENTICAL opt-in remains off. Evidence: overnight-ab-20261006/
+                            # nvidia/default-repair-normalized-measurements.json.
                             if IVF_APPLE_FAST_BALANCED or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
                                 # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
                                 comptime if IVF_APPLE_FAST_BALANCED and is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():

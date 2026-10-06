@@ -201,6 +201,11 @@ comptime ALIGN_VALUE = 512
 # More descriptors trade launch/scan overhead for a shorter heavy-node tail.
 # Partition uses its unchanged TPB128 table; phase reuse remains disabled.
 # NEVER RUN — PENDING MEASUREMENT: new opt-in histogram task map.
+# A07 NVIDIA L40S 2026-10-06 representative RF caller NEUTRAL:
+# tasks256 candidate123.567/125.678/92.118 ms versus512 baseline
+# 124.910/126.939/92.868 ms at100000x32,100001x33,65537x17.
+# One warmup/score, <1.1% difference; default512 retained.
+# Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 comptime IDN_RF_TASK_ROWS256 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_TASK_ROWS256"]()
 comptime HIST_ITEMS_PER_THREAD = 2 if IDN_RF_TASK_ROWS256 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4)
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD

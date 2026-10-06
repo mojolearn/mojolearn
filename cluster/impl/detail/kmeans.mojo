@@ -199,6 +199,10 @@ comptime IDN_KMEANS_DEVICE_CONV = (
 #: Iterations enqueued per flag read. CANDIDATE ARMS (the default is 8):
 #: `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1=1` (gating alone, one read per
 #: iteration), `_2`, `_4`, `_16`, `_32`. No bit depends on the chunk.
+# A08 NVIDIA L40S 2026-10-06 convpoll1 at256rows is mixed WIN/LOSS:
+# candidate0.887/1.077/1.517 ms vs1.086/1.272/1.503 ms on
+# 100000x32,100001x33,65537x17,k32. One warmup/score; default8 retained.
+# Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 comptime KMEANS_CONV_CHUNK = (
     # A08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
     1 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1"]()
