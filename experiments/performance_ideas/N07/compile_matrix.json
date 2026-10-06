@@ -5,7 +5,7 @@
   "qualification": "pending_device_validation",
   "default_policy": "Explicit bounded exact-integer adapter; weighted floating forest admission is absent.",
   "entrance": "experiments/performance_ideas/N07/streamed_histogram.mojo",
-  "source_scope": "Implemented exact bounded Int32 addends and Int64 partials; no floating-weight quantization or production forest dispatcher.",
+  "source_scope": "Implemented production four-column replicated histograms on existing integer/fixed-point bins, including weighted forest caller. Existing scales/quantization retained; above16KiB uses original bounded single-column fallback. Device/host identity and full fit quality remain pending.",
   "supported_vendors": [
     "nvidia",
     "amd",
@@ -34,6 +34,18 @@
       "name": "candidate",
       "source": "experiments/performance_ideas/N07/check.mojo",
       "defines": []
+    },
+    {
+      "name": "production_baseline",
+      "source": "experiments/performance_ideas/N07/production_check.mojo",
+      "defines": []
+    },
+    {
+      "name": "production_stream_replicas",
+      "source": "experiments/performance_ideas/N07/production_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RF_STREAM_REPLICAS=1"
+      ]
     }
   ]
 }

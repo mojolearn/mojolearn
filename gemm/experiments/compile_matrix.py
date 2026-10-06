@@ -19,9 +19,11 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ids', nargs='+', required=True)
-    parser.add_argument('--vendors', nargs='+', default=['nvidia', 'amd'])
+    parser.add_argument('--vendors', nargs='+', choices=['nvidia', 'amd', 'apple'], default=['nvidia', 'amd'])
+    parser.add_argument('--arms', nargs='+', help='Restrict to named matrix arms; omitted builds every arm')
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--jobs', type=int, default=4)
+    parser.add_argument('--plan-only', action='store_true', help='Write complete jobs/arm provenance without compiling')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
     sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip()
@@ -38,6 +40,8 @@ def main():
                 unsupported.append(dict(id=idea, vendor=vendor, reason=matrix['unsupported_reason']))
                 continue
             for arm in matrix['arms']:
+                if args.arms and arm['name'] not in args.arms:
+                    continue
                 key = json.dumps([vendor, matrix['mode'], arm['source'], sorted(arm['defines'])])
                 token = hashlib.sha256(key.encode()).hexdigest()[:16]
                 arms.append(dict(id=idea, arm=arm['name'], vendor=vendor, job=token))
@@ -45,6 +49,7 @@ def main():
     receipt = dict(schema=1, source_sha=sha, qualification='pending_device_validation',
                    executed_gpu=False, host_platform=sys.platform, expected_arms=len(arms),
                    expected_unique_jobs=len(jobs), arms=arms, unsupported=unsupported, builds=[])
+    receipt['planned_jobs'] = list(jobs.values())
     path = args.evidence/'receipt.json'
 
     def save():
@@ -53,6 +58,11 @@ def main():
         temporary.replace(path)
 
     save()
+    if not jobs:
+        parser.error('no admitted source arms match the selected IDs, targets and arm filter')
+    if args.plan_only:
+        print(f"planned_arms={len(arms)} unique_jobs={len(jobs)} unsupported={len(unsupported)} evidence={path}")
+        return 0
 
     def build(job):
         output = args.evidence/job['job']

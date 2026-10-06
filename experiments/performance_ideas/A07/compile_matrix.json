@@ -5,7 +5,7 @@
   "qualification": "pending_device_validation",
   "default_policy": "Explicit integer node-task adapter only; complete production forest integration owed.",
   "entrance": "experiments/performance_ideas/A07/histogram_tasks.mojo",
-  "source_scope": "Implemented integer node-task and graph canonicalization adapters; complete floating-weight forest fit integration remains absent.",
+  "source_scope": "Implemented real production histogram WorkloadInfo granularity256 through hostqueue and device-loop histogram maps, preserving partition table and existing exact integer/fixed-point weighted bins. Graph buckets and standalone node histograms remain separately instantiated. Full device/host identity/fit quality pending.",
   "supported_vendors": [
     "nvidia",
     "amd",
@@ -46,6 +46,18 @@
         "MOJOLEARN_RBC_CANON_DEGREE_BUCKETS=1"
       ],
       "runtime_environment": {}
+    },
+    {
+      "name": "production_default512",
+      "source": "experiments/performance_ideas/A07/production_check.mojo",
+      "defines": []
+    },
+    {
+      "name": "production_tasks256",
+      "source": "experiments/performance_ideas/A07/production_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
+      ]
     }
   ]
 }

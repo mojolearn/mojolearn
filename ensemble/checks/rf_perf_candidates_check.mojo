@@ -448,7 +448,7 @@ def run_histogram_arm[
         ctx, HistogramArgs[ObjT](fx.dataset(), fx.quantiles(), obj^)
     )
     comptime if TILE > 0:
-        ctx.enqueue_function[build_histograms_binned_columns_kernel[ObjT, TPB, TILE, SMEM_SLOTS, False, sabotage]](
+        ctx.enqueue_function[build_histograms_binned_columns_kernel[ObjT, TPB, TILE, SMEM_SLOTS, False, sabotage, SMEM_COPIES]](
             argsp.unsafe_origin_cast[MutAnyOrigin](),
             hists.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[BinT](),
             Int32(MAX_N_BINS), fx.wi_ptr().unsafe_origin_cast[MutAnyOrigin](),
