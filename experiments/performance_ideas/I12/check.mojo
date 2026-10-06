@@ -9,6 +9,7 @@ from glm.checks.logistic_check import check_logistic_device_equals_host, check_l
 from glm.checks.multinomial_check import check_softmax_device_equals_host, check_softmax_is_a_minimizer
 from solver.checks.cd_check import check_cd_refuses_by_name, check_cd_recovers_the_planted_support, check_cd_device_equals_oracle, check_cd_is_launch_invariant, check_cd_elasticnet_arms_reach, check_cd_predict_matches_host
 
+# NEVER RUN — PENDING VALIDATION
 def main() raises:
     var ctx=DeviceContext()
     check_exact_trial_schedule(ctx)
