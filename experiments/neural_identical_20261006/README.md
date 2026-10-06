@@ -1,5 +1,9 @@
 # Neural IDENTICAL source experiments
 
+[Experiment and source file index](EXPERIMENT_FILE_INDEX.md) lists every NI card
+and recorded variant with its A/B controls, implementation files, and the older
+neural experiments found in existing runners and recipes.
+
 [The complete 60-idea catalog](../../docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md)
 defines the A/B hypotheses, numerical contracts, quality risks, full-workload
 scope and interaction experiments. It was written before the three implementation
