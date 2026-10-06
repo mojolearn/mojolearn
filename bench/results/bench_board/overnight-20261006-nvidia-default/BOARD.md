@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T08:57:11Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T08:59:22Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T08:57:11Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 109 done, 3 failed, 0 unsupported, 1 pending. Cells: 247 (REFUSED 14, ok 233).
+Races: 113 planned, 111 done, 2 failed, 0 unsupported, 0 pending. Cells: 248 (REFUSED 13, ok 235).
 
-Inference cells: 168 (REFUSED 6, ok 162).
+Inference cells: 170 (REFUSED 6, ok 164).
 
 ## Quality at a glance
 
@@ -154,6 +154,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | agglomerative | taxi | silhouette (higher is better) | - | - | cuml-gpu 0.685524 |
 | classical2 | elasticnet | istella | r2 (higher is better) | - | - | cuml-gpu 0.260922 |
 | classical2 | elasticnet | istella | rmse (lower is better) | - | - | cuml-gpu 0.718134 |
+| classical2 | ets | synthetic | forecast_rmse (lower is better) | - | - | cuml-gpu 1.073814 |
 | classical2 | ivf | taxi | recall_at_k (higher is better) | - | - | cuvs-gpu 0.999450 |
 | classical2 | ivf | taxi | rows_with_repeated_ids | - | - | cuvs-gpu 0 |
 | classical2 | kernel-ridge | taxi | r2 (higher is better) | - | - | cuml-gpu 0.726543 |
@@ -182,22 +183,24 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | neural | gemm-int8 | gaussian | max_rel_err_vs_fp64 (lower is better) | - | - | torch-eager-int8 0.000000; torch-compile-int8 0.000000 |
 | neural | lm-forward | bytes | mean_nll (lower is better) | - | - | torch-eager-fp32 9.018733; torch-eager-tf32 9.018733; torch-compile-fp32 9.018733; torch-compile-tf32 9.018732; torch-eager-bf16 9.018664; torch-compile-bf16 9.018669 |
 | neural | samba-forward | bytes | mean_nll (lower is better) | - | - | torch-eager-fp32 5.635910; torch-eager-tf32 5.635948; torch-compile-fp32 5.635910; torch-compile-tf32 5.635950; torch-eager-bf16 5.635952; torch-compile-bf16 5.635985 |
-| trees | gbdt-depthwise | istella | logloss (lower is better) | - | - | catboost-gpu 0.156748; xgboost-gpu 0.149263; catboost-cpu -; xgboost-cpu - |
 | trees | gbdt-depthwise | istella | auc (higher is better) | - | - | catboost-gpu 0.983152; xgboost-gpu 0.983622; catboost-cpu -; xgboost-cpu - |
-| trees | gbdt-lossguide | istella | logloss (lower is better) | - | - | catboost-gpu 0.149188; xgboost-gpu 0.149263; catboost-cpu -; xgboost-cpu -; lightgbm-cuda 0.356515 |
+| trees | gbdt-depthwise | istella | logloss (lower is better) | - | - | catboost-gpu 0.156748; xgboost-gpu 0.149263; catboost-cpu -; xgboost-cpu - |
 | trees | gbdt-lossguide | istella | auc (higher is better) | - | - | catboost-gpu 0.983668; xgboost-gpu 0.983622; catboost-cpu -; xgboost-cpu -; lightgbm-cuda 0.500000 |
-| trees | gbdt-multiclass | istella | mlogloss (lower is better) | - | - | catboost-gpu 0.258149; xgboost-gpu 0.246803; catboost-cpu -; xgboost-cpu -; lightgbm-cuda 0.243459 |
+| trees | gbdt-lossguide | istella | logloss (lower is better) | - | - | catboost-gpu 0.149188; xgboost-gpu 0.149263; catboost-cpu -; xgboost-cpu -; lightgbm-cuda 0.356515 |
 | trees | gbdt-multiclass | istella | accuracy (higher is better) | - | - | catboost-gpu 0.907780; xgboost-gpu 0.910140; catboost-cpu -; xgboost-cpu -; lightgbm-cuda 0.911402 |
-| trees | gbdt-ordered | istella | logloss (lower is better) | - | - | catboost-gpu 0.190474; catboost-cpu - |
+| trees | gbdt-multiclass | istella | mlogloss (lower is better) | - | - | catboost-gpu 0.258149; xgboost-gpu 0.246803; catboost-cpu -; xgboost-cpu -; lightgbm-cuda 0.243459 |
 | trees | gbdt-ordered | istella | auc (higher is better) | - | - | catboost-gpu 0.979432; catboost-cpu - |
+| trees | gbdt-ordered | istella | logloss (lower is better) | - | - | catboost-gpu 0.190474; catboost-cpu - |
+| trees | gbdt-rank-pairlogit | istella | map (higher is better) | - | - | catboost-gpu 0.853929; xgboost-gpu 0.872796; catboost-cpu -; xgboost-cpu - |
 | trees | gbdt-rank-pairlogit | istella | ndcg10 (higher is better) | - | - | catboost-gpu 0.719621; xgboost-gpu 0.738397; catboost-cpu -; xgboost-cpu - |
 | trees | gbdt-rank-pairlogit | istella | ndcg5 (higher is better) | - | - | catboost-gpu 0.650025; xgboost-gpu 0.670093; catboost-cpu -; xgboost-cpu - |
-| trees | gbdt-rank-pairlogit | istella | map (higher is better) | - | - | catboost-gpu 0.853929; xgboost-gpu 0.872796; catboost-cpu -; xgboost-cpu - |
-| trees | gbdt-symmetric-1000 | istella | logloss (lower is better) | - | - | catboost-gpu 0.170561; catboost-cpu - |
 | trees | gbdt-symmetric-1000 | istella | auc (higher is better) | - | - | catboost-gpu 0.982382; catboost-cpu - |
-| trees | gbdt-symmetric | istella | logloss (lower is better) | - | - | catboost-gpu 0.187292; catboost-cpu - |
+| trees | gbdt-symmetric-1000 | istella | logloss (lower is better) | - | - | catboost-gpu 0.170561; catboost-cpu - |
 | trees | gbdt-symmetric | istella | auc (higher is better) | - | - | catboost-gpu 0.980018; catboost-cpu - |
+| trees | gbdt-symmetric | istella | logloss (lower is better) | - | - | catboost-gpu 0.187292; catboost-cpu - |
 | trees | iforest | istella | auc (higher is better) | - | - | cuml-iforest-gpu 0.830358 |
+| trees | rf | istella | auc (higher is better) | - | - | cuml-rf-gpu 0.945348 |
+| trees | rf | istella | logloss (lower is better) | - | - | cuml-rf-gpu 0.182069 |
 
 ## Inference at a glance
 
@@ -277,6 +280,8 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | trees | gbdt-symmetric | istella | large | - | - | - | - | catboost-gpu 1415.2 ms (IDENTICAL/arm -) |
 | trees | iforest | istella | test | - | - | - | - | cuml-iforest-gpu 79.3 ms (IDENTICAL/arm -) |
 | trees | iforest | istella | large | - | - | - | - | cuml-iforest-gpu 160.0 ms (IDENTICAL/arm -) |
+| trees | rf | istella | test | - | - | - | - | cuml-rf-gpu 69.2 ms (IDENTICAL/arm -) |
+| trees | rf | istella | large | - | - | - | - | cuml-rf-gpu 116.7 ms (IDENTICAL/arm -) |
 
 ## Trees
 
@@ -728,6 +733,46 @@ Inference (each arm predicts with its own model from the fit rounds above):
 
 inference call, cuml-iforest-gpu: cuml IsolationForest.score_samples(host X)
 
+### rf / istella (rows full, shape istella-2043304x220)
+
+race: done, driver rc 0, log `raw/trees/rf.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-rf-gpu | cuml | gpu | opponent | 24023.2 | 24023.2..24023.2 | 1 | - | - | 5222.5 | 444.0 | auc=0.945348, logloss=0.182069 | yes | UNKNOWN | - | ok (measured this run) |
+
+memory, cuml-rf-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+
+FSPEED-FIT-VERDICT: `lane=rf arms=cuml-rf-gpu leaves=- spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one`
+
+config: NVIDIA gbm-bench, skrf/cumlrf: max_depth 8, n_estimators 500 (https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-rf-gpu`, seed 7): MATCHED
+
+| parameter | cuml-rf-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| bootstrap | true |
+| class_weight | null |
+| max_bin | 128 |
+| max_depth | 8 |
+| max_features | "sqrt" |
+| max_leaves | -1 |
+| max_samples | 1.0 |
+| min_samples_leaf | 1 |
+| min_split_gain | 0.0 |
+| n_estimators | 500 |
+| seed | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-rf-gpu | test | 500000 | 69.2 | 69.2..69.2 | 1 | - | - | auc=0.945348, auc_matches_fit=True, logloss=0.182069, logloss_matches_fit=True | yes | UNKNOWN | ok |
+| cuml-rf-gpu | large | 1000000 | 116.7 | 116.7..116.7 | 1 | - | - | - | yes | UNKNOWN | ok |
+
+inference call, cuml-rf-gpu: cuml RandomForest.predict_proba(host X) (FIL conversion refused: 'RandomForestClassifier' object has no attribute 'convert_to_fil_model')
+
 ## Classical
 
 ### dbscan / taxi (rows full, shape 1000000x11)
@@ -1106,11 +1151,13 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 
 ### ets / synthetic (rows full, shape Yfit 64x1440; Yhold 64x48)
 
-race: failed, driver rc 1, log `logs/classical2.ets.synthetic.rows-full.log`, ran on cc560ebdaf91
+race: done, driver rc 0, log `logs/classical2.ets.synthetic.rows-full.log`, ran on cc560ebdaf91
 
 | arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| cuml-gpu | cuml | gpu | opponent | - | - | 0 | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(error: {"error": "TypeError('Implicit conversion to a host NumPy array via __array__ is not allowed, To explicitly construct a GPU matrix, consider using .to_cupy()\\nTo explicitly construct a host matrix, c) (measured this run) |
+| cuml-gpu | cuml | gpu | opponent | 492.7 | 492.7..492.7 | 1 | - | - | 930.1 | 480.0 | forecast_rmse=1.073814 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
 
 settings: trend additive, seasonal additive, seasonal_periods=24, initialization_method='estimated'; ours and cuML start_periods=2, eps=2.24e-3; statsmodels damped_trend=False, use_boxcox=False. Rows: 64 synthetic hourly series, period 24, 1440 fit points, 48 held out. Timed: construct + fit of every series.
 

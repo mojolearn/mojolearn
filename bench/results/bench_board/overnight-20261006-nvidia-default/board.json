@@ -12,7 +12,7 @@
       "api": "cuda",
       "count": 1,
       "cuda_driver_raw": [
-        "Tue Oct  6 06:53:59 2026       ",
+        "Tue Oct  6 08:59:15 2026       ",
         "+-----------------------------------------------------------------------------------------+",
         "| NVIDIA-SMI 580.167.08             Driver Version: 580.167.08     CUDA Version: 13.0     |",
         "+-----------------------------------------+------------------------+----------------------+"
@@ -214,6 +214,173 @@
       "sync": null
     }
   },
+  "box_history": [
+    {
+      "packages": {
+        "adagio": "0.2.6",
+        "aiohappyeyeballs": "2.7.1",
+        "aiohttp": "3.14.4",
+        "aiosignal": "1.4.0",
+        "anyio": "4.15.1",
+        "arch": "8.0.0",
+        "attrs": "26.1.0",
+        "cachetools": "7.2.1",
+        "catboost": "1.2.10",
+        "certifi": "2026.7.22",
+        "charset-normalizer": "3.5.2",
+        "click": "8.5.0",
+        "cloudpickle": "3.1.2",
+        "cmdstanpy": "1.3.0",
+        "contourpy": "1.3.3",
+        "coreforecast": "0.0.18",
+        "cuda-bindings": "12.9.9",
+        "cuda-core": "1.2.1",
+        "cuda-pathfinder": "1.8.3",
+        "cuda-toolkit": "12.9.1",
+        "cudf-cu12": "26.8.1",
+        "cugraph-cu12": "26.8.0",
+        "cuml-cu12": "26.8.0",
+        "cupy-cuda12x": "14.2.0",
+        "cuvs-cu12": "26.8.1",
+        "cycler": "0.12.1",
+        "dask": "2026.7.1",
+        "dask-cuda": "26.8.0",
+        "dask-cudf-cu12": "26.8.1",
+        "distributed": "2026.7.1",
+        "distributed-ucxx-cu12": "0.51.1",
+        "einops": "0.8.1",
+        "faiss-cpu": "1.15.1",
+        "filelock": "4.0.12",
+        "fonttools": "4.65.0",
+        "formulaic": "1.2.2",
+        "frozenlist": "1.8.0",
+        "fsspec": "2026.9.0",
+        "fugue": "0.9.7",
+        "gpytorch": "1.15.2",
+        "graphviz": "0.21",
+        "h11": "0.16.0",
+        "hf-xet": "1.6.0",
+        "holidays": "0.106",
+        "httpcore": "1.0.9",
+        "httpx": "0.28.1",
+        "huggingface_hub": "1.33.0",
+        "idna": "3.20",
+        "implicit": "0.7.3",
+        "importlib_metadata": "9.0.1",
+        "interface_meta": "2.0.1",
+        "jinja2": "3.1.6",
+        "joblib": "1.6.0",
+        "kiwisolver": "1.5.1",
+        "libcudf-cu12": "26.8.1",
+        "libcugraph-cu12": "26.8.0",
+        "libcuml-cu12": "26.8.0",
+        "libcuvs-cu12": "26.8.1",
+        "libkvikio-cu12": "26.8.0",
+        "libnvforest-cu12": "26.8.0",
+        "libraft-cu12": "26.8.0",
+        "librmm-cu12": "26.8.0",
+        "libucx-cu12": "1.19.0",
+        "libucxx-cu12": "0.51.1",
+        "lightgbm": "4.7.0",
+        "linear_operator": "0.6.1",
+        "llvmlite": "0.46.0",
+        "locket": "1.0.0",
+        "markdown-it-py": "4.2.0",
+        "markupsafe": "3.0.4",
+        "matplotlib": "3.11.2",
+        "mdurl": "0.1.2",
+        "mpmath": "1.3.0",
+        "msgpack": "1.2.3",
+        "multidict": "6.9.1",
+        "narwhals": "2.26.0",
+        "networkx": "3.6.1",
+        "numba": "0.64.0",
+        "numba-cuda": "0.30.4",
+        "numba_cuda_mlir": "0.5.4",
+        "numpy": "2.4.6",
+        "nvforest-cu12": "26.8.0",
+        "nvidia-cublas-cu12": "12.9.1.4",
+        "nvidia-cuda-cccl-cu12": "12.9.27",
+        "nvidia-cuda-cupti-cu12": "12.9.79",
+        "nvidia-cuda-nvcc-cu12": "12.9.86",
+        "nvidia-cuda-nvrtc-cu12": "12.9.86",
+        "nvidia-cuda-runtime-cu12": "12.9.79",
+        "nvidia-cudnn-cu12": "9.20.0.48",
+        "nvidia-cufft-cu12": "11.4.1.4",
+        "nvidia-cufile-cu12": "1.14.1.1",
+        "nvidia-curand-cu12": "10.3.10.19",
+        "nvidia-cusolver-cu12": "11.7.5.82",
+        "nvidia-cusparse-cu12": "12.5.10.65",
+        "nvidia-cusparselt-cu12": "0.8.1",
+        "nvidia-libnvcomp-cu12": "5.3.0.16",
+        "nvidia-ml-py": "13.615.71",
+        "nvidia-nccl-cu12": "2.29.7",
+        "nvidia-nvjitlink-cu12": "12.9.86",
+        "nvidia-nvshmem-cu12": "3.4.5",
+        "nvidia-nvtx-cu12": "12.9.79",
+        "nvtx": "0.2.16",
+        "packaging": "26.3",
+        "pandas": "3.0.3",
+        "partd": "1.4.2",
+        "patsy": "1.0.3",
+        "pillow": "12.3.0",
+        "pip": "24.0",
+        "plotly": "7.1.0",
+        "propcache": "0.5.4",
+        "prophet": "1.4.0",
+        "psutil": "7.2.2",
+        "pyarrow": "23.0.1",
+        "pygments": "2.21.0",
+        "pylibcudf-cu12": "26.8.1",
+        "pylibcugraph-cu12": "26.8.0",
+        "pylibraft-cu12": "26.8.0",
+        "pyparsing": "3.3.2",
+        "python-dateutil": "2.9.0.post0",
+        "pytz": "2026.5",
+        "pyyaml": "6.0.3",
+        "raft-dask-cu12": "26.8.0",
+        "rapids-dask-dependency": "26.8.0",
+        "rapids-logger": "0.2.3",
+        "requests": "2.34.2",
+        "rich": "15.0.0",
+        "rmm-cu12": "26.8.0",
+        "scikit-learn": "1.7.2",
+        "scipy": "1.17.1",
+        "setuptools": "84.0.0",
+        "shap": "0.51.0",
+        "six": "1.17.0",
+        "slicer": "0.0.8",
+        "sortedcontainers": "2.4.0",
+        "stanio": "0.5.1",
+        "statsforecast": "2.1.1",
+        "statsmodels": "0.15.0",
+        "sympy": "1.14.0",
+        "tblib": "3.2.2",
+        "threadpoolctl": "3.7.0",
+        "tokenizers": "0.23.2",
+        "toolz": "1.1.0",
+        "torch": "2.13.0+cu129",
+        "torch-geometric": "2.8.0.post1",
+        "tornado": "6.5.10",
+        "tqdm": "4.70.1",
+        "treelite": "4.7.2",
+        "triad": "1.0.2",
+        "triton": "3.7.1",
+        "typing_extensions": "4.16.0",
+        "tzdata": "2026.5",
+        "ucxx-cu12": "0.51.1",
+        "urllib3": "2.8.0",
+        "utilsforecast": "0.2.17",
+        "wrapt": "2.5.0",
+        "xgboost": "3.2.0",
+        "xxhash": "4.0.1",
+        "yarl": "1.25.1",
+        "zict": "3.0.0",
+        "zipp": "4.1.1"
+      },
+      "resumed": "2026-10-06T08:59:15Z"
+    }
+  ],
   "config": {
     "artifact_identity": null,
     "data": {
@@ -240,13 +407,7 @@
       }
     },
     "data_root": "/root/datasets/gbm-bench",
-    "data_sha256": {
-      "corpus/enwik8/input.txt": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
-      "corpus/pile_github/input.txt": "52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df",
-      "istella": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
-      "istella-rank": "7d2be6c13f3930a026561eea5fa629644bf52c2295d5a5f8c15ff84e3cec3fd4",
-      "taxi": "10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15"
-    },
+    "data_sha256": {},
     "datasets": [
       "taxi",
       "istella"
@@ -258,7 +419,7 @@
       "algos",
       "neural"
     ],
-    "harness_sha256": "e2d98e20633157ef87897f55dca022a1910deaf5f5574e124dc966c5d3f9962d",
+    "harness_sha256": "e892b823116eda15569c576765094d60b7eb173b938a29e17d313439f03202e6",
     "infer": true,
     "lanes": null,
     "modes": [
@@ -42915,7 +43076,7 @@
               "input_home": "device",
               "inside_clock": "construct + fit of every series",
               "pre_clock_fit": false,
-              "upload_ms_untimed": 10.195501148700714
+              "upload_ms_untimed": 4.226090386509895
             },
             "span_asymmetry": []
           },
@@ -42923,18 +43084,24 @@
           "device": "gpu",
           "device_name": "NVIDIA L40S",
           "family": "classical2",
-          "hash": null,
+          "hash": "ef05c70eb0b69cc1",
           "hash_stable": null,
           "lane": "ets",
           "library": "cuml",
           "library_version": "26.08.00",
-          "max_ms": null,
-          "median_ms": null,
+          "max_ms": 492.69164353609085,
+          "median_ms": 492.69164353609085,
           "memory": {
-            "gpu_method": "not sampled",
-            "host_method": "not sampled"
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 480.0,
+            "peak_host_mb": 930.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 476.0,
+            "warmup_host_mb": 821.1
           },
-          "min_ms": null,
+          "min_ms": 492.69164353609085,
           "mode": "opponent",
           "neural_shape": null,
           "params": {
@@ -42948,12 +43115,14 @@
             },
             "source": "get_params"
           },
-          "peak_gpu_mb": null,
-          "peak_host_mb": null,
-          "quality": {},
+          "peak_gpu_mb": 480.0,
+          "peak_host_mb": 930.1,
+          "quality": {
+            "forecast_rmse": 1.0738144686414044
+          },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
-          "rounds": 0,
+          "rounds": 1,
           "rows": null,
           "rows_tag": "full",
           "settings": {
@@ -42980,10 +43149,12 @@
           },
           "shape": "Yfit 64x1440; Yhold 64x48",
           "source": "measured this run",
-          "status": "REFUSED(error: {\"error\": \"TypeError('Implicit conversion to a host NumPy array via __array__ is not allowed, To explicitly construct a GPU matrix, consider using .to_cupy()\\\\nTo explicitly construct a host matrix, c)",
-          "times_ms": [],
+          "status": "ok",
+          "times_ms": [
+            492.69164353609085
+          ],
           "verdict": "LIKE-FOR-LIKE-SPAN",
-          "warmup_ms": null
+          "warmup_ms": 573.3447410166264
         }
       ],
       "command": [
@@ -43019,7 +43190,7 @@
       "dataset": "synthetic",
       "env": {},
       "family": "classical2",
-      "finished": "2026-10-06T08:10:34Z",
+      "finished": "2026-10-06T08:59:22Z",
       "host": {
         "hostname": "cc560ebdaf91",
         "pod_id": null
@@ -43069,14 +43240,14 @@
       },
       "params_check": "MATCHED",
       "race_json": "raw/classical2/rows-full/ets-synthetic.json",
-      "rc": 1,
+      "rc": 0,
       "rows": null,
       "skipped_opponents": [],
-      "started": "2026-10-06T08:10:31Z",
-      "status": "failed",
+      "started": "2026-10-06T08:59:18Z",
+      "status": "done",
       "stored_arms": [],
       "stored_now": 1,
-      "wall_s": 3.0
+      "wall_s": 6.2
     },
     "classical2/ivf/taxi/rows=full": {
       "arms": [
@@ -58934,8 +59105,518 @@
       "stored_arms": [],
       "stored_now": 1,
       "wall_s": 18.3
+    },
+    "trees/rf/istella/rows=full": {
+      "arms": [
+        "cuml-rf-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-rf-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": "lane=rf arms=cuml-rf-gpu leaves=- spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "trees",
+          "fit": "trees=- leaves=- depth=- src=none",
+          "hash": "01978d36e8e541f9",
+          "hash_stable": true,
+          "lane": "rf",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 24023.243,
+          "median_ms": 24023.243,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 444.0,
+            "peak_host_mb": 5222.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 440.0,
+            "warmup_host_mb": 5155.7
+          },
+          "min_ms": 24023.243,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "bootstrap": true,
+              "class_weight": null,
+              "max_bin": 128,
+              "max_depth": 8,
+              "max_features": "sqrt",
+              "max_leaves": -1,
+              "max_samples": 1.0,
+              "min_samples_leaf": 1,
+              "min_split_gain": 0.0,
+              "n_estimators": 500,
+              "seed": 7
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 444.0,
+          "peak_host_mb": 5222.5,
+          "quality": {
+            "auc": 0.945348,
+            "logloss": 0.182069
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "bootstrap": true,
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "max_depth": 8,
+              "max_samples": 1.0,
+              "min_impurity_decrease": 0.0,
+              "min_samples_leaf": 1,
+              "min_samples_split": 2,
+              "n_bins": 128,
+              "n_estimators": 500,
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "istella-2043304x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            24023.243
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 25741.475
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "rf",
+        "--dataset",
+        "istella",
+        "--devices",
+        "gpu",
+        "--arms",
+        "cuml-rf-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "istella",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "cuda",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T08:58:24Z",
+      "fit_verdict_line": "lane=rf arms=cuml-rf-gpu leaves=- spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "trees/rf/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-rf-gpu",
+          "batch": "test",
+          "batch_rows": 500000,
+          "call": "cuml RandomForest.predict_proba(host X) (FIL conversion refused: 'RandomForestClassifier' object has no attribute 'convert_to_fil_model')",
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "trees",
+          "hash": "01978d36e8e541f9",
+          "hash_stable": true,
+          "lane": "rf",
+          "library": "cuml",
+          "max_ms": 69.194,
+          "median_ms": 69.194,
+          "memory": {},
+          "min_ms": 69.194,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "auc": 0.945348,
+            "auc_matches_fit": true,
+            "logloss": 0.182069,
+            "logloss_matches_fit": true
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "bootstrap": true,
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "max_depth": 8,
+              "max_samples": 1.0,
+              "min_impurity_decrease": 0.0,
+              "min_samples_leaf": 1,
+              "min_samples_split": 2,
+              "n_bins": 128,
+              "n_estimators": 500,
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            69.194
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 70.008
+        },
+        {
+          "arm": "cuml-rf-gpu",
+          "batch": "large",
+          "batch_rows": 1000000,
+          "call": "cuml RandomForest.predict_proba(host X) (FIL conversion refused: 'RandomForestClassifier' object has no attribute 'convert_to_fil_model')",
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "trees",
+          "hash": "151841139e05ccfa",
+          "hash_stable": true,
+          "lane": "rf",
+          "library": "cuml",
+          "max_ms": 116.68,
+          "median_ms": 116.68,
+          "memory": {},
+          "min_ms": 116.68,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "bootstrap": true,
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "skrf/cumlrf: max_depth 8, n_estimators 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "max_depth": 8,
+              "max_samples": 1.0,
+              "min_impurity_decrease": 0.0,
+              "min_samples_leaf": 1,
+              "min_samples_split": 2,
+              "n_bins": 128,
+              "n_estimators": 500,
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            116.68
+          ],
+          "verdict": "UNKNOWN",
+          "warmup_ms": 932.159
+        }
+      ],
+      "lane": "rf",
+      "log": "raw/trees/rf.istella.rows-full.log",
+      "notes": [
+        "lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so",
+        "lane=rf arms=cuml-rf-gpu metric=mismatch delta=0.000000 reason=seed 7 on every arm through its own argument (random_state, random_seed, seed); each library draws from its own generator, so the streams are not shared: row bootstrap (rf), per-node feature draws, ET thresholds; LightGBM derives its bag"
+      ],
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-rf-gpu": {
+            "library": "cuml",
+            "params": {
+              "bootstrap": true,
+              "class_weight": null,
+              "max_bin": 128,
+              "max_depth": 8,
+              "max_features": "sqrt",
+              "max_leaves": -1,
+              "max_samples": 1.0,
+              "min_samples_leaf": 1,
+              "min_split_gain": 0.0,
+              "n_estimators": 500,
+              "seed": 7
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "trees",
+        "lane": "rf",
+        "problems": [],
+        "reference": "cuml-rf-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:57:11Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 73.1
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T08:57:11Z"
+  "superseded": [
+    {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "construct + fit of every series",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 10.195501148700714
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "classical2",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "ets",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "eps": 0.00224,
+              "seasonal": "additive",
+              "seasonal_periods": 24,
+              "seed": "none (deterministic)",
+              "start_periods": 2
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "seasonal",
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_more.py",
+            "interleaved": true,
+            "lane_config": {
+              "mismatches": [
+                "initialization: ours 'estimated' (its default, statsmodels' definition), statsmodels 'estimated'; cuML has only its heuristic start (start_periods=2), so its row fits the older initialization",
+                "cuML returns no in-sample predictions; that quality cell is empty",
+                "trend: ours and cuML are additive-trend with no parameter; statsmodels trend='additive'. eps is ours' and cuML's only; statsmodels fit() uses its own optimizer",
+                "seed: no arm has a seed argument"
+              ],
+              "params": "trend additive, seasonal additive, seasonal_periods=24, initialization_method='estimated'; ours and cuML start_periods=2, eps=2.24e-3; statsmodels damped_trend=False, use_boxcox=False",
+              "quality": "forecast RMSE, in-sample one-step RMSE (t >= 48)",
+              "rows": "64 synthetic hourly series, period 24, 1440 fit points, 48 held out",
+              "timed": "construct + fit of every series"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "Yfit 64x1440; Yhold 64x48",
+          "source": "measured this run",
+          "status": "REFUSED(error: {\"error\": \"TypeError('Implicit conversion to a host NumPy array via __array__ is not allowed, To explicitly construct a GPU matrix, consider using .to_cupy()\\\\nTo explicitly construct a host matrix, c)",
+          "times_ms": [],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": null
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_more.py",
+        "race",
+        "--lane",
+        "ets",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/opponent-cache/more-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/classical2/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "synthetic",
+      "env": {},
+      "family": "classical2",
+      "finished": "2026-10-06T08:10:34Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "classical2/ets/synthetic/rows=full",
+      "infer_cells": [],
+      "lane": "ets",
+      "lane_config": {
+        "mismatches": [
+          "initialization: ours 'estimated' (its default, statsmodels' definition), statsmodels 'estimated'; cuML has only its heuristic start (start_periods=2), so its row fits the older initialization",
+          "cuML returns no in-sample predictions; that quality cell is empty",
+          "trend: ours and cuML are additive-trend with no parameter; statsmodels trend='additive'. eps is ours' and cuML's only; statsmodels fit() uses its own optimizer",
+          "seed: no arm has a seed argument"
+        ],
+        "params": "trend additive, seasonal additive, seasonal_periods=24, initialization_method='estimated'; ours and cuML start_periods=2, eps=2.24e-3; statsmodels damped_trend=False, use_boxcox=False",
+        "quality": "forecast RMSE, in-sample one-step RMSE (t >= 48)",
+        "rows": "64 synthetic hourly series, period 24, 1440 fit points, 48 held out",
+        "timed": "construct + fit of every series"
+      },
+      "log": "logs/classical2.ets.synthetic.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "eps": 0.00224,
+              "seasonal": "additive",
+              "seasonal_periods": 24,
+              "seed": "none (deterministic)",
+              "start_periods": 2
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical2",
+        "lane": "ets",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical2/rows-full/ets-synthetic.json",
+      "rc": 1,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T08:10:31Z",
+      "status": "failed",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 3.0
+    }
+  ],
+  "updated": "2026-10-06T08:59:22Z"
 }

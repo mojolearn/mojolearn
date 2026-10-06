@@ -1,17 +1,17 @@
 {
   "coverage": {
     "cell_statuses": {
-      "REFUSED": 14,
-      "ok": 233
+      "REFUSED": 13,
+      "ok": 235
     },
-    "cells": 247,
-    "done": 109,
-    "failed": 3,
-    "pending": 1,
+    "cells": 248,
+    "done": 111,
+    "failed": 2,
+    "pending": 0,
     "planned": 113,
     "race_statuses": {
-      "done": 109,
-      "failed": 3
+      "done": 111,
+      "failed": 2
     },
     "unsupported": 0
   },
@@ -105,16 +105,22 @@
         "validation": "Package metadata and hashes only; no GPU import, training, or measurements performed."
       },
       "purpose": "Distinct upstream4.7.0 conda CUDA12.9 opponent build replaces CPU-only PyPI wheel; original refusal retained"
+    },
+    {
+      "commit": "75bcde24199643a4ce803886ddf8d9638c416eb8",
+      "installed": 1791277144.340262,
+      "patch_sha256": "7ded7fea6db54c881b3ff5c27a7a41a81899fdc6ca13e48597376ca9abf2020a",
+      "purpose": "Explicit cuDF ETS output capture after fit timing; original failed receipt retained"
     }
   ],
   "harness_source_sha": "b0f5242d244ef75cd9ba7d78ca92e10008d75510",
   "policy": "Exact opponent-only source files, hardware and failures retained. No A/B component ratios are derived.",
-  "published_at": 1791277075.5412118,
+  "published_at": 1791277195.709732,
   "schema": "mojolearn-opponent-publication/1",
   "source_directory": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia/default-capture/artifacts/gpu-opponents/board",
   "source_sha256": {
-    "board_json": "ad8f1a0f3ec21b1eb742f9c96ab820f7cf663070871f25ff4598abc733432c9b",
-    "board_markdown": "6b34805063320bfc39c0470e8ed98ae39bc7a126cb8384cc7b0365038155f934"
+    "board_json": "cc99bc37e98bd8de81d6b32e1472c07afd0b0d7080a55ff7c58d1d60f9c16ea4",
+    "board_markdown": "2c76da867738096b477d247da23d6dfa5aeae86a7865853210eb1071463d66b5"
   },
-  "source_updated": "2026-10-06T08:57:11Z"
+  "source_updated": "2026-10-06T08:59:22Z"
 }
