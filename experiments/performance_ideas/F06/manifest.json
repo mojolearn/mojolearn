@@ -13,7 +13,6 @@
     "experiments/performance_ideas/F06/caller.py"
   ],
   "candidate_defines": [
-    "-D",
     "MOJOLEARN_MCD_FAST_BOUND_BATCH"
   ],
   "baseline_defines": [],
@@ -42,5 +41,6 @@
     "split products retain incumbent split path"
   ],
   "timing_contract": "Full robust fit through read of location/covariance/support; candidate launch count reported",
-  "blocker": null
+  "blocker": null,
+  "output_kind": "directory"
 }

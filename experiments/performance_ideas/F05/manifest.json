@@ -12,13 +12,10 @@
     "experiments/apple_fast/gemm/softmax_narrow.mojo"
   ],
   "candidate_defines": [
-    "-D",
     "MOJOLEARN_SOFTMAX_FAST_G2_NARROW",
-    "-D",
     "MOJOLEARN_SOFTMAX_G2_AUDIT"
   ],
   "baseline_defines": [
-    "-D",
     "MOJOLEARN_SOFTMAX_G2_AUDIT"
   ],
   "build_argv": [
@@ -49,5 +46,6 @@
     "finite fitted margins/state"
   ],
   "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
-  "blocker": null
+  "blocker": null,
+  "output_kind": "directory"
 }

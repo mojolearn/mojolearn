@@ -12,13 +12,10 @@
     "experiments/performance_ideas/F04/caller.py"
   ],
   "candidate_defines": [
-    "-D",
     "MOJOLEARN_RESAMPLE_FAST_GATHER",
-    "-D",
     "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
   ],
   "baseline_defines": [
-    "-D",
     "MOJOLEARN_RESAMPLE_FAST_GATHER"
   ],
   "build_argv": [
@@ -46,5 +43,6 @@
     "refusal and retained-output ownership"
   ],
   "timing_contract": "Whole public resample through first read of every output; direct transport counted; no packed extra copy",
-  "blocker": null
+  "blocker": null,
+  "output_kind": "directory"
 }

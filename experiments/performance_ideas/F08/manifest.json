@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "id": "F08",
+  "title": "Independent LM backward fusion and view A/B training task",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/F08/caller.py",
+    "experiments/performance_ideas/apple_fast/lm_task.py",
+    "training/byte_lm_afn.mojo",
+    "training/byte_lm_afn_grad.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_AFN_LM_BWD_NOSYNC"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "bash",
+    "bindings/build_byte_lm.sh"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F08",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F08/caller.py"
+  ],
+  "depends_on": [
+    "F03"
+  ],
+  "quality_gates": [
+    "FAST Metal binding available",
+    "actual backward train task",
+    "heldout learning curve no material loss",
+    "parameter-handle refresh/checkpoint resume/failed update"
+  ],
+  "timing_contract": "Whole train step through consumed loss; forward-only timing cannot certify backward",
+  "blocker": null,
+  "output_kind": "directory",
+  "variants": {
+    "default": [
+      "MOJOLEARN_AFN_LM_BWD_NOSYNC"
+    ],
+    "fused": [
+      "MOJOLEARN_AFN_LM_BWD_FUSE"
+    ],
+    "views": [
+      "MOJOLEARN_AFN_LM_PARAM_VIEWS"
+    ]
+  }
+}

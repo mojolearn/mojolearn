@@ -13,13 +13,10 @@
     "experiments/performance_ideas/F07/caller.py"
   ],
   "candidate_defines": [
-    "-D",
     "MOJOLEARN_AFN_ATTN_FLASH",
-    "-D",
     "MOJOLEARN_AFN_ATTN_AUDIT"
   ],
   "baseline_defines": [
-    "-D",
     "MOJOLEARN_AFN_ATTN_AUDIT"
   ],
   "build_argv": [
@@ -50,16 +47,13 @@
   "blocker": null,
   "variants": {
     "default": [
-      "-D",
       "MOJOLEARN_AFN_ATTN_FLASH",
-      "-D",
       "MOJOLEARN_AFN_ATTN_AUDIT"
     ],
     "gqa": [
-      "-D",
       "MOJOLEARN_AFN_ATTN_GQA_TILE",
-      "-D",
       "MOJOLEARN_AFN_ATTN_AUDIT"
     ]
-  }
+  },
+  "output_kind": "directory"
 }

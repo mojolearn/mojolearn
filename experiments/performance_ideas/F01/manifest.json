@@ -13,17 +13,12 @@
     "experiments/apple_fast/gemm/scoped_dispatch.mojo"
   ],
   "candidate_defines": [
-    "-D",
     "MOJOLEARN_SCOPED_GEMM_G1_TALL",
-    "-D",
     "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
-    "-D",
     "MOJOLEARN_SCOPED_GEMM_PCA",
-    "-D",
     "MOJOLEARN_SCOPED_GEMM_AUDIT"
   ],
   "baseline_defines": [
-    "-D",
     "MOJOLEARN_SCOPED_GEMM_AUDIT"
   ],
   "build_argv": [
@@ -51,5 +46,6 @@
     "fit and inverse timings remain separate"
   ],
   "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
-  "blocker": null
+  "blocker": null,
+  "output_kind": "directory"
 }

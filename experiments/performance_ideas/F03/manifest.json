@@ -39,5 +39,6 @@
     "heldout loss no material loss"
   ],
   "timing_contract": "Train step through consumed scalar, first step separate from repeated calls; A resident=False B resident=True; no new default",
-  "blocker": null
+  "blocker": null,
+  "output_kind": "directory"
 }
