@@ -42,7 +42,7 @@
     "actual complete boosting fit",
     "same tree count/depth/random seed/sampling semantics",
     "heldout RMSE no material loss",
-    "categorical/ranking/depthwise/lossguide extension qualification still owed"
+    "Categorical/ranking fixed-seed tasks and independent depthwise/lossguide incumbent-route scheduling controls, whole fit/iterations/quality"
   ],
   "timing_contract": "Whole boosting fit and first prediction separately from retained prediction",
   "blocker": null,
@@ -56,11 +56,27 @@
     ],
     "arena": [
       "MOJOLEARN_SYM_BUF_ARENA"
-    ]
+    ],
+    "categorical": [
+      "MOJOLEARN_SYM_REUSE_PARTITION"
+    ],
+    "ranking": [
+      "MOJOLEARN_SYM_REUSE_PARTITION"
+    ],
+    "depthwise": [],
+    "lossguide": []
   },
   "binding": "gbdt",
   "prerequisite_bindings": [
     "core"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "variant_baseline_defines": {
+    "depthwise": [
+      "MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF"
+    ],
+    "lossguide": [
+      "MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF"
+    ]
+  }
 }
