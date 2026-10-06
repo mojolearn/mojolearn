@@ -253,19 +253,34 @@ if os.environ.get("MOJOLEARN_BENCH_LARS_STABLE") == "1":
     # sklearn documents increasing eps for ill-conditioned Cholesky factors.
     # sqrt(binary64 epsilon) reserves half the precision for their diagonal
     # stabilization; this hypothesis applies to any shape, not a board size.
-    # Set the same explicit value on every compared implementation. Timing and
-    # quality remain unproven until measured; this is not a runtime default.
+    # Audit: our Lars stores eps/precompute but never forwards either to Mojo.
+    # This recipe is sklearn-only; matching kwargs cannot establish matching
+    # numerical behavior. Original published receipts remain unchanged.
     _LARS_STABLE_EPS = 2.0 ** -26
-    _add("lars-stable", xlane="linear", ours="Lars", task="reg", block="reg",
+    _add("lars-stable", xlane="linear", ours=(), task="reg", block="reg",
          sk="sklearn.linear_model:Lars",
          params=dict(n_nonzero_coefs=500, fit_intercept=True,
                      eps=_LARS_STABLE_EPS, random_state=SEED),
-         cuml="cuml.experimental.linear_model:Lars",
-         cuml_params=dict(n_nonzero_coefs=500, fit_intercept=True, eps=_LARS_STABLE_EPS),
-         notes=["Opt-in stabilization experiment: eps=sqrt(binary64 machine epsilon) "
-                "on every arm; original lars recipe and failure evidence remain unchanged. "
+         notes=["Sklearn-only stabilization experiment: eps=sqrt(binary64 machine epsilon). "
+                "Other arms unsupported: ours stores but ignores eps/precompute, cuML behavior "
+                "is not qualified. Original lars recipe and failure evidence remain unchanged. "
                 "Require finite held-out quality and R2 >= 0 (constant-mean baseline) "
                 "before accepting this experiment's quality; no default promotion."])
+if os.environ.get("MOJOLEARN_BENCH_LARS_DIRECT") == "1":
+    # One supported sklearn numerical-route hypothesis, not a parameter search.
+    # Direct X correlations avoid the cached full Gram product, while retaining
+    # the LARS objective, data, stopping settings, and original machine eps.
+    # sklearn still factors an active Gram; this is not a QR stability claim.
+    # This applies to any shape. Other implementations are deliberately absent:
+    # ours accepts precompute/eps but does not forward them to its native solver.
+    _add("lars-direct", xlane="linear", ours=(), task="reg", block="reg",
+         sk="sklearn.linear_model:Lars",
+         params=dict(n_nonzero_coefs=500, fit_intercept=True, precompute=False,
+                     eps=2.0 ** -52, random_state=SEED),
+         notes=["Sklearn-only direct-X LARS route: precompute=False, original eps=2**-52. "
+                "No row, feature, iteration, target, seed or objective change. "
+                "Our native solver ignores precompute/eps; other arms unsupported here. "
+                "Finite predictions and R2>=0 required; no default promotion or A/B claim."])
 _add("lasso-lars", xlane="linear", ours="LassoLars", task="reg", block="reg",
      sk="sklearn.linear_model:LassoLars", params=dict(alpha=0.01, max_iter=500, random_state=SEED))
 _add("quantile", xlane="linear", ours="QuantileRegressor", task="reg", block="reg",
@@ -2590,7 +2605,7 @@ def _build_est(lane, arm, D):
         h = D["X"].shape[1] // 2
         Xa, Ya, Xqa, Yqa = X[:, :h], X[:, h:], Xq[:, :h], Xq[:, h:]
 
-    lars_float64 = lane in ("lars", "lars-stable") and arm == "sklearn-cpu"
+    lars_float64 = lane in ("lars", "lars-stable", "lars-direct") and arm == "sklearn-cpu"
     if lars_float64:
         # sklearn Lars explicitly retains consistent input precision for its
         # Gram/Cholesky solver. Its float32 ill-conditioned recovery overflowed
