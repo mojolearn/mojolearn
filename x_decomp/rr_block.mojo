@@ -140,7 +140,26 @@ def rb_gather_cell(a: F32Ptr, nn: Int, lo: Int, hi: Int, x: Int, y: Int) -> Floa
     """Cell (x, y) of the pair's pivot problem, read from A's upper triangle."""
     var i = rb_idx(lo, hi, min(x, y))
     var j = rb_idx(lo, hi, max(x, y))
-    return a.unsafe_load(i * nn + j)
+    var value = a.unsafe_load(i * nn + j)
+    if x != y:
+        return value
+    # Candidate correctness repair (2026-10-05): repeated diagonals near 2
+    # lost small Jacobi updates in float32. The retained AMD pivot refused
+    # 60/120/180/240 sweeps; translating by 2 converged in four with the
+    # SAME local tolerance. A scalar diagonal shift preserves eigenvectors;
+    # block updates use only those vectors, never these local eigenvalues.
+    # Admit the shift only when EVERY rounded diagonal magnitude decreases
+    # or stays equal. Off-diagonals are unchanged, so the existing relative
+    # stopping threshold is no weaker; outer convergence/Frobenius checks
+    # and the sweep budget are unchanged. No shape/dataset dispatch.
+    var first = rb_idx(lo, hi, 0)
+    var shift = a.unsafe_load(first * nn + first)
+    for k in range(RB_W):
+        var index = rb_idx(lo, hi, k)
+        var diagonal = a.unsafe_load(index * nn + index)
+        if abs(ftz(diagonal - shift)) > abs(diagonal):
+            return value
+    return ftz(value - shift)
 
 
 @always_inline
