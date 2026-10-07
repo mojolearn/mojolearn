@@ -66,7 +66,7 @@ from checks.numerics import (
 )
 from checks.fixture_rng import splitmix64_next
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 
 
 @always_inline
@@ -191,12 +191,13 @@ def _o_wgrad_block(K: Int) -> Int:
         return K
     # NN43: independently restated fixed absolute leaf profile; this is
     # source only, no oracle/check was executed for the candidate.
-    comptime if is_defined["MOJOLEARN_NN43_WGRAD_FIXED128"]():
+    comptime if get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD", 0]() == 2:
         var leaf = 128
         while (K + leaf - 1) // leaf > (1 << 22):
             leaf *= 2
         return leaf
-    var r = 512
+    # NI51 arm (IDN_SEQ_WGRAD=1): blocks grow from 256 rows, as recurrent.mojo.
+    var r = 256 if get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD", 0]() == 1 else 512
     while r * r < K:
         r *= 2
     return r

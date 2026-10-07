@@ -25,8 +25,11 @@ def neural_arithmetic_suffix() -> String:
             result += ".nn-mamba2-grad-v2-tree"
         elif get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD", 0]() == 2:
             result += ".nn-mamba2-grad-v2-leaf128"
-        comptime if is_defined["MOJOLEARN_NN43_WGRAD_FIXED128"]() and not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]():
-            result += ".nn-recurrent-grad-v2-fixed128"
+        comptime if not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]():
+            comptime if get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD", 0]() == 2:
+                result += ".nn-recurrent-grad-v2-fixed128"
+            elif get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD", 0]() == 1:
+                result += ".nn-recurrent-grad-v2-min256"
         comptime if NN54_LOSS_PROFILE:
             result += ".nn-loss-v2-leaf128"
         comptime if NN57_NORM_PROFILE:

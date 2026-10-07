@@ -51,7 +51,7 @@ from sequence.mlp import mlp_epoch_key, mlp_perm_args
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, SEQ_LSTM_WGRAD, scan_applies
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 
 #: nr-small D3 (2026-10-04): under IDENTICAL the recurrent weight and bias
 #: gradients (C = A B over the K = T B time x batch rows, M N cells of one
@@ -73,9 +73,14 @@ comptime SEQ_WGRAD_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 # No launch/vendor/board shape chooses the graph. New bits across versions
 # are permitted. Host Exec and GPU Exec run the same OP_GEMM_SPLITK body.
 # Unmeasured, disabled; no quality/identity evidence is claimed.
+# L11 (2026-10-07): NN43 and NI51's leaf arm are arms of ONE switch,
+# -D MOJOLEARN_IDN_SEQ_WGRAD=0|1|2: 0 = sqrt(K) blocks from 512 rows
+# (default), 1 = NI51 sqrt(K) blocks from 256 rows, 2 = NN43 fixed 128-row
+# leaves. Each arm is a bit version for every column together.
+comptime IDN_SEQ_WGRAD_ARM = get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD", 0]()
 comptime NN43_WGRAD_FIXED128 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN43_WGRAD_FIXED128"]()
+    and IDN_SEQ_WGRAD_ARM == 2
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]()
 )
@@ -85,9 +90,7 @@ comptime NN43_WGRAD_FIXED128 = (
 # bounds partial count; no dataset or benchmark dimension selects this graph.
 # The generic executor makes host and all GPU columns share the new bits.
 # Default OFF; multi-step recurrent quality and identity are unmeasured.
-comptime SEQ_WGRAD_LEAF256 = SEQ_WGRAD_BLOCKED and is_defined[
-    "MOJOLEARN_IDN_SEQ_WGRAD_LEAF256"
-]()
+comptime SEQ_WGRAD_LEAF256 = SEQ_WGRAD_BLOCKED and IDN_SEQ_WGRAD_ARM == 1
 comptime WGRAD_MIN_BLOCK = 256 if SEQ_WGRAD_LEAF256 else 512
 #: partial floats one launch pair may hold (rows of cells are chunked to
 #: fit; chunking moves no bit, every cell's blocks are the same)

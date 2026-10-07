@@ -9,7 +9,7 @@ reference's closed form dx = rstd (g - mean(g) - xhat mean(g xhat)) with
 g = dy w."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST, ftz, identical_div, identical_rsqrt
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from std.sys.info import has_apple_gpu_accelerator
 
 #: lane idn-loss-norm-folds (2026-10-04): under IDENTICAL the dweight / dbias
@@ -32,10 +32,12 @@ def ln_fold_rows(M: Int) -> Int:
     # NI51 independent V arm: more independent parameter-gradient leaves;
     # sqrt(M) growth still bounds scratch. Shared HostExec/DeviceExec operation
     # source; only neural LayerNorm changes. Default OFF, validation NOT RUN.
+    # L11 (2026-10-07): a leaf parameter, -D MOJOLEARN_IDN_SEQ_LN_LEAF=64|32
+    # (default 64; legal set asserted in core/six_lane_experiment_guards).
     var r = 64
     comptime if (
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and LN_FOLD_BLOCK
-        and is_defined["MOJOLEARN_IDN_SEQ_LN_LEAF32"]()
+        and get_defined_int["MOJOLEARN_IDN_SEQ_LN_LEAF", 64]() == 32
         and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     ):
         r = 32
