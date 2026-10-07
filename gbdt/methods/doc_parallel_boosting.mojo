@@ -122,6 +122,7 @@ from gbdt.methods.greedy_subsets_searcher.structure_searcher_options import (
     TTreeStructureSearcherOptions,
 )
 from gbdt.models.non_symmetric_tree import TNonSymmetricTree
+from gbdt.models.ns_bitvector_predict import GBDT_NS_BITVEC
 from gbdt.models.add_non_symmetric_tree_doc_parallel import (
     IDN_NS_PREDICT_PACKED,
     add_non_symmetric_tree_to_cursor,
@@ -4600,7 +4601,9 @@ def predict(
         # below takes is the fix if anyone measures a need.
         # lane/fam-gbdt (IDN_NS_PREDICT_PACKED): the ensemble packed once,
         # the same kernels back to back, one drain
-        comptime if IDN_NS_PREDICT_PACKED:
+        # lane/trees-predict-ideas: MOJOLEARN_GBDT_NS_PREDICT_BITVEC takes
+        # the packed staging in every numeric mode (its apply lives there)
+        comptime if IDN_NS_PREDICT_PACKED or GBDT_NS_BITVEC:
             add_non_symmetric_trees_packed(
                 ctx, layout, model.non_symmetric_models, cindex, n_rows,
                 cursor,
