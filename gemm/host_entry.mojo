@@ -64,6 +64,28 @@ from gemm.host_transport import (
     gemm_up_f32,
 )
 from gemm.contract import OP_NN, OP_NT, OP_TN
+from std.sys.compile import is_defined
+from gemm.neural_dispatch import (
+    identical_gemm_into as _neural_gemm_into,
+    identical_gemm_workspace_max_floats as _neural_workspace_max_floats,
+)
+from gemm.experiments.neural_ozaki import NEURAL_OZAKI
+
+comptime GEMM_OZAKI_LINALG = is_defined["MOJOLEARN_IDN_GEMM_OZAKI_LINALG"]()
+"""lane/neural-small (2026-10-07), IDENTICAL grid control `gemm_ozaki_linalg`.
+Absent = main: the linalg GEMM calls `gemm_identical` directly. Defined: it
+calls `gemm.neural_dispatch.identical_gemm_into`, so a build that also sets
+`-D MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4|5|6` serves the product with
+the Ozaki int8 profile (gemm/experiments/neural_ozaki.mojo) the neural GEMMs
+already take. Cost reasoning: the incumbent fp32 SIMT body is bound by fp32
+FMA throughput, the int8 matrix units (IMMA on NVIDIA, i8 MFMA on AMD) run
+S(S+1)/2 int8 products per tile at several times that rate, which holds for
+any k under `ozaki_max_k[S]` (a function of S only, not of a board shape);
+k above the bound falls back to the incumbent inside the router.
+BITS CHANGE: a new profile (integer diagonal sums, one RNE epilogue). Same
+words on NVIDIA and AMD by construction (integer sums are order free); the
+host column runs the same construction on its integer ALU (the PIECES
+kernel), so it changes together with the device columns."""
 
 
 def identical_gemm_host(
@@ -132,10 +154,20 @@ def identical_gemm_host(
     # THE ONE LINE THAT COMPUTES ANYTHING. Everything above is transport and
     # everything below is transport.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var ws = lease.f32(ctx, ROLE_WS, identical_gemm_workspace_max_floats(m, n, k))
-        identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
-        gemm_down_f32(ctx, lease, c, c_ptr, m * n)
-        _ = ws
+        comptime if GEMM_OZAKI_LINALG:
+            comptime assert NEURAL_OZAKI, (
+                "MOJOLEARN_IDN_GEMM_OZAKI_LINALG routes the linalg GEMM to the"
+                " Ozaki profile: define MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4|5|6"
+            )
+            var ws = lease.f32(ctx, ROLE_WS, _neural_workspace_max_floats(m, n, k))
+            _neural_gemm_into(ctx, c, a, b, ws, m, n, k, op)
+            gemm_down_f32(ctx, lease, c, c_ptr, m * n)
+            _ = ws
+        else:
+            var ws = lease.f32(ctx, ROLE_WS, identical_gemm_workspace_max_floats(m, n, k))
+            identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
+            gemm_down_f32(ctx, lease, c, c_ptr, m * n)
+            _ = ws
     else:
         identical_gemm(ctx, c, a, b, m, n, k, op)
         gemm_down_f32(ctx, lease, c, c_ptr, m * n)

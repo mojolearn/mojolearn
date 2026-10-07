@@ -4058,6 +4058,29 @@ comptime GEMM_TILE_SHORT_K_DEFAULT = 512 if TARGET_COLUMN == COLUMN_NVIDIA else 
 #: the smaller tile; AMD keeps every k. MOJOLEARN_GEMM_TILE_MIN_K overrides.
 comptime GEMM_TILE_MIN_K_DEFAULT = 4096 if TARGET_COLUMN == COLUMN_NVIDIA else 0
 
+#: lane/neural-small (2026-10-07), IDENTICAL grid int sweeps
+#: `gemm_tile_min_blocks` and `gemm_tile_short_k`. The two runtime env knobs
+#: above cannot be varied by the define-only grid, so each also reads a
+#: build define. Absent = main (the env var when set, else the column
+#: default). Defined, the define wins over the env var.
+#:   -D MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=<n>, legal set {0, 128, 192, 256,
+#:      384, 512, 1024} (0 = no block floor). Cost reasoning: the floor
+#:      trades tile width (operand reuse per block) for SM/CU fill; it was
+#:      measured once per vendor (AMD 1024, NVIDIA 192), and the right
+#:      value scales with the SM/CU count and the output's tile count, so
+#:      the sweep covers 1x to 7x the 142/304 unit counts.
+#:   -D MOJOLEARN_IDN_GEMM_TILE_SHORT_K=<k>, legal set {0, 512, 1024} (0 =
+#:      no short-chain rule). Cost reasoning: a narrower tile pays its lost
+#:      reuse once per k step, so the step-down only pays below some k; the
+#:      sweep moves that bound by a factor of two either side.
+#: No bits: every tuned plan computes the same leaves and folds
+#: (`check_device_is_launch_invariant`); execution plan only. These knobs
+#: are read by every `choose_gemm_plan_tiles` caller in a build (classical
+#: GEMM users included), so a grid build carrying them must not be shared
+#: with classical workloads.
+comptime IDN_GEMM_TILE_MIN_BLOCKS = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS", -1]()
+comptime IDN_GEMM_TILE_SHORT_K = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_SHORT_K", -1]()
+
 
 struct _TileMinK(Defaultable, Movable):
     var k: Int
@@ -4113,7 +4136,14 @@ comptime GEMM_TILE_SHORT_K = _Global[StorageType=_TileShortK, name=_TILE_SHORT_K
 def gemm_tile_short_k() -> Int:
     """The largest k the SHORT-chain step-down applies to (0 = none):
     MOJOLEARN_GEMM_TILE_SHORT_K when set (read once per process), else
-    GEMM_TILE_SHORT_K_DEFAULT."""
+    GEMM_TILE_SHORT_K_DEFAULT. `-D MOJOLEARN_IDN_GEMM_TILE_SHORT_K` wins
+    over both when defined."""
+    comptime if IDN_GEMM_TILE_SHORT_K >= 0:
+        comptime assert (
+            IDN_GEMM_TILE_SHORT_K == 0 or IDN_GEMM_TILE_SHORT_K == 512
+            or IDN_GEMM_TILE_SHORT_K == 1024
+        ), "MOJOLEARN_IDN_GEMM_TILE_SHORT_K legal set is 0, 512, 1024"
+        return IDN_GEMM_TILE_SHORT_K
     try:
         var p = GEMM_TILE_SHORT_K.get_or_create_ptr()
         if p[].k < 0:
@@ -4131,7 +4161,16 @@ def gemm_tile_short_k() -> Int:
 
 def gemm_tile_min_blocks() -> Int:
     """The tuned tiles' minimum block count: MOJOLEARN_GEMM_TILE_MIN_BLOCKS
-    when set (read once per process), else GEMM_TILE_MIN_BLOCKS_DEFAULT."""
+    when set (read once per process), else GEMM_TILE_MIN_BLOCKS_DEFAULT.
+    `-D MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS` wins over both when defined."""
+    comptime if IDN_GEMM_TILE_MIN_BLOCKS >= 0:
+        comptime assert (
+            IDN_GEMM_TILE_MIN_BLOCKS == 0 or IDN_GEMM_TILE_MIN_BLOCKS == 128
+            or IDN_GEMM_TILE_MIN_BLOCKS == 192 or IDN_GEMM_TILE_MIN_BLOCKS == 256
+            or IDN_GEMM_TILE_MIN_BLOCKS == 384 or IDN_GEMM_TILE_MIN_BLOCKS == 512
+            or IDN_GEMM_TILE_MIN_BLOCKS == 1024
+        ), "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set is 0, 128, 192, 256, 384, 512, 1024"
+        return IDN_GEMM_TILE_MIN_BLOCKS
     try:
         var p = GEMM_TILE_MIN_BLOCKS.get_or_create_ptr()
         if p[].blocks < 0:
@@ -4250,7 +4289,21 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
     # tile so no thread row idles; then the small outputs under the tuned
     # plans' 128 K-cell floor.
     var p_count = contract_partition(k)[1]
-    if p_count >= 4 and identical_gemm_splitk_fits(m, n, k):
+    # lane/neural-small (2026-10-07), IDENTICAL grid int sweep
+    # `gemm_split_min_leaves`: -D MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES=4|3|2
+    # (absent = 4, main). The floor exists only to keep the P = 3 fixtures
+    # on their documented plans; below it a short-contraction product
+    # (k of two or three leaves) whose output is under about 1.5 blocks per
+    # SM/CU runs on too few tuned tiles, and a split plan multiplies the
+    # blocks by P with the SAME leaves and the same fold tree, at any model
+    # width with such a k. No bits (`check_device_is_launch_invariant`);
+    # under 3 or 2 the batch-invariance fixtures that name the P = 3 plans
+    # see the split plan instead (plan id only, same words).
+    comptime SPLIT_MIN_LEAVES = get_defined_int["MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES", 4]()
+    comptime assert (
+        SPLIT_MIN_LEAVES == 4 or SPLIT_MIN_LEAVES == 3 or SPLIT_MIN_LEAVES == 2
+    ), "MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES legal set is 4, 3, 2"
+    if p_count >= SPLIT_MIN_LEAVES and identical_gemm_splitk_fits(m, n, k):
         var cap = gemm_split_cells_cap()
         if m <= 8 and n >= 256:
             if m == 1:

@@ -76,7 +76,12 @@ ARM_EXCLUSIONS = [
 # Arms whose notes declare reach beyond the declared algorithm lists. A config
 # carrying one is never packed with another algorithm's config.
 GLOBAL_REACH = {
-    ('gemm_leaf', 'all256'): 'note: "all256 is the NI08 contract leaf for every GEMM (gemm lane and classical too)"',
+    ('gemm_contract_leaf', 'all256'): 'note: "NI08 contract leaf 256 for every GEMM caller in the build (gemm lane and classical too)"',
+    ('gemm_tile_min_blocks', '*'): 'note: "Reaches every gemm_identical tuned-tile caller in the build (classical included)"',
+    ('gemm_tile_short_k', '*'): 'note: "Reaches every gemm_identical tuned-tile caller in the build (classical included)"',
+    ('gemm_split_min_leaves', '*'): 'note: "the split-plan floor of every gemm_identical caller (classical included)"',
+    ('gemm_kpack_rpt4', '*'): 'note: "Reaches classical callers"',
+    ('gemm_fs2', '*'): 'note: "Reaches classical callers"',
     ('neural_gemm_schedule', 'stream_all'): 'note: "stream_all (NI02) moves every GEMM caller (gemm lane, classical, neural)"',
     ('neural_gemm_ozaki_slices', '*'): 'other_reach: "non-board callers of gemm/neural_dispatch.identical_gemm_into also take the switch"',
 }
@@ -541,9 +546,15 @@ def plan_algorithm(algo, controls, reach, guards, cap=CAP):
     rep = {k: arm_info[k]['arms'][0] for k in eligible}
 
     def with_parent(assign):
-        keys = {k for k, _ in assign}
-        extra = [(parents[k][0], rep[parents[k][0]]) for k, _ in assign if k in parents and parents[k][0] not in keys]
-        ordered = unique(extra + list(assign))
+        # Transitive: a grandchild (nn20_split_kv_leaves -> nn20_split_kv ->
+        # attn_softmax) carries every ancestor's representative arm.
+        ordered = list(assign)
+        while True:
+            keys = {k for k, _ in ordered}
+            extra = [(parents[k][0], rep[parents[k][0]]) for k, _ in ordered if k in parents and parents[k][0] not in keys]
+            if not extra:
+                break
+            ordered = unique(extra + ordered)
         return tuple(sorted(ordered, key=lambda ka: eligible.index(ka[0])))
 
     candidates, seen = [], {(): 'B'}

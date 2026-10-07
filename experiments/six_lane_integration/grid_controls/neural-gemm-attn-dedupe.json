@@ -140,9 +140,6 @@
     ],
     "neural256": [
      "MOJOLEARN_IDN_GEMM_LEAF=2"
-    ],
-    "all256": [
-     "MOJOLEARN_IDN_GEMM_LEAF=3"
     ]
    },
    "default": "off",
@@ -163,7 +160,7 @@
     "I.N.NN03",
     "I.N.NI08"
    ],
-   "note": "Scope arm: neural128/neural256 switch the neural callers to the NN03 profile body; all256 is the NI08 contract leaf for every GEMM (gemm lane and classical too). Leaf 64 deleted (I04 loser). Bit version: ID check per arm. Fix per release before the grid (parameter sweep)."
+   "note": "Scope arm: neural128/neural256 switch the neural callers to the NN03 profile body. The all256 contract-leaf arm (every GEMM, classical too) is split out as gemm_contract_leaf. Leaf 64 deleted (I04 loser). Bit version: ID check per arm."
   },
   "neural_gemm_chains": {
    "define": "MOJOLEARN_IDN_NEURAL_CHAINS",
@@ -640,7 +637,8 @@
    },
    "default": "off",
    "source": [
-    "gemm/experiments/neural_tiled_v2.mojo:23"
+    "gemm/experiments/neural_tiled_v2.mojo:23",
+    "transformer/impl/llama/modeling_llama.mojo:4836"
    ],
    "binding": [
     "_mojolearn_byte_lm",
@@ -650,7 +648,7 @@
    ],
    "bits_change": false,
    "status": "kept",
-   "note": "In scope, not in this lane's merge list; unchanged."
+   "note": "Read in llama_attention_forward (modeling_llama.mojo:4836), the route of lm-forward, lm-train-step, transformer-forward and samba-*: replaces the q/k/v llama_proj calls (they skip gemm/neural_dispatch). Declared for those lanes in neural-small.json, crossed with neural_gemm_pair/neural_gemm_schedule."
   },
   "gemm_group_slack": {
    "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 / _8 / MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY",
@@ -762,6 +760,26 @@
     "ab": "B arm = legacy rule on, A arm = main; time neighboring shapes and one non-board dataset; delete the code once recorded",
     "reason": "exact k==768 AMD short-k rule (dimension targeting)"
    }
+  },
+  "gemm_contract_leaf": {
+   "define": "MOJOLEARN_IDN_GEMM_LEAF",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "all256": [
+     "MOJOLEARN_IDN_GEMM_LEAF=3"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gemm/contract.mojo:131"
+   ],
+   "binding": [
+    "_mojolearn_linalg"
+   ],
+   "bits_change": true,
+   "status": "split_from:gemm_leaf",
+   "note": "NI08 contract leaf 256 for every GEMM caller in the build (gemm lane and classical too). Declared for gemm:gemm only; a classical lane that wants it declares it in its own family file. Same define as gemm_leaf: never crossed with it."
   }
  },
  "algorithms": {
@@ -929,27 +947,11 @@
     ]
    ]
   },
-  "neural:mamba-forward": {
-   "binding": "_mojolearn_mamba",
-   "route": "mamba binding -> mamba/impl/modules/idn_gemm_ws -> gemm.neural_dispatch.identical_gemm_into (ROLE_PROJECTION)",
-   "controls": [
-    "neural_gemm_schedule",
-    "gemm_leaf",
-    "neural_gemm_chains"
-   ],
-   "interaction_groups": [
-    [
-     "neural_gemm_schedule",
-     "gemm_leaf",
-     "neural_gemm_chains"
-    ]
-   ]
-  },
   "gemm:gemm": {
    "binding": "_mojolearn_linalg",
    "route": "linalg binding -> gemm/checks/gemm_identical (not the neural dispatch)",
    "controls": [
-    "gemm_leaf",
+    "gemm_contract_leaf",
     "neural_gemm_schedule",
     "gemm_one_page",
     "gemm_compact_live_tile",
@@ -961,7 +963,7 @@
    ],
    "interaction_groups": [
     [
-     "gemm_leaf",
+     "gemm_contract_leaf",
      "neural_gemm_schedule",
      "gemm_one_page",
      "gemm_compact_live_tile",
@@ -969,7 +971,7 @@
      "gemm_global_workspace"
     ]
    ],
-   "note": "Only gemm_leaf=all256 and neural_gemm_schedule=stream_all reach this lane."
+   "note": "Only gemm_contract_leaf=all256 and neural_gemm_schedule=stream_all reach this lane (plus neural-small.json controls)."
   }
  },
  "removed": [
@@ -1102,5 +1104,5 @@
    "reason": "merged into train_no_decode_cache; the old define is refused by core/six_lane_experiment_guards.mojo"
   }
  ],
- "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines)."
+ "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."
 }
