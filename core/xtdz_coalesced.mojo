@@ -24,8 +24,8 @@ chain's value. Same chains, same fold, same bits.
 `-D MOJOLEARN_APPLE_STEP_UNROLL_OFF` turns this off with the unroll; the
 caller then launches the one-block-per-cell kernel.
 """
-from experiments.classical_identical_ideas.shared_controls import C01_LEAF64, C01_LEAF128
-from core.classical_stats import classical_column_mean
+from experiments.classical_identical_ideas.shared_controls import C01_MEAN
+from core.blocked_moments import bm_column_mean
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -372,11 +372,15 @@ def column_mean_launch[force_coalesced: Bool = False](
     allocates its workspace here and SYNCHRONIZES before releasing it;
     otherwise the one-block-per-column launch, asynchronous as before.
     IDN_XTY_TILED (IDENTICAL, default): the tile order of `xty_tiled`."""
-    comptime if C01_LEAF64 or C01_LEAF128:
+    # C01_MEAN (lane classical-decomp, 2026-10-07; default OFF): leaf column
+    # sums, one block per leaf, and the binary-counter fold over leaves
+    # (core/blocked_moments.mojo; host column core/blocked_moments_host.mojo).
+    # It SYNCHRONIZES before releasing its workspace. NOT MEASURED.
+    comptime if C01_MEAN:
         if n_rows >= 1 and n_cols >= 1:
-            ctx.enqueue_function[classical_column_mean_kernel](
-                mu.unsafe_ptr(), x.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
-                grid_dim=(n_cols+127)//128, block_dim=128,
+            bm_column_mean(
+                ctx, mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows, n_cols,
             )
             return
     comptime if IDN_XTY_TILED:
@@ -416,15 +420,3 @@ def column_mean_launch[force_coalesced: Bool = False](
         grid_dim=(n_cols, 1, 1),
         block_dim=(STATS_TPB, 1, 1),
     )
-
-
-# C01: a physical thread owns a column; logical leaves are scalar-profile
-# constants. A future parallel schedule must retain these exact leaves.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-def classical_column_mean_kernel(
-    output: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
-    rows: Int32, cols: Int32,
-):
-    var column = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if column < Int(cols):
-        output.unsafe_store(column, classical_column_mean(x, Int(rows), Int(cols), column))

@@ -1,7 +1,7 @@
 """CPU binding for `_mojolearn_x_prep`. HOST ONLY: the same units as the
 device, run in a loop on the caller's arena (x_prep/host/program.mojo), with
 the GPU binding's export names and address contract."""
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C55_CLASS_GROUP, C04_LOAD_CENTER, C56_LDA_INPUT
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C55_CLASS_GROUP, C04_LDA, C56_LDA_INPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -191,7 +191,7 @@ def idn_int_binding() raises -> PythonObject:
 
 def classical_shared_binding() raises -> PythonObject:
     # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    return PythonObject(Int(C08_DICTIONARY) | (Int(C55_CLASS_GROUP) << 1) | (Int(C04_LOAD_CENTER) << 2) | (Int(C56_LDA_INPUT) << 3))
+    return PythonObject(Int(C08_DICTIONARY) | (Int(C55_CLASS_GROUP) << 1) | (Int(C04_LDA) << 2) | (Int(C56_LDA_INPUT) << 3))
 
 
 def idn_fam_binding() raises -> PythonObject:

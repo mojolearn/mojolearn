@@ -1,8 +1,7 @@
 """PCA by covariance eigendecomposition. The `input`-unchanged CONTRACT is the one to not drop: `input` is an in-out parameter that must end the call unchanged, and a fit that leaves the caller's matrix centered is wrong in a way nothing in the fit itself will reveal."""
-from experiments.classical_identical_ideas.linear_controls import C23_CENTERED_PANELS
-from x_decomp.classical_device import centered_gram_kernel as c23_centered_gram_kernel
-from experiments.classical_identical_ideas.shared_controls import C04_LOAD_CENTER
-from core.classical_centered import centered_gram_v1_cell
+from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_C23, PCA_COV_LEGAL
+from core.blocked_moments import bm_centered_gram_panels, bm_onepass_covariance
+from gemm.contract import contract_leaf_size
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -207,21 +206,38 @@ def compute_covariance(
     restore_input: Bool = True,
 ) raises:
     """Steps 1, 2, 3 and 6. The branch below must take the fused arm exactly when `gemm_tn` would take split-K for this shape, so it asks the SAME `gram_splitk_applies(m, n, k)` that `gemm_tn` asks -- one predicate, both readers, no target test of our own."""
+    comptime assert PCA_COV_LEGAL, "MOJOLEARN_CLASSICAL_PCA_COV must be 4 (C04 arm) or 23 (C23 arm)"
+    # MOJOLEARN_CLASSICAL_PCA_COV (lane classical-decomp, 2026-10-07; default
+    # absent = the incumbent below). One switch, two named arms, each
+    # replacing the incumbent's routing at every width; X is never modified.
+    # NOT MEASURED.
+    comptime if PCA_COV_C23:
+        # =23: mean and covariance from ONE blocked read (per-leaf centering,
+        # Chan merge in the binary-counter order), scaled by 1 / (n - 1).
+        bm_onepass_covariance(
+            ctx, mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows, n_cols,
+        )
+        return
     # column_mean_kernel's value, read row-coalesced where it applies
     # (core/xtdz_coalesced.mojo::column_mean_launch).
     column_mean_launch(ctx, mu, x, n_rows, n_cols)
     var cells = n_rows * n_cols
-    # C23 profile takes precedence over C04's incumbent-v1 schedule;
-    # C04×C23 uses these centered loads and C23's fixed panel fold.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    comptime if C23_CENTERED_PANELS:
-        ctx.enqueue_function[c23_centered_gram_kernel](
-            x.unsafe_ptr(), mu.unsafe_ptr(), cov.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
-            grid_dim=(n_cols*n_cols+127)//128, block_dim=128,
+    comptime if PCA_COV_C04:
+        # =4: the centered Gram around the mean read straight from X (no
+        # shift/unshift passes), leaves of contract_leaf_size(n) rows, the
+        # binary-counter fold: the old C04 cell's value
+        # (core/classical_centered.mojo, the host column), row-parallel.
+        bm_centered_gram_panels(
+            ctx, cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            n_rows, n_cols, contract_leaf_size(n_rows),
         )
         ctx.enqueue_function[scale_in_place_kernel](
-            cov.unsafe_ptr(), Int32(n_cols*n_cols), Float32(1)/Float32(n_rows-1),
-            grid_dim=(n_cols*n_cols+255)//256, block_dim=256,
+            cov.unsafe_ptr(), Int32(n_cols * n_cols), Float32(1.0) / Float32(n_rows - 1),
+            grid_dim=((n_cols * n_cols + 255) // 256, 1, 1), block_dim=(256, 1, 1),
         )
         ctx.synchronize()
         return
@@ -318,14 +334,6 @@ def compute_covariance(
         gram_centered_splitk_into(
             ctx, cov, x, mu, x_alias, n_cols, n_rows
         )
-    elif C04_LOAD_CENTER:
-        # C04: v1 non-split covariance consumes centered loads directly.
-        # Split-K is already fused and retains its incumbent profile.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        ctx.enqueue_function[classical_centered_gram_kernel](
-            cov.unsafe_ptr(), x.unsafe_ptr(), mu.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
-            grid_dim=(n_cols*n_cols+127)//128, block_dim=128,
-        )
     else:
         ctx.enqueue_function[shift_columns_kernel](
             x.unsafe_ptr(),
@@ -344,7 +352,7 @@ def compute_covariance(
         grid_dim=((n_cols * n_cols + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    if restore_input and not fused and not C04_LOAD_CENTER:
+    if restore_input and not fused:
         ctx.enqueue_function[shift_columns_kernel](
             x.unsafe_ptr(),
             mu.unsafe_ptr(),
@@ -903,13 +911,3 @@ def whiten_components(
         block_dim=(256, 1, 1),
     )
     ctx.synchronize()
-
-
-# C04 preserves the same-version GEMM v1 leaves and adjacent-pair fold.
-def classical_centered_gram_kernel(
-    output: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
-    means: MutPointer[Float32, MutAnyOrigin], rows: Int32, cols: Int32,
-):
-    var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if t < Int(cols)*Int(cols):
-        output.unsafe_store(t, centered_gram_v1_cell(x, means, Int(rows), Int(cols), t//Int(cols), t%Int(cols)))

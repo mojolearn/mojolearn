@@ -27,7 +27,7 @@ enqueued launch, with no sync:
 Host floats a launch reads are held (`hold_f`, `hold_i`) until the next
 sync, so an enqueued upload never reads freed memory."""
 from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_STATE
-from experiments.classical_identical_ideas.linear_controls import C23_CENTERED_PANELS, C28_BUCKET_SOLVES
+from experiments.classical_identical_ideas.linear_controls import C23_MCD, C28_BUCKET_SOLVES
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.python import Python, PythonObject
@@ -70,7 +70,9 @@ from x_decomp.kit import (
     Mat, OP_GTS, OP_SELECT, mat_const, svd_order, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
     mat_from,
 )
-from x_decomp.classical_device import contrast_kernel, centered_gram_kernel
+from x_decomp.classical_device import contrast_kernel
+from core.blocked_moments import bm_centered_gram_panels
+from core.blocked_moments_ops import C23_MCD_LEAF_ROWS
 from std.atomic import Atomic
 from std.builtin.sort import sort
 from core.device_zero import enqueue_fill
@@ -469,8 +471,9 @@ struct DKit(Movable):
     def classical_centered_gram(self, X: DMat, means: DMat) raises -> DMat:
         var out = DMat(X.c, X.c)
         if X.c > 0:
-            self.ctx.enqueue_function[centered_gram_kernel](X.p(), means.p(), out.p(), Int32(X.r), Int32(X.c),
-                                                           grid_dim=_blocks(X.c * X.c), block_dim=TPB)
+            # C23_MCD (lane classical-decomp): the panel-256 reference cell's
+            # value, row-parallel (core/blocked_moments.mojo)
+            bm_centered_gram_panels(self.ctx, out.p(), X.p(), means.p(), X.r, X.c, C23_MCD_LEAF_ROWS)
         return out^
 
     def classical_contrast(self, Y: DMat, fun: Int, alpha: Float64, mut gp: DMat) raises -> DMat:
@@ -985,7 +988,7 @@ struct DMcd:
         # C57 retains this candidate's just-computed immutable subset mean.
         # No reuse across support changes; the centered products are unchanged.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        comptime if C23_CENTERED_PANELS:
+        comptime if C23_MCD:
             return self.k.ew1(OP_SCALE, self.k.classical_centered_gram(Xs, loc), 1.0 / Float64(Xs.r))
         comptime if C57_CANDIDATE_STATE:
             var Xc = self.k.ew2(OP_SUB, Xs, loc)

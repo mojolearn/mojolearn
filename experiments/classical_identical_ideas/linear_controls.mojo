@@ -6,7 +6,7 @@ NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 Absence preserves the incumbent; measurements do not imply default promotion.
 Numerical profiles are shared by the host and all three device columns.
 """
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime CLASSICAL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -41,7 +41,38 @@ comptime C20_ROW_CACHE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_R
 comptime C20_PAIR_LOAD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"]()
 comptime C21_EXTREMA = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"]()
 comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"]()
-comptime C23_CENTERED_PANELS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS"]()
+# lane classical-decomp (2026-10-07): the old C23_CENTERED_PANELS define is
+# split per algorithm family. Its PCA use is the ONE_PASS arm of
+# MOJOLEARN_CLASSICAL_PCA_COV below; its MCD use is C23_MCD. Both run
+# row-parallel (core/blocked_moments.mojo); the per-cell serial kernels
+# (one GPU thread per covariance cell over every row) are deleted.
+# C23_MCD: MinCovDet/EllipticEnvelope `emp_cov_at` as the centered Gram
+# around the candidate location, leaves of 256 rows folded by the binary
+# counter: the old C23 cell's value (x_decomp/classical_cells.mojo, the host
+# column), now computed in parallel. NOT MEASURED.
+comptime C23_MCD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C23_MCD"]()
+# PCA covariance, ONE switch with named arms (the old C04-over-C23 silent
+# priority is gone): -D MOJOLEARN_CLASSICAL_PCA_COV=4 is the C04 arm
+# (two passes: the column mean, then the centered Gram around it read
+# straight from X, leaves of contract_leaf_size(n) rows, binary-counter
+# fold: the old C04 cell's value, computed in parallel, no shift/unshift
+# passes); =23 is the C23 arm (ONE blocked pass: each leaf of
+# bm_onepass_leaf_rows rows centers on its own means, leaves merge by
+# Chan's update in the binary-counter order; the mean comes out of the same
+# pass). Absent = the incumbent (column_mean_launch, then split-K or
+# shift + gemm_tn). Either arm replaces the incumbent's routing at every
+# width. NOT MEASURED.
+comptime _PCA_COV_RAW = get_defined_int["MOJOLEARN_CLASSICAL_PCA_COV", 0]()
+comptime PCA_COV_LEGAL = _PCA_COV_RAW == 0 or _PCA_COV_RAW == 4 or _PCA_COV_RAW == 23
+comptime PCA_COV_C04 = CLASSICAL_IDN and _PCA_COV_RAW == 4
+comptime PCA_COV_C23 = CLASSICAL_IDN and _PCA_COV_RAW == 23
+# TSVD_FUSED_STATS (new, lane classical-decomp): TruncatedSVD's
+# explained_variance_ / _ratio_ in one blocked kernel: per leaf the mean and
+# centered sum of squares of X's columns and of X V^T's columns (the
+# projection formed in the kernel, never stored), merged by Chan's update.
+# Replaces gemm_nt + two (mean, shift, square, mean) chains: about 8 passes
+# over n x d down to 2 reads of each leaf. NOT MEASURED.
+comptime TSVD_FUSED_STATS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS"]()
 comptime C24_PANEL8 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_PANEL8"]()
 comptime C24_ROWS2048 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048"]()
 comptime C24_TREE4 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_TREE4"]()

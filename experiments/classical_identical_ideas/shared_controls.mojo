@@ -4,16 +4,29 @@ Unless scoped evidence below says otherwise: NOT COMPILED — NOT TESTED —
 IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 A enables only its named define; B omits it and retains all incumbent controls.
 """
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime C01_LEAF64 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C01_LEAF64"]()
-comptime C01_LEAF128 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C01_LEAF128"]()
+# lane classical-decomp (2026-10-07): C01 is split in two.
+# C01_LEAF: the regression-metrics PairSum leaf length (x_metrics/common.mojo
+# LEAF), an integer sweep: -D MOJOLEARN_CLASSICAL_C01_LEAF=32|64|128, absent =
+# 32. Replaces the C01_LEAF64/C01_LEAF128 pair, where 128 silently won.
+comptime _C01_LEAF_RAW = get_defined_int["MOJOLEARN_CLASSICAL_C01_LEAF", 32]()
+comptime C01_LEAF_LEGAL = _C01_LEAF_RAW == 32 or _C01_LEAF_RAW == 64 or _C01_LEAF_RAW == 128
+comptime C01_LEAF = _C01_LEAF_RAW if CLASSICAL_IDENTICAL else 32
+# C01_MEAN: core/xtdz_coalesced.mojo column_mean_launch (PCA covariance mean,
+# PCA full-SVD mean, TSVD column variances) as leaf column sums (one block per
+# leaf of contract_leaf_size(n) rows, sub-chains added in order) and the
+# binary-counter fold over leaves (core/blocked_moments.mojo). Replaces the
+# one-thread-per-column serial mean. NOT MEASURED.
+comptime C01_MEAN = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C01_MEAN"]()
 comptime C02_STATS_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C02_STATS_PAIR"]()
 comptime C03_FINITE_EXTREMA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA"]()
-comptime C04_LOAD_CENTER = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C04_LOAD_CENTER"]()
+# C04 is split (lane classical-decomp, 2026-10-07): its PCA use is the =4 arm of
+# MOJOLEARN_CLASSICAL_PCA_COV (linear_controls.mojo); C04_LDA is the x_prep
+# `centered_matmul` op (LDA transform, solver != eigen), behavior unchanged.
+comptime C04_LDA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C04_LDA"]()
 comptime C05_PHASE_SCRATCH = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH"]()
 # C06 (lane classical-kmeans, 2026-10-07): ONE control with arms, replacing
 # ROWS2/ROWS4 (two defines where ROWS4 silently won). Rows per norm block,

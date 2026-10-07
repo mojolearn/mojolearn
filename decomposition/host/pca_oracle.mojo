@@ -138,11 +138,9 @@ The restatement is a prediction until measured. The CPU identity gate
 pca,pca-whiten,tsvd --require-columns 4`) is the measurement, and the
 brief records what it has shown.
 """
-from experiments.classical_identical_ideas.shared_controls import C01_LEAF64, C01_LEAF128
-from core.classical_stats import classical_column_mean
-from experiments.classical_identical_ideas.linear_controls import C23_CENTERED_PANELS
-from x_decomp.classical_cells import centered_gram_cell as c23_centered_gram_cell
-from experiments.classical_identical_ideas.shared_controls import C04_LOAD_CENTER
+from experiments.classical_identical_ideas.shared_controls import C01_MEAN
+from experiments.classical_identical_ideas.linear_controls import PCA_COV_C04, PCA_COV_C23, TSVD_FUSED_STATS
+from core.blocked_moments_host import host_bm_column_mean, host_bm_onepass_covariance, host_bm_tsvd_variances
 from core.classical_centered import centered_gram_v1_cell
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -244,14 +242,10 @@ def host_column_mean(x: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32
 def host_column_mean_launch(x: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32]:
     """`core/xtdz_coalesced.mojo::column_mean_launch`'s value: the tile
     order under IDN_XTY_TILED (lane fam2-shared), else `host_column_mean`."""
-    comptime if C01_LEAF64 or C01_LEAF128:
+    comptime if C01_MEAN:
+        # core/blocked_moments.mojo `bm_column_mean`'s host column
         if n_rows >= 1 and n_cols >= 1:
-            var means = List[Float32](length=n_cols, fill=Float32(0))
-            # Read-only shared helper ABI; x owns the storage for this fold.
-            var ptr = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
-            for column in range(n_cols):
-                means[column] = classical_column_mean(ptr, n_rows, n_cols, column)
-            return means^
+            return host_bm_column_mean(x, n_rows, n_cols)
     comptime if IDN_XTY_TILED:
         if n_rows >= 1 and n_cols >= 1:
             return host_column_mean_tiled(x, n_rows, n_cols)
@@ -738,31 +732,32 @@ def host_pca_fit(
 ) raises -> PCAHostFit:
     """`pca_fit_host` without the DeviceContext."""
     host_pca_validate(n_rows, n_cols, n_components)
-    var mu = host_column_mean_launch(x, n_rows, n_cols)
+    var mu: List[Float32]
     var cov: List[Float32]
-    if C23_CENTERED_PANELS:
-        cov = List[Float32](length=n_cols*n_cols, fill=Float32(0))
-        # Shared cell helpers only read x/mu, whose owners outlive this loop.
-        var xp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
-        var mp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(mu.unsafe_ptr()))
-        for i in range(n_cols):
-            for j in range(i, n_cols):
-                var value = c23_centered_gram_cell(xp, mp, n_rows, n_cols, i, j)
-                cov[i*n_cols+j] = value
-                cov[j*n_cols+i] = value
-    elif host_gram_applies(n_cols):
-        cov = host_gram_splitk(x, mu, True, n_cols, n_rows)
-    elif C04_LOAD_CENTER:
+    comptime if PCA_COV_C23:
+        # MOJOLEARN_CLASSICAL_PCA_COV=23: `bm_onepass_covariance`'s host
+        # column; it returns the (n - 1)-scaled covariance and the mean
+        mu = List[Float32]()
+        cov = host_bm_onepass_covariance(x, n_rows, n_cols, mu)
+    elif PCA_COV_C04:
+        # MOJOLEARN_CLASSICAL_PCA_COV=4: the reference cell the device's
+        # row-parallel leaves and binary-counter fold reproduce
+        mu = host_column_mean_launch(x, n_rows, n_cols)
         cov = List[Float32](length=n_cols*n_cols, fill=Float32(0))
         var xp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
         var mp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(mu.unsafe_ptr()))
         for i in range(n_cols):
             for j in range(n_cols):
                 cov[i*n_cols+j] = centered_gram_v1_cell(xp, mp, n_rows, n_cols, i, j)
+        host_scale_in_place(cov, Float32(1.0) / Float32(n_rows - 1))
     else:
-        var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
-        cov = host_gemm_tn(centered, n_cols, n_rows)
-    host_scale_in_place(cov, Float32(1.0) / Float32(n_rows - 1))
+        mu = host_column_mean_launch(x, n_rows, n_cols)
+        if host_gram_applies(n_cols):
+            cov = host_gram_splitk(x, mu, True, n_cols, n_rows)
+        else:
+            var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
+            cov = host_gemm_tn(centered, n_cols, n_rows)
+        host_scale_in_place(cov, Float32(1.0) / Float32(n_rows - 1))
     var result = host_eig_and_truncate(cov, n_cols, n_components, n_rows - 1)
     return PCAHostFit(result^, mu^)
 
@@ -821,6 +816,23 @@ def host_tsvd_explained(
     DeviceContext: X V^T by `host_gemm_nt_into` (`tsvd_transform`'s host
     arm), then both column variances."""
     host_pca_validate(n_rows, n_features, n_components)
+    comptime if TSVD_FUSED_STATS:
+        # MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS: `bm_tsvd_variances`' host column
+        var xs = List[Float32](length=n_rows * n_features, fill=Float32(0.0))
+        for i in range(n_rows * n_features):
+            xs[i] = x[i]
+        var vs = List[Float32](length=n_components * n_features, fill=Float32(0.0))
+        for i in range(n_components * n_features):
+            vs[i] = components[i]
+        var both = host_bm_tsvd_variances(xs, vs, n_rows, n_features, n_components)
+        var vx = List[Float32](length=n_features, fill=Float32(0.0))
+        var vt = List[Float32](length=n_components, fill=Float32(0.0))
+        for i in range(n_features):
+            vx[i] = both[i]
+        for i in range(n_components):
+            vt[i] = both[n_features + i]
+        tsvd_explained_finish(vt, vx, explained_ptr, ratio_ptr)
+        return
     var xt = List[Float32](length=n_rows * n_components, fill=Float32(0.0))
     host_gemm_nt_into(
         x, components, host_list_ptr(xt), n_rows, n_components, n_features,

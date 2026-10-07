@@ -1493,3 +1493,17 @@ Evidence: `~/mojolearn-evidence/board-review-20261007/review_classical.md` (C06,
 | `C38_REUSE_NEAREST` / `C38_DEVICE_POTENTIAL` KMeans half (IDENTICAL) | kmeans / all | main @ 8be4d20d4 | none (no-op) | - | DROPPED (deleted) | OR-ed into `IDN_KMEANS_INCR_INIT`, `KMEANS_FAST_PP_NOSYNC`, `IDN_KMEANS_INIT_PSI_DEVICE`, which NVIDIA/AMD IDENTICAL already set: no-op there. Its x_cluster half (k-means++ distances once per distinct candidate) is real and kept as `XCLUSTER_KPP_DISTINCT` |
 | `C30_DIRECT_DISTANCE` + `C30_ROWS_4`, `C36_CENTROID_TILES` + `C36_ROWS_4` (IDENTICAL) | kmeans istella (5.3x NV), ~12 algorithms | main @ 8be4d20d4 | board-review-20261007 all-on | see review | RESTRUCTURED | too broad and redundant (C30_ROWS_4 and C36_ROWS_4 set the same value). Now one KMeans control `KMEANS_ROW_ASSIGN=2|4` (+ `KMEANS_DIRECT_DISTANCE` arm) with a k*d <= 512 cost rule for the expanded arms, `XCLUSTER_ROW_ASSIGN=2|4`, and per-family direct-distance defines KNN / KDE / DBSCAN / GRAPH / IVF with the old behavior. A/B owed per family |
 | `CLASSICAL_C06_ROWS2` / `C06_ROWS4` (IDENTICAL) | row norms | main @ 8be4d20d4 | none | - | RESTRUCTURED | two defines where ROWS4 silently won: now `CLASSICAL_C06_NORM_ROWS=2|4`; new `CLASSICAL_C06_SMALL_D_THREAD` (thread per row at d <= 32, incumbent bits); KMeans direct arms no longer compute norms they never read. A/B owed |
+
+## Classical IDENTICAL decomposition switches (lane/classical-decomp, 2026-10-07)
+
+The serial one-thread-per-cell kernels below were the measured culprits of the all-on IDENTICAL A/B
+(`~/mojolearn-evidence/board-review-20261007/review_classical.md`; NVIDIA / AMD all-on time ratios). Their code is
+deleted; the ideas return as row-parallel rewrites (`core/blocked_moments.mojo`), default OFF and unmeasured.
+Old code is recoverable at main 8be4d20d4.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_CLASSICAL_C01_LEAF64` / `_LEAF128` (mean kernel part) | tsvd taxi, pca taxi | main @ 8be4d20d4 | six-lane all-on 20261006 | tsvd taxi x4.8 NV / x6.6 AMD (all-on) | DROPPED-slower | one GPU thread per column over all rows (d = 11 threads); replaced by `MOJOLEARN_CLASSICAL_C01_MEAN` (leaf column sums + binary-counter fold); the metrics leaf became `MOJOLEARN_CLASSICAL_C01_LEAF=32\|64\|128` |
+| `MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS` (PCA) | pca taxi | main @ 8be4d20d4 | six-lane all-on 20261006 | pca taxi x3.0 NV / x3.7 AMD (all-on, with C01) | DROPPED-slower | d*d = 121 threads each over all rows; replaced by `MOJOLEARN_CLASSICAL_PCA_COV=23` (one blocked pass, per-leaf centering, Chan merge) |
+| `MOJOLEARN_CLASSICAL_C04_LOAD_CENTER` (PCA) | pca istella | main @ 8be4d20d4 | none (shadowed by C23 in all-on) | - | DROPPED-serial | per-cell serial kernel, never reached at d <= 128 (split-K took precedence); replaced by `MOJOLEARN_CLASSICAL_PCA_COV=4` (same cell values, row-parallel, every width); LDA use renamed `MOJOLEARN_CLASSICAL_C04_LDA` |
+| `MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS` (MCD) | min-cov-det, elliptic-envelope | main @ 8be4d20d4 | not measured alone | - | REWRITTEN | split to `MOJOLEARN_CLASSICAL_C23_MCD`; same panel-256 cell values computed row-parallel |
