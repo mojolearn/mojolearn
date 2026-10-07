@@ -1,7 +1,7 @@
 """The prep lane's device runner: the arena goes up once, every stage of the
 program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
-from experiments.classical_identical_ideas.shared_controls import C07_KEYS1024, C07_KEYS4096, C08_GROUPED_OUTPUT
+from experiments.classical_identical_ideas.shared_controls import C07_RADIX_ROWS, C08_GROUPED_OUTPUT, C08_DICTIONARY, C08_UNIQUE_SCAN
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -358,9 +358,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # 0.070 s, every digest equal); MOJOLEARN_XPREP_SORT_RADIX=0 is the bitonic sort.
     # MOJOLEARN_XPREP_SORT_CHUNK = positions per chunk (512 to 4096 measured within 0.006 s).
     var radix = False
-    # C07 task sizes bound per-task key traffic independently of digit width.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var radix_rows = 4096 if C07_KEYS4096 else (1024 if C07_KEYS1024 else 2048)
+    # C07 (IDENTICAL int sweep MOJOLEARN_CLASSICAL_C07_RADIX_ROWS = 1024|2048|4096, default
+    # 2048): keys one (column, chunk) task walks, independent of the digit width; same words.
+    var radix_rows = C07_RADIX_ROWS
     comptime if IDN_XPREP_RADIX:
         # K1: IDENTICAL takes the radix sort by define, not by env (the same words either way)
         radix = True
