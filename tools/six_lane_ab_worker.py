@@ -94,30 +94,51 @@ def make_runner(module,family,work,data,saved,race_arm):
     return module.BUILDERS[(work['lane'],race_arm)](data,saved)
 
 
+# The verdict clock (owner, 2026-10-07): fit and transform/predict only, each
+# recorded separately. Dataset load, lane transforms, runner construction
+# (harness host->device staging, recipe materialization), inference-runner
+# setup, output capture, hashing and persistence are outside it. Product work
+# the estimator does inside its own fit/predict call stays inside. The old
+# whole-operation total remains recorded as full_operation_seconds.
+SCORED_BOUNDARY='scored = fit/training call + required sync, plus the separate transform/predict call + required sync when present; excludes load, preparation, construction, inference-runner setup and output capture'
+
+
 def complete_operation(module,family,work,data,runner):
     start=time.perf_counter()
     if family=='forest':runner.out=None
     if family=='expanded':runner.fit()
     else:runner.call();runner.sync()
     fitted=time.perf_counter();inference={};inference_outputs=None
+    infer_core=0.0
     if work['inference']=='separate':
         if family=='classical':
-            inf=module.infer_runner(work['lane'],runner,data);inf.call();inf.sync();inference=inf.outputs()
+            # infer_runner setup (its documented untimed upload) and the
+            # host capture in outputs() stay outside the scored predict call.
+            inf=module.infer_runner(work['lane'],runner,data)
+            called=time.perf_counter();inf.call();inf.sync();infer_core=time.perf_counter()-called
+            inference=inf.outputs()
         elif family=='more':
             # These saved runners perform prediction and its host conversion
             # in outputs(). Keep that exact operation once, inside the declared
             # inference interval, instead of issuing duplicate predictions.
-            inference_outputs=runner.outputs();runner.sync()
-        elif hasattr(runner,'infer') and runner.infer():pass
+            inference_outputs=runner.outputs();runner.sync();infer_core=time.perf_counter()-fitted
+        elif hasattr(runner,'infer') and runner.infer():infer_core=time.perf_counter()-fitted
         else:raise ValueError('No existing separate inference operation for this saved race')
+    elif family=='forest':
+        # The forest runner predicts lazily inside outputs(). Issue that same
+        # single prediction here so the scored clock holds it and the output
+        # capture below only reads the result (no duplicate prediction).
+        runner.infer();infer_core=time.perf_counter()-fitted
     inferred=time.perf_counter()
     outputs=inference_outputs if inference_outputs is not None else runner.outputs()
     if hasattr(runner,'sync'):runner.sync()
     elif hasattr(runner,'sync_for_receipt'):runner.sync_for_receipt()
     end=time.perf_counter()
     if inference:outputs=dict(outputs,separate_inference=inference)
-    timings=dict(fit_or_training_seconds=fitted-start,consumed_output_seconds=end-inferred)
-    if work['inference']=='separate':timings['inference_seconds']=inferred-fitted
+    timings=dict(fit_or_training_seconds=fitted-start,consumed_output_seconds=end-inferred,
+                 scored_fit_seconds=fitted-start,scored_inference_seconds=infer_core,
+                 scored_seconds=(fitted-start)+infer_core)
+    if work['inference']=='separate' or family=='forest':timings['inference_seconds']=inferred-fitted
     return outputs,end,timings
 
 
@@ -152,6 +173,8 @@ def run(args):
     start=time.perf_counter();data,saved=saved_inputs(module,family,work)
     runner=make_runner(module,family,work,data,saved,race_arm);prepared=time.perf_counter()
     outputs,end,timings=complete_operation(module,family,work,data,runner)
+    # full_operation_seconds is the old whole total (load + preparation +
+    # operation + capture), kept as a record. Verdicts use scored_seconds.
     timings.update(full_operation_seconds=end-start,preparation_seconds=prepared-start,cold_seconds=end-start)
     # Everything below (shape/setting admission, hashes, model export, metrics,
     # environment inspection and persistence) is outside the timed operation.
@@ -220,8 +243,8 @@ def run(args):
             raise ValueError('Required repeated learned-state capture failed; retained original output evidence')
         repeated.append(dict(index=index,timings=parts,outputs=repeated_output,retained_output_values=str(repeated_values_path),model_state=repeated_state))
     counts=dict(excluded_warmups=int(args.phase=='warmup'),scored=int(args.phase=='scored'))
-    result=dict(schema='mojolearn.full-ab-result/1',status='PASS',source_sha=recipe['source_sha'],dataset_sha256=job['dataset_sha256'],dataset_version=work['dataset_version'],dataset_split=work['split'],seed=work['seed'],mode=job['mode'],vendor=recipe['vendor'],arm=args.arm,phase=args.phase,dimensions=actual_shapes,estimator_settings=actual_settings,full_dataset_coverage=True,timed_boundary=job['timed_boundary'],
-        timings=timings,repeated_use=repeated,missing_timing_scopes=[] if repeated else ['repeated use'],outputs=output,retained_output_values=str(values_path),output_sha256=output['sha256'],model_state=state,loaded_artifacts=loaded,configuration=cfg,implementation_ids=job['implementation_ids'],workload_id=job['workload_id'],hashing_outside_timing=True,source_coverage_pending=job.get('source_coverage_pending',[]),
+    result=dict(schema='mojolearn.full-ab-result/1',status='PASS',source_sha=recipe['source_sha'],dataset_sha256=job['dataset_sha256'],dataset_version=work['dataset_version'],dataset_split=work['split'],seed=work['seed'],mode=job['mode'],vendor=recipe['vendor'],arm=args.arm,phase=args.phase,dimensions=actual_shapes,estimator_settings=actual_settings,full_dataset_coverage=True,timed_boundary=job['timed_boundary'],scored_boundary=SCORED_BOUNDARY,
+        timings=timings,aa_noise_floor=job.get('aa_noise_floor'),repeated_use=repeated,missing_timing_scopes=[] if repeated else ['repeated use'],outputs=output,retained_output_values=str(values_path),output_sha256=output['sha256'],model_state=state,loaded_artifacts=loaded,configuration=cfg,implementation_ids=job['implementation_ids'],workload_id=job['workload_id'],hashing_outside_timing=True,source_coverage_pending=job.get('source_coverage_pending',[]),
         hardware=hardware_record(runner),declared_hardware=recipe.get('hardware'),compiler=[a['compiler'] for a in expected],thread_environment={k:os.environ.get(k) for k in THREAD_ENV},resource_policy=actual_resources,declared_resource_policy=recipe['resource_policy'],effective_pools=pools,harness_sha256=work['harness_sha256'],sample_counts=counts,
         task_quality=dict(status='PENDING',metrics=metrics,gate_source=work['quality_gate_source'],reason='Existing independent gate assessment remains required; no acceptance inferred from metrics alone'),runtime_reach=info)
     if recipe['source_sha']!=git('rev-parse','HEAD') or git('status','--porcelain','--untracked-files=all'):raise ValueError('Worker source freeze changed during operation')
