@@ -3112,6 +3112,16 @@ _AGN_BUDGET = 1 << 25
 #: inside the explainer (xtrees/agnostic_device.mojo `model_kernel`): no
 #: synthetic matrix, no model call per chunk. Moves no bit.
 _AGN_IDN_DEVICE_MODEL = 64
+#: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL / MOJOLEARN_PSHAP_FAST_DEVICE_MODEL
+#: (lane apple-fast-round2, FAST + Apple experiments, default off; bits 1024
+#: and 2048 of `x_trees_fast_switches`): the FAST KernelExplainer /
+#: PermutationExplainer take the device-model route above instead of
+#: downloading every chunk's synthetic matrix to call the model's predict
+#: (xtrees/agnostic_device.mojo has the cost reasoning). The model's
+#: predict on the host inside a GPU explain is host-route debt; this route
+#: removes it for this library's flat forests.
+_KSHAP_FAST_DEVICE_MODEL = 1024
+_PSHAP_FAST_DEVICE_MODEL = 2048
 
 
 def _agn_device_forest(explainer, model):
@@ -3122,8 +3132,16 @@ def _agn_device_forest(explainer, model):
     callback). The arrays are the snapshot the forest's own predict
     validated and froze (`_prepare_resident_forest`). rf_input: the random
     forest's predict flushes the compared feature, ExtraTrees' does not."""
-    if _trees_fast_tier(explainer) or not _trees_build_switch(explainer, _AGN_IDN_DEVICE_MODEL):
+    if _trees_fast_tier(explainer):
+        # FAST experiments: one bit per explainer (routing only, no compute)
+        bit = _PSHAP_FAST_DEVICE_MODEL if isinstance(explainer, PermutationExplainer) else _KSHAP_FAST_DEVICE_MODEL
+        if not _trees_switch(explainer, bit):
+            return None
+        fast = True
+    elif not _trees_build_switch(explainer, _AGN_IDN_DEVICE_MODEL):
         return None
+    else:
+        fast = False
     m = getattr(model, "_random_inner", None)
     if m is None:
         m = model
@@ -3138,7 +3156,15 @@ def _agn_device_forest(explainer, model):
     if not hasattr(m, "_offsets") or not callable(getattr(m, "_ordered_resident_auto", None)):
         return None
     try:
-        if m._effective_mode() != "identical" or not m._ordered_resident_auto():
+        if fast:
+            # FAST: the forest's own predict may be parallel_groves; the
+            # device walk is the strict increasing-tree sum over the same
+            # validated snapshot (no bits requirement in FAST).
+            # _prepare_resident_forest refuses (ValueError) a forest with
+            # neither resident route, which keeps the callback.
+            if m._effective_mode() not in ("fast", "identical"):
+                return None
+        elif m._effective_mode() != "identical" or not m._ordered_resident_auto():
             return None
         m._prepare_resident_forest()
     except (AttributeError, ImportError, RuntimeError, ValueError):
@@ -3285,7 +3311,9 @@ class KernelExplainer(_AgnosticExplainer):
         x0, f0, p0 = addr_ro(Xa, name="X"), addr_ro(fx, name="fx"), addr(phi, name="phi")
         fnull = self._fnull
         R = self._chunk(m * nb * d, n)
-        if m > 0 and _trees_switch(self, _KSHAP_FAST_BATCH):
+        # MOJOLEARN_KSHAP_FAST_DEVICE_MODEL: a loaded device model (self._dev,
+        # only set on FAST when that bit is on) wins over the batched download
+        if m > 0 and _trees_switch(self, _KSHAP_FAST_BATCH) and getattr(self, "_dev", None) is None:
             self._batched(b, Xa, fx, taddr, phi, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R)
             return self._shape(phi, n, d)
         if self._model_load(b):

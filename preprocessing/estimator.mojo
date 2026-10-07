@@ -5,6 +5,9 @@ from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+from checks.numerics import NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
@@ -324,6 +327,63 @@ def standard_transform_direct(
         ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
         ctx.synchronize()
     _ = dout^; _ = ds^; _ = dm^; _ = dx^; _ = ctx^
+    return ok
+
+
+# ---- MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED (lane apple-fast-round2) ----
+# FAST + Apple experiment, default off. StandardScaler.fit_transform(X) was
+# fit (X up, scan, stats, rows home) then transform (the SAME X up again,
+# the stats up, kernel, scans, output home): two n*d uploads of one array.
+# Here X goes up once and the transform kernel reads the resident copy and
+# the fitted rows where the fit left them. The reuse is by construction (the
+# one buffer fit_transform was handed), never by matching a size, so a
+# different array can never take a stale copy. Cost: one n*d host-to-device
+# copy and one host round trip saved (on Apple, shared-memory uploads of
+# ~1-2 ms per 64 MB, so a 10^9-byte X saves tens of ms against a ~1 ms
+# kernel). Same kernels on the same words as fit + transform: no bit moves.
+comptime PREP_FAST_FIT_TRANSFORM_FUSED = (
+    _DEVCTX_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"]()
+)
+
+
+def standard_fit_transform_direct(
+    x: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, with_mean: Int, with_std: Int,
+    stats: MutPointer[Float32, MutUntrackedOrigin], output: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """`standard_fit_direct` then `standard_transform_direct` (inverse 0) on
+    ONE upload of X: the three fitted rows into `stats` (3 d) and the n*d
+    transformed words into `output`. 1 when both were written; 0 (nothing
+    written) when X holds a NaN or an infinity (the caller's two-step NaN
+    route); -1 (the rows written, the output not) on a Float32 overflow in
+    the transform. A nonfinite or invalid fitted row raises as the fit does."""
+    validate_standard(n,d,with_mean,with_std)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dx = _upload_direct(ctx,x,n*d)
+    if device_first_nonfinite(ctx,dx,n*d) >= 0:
+        _ = dx^
+        return 0
+    var res = standard_fit_dev(ctx,dx,n,d,with_mean,with_std)
+    var f = _prep_rows_check_emit(ctx,res,3*d,2*d,d,d,d,3*d,stats)
+    if f[0] != 0:
+        _ = dx^; _ = res^
+        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
+    if f[1] != 0:
+        _ = dx^; _ = res^
+        raise Error("StandardScaler: invalid variance or scale")
+    # row 0 the mean, row 2 the scale (the rows fit keeps as mean_ / scale_;
+    # the kernel reads each only when its flag is set, as transform passes)
+    var dm = res.create_sub_buffer[DType.float32](0, d)
+    var ds = res.create_sub_buffer[DType.float32](2*d, d)
+    var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
+    standard_transform_into(ctx,dx,dm,ds,dout,n,d,0,with_mean,with_std)
+    var ok = 1
+    if device_first_nonfinite(ctx,dout,n*d) >= 0:
+        ok = -1
+    else:
+        ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
+        ctx.synchronize()
+    _ = dout^; _ = ds^; _ = dm^; _ = res^; _ = dx^; _ = ctx^
     return ok
 
 

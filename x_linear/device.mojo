@@ -946,6 +946,100 @@ def sgd_mb_steprows_kernel(
     witness_end(wf, woff, nonce)
 
 
+# lane apple-fast-round2 (2026-10-07): MOJOLEARN_SGD_FAST_EPOCH_RESIDENT, a
+# FAST + Apple experiment, default off. SGDClassifier / SGDRegressor at
+# their large batch (sub-blocks of XG_TPB rows, so above MB_SMALL_BATCH) ran
+# three launches per minibatch on FAST (rows, partials, step): n / batch x 3
+# launches an epoch, each ~20 us of Metal encode + launch while the batch's
+# arithmetic is a few us across the GPU, so the launch stream is the epoch.
+# Here a minibatch is ONE launch (`sgd_mb_fast_batch_kernel`): every block
+# applies the previous batch's step from its partials (w0 -> w1, the same
+# word from every block, as SGD_IDN_MB_FUSE does), crosses `team_barrier`,
+# runs its XG_TPB rows on w1, crosses `team_barrier` again and writes the
+# partials of exactly those rows (block s = sub-block s, since sub ==
+# XG_TPB == the block's width) to the other parts buffer. The epoch's
+# launches are all enqueued with no host wait; the one sync per epoch (the
+# stop words) stays. The minibatch loop is not folded into a single launch
+# per epoch: that needs a grid-wide barrier between rows and step, and
+# Metal does not guarantee co-resident threadgroups (a spin barrier can
+# hang into the macOS long-launch abort), while one block per epoch would be
+# a serial one-block route over a runtime size. 3 launches a batch -> 1.
+# Update order: the same batches in the same order, the same helpers, the
+# same sub-block fold (sub = XG_TPB); FAST carries no bits requirement.
+comptime SGD_FAST_EPOCH_RESIDENT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"]()
+)
+
+
+def sgd_mb_fast_batch_kernel(
+    parts_prev: FP, parts_cur: FP, w0: FP, b0: FP, w1: FP, b1: FP, obj: FP, x: FP, ys: FP, idx: IP, swp: FP,
+    dlv: FP, lv: FP, ci: IP, cf: FP, etp: FP, start: Int32, bs_prev: Int32, bs: Int32, eta: Float32,
+    dev_eta: Int32, wf: IP, woff: Int32, nonce: Int32,
+):
+    """SGD_FAST_EPOCH_RESIDENT, one launch per minibatch (ocm == 0 only; the
+    host gates it). ci / cf: `_sgd_mb_chunk_kernel_body`'s. bs_prev > 0: the
+    step of the previous batch from parts_prev (w0 -> w1); then the rows
+    [start, start + bs) on the stepped weights (w1, or w0 when bs_prev == 0)
+    and this block's sub-block partials into parts_cur. bs == 0 is the step
+    alone (one block; w1 may equal w0, each thread owning its words)."""
+    var dd = ldi(ci, 2)
+    var loss = ldi(ci, 3)
+    var has_sw = ldi(ci, 4) != 0
+    var has_cw = ldi(ci, 5) != 0
+    var lr = ldi(ci, 6)
+    var nsub = ldi(ci, 7)
+    var penalty = ldi(ci, 8)
+    var fi = ldi(ci, 9) != 0
+    var need_obj = ldi(ci, 10) != 0
+    var one_class = ldi(ci, 11) != 0
+    var bsum = ldi(ci, 12) != 0
+    var sub = ldi(ci, 13)
+    var dblk = ldi(ci, 14)
+    var eps = ld(cf, 0)
+    var wpos = ld(cf, 1)
+    var wneg = ld(cf, 2)
+    var eta0 = ld(cf, 3)
+    var alpha = ld(cf, 5)
+    var l1r = ld(cf, 6)
+    var e = ld(etp, 0) if dev_eta != 0 else eta
+    var tid = Int(thread_idx.x)
+    var nt = Int(block_dim.x)
+    var bp = Int(bs_prev)
+    var wr = w0
+    var br = b0
+    if bp > 0:
+        var subs = mb_subs(bp, sub)
+        for j in range(tid, dd + 2, nt):
+            var g = Float32(0)
+            for s in range(subs):
+                g = fa(g, ld(parts_prev, j * nsub + s))
+            if j < dd:
+                st(w1, j, mb_step(ld(w0, j), g, bp, e, alpha, l1r, penalty, bsum))
+            elif j == dd:
+                if fi:
+                    st(b1, 0, mb_bias_step(ld(b0, 0), g, bp, e, alpha, one_class, bsum))
+                else:
+                    st(b1, 0, ld(b0, 0))
+            elif need_obj and Int(block_idx.x) == 0:
+                st(obj, 0, fa(ld(obj, 0), g))
+        wr = w1
+        br = b1
+    team_barrier()
+    var r = Int(block_idx.x) * nt + tid
+    if r < Int(bs):
+        var i = Int(idx.unsafe_load(Int(start) + r))
+        var o = mb_row(x, ys, i, dd, wr, 0, ld(br, 0), loss, eps, swp, has_sw, wpos, wneg, has_cw, lr, eta0, dblk)
+        st(dlv, r, o[0])
+        st(lv, r, o[1])
+    team_barrier()
+    if Int(bs) > 0:
+        var sb = Int(block_idx.x)
+        for j in range(tid, dd + 2, nt):
+            st(parts_cur, j * nsub + sb, mb_part(x, dd, idx, Int(start), dlv, lv, j, sb, Int(bs), sub))
+    witness_end(wf, woff, nonce)
+
+
 # lane/idn-sgd-multiblock: the fit's finiteness check on the device
 # (IDENTICAL). The binding walked all n x d host words one at a time before
 # every fit (bindings/_mojolearn_x_linear.mojo `_finite`); here one thread
@@ -1552,6 +1646,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var ddl = ctx.enqueue_create_buffer[DType.float32](batch)
     var dlv = ctx.enqueue_create_buffer[DType.float32](batch)
     var dparts = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub)
+    # SGD_FAST_EPOCH_RESIDENT: the second partials buffer (one word otherwise)
+    var dparts2 = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub if SGD_FAST_EPOCH_RESIDENT else 1)
     var dw = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     # the intercept as (hi, lo): the one-class float-float (SGD_OC_MB_IMPLICIT;
     # the low word stays 0 and unread with ocm 0)
@@ -1685,7 +1781,67 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                     )
                 dobj.enqueue_fill(Float32(0))
                 var start = 0
-                if chunk > 1 and batch <= XG_TPB and d + 2 <= XG_TPB:
+                var fast_fused = False
+                comptime if SGD_FAST_EPOCH_RESIDENT:
+                    # one launch per minibatch (sgd_mb_fast_batch_kernel's
+                    # comment); weights ping-pong dw/dbias <-> dw2/dbias2,
+                    # partials dparts <-> dparts2. cur 0: weights in dw.
+                    if ocm == 0 and sub == XG_TPB:
+                        fast_fused = True
+                        var cur = 0
+                        var bs_prev = 0
+                        var et_prev = eta0
+                        var pp = 0
+                        var etp = FP(unsafe_from_address=Int(dstt.unsafe_ptr())) + 4 * par + 2
+                        var wa = Int(dw.unsafe_ptr())
+                        var wb = Int(dw2.unsafe_ptr())
+                        var ba = Int(dbias.unsafe_ptr())
+                        var bb = Int(dbias2.unsafe_ptr())
+                        var pa = Int(dparts.unsafe_ptr())
+                        var pb = Int(dparts2.unsafe_ptr())
+                        while start < n:
+                            var bs = min(batch, n - start)
+                            var et = mb_eta(lr, eta0, eta0, alpha, power_t, opt_init, t)
+                            var stepped = bs_prev > 0
+                            ctx.enqueue_function[sgd_mb_fast_batch_kernel](
+                                FP(unsafe_from_address=pb if pp == 0 else pa),
+                                FP(unsafe_from_address=pa if pp == 0 else pb),
+                                FP(unsafe_from_address=wa if cur == 0 else wb),
+                                FP(unsafe_from_address=ba if cur == 0 else bb),
+                                FP(unsafe_from_address=wb if cur == 0 else wa),
+                                FP(unsafe_from_address=bb if cur == 0 else ba),
+                                dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
+                                ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp,
+                                Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(dev_eta),
+                                wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                            )
+                            wo += _xg_blocks(bs)
+                            if stepped:
+                                cur = 1 - cur
+                            # this batch's partials went to the buffer pp names
+                            pp = 1 - pp
+                            bs_prev = bs
+                            et_prev = et
+                            t += bs if bsum else 1
+                            start += bs
+                        if bs_prev > 0:
+                            # the last batch's step into dw / dbias (in place
+                            # when cur == 0: one block, a thread per word)
+                            ctx.enqueue_function[sgd_mb_fast_batch_kernel](
+                                FP(unsafe_from_address=pb if pp == 0 else pa),
+                                FP(unsafe_from_address=pa if pp == 0 else pb),
+                                FP(unsafe_from_address=wa if cur == 0 else wb),
+                                FP(unsafe_from_address=ba if cur == 0 else bb),
+                                FP(unsafe_from_address=wa), FP(unsafe_from_address=ba),
+                                dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
+                                ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp,
+                                Int32(start), Int32(bs_prev), Int32(0), et_prev, Int32(dev_eta),
+                                wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
+                            )
+                            wo += 1
+                if fast_fused:
+                    pass
+                elif chunk > 1 and batch <= XG_TPB and d + 2 <= XG_TPB:
                     if pa_rate:
                         ctx.enqueue_function[sgd_rowsq_kernel](
                             dx.unsafe_ptr(), Int32(n), Int32(d), dsq.unsafe_ptr(), wit.p(), Int32(wo), nonce,

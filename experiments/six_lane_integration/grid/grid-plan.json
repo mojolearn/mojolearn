@@ -44924,6 +44924,52 @@
  "excluded": [
   {
    "algorithms": [],
+   "control": "kshap_fast_device_model",
+   "define": "MOJOLEARN_KSHAP_FAST_DEVICE_MODEL",
+   "file": "apple-fast-round2",
+   "reasons": [
+    "off-board: \"; A/B on the M3 (docs/apple-fast/ab/apple-fast-round2.txt). not on the board lane list as a reached route: the board kernel-shap explains a NumPy\"",
+    "off-board (tag off_board)",
+    "grid: exclude (authored)",
+    "not declared by any board algorithm workload"
+   ]
+  },
+  {
+   "algorithms": [],
+   "control": "pshap_fast_device_model",
+   "define": "MOJOLEARN_PSHAP_FAST_DEVICE_MODEL",
+   "file": "apple-fast-round2",
+   "reasons": [
+    "off-board: \"; A/B on the M3 (docs/apple-fast/ab/apple-fast-round2.txt). not on the board lane list as a reached route: the board permutation-shap explains the\"",
+    "off-board (tag off_board)",
+    "grid: exclude (authored)",
+    "not declared by any board algorithm workload"
+   ]
+  },
+  {
+   "algorithms": [],
+   "control": "sgd_fast_epoch_resident",
+   "define": "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT",
+   "file": "apple-fast-round2",
+   "reasons": [
+    "grid: exclude (authored)",
+    "not declared by any board algorithm workload"
+   ]
+  },
+  {
+   "algorithms": [],
+   "control": "x_prep_fast_fit_transform_fused",
+   "define": "MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED",
+   "file": "apple-fast-round2",
+   "reasons": [
+    "off-board: \"; A/B on the M3 (docs/apple-fast/ab/apple-fast-round2.txt). not on the board lane list as a reached route: the board standard-scaler times fit(X)\"",
+    "off-board (tag off_board)",
+    "grid: exclude (authored)",
+    "not declared by any board algorithm workload"
+   ]
+  },
+  {
+   "algorithms": [],
    "control": "c08_onehot_ft",
    "define": "MOJOLEARN_CLASSICAL_C08_ONEHOT_FT",
    "file": "classical-encoders",
@@ -45569,6 +45615,13 @@
  },
  "inputs": {
   "grid_controls": {
+   "apple-fast-round2": {
+    "branch": "lane/apple-fast-round2",
+    "head": "db19e2107",
+    "lane": "apple-fast-round2",
+    "path": "experiments/six_lane_integration/grid_controls/apple-fast-round2.json",
+    "sha256": "bf501efac8f43ae7de6a5bf34714174a8888e57a617ce90180f033817e7a8e4d"
+   },
    "classical-cv": {
     "branch": "lane/classical-cv",
     "head": "0410922f36b2",
@@ -45791,6 +45844,7 @@
   }
  ],
  "removed_per_file": {
+  "apple-fast-round2": 0,
   "classical-cv": 3,
   "classical-cv-folds": 0,
   "classical-decomp": 4,
@@ -45853,11 +45907,11 @@
   "cells": 2722,
   "configs": 597,
   "configs_per_vendor": 597,
-  "controls": 229,
+  "controls": 233,
   "deferred_configs": 346,
   "deferred_cross_configs": 198283,
   "deferred_cross_groups": 107,
-  "excluded_controls": 52,
+  "excluded_controls": 56,
   "guard_asserts": 119,
   "mapped_algorithms": 84,
   "packed_multi_member": 101,
