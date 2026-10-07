@@ -46,6 +46,8 @@ refusal, its reflector's stored tail is zeroed so no later product reads it.
 """
 from experiments.classical_identical_ideas.linear_controls import C24_PANEL8, C24_ROWS2048, C24_TREE4
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 
 #: rows per leaf block (the last block takes the remainder)
 comptime TS_TREE_ARITY = 4 if C24_TREE4 else 2
@@ -59,6 +61,37 @@ comptime TS_TPB = TS_P * TS_NB
 #: the widest matrix the route takes (a leaf block holds >= TS_ROWS rows, a
 #: tree combine is O(n^3) cells in one threadgroup)
 comptime TS_MAX_N = 512
+
+# lane/classical-structural (2026-10-07), IDENTICAL only, default off:
+# `-D MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO`. randomized_svd orthonormalizes its
+# tall sketch (m x l, l small) nine times per fit through `orth`: two passes
+# of the sliced Householder `qr_factor` (64 slices x 32 threads, 18 serial
+# reflector steps each), a one-thread rank guard and a per-row trsm, about
+# 154 launches, 6 syncs and 4 allocations per orth. Under this define `orth`
+# is ONE blocked TSQR pass (`ts_factor_device`, the OLS kernels: 4096-row
+# leaves in parallel, a fixed combine tree) with the explicit Q formed by
+# applying the kept reflectors to a selection matrix (`ts_apply_device`,
+# C = diag(R[j, j] != 0 after the rank guard)), about 25 launches and 1 sync
+# per orth. Cost reasoning: the sketch is read three times at full width
+# instead of being walked by 2,048 threads with strided loads; the gain is
+# latency, not flops, so it holds for any tall m x l with l small. Bits
+# change (one Householder pass with the TSQR's reflector order instead of
+# two sliced passes): the host column (`HostExec.orth`) takes the same route
+# through `ts_factor_host` / `ts_apply_host`, the TSQR's host replay, so the
+# two columns move together. A dependent column (rank guard zero) maps to a
+# zero column of C and so to an exactly zero Q column, which keeps
+# randomized_svd's `nlive` compaction contract. Shapes the TSQR does not
+# take (l > TS_MAX_N, m < l, an Int32 overflow) keep the two-pass route on
+# both columns.
+comptime RSVD_IDN_TSQR_ORTHO = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO"]()
+)
+
+
+def orth_tsqr_shape_ok(m: Int, l: Int) -> Bool:
+    """The shapes `tsqr_r_py` accepts (x_decomp/api.mojo): the TSQR orth is
+    taken exactly for these on both columns."""
+    return l >= 1 and m >= l and l <= TS_MAX_N and m * l <= 2147483647
 #: cells (multiply-adds) per device launch: macOS silently cuts a long Metal
 #: command buffer, so every phase is sliced to about this much work. 2^34
 #: (lane apple-fast-tsqr; was 2^27, which left ONE to three leaf blocks per

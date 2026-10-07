@@ -781,14 +781,42 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
             retained_bytes += len(st[].bufs[i])*4
         if retained_bytes>16*1024*1024:
             raise Error("x_decomp tsqr: retained factor state exceeds16 MiB experiment budget")
+    var nb = ts_blocks(m)
+    var dcb = ctx.enqueue_create_buffer[DType.float32](nb * n * k)
+    ctx.enqueue_copy(dst_buf=dcb.create_sub_buffer[DType.float32](0, n * k), src_ptr=c)
+    return _ts_apply_dcb(ctx, dcb^, m, n, k, keep)
+
+
+def ts_apply_device_buf(
+    ctx: DeviceContext, dc: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """`ts_apply_device` for a c (n x k) that is already on the device (its
+    first n * k words), so no host matrix crosses: RSVD_IDN_TSQR_ORTHO's
+    selection matrix. The state is released."""
+    var st = TS_DEV_STATE.get_or_create_ptr()
+    if len(st[].bufs) != 4 or st[].m != m or st[].n != n:
+        ts_free_device()
+        raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
+    var nb = ts_blocks(m)
+    var dcb = ctx.enqueue_create_buffer[DType.float32](nb * n * k)
+    ctx.enqueue_copy(
+        dst_buf=dcb.create_sub_buffer[DType.float32](0, n * k), src_buf=dc.create_sub_buffer[DType.float32](0, n * k)
+    )
+    return _ts_apply_dcb(ctx, dcb^, m, n, k, False)
+
+
+def _ts_apply_dcb(
+    ctx: DeviceContext, var dcb: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, keep: Bool
+) raises -> DeviceBuffer[DType.float32]:
+    """The apply proper: `dcb` holds c in its first n * k words (the rest is
+    the tree's workspace)."""
+    var st = TS_DEV_STATE.get_or_create_ptr()
     var da = st[].bufs[0]
     var dt = st[].bufs[1]
     var dtl = st[].bufs[2]
     var dtau = st[].bufs[3]
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
-    var dcb = ctx.enqueue_create_buffer[DType.float32](nb * n * k)
-    ctx.enqueue_copy(dst_buf=dcb.create_sub_buffer[DType.float32](0, n * k), src_ptr=c)
     var strides = List[Int]()
     var s = 1
     while s < nb:
