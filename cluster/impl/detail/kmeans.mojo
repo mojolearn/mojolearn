@@ -79,6 +79,7 @@ from cluster.checks.plus_plus import (
     write_inclusive_scan_kernel,
 )
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.info import has_apple_gpu_accelerator
@@ -205,9 +206,16 @@ comptime IDN_KMEANS_DEVICE_CONV = (
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
-#: Iterations enqueued per flag read. CANDIDATE ARMS (the default is 8):
-#: `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1=1` (gating alone, one read per
-#: iteration), `_2`, `_4`, `_16`, `_32`. No bit depends on the chunk.
+#: Iterations enqueued per flag read: ONE int sweep define (lane
+#: classical-fixes, 2026-10-07), `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1|2|4|16|32`,
+#: default 8 when absent. It replaces the five mutually overriding defines
+#: `MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1|_2|_4|_16|_32` (refused in
+#: core/six_lane_experiment_guards.mojo); each value keeps that arm's loop.
+#: Cost reasoning: a chunk trades one host flag read (a sync) per chunk
+#: against up to chunk-1 near-empty launches enqueued past convergence; it
+#: does not depend on the data shape. No bit depends on the chunk (labels,
+#: centroids, inertia and n_iter are the per-iteration loop's), and the host
+#: column has no chunked loop, so it is unaffected.
 # A08 partial AMD WINNER,2026-10-06:poll1/current8=0.833,0.839,0.988 on
 # generated full fits100000x32,100001x33,65537x17 with32 clusters. One in-process
 # warmup+one score,MI325X,timing source4252d8155. NVIDIA/full named-dataset
@@ -217,23 +225,7 @@ comptime IDN_KMEANS_DEVICE_CONV = (
 # candidate0.887/1.077/1.517 ms vs1.086/1.272/1.503 ms on
 # 100000x32,100001x33,65537x17,k32. One warmup/score; default8 retained.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
-comptime KMEANS_CONV_CHUNK = (
-    # A08 partial AMD winner; no combined-vendor default admission yet.
-    1 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1"]()
-    else (
-        2 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2"]()
-        else (
-            4 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_4"]()
-            else (
-                16 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_16"]()
-                else (
-                    32 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_32"]()
-                    else 8
-                )
-            )
-        )
-    )
-)
+comptime KMEANS_CONV_CHUNK = get_defined_int["MOJOLEARN_IDN_KMEANS_CONV_CHUNK", 8]()
 
 
 def kmeans_shift_threshold(tol: Float64) -> Float32:
