@@ -190,21 +190,19 @@
    ],
    "binding": "_mojolearn_x_cnn",
    "bits_change": false,
-   "status": "rewritten",
+   "status": "kept",
    "entries": [
     "NN45",
     "NI16"
    ],
-   "board": "off-board (x_cnn)",
-   "tags": [
-    "off_board"
-   ],
+   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
    "arm_names": {
     "0": "separate",
     "1": "nn45_fwd_fused",
     "2": "ni16_fwd_bwd_fused"
    },
-   "note": "MOJOLEARN_XCNN_NO_DIRECT_CONV (x_cnn/device.mojo:321) is the pre-existing before-arm that exposes the fused path when direct conv would bypass it."
+   "note": "MOJOLEARN_XCNN_NO_DIRECT_CONV (x_cnn/device.mojo:321) is the pre-existing before-arm that exposes the fused path when direct conv would bypass it.",
+   "reach": "neural:cnn-clf, NOT reached at the board config (both arms live in the no-pool branch, x_cnn/device.mojo:2919/2999; both board blocks pool)"
   },
   "seq_lstm_scan": {
    "define": "MOJOLEARN_IDN_SEQ_LSTM_SCAN",
@@ -912,11 +910,9 @@
     "NN46",
     "NI14"
    ],
-   "board": "off-board (x_cnn)",
-   "tags": [
-    "off_board"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
+   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "reach": "neural:cnn-clf: x_cnn/ops.mojo:554 maxpool_bwd_val (every block) and :296 col2im_at (block 2, no NI14 arm)"
   },
   "nn47_apply_running": {
    "define": "MOJOLEARN_NN47_APPLY_RUNNING",
@@ -1216,11 +1212,9 @@
    "entries": [
     "NI10"
    ],
-   "board": "off-board (x_cnn)",
-   "tags": [
-    "off_board"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
+   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "reach": "neural:cnn-clf, NOT reached at the board shape (tape ~11 MB under the 64 MiB budget; read only via x_cnn_neural_tape_budget_bytes)"
   },
   "ni11_direct_taps64": {
    "define": "MOJOLEARN_NI11_DIRECT_CONV_TAPS64",
@@ -1241,11 +1235,9 @@
    "entries": [
     "NI11"
    ],
-   "board": "off-board (x_cnn)",
-   "tags": [
-    "off_board"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
+   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "reach": "neural:cnn-clf, NOT reached at the board shape (block 1 ckk 9 already direct, block 2 ckk 72 > 64)"
   },
   "ni12_implicit_conv": {
    "define": "MOJOLEARN_NI12_IMPLICIT_CONV",
@@ -1266,11 +1258,9 @@
    "entries": [
     "NI12"
    ],
-   "board": "off-board (x_cnn)",
-   "tags": [
-    "off_board"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
+   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "reach": "neural:cnn-clf: x_cnn/device.mojo:2817 _conv_relu_on_device, both blocks, fit and predict"
   },
   "ni14_bounded_col2im": {
    "define": "MOJOLEARN_NI14_BOUNDED_COL2IM",
@@ -1291,11 +1281,9 @@
    "entries": [
     "NI14"
    ],
-   "board": "off-board (x_cnn)",
-   "tags": [
-    "off_board"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
+   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "reach": "neural:cnn-clf: x_cnn/device.mojo:290 via _col2im :3022, block 2 backward; NI14_TILED wins when both are set"
   },
   "ni14_tiled_col2im": {
    "define": "MOJOLEARN_NI14_TILED_COL2IM",
@@ -1316,11 +1304,9 @@
    "entries": [
     "NI14"
    ],
-   "board": "off-board (x_cnn)",
-   "tags": [
-    "off_board"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
+   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "reach": "neural:cnn-clf: x_cnn/device.mojo:287 via _col2im :3022, block 2 backward"
   },
   "ni15_bias_no_ones": {
    "define": "MOJOLEARN_NI15_BIAS_NO_ONES",
@@ -1341,11 +1327,9 @@
    "entries": [
     "NI15"
    ],
-   "board": "off-board (x_cnn)",
-   "tags": [
-    "off_board"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
+   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "reach": "neural:cnn-clf: x_cnn/device.mojo:808/814 bias_grad_gemm (:3014, head :1492); bypassed when a neural GEMM experiment is on"
   },
   "ni17_balanced_norm": {
    "define": "MOJOLEARN_NI17_BALANCED_NORM",
@@ -1391,11 +1375,9 @@
    "entries": [
     "NI18"
    ],
-   "board": "off-board (x_cnn)",
-   "tags": [
-    "off_board"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
+   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "reach": "neural:cnn-clf: x_cnn/device.mojo:2643 res_gather_pair_perm on the fit_epoch_d route (bindings/_mojolearn_x_cnn.mojo:1465)"
   },
   "ni52_mlp_epoch_order": {
    "define": "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER",

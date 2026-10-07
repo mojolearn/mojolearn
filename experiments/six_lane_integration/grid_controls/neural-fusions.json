@@ -1,97 +1,207 @@
 {
-  "schema": "mojolearn.grid-controls/1",
-  "lane": "neural-fusions",
-  "branch": "lane/neural-fusions",
-  "head": "743c2859e",
-  "controls": {
-    "m1_persistent_scan": {
-      "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN",
-      "kind": "switch",
-      "arms": {"off": [], "on": ["MOJOLEARN_IDN_M1_PERSISTENT_SCAN=1"]},
-      "default": "off",
-      "source": ["mamba/impl/ops/m1_persistent_scan.mojo:58", "mamba/impl/ops/selective_scan_interface.mojo:265", "mamba/impl/ops/selective_scan_interface.mojo:588"],
-      "binding": "_mojolearn_mamba",
-      "bits_change": false,
-      "status": "new",
-      "notes": "one launch; block = CH channels x 16 states of one batch row for the whole sequence; chains serial per thread, y/out fold from shared memory; same S5-S11 graph as selective_scan_fwd_kernel. Refused (comptime assert) together with MOJOLEARN_IDN_M1_STATE_WINDOW; unused when MOJOLEARN_NN34_AFFINE_PREFIX is on (that profile replaces the scan)."
-    },
-    "m1_persistent_scan_ch": {
-      "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH",
-      "kind": "int_sweep",
-      "arms": {"2": ["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=2"], "4": ["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=4"], "8": ["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=8"]},
-      "default": "4",
-      "source": ["mamba/impl/ops/m1_persistent_scan.mojo:54"],
-      "binding": "_mojolearn_mamba",
-      "bits_change": false,
-      "status": "new",
-      "notes": "channels per block; only read with m1_persistent_scan on; sweep per vendor before the grid"
-    },
-    "m1_persistent_scan_tokens": {
-      "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS",
-      "kind": "int_sweep",
-      "arms": {"16": ["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=16"], "32": ["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=32"], "64": ["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=64"]},
-      "default": "32",
-      "source": ["mamba/impl/ops/m1_persistent_scan.mojo:55"],
-      "binding": "_mojolearn_mamba",
-      "bits_change": false,
-      "status": "new",
-      "notes": "tokens staged per chunk (shared memory TOK*CH*16*4 bytes); only read with m1_persistent_scan on"
-    },
-    "nn20_split_kv": {
-      "define": "MOJOLEARN_IDN_NN20_SPLIT_KV",
-      "kind": "switch",
-      "arms": {"off": ["MOJOLEARN_IDN_ATTN_SOFTMAX=1"], "on": ["MOJOLEARN_IDN_ATTN_SOFTMAX=1", "MOJOLEARN_IDN_NN20_SPLIT_KV=1"]},
-      "default": "off",
-      "source": ["transformer/experiments/attention_summary_split.mojo:50", "transformer/experiments/attention_summary_split.mojo:216", "transformer/experiments/summary_model.mojo:155"],
-      "binding": "_mojolearn_transformer",
-      "bits_change": false,
-      "requires": ["MOJOLEARN_IDN_ATTN_SOFTMAX=1"],
-      "status": "new",
-      "notes": "bits equal to NN20 (NN20 itself is a profile change vs attention v1). Both arms carry the NN20 define; the A/B is NN20 one-thread-per-row vs NN20 split. Inert without NN20. ON arm adds two scratch allocations and one counted completion wait."
-    },
-    "nn20_split_kv_leaves": {
-      "define": "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES",
-      "kind": "int_sweep",
-      "arms": {"2": ["MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=2"], "4": ["MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=4"], "8": ["MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=8"], "16": ["MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=16"]},
-      "default": "4",
-      "source": ["transformer/experiments/attention_summary_split.mojo:56"],
-      "binding": "_mojolearn_transformer",
-      "bits_change": false,
-      "status": "new",
-      "notes": "32-key leaves per split (power of two, aligned); execution plan only"
-    }
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "neural-fusions",
+ "branch": "lane/neural-fusions",
+ "head": "743c2859e",
+ "controls": {
+  "m1_persistent_scan": {
+   "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/ops/m1_persistent_scan.mojo:58",
+    "mamba/impl/ops/selective_scan_interface.mojo:265",
+    "mamba/impl/ops/selective_scan_interface.mojo:588"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "new",
+   "notes": "one launch; block = CH channels x 16 states of one batch row for the whole sequence; chains serial per thread, y/out fold from shared memory; same S5-S11 graph as selective_scan_fwd_kernel. Refused (comptime assert) together with MOJOLEARN_IDN_M1_STATE_WINDOW; unused when MOJOLEARN_NN34_AFFINE_PREFIX is on (that profile replaces the scan)."
   },
-  "algorithms": {
-    "neural:mamba1-forward": {
-      "binding": "_mojolearn_mamba",
-      "route": "Mamba1Block.forward -> modeling_mamba.mamba_selective_scan -> selective_scan_fn -> m1_persistent_scan (on) | selective_scan_fwd_kernel (off)",
-      "controls": ["m1_persistent_scan", "m1_persistent_scan_ch", "m1_persistent_scan_tokens"],
-      "interaction_groups": [["m1_persistent_scan", "m1_persistent_scan_ch", "m1_persistent_scan_tokens"], ["m1_persistent_scan", "NI38:MOJOLEARN_IDN_M1_STATE_WINDOW (exclusive)", "NN34:MOJOLEARN_NN34_AFFINE_PREFIX (supersedes)", "NI46:MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED"]]
-    },
-    "neural:transformer-forward": {
-      "binding": "_mojolearn_transformer",
-      "route": "TransformerBlock.forward -> llama_decoder_layer -> eager attention (modeling_llama.mojo:4183, NN20 on) -> summary_model.model_summary_forward -> _nn20_split_forward",
-      "controls": ["nn20_split_kv", "nn20_split_kv_leaves"],
-      "interaction_groups": [["nn20_split_kv", "nn20_split_kv_leaves", "NN20/NI20 attention profile switch (L10 merge)"]]
-    },
-    "neural:samba-forward": {
-      "binding": "_mojolearn_transformer",
-      "route": "SambaStack attention layers through the transformer binding -> same NN20 route",
-      "controls": ["nn20_split_kv", "nn20_split_kv_leaves"],
-      "interaction_groups": [["nn20_split_kv", "nn20_split_kv_leaves"]]
-    }
+  "m1_persistent_scan_ch": {
+   "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH",
+   "kind": "int_sweep",
+   "arms": {
+    "2": [
+     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=2"
+    ],
+    "4": [
+     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=4"
+    ],
+    "8": [
+     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=8"
+    ]
+   },
+   "default": "4",
+   "source": [
+    "mamba/impl/ops/m1_persistent_scan.mojo:54"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "new",
+   "notes": "channels per block; only read with m1_persistent_scan on; sweep per vendor before the grid"
   },
-  "removed": [],
-  "ideas": [
-    {"idea": "RMSNorm fused into the next GEMM's A-load (+ bias/residual epilogue)", "status": "not built",
-     "reason": "The board's QKV/gate/up calls are served by three different GEMM bodies with their own staging: NVIDIA's packed kpack body (_kpack_run, IDN_GEMM_NV_STEP_KPACK default on for stepped-down calls), AMD's identical_gemm_mfma16_kernel, and the scalar identical_gemm_tuned_kernel fallback, all in gemm/checks/gemm_identical.mojo which L10 (dedupe) and L12 (ozaki) are editing. A prologue needs a comptime A-transform plus two kernel args (rstd, gamma) in each body; bits stay equal because A_eff = ftz(w*ftz(x*rstd)) is the incumbent S3/S4 value. Stats kernel (S1/S2) stays serial per row; stage x through shared memory for coalescing. Residual epilogue must go into the fold kernel for GROUP/split launches. Existing partial routes: MOJOLEARN_FUSE_RESIDUAL1_NORM2 (residual+norm2 on NV/AMD), NN25/NI25 norm geometry arms. Owed after L10/L12 merge."},
-    {"idea": "Fixed-order stream-K for under-filled GEMMs", "status": "subsumed",
-     "reason": "Contract gemm.fp32.v1 7.1 forbids splitting a leaf (128 k), so the finest deterministic unit is (tile, leaf); stream-K at that grain is leaf split-K, which exists: DEVIATION 2595 ksplit/ksplit_leaf arms, PLAN_SPLIT_* plans, the tile step-down (GEMM_TILE_MIN_BLOCKS) and NN10 cost plan. Sub-leaf stream-K would carry the accumulator serially between CTAs (no parallelism). A per-device fill rule over (tile, leaf-split) is NN10's job."},
-    {"idea": "Persistent chunked Mamba2/Mamba3 SSD at batch 1", "status": "not built",
-     "reason": "Mamba2 (ssd_minimal.ssd_forward) and Mamba3 (mamba3_siso) do not launch per chunk: the chunk-state pass is one kernel per call, parallel over (h,p,n) cells, serial over chunks. A persistent version would fuse the ~10 (M2) / ~25 (M3) launches with decoupled look-back over chunk states in fixed chunk order; bits unchanged if each stage keeps its fold. Large kernel, measured launch share unknown; Mamba-1 (the real per-window/under-filled case) is built as m1_persistent_scan."},
-    {"idea": "Split-KV attention on the v1 profile / decode lanes", "status": "not built",
-     "reason": "v1 S17 denominator and S19 value sum are serial ascending chains over all keys (IDENTICAL_TRANSFORMER_CONTRACT 5.3), so any KV split is a new profile; the summary-tree profile NN20 is the one where a split is bit-free, so split-KV is built on NN20. Board decode/*-infer lanes are CPU host bindings and never GPU-timed."},
-    {"idea": "CUDA/HIP graph capture of the step", "status": "wait for Modular",
-     "reason": "Mojo/MAX 1.0.0 (ed45d567) DeviceContext exposes no stream-capture or graph record/replay API (only an internal 'device graph is being recorded' refusal note on wrapping host memory). Modular ask: public DeviceContext graph capture/instantiate/replay for CUDA and HIP. No workaround built."}
-  ]
+  "m1_persistent_scan_tokens": {
+   "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS",
+   "kind": "int_sweep",
+   "arms": {
+    "16": [
+     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=16"
+    ],
+    "32": [
+     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=32"
+    ],
+    "64": [
+     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=64"
+    ]
+   },
+   "default": "32",
+   "source": [
+    "mamba/impl/ops/m1_persistent_scan.mojo:55"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "new",
+   "notes": "tokens staged per chunk (shared memory TOK*CH*16*4 bytes); only read with m1_persistent_scan on"
+  },
+  "nn20_split_kv": {
+   "define": "MOJOLEARN_IDN_NN20_SPLIT_KV",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_NN20_SPLIT_KV=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "transformer/experiments/attention_summary_split.mojo:50",
+    "transformer/experiments/attention_summary_split.mojo:216",
+    "transformer/experiments/summary_model.mojo:155"
+   ],
+   "binding": "_mojolearn_transformer",
+   "bits_change": false,
+   "requires": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1"
+   ],
+   "status": "rewritten",
+   "notes": "NN20 split-KV summary forward; only read with attn_softmax on (the NN20 profile, arm summary_tree, MOJOLEARN_IDN_ATTN_SOFTMAX=1). OFF arm is main (no define); the grid adds the parent arm, so the A/B against attn_softmax=summary_tree alone isolates the split. Bits equal to NN20 (NN20 itself is a profile change vs v1). ON adds two scratch allocations and one counted completion wait."
+  },
+  "nn20_split_kv_leaves": {
+   "define": "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES",
+   "kind": "int_sweep",
+   "arms": {
+    "2": [
+     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=2"
+    ],
+    "4": [
+     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=4"
+    ],
+    "8": [
+     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=8"
+    ],
+    "16": [
+     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=16"
+    ]
+   },
+   "default": "4",
+   "source": [
+    "transformer/experiments/attention_summary_split.mojo:56"
+   ],
+   "binding": "_mojolearn_transformer",
+   "bits_change": false,
+   "status": "new",
+   "notes": "32-key leaves per split (power of two, aligned); execution plan only"
+  }
+ },
+ "algorithms": {
+  "neural:mamba1-forward": {
+   "binding": "_mojolearn_mamba",
+   "route": "Mamba1Block.forward -> modeling_mamba.mamba_selective_scan -> selective_scan_fn -> m1_persistent_scan (on) | selective_scan_fwd_kernel (off)",
+   "controls": [
+    "m1_persistent_scan",
+    "m1_persistent_scan_ch",
+    "m1_persistent_scan_tokens"
+   ],
+   "interaction_groups": [
+    [
+     "m1_persistent_scan",
+     "m1_persistent_scan_ch",
+     "m1_persistent_scan_tokens"
+    ],
+    [
+     "m1_persistent_scan",
+     "NI38:MOJOLEARN_IDN_M1_STATE_WINDOW (exclusive)",
+     "NN34:MOJOLEARN_NN34_AFFINE_PREFIX (supersedes)",
+     "NI46:MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED"
+    ]
+   ]
+  },
+  "neural:transformer-forward": {
+   "binding": "_mojolearn_transformer",
+   "route": "TransformerBlock.forward -> llama_decoder_layer -> eager attention (modeling_llama.mojo:4183, NN20 on) -> summary_model.model_summary_forward -> _nn20_split_forward",
+   "controls": [
+    "attn_softmax",
+    "nn20_split_kv",
+    "nn20_split_kv_leaves"
+   ],
+   "interaction_groups": [
+    [
+     "attn_softmax",
+     "nn20_split_kv",
+     "nn20_split_kv_leaves"
+    ]
+   ]
+  },
+  "neural:samba-forward": {
+   "binding": "_mojolearn_transformer",
+   "route": "SambaStack attention layers through the transformer binding -> same NN20 route",
+   "controls": [
+    "attn_softmax",
+    "nn20_split_kv",
+    "nn20_split_kv_leaves"
+   ],
+   "interaction_groups": [
+    [
+     "attn_softmax",
+     "nn20_split_kv",
+     "nn20_split_kv_leaves"
+    ]
+   ]
+  }
+ },
+ "removed": [],
+ "ideas": [
+  {
+   "idea": "RMSNorm fused into the next GEMM's A-load (+ bias/residual epilogue)",
+   "status": "not built",
+   "reason": "The board's QKV/gate/up calls are served by three different GEMM bodies with their own staging: NVIDIA's packed kpack body (_kpack_run, IDN_GEMM_NV_STEP_KPACK default on for stepped-down calls), AMD's identical_gemm_mfma16_kernel, and the scalar identical_gemm_tuned_kernel fallback, all in gemm/checks/gemm_identical.mojo which L10 (dedupe) and L12 (ozaki) are editing. A prologue needs a comptime A-transform plus two kernel args (rstd, gamma) in each body; bits stay equal because A_eff = ftz(w*ftz(x*rstd)) is the incumbent S3/S4 value. Stats kernel (S1/S2) stays serial per row; stage x through shared memory for coalescing. Residual epilogue must go into the fold kernel for GROUP/split launches. Existing partial routes: MOJOLEARN_FUSE_RESIDUAL1_NORM2 (residual+norm2 on NV/AMD), NN25/NI25 norm geometry arms. Owed after L10/L12 merge."
+  },
+  {
+   "idea": "Fixed-order stream-K for under-filled GEMMs",
+   "status": "subsumed",
+   "reason": "Contract gemm.fp32.v1 7.1 forbids splitting a leaf (128 k), so the finest deterministic unit is (tile, leaf); stream-K at that grain is leaf split-K, which exists: DEVIATION 2595 ksplit/ksplit_leaf arms, PLAN_SPLIT_* plans, the tile step-down (GEMM_TILE_MIN_BLOCKS) and NN10 cost plan. Sub-leaf stream-K would carry the accumulator serially between CTAs (no parallelism). A per-device fill rule over (tile, leaf-split) is NN10's job."
+  },
+  {
+   "idea": "Persistent chunked Mamba2/Mamba3 SSD at batch 1",
+   "status": "not built",
+   "reason": "Mamba2 (ssd_minimal.ssd_forward) and Mamba3 (mamba3_siso) do not launch per chunk: the chunk-state pass is one kernel per call, parallel over (h,p,n) cells, serial over chunks. A persistent version would fuse the ~10 (M2) / ~25 (M3) launches with decoupled look-back over chunk states in fixed chunk order; bits unchanged if each stage keeps its fold. Large kernel, measured launch share unknown; Mamba-1 (the real per-window/under-filled case) is built as m1_persistent_scan."
+  },
+  {
+   "idea": "Split-KV attention on the v1 profile / decode lanes",
+   "status": "not built",
+   "reason": "v1 S17 denominator and S19 value sum are serial ascending chains over all keys (IDENTICAL_TRANSFORMER_CONTRACT 5.3), so any KV split is a new profile; the summary-tree profile NN20 is the one where a split is bit-free, so split-KV is built on NN20. Board decode/*-infer lanes are CPU host bindings and never GPU-timed."
+  },
+  {
+   "idea": "CUDA/HIP graph capture of the step",
+   "status": "wait for Modular",
+   "reason": "Mojo/MAX 1.0.0 (ed45d567) DeviceContext exposes no stream-capture or graph record/replay API (only an internal 'device graph is being recorded' refusal note on wrapping host memory). Modular ask: public DeviceContext graph capture/instantiate/replay for CUDA and HIP. No workaround built."
+  }
+ ]
 }

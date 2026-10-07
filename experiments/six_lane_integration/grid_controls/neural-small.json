@@ -1,0 +1,778 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "neural-small",
+ "branch": "lane/neural-small",
+ "head": "a7b55a97b",
+ "controls": {
+  "attn_tile_order": {
+   "define": "MOJOLEARN_IDN_ATTN_TILE_ORDER",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "asc": [
+     "MOJOLEARN_IDN_ATTN_TILE_ORDER=1"
+    ],
+    "zdot_asc": [
+     "MOJOLEARN_IDN_ATTN_TILE_ORDER=2"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "transformer/impl/llama/fused_attention.mojo:1495",
+    "transformer/impl/llama/fused_attention.mojo:1551",
+    "transformer/impl/llama/fused_attention.mojo:10198"
+   ],
+   "binding": [
+    "_mojolearn_byte_lm",
+    "_mojolearn_transformer",
+    "_mojolearn_training"
+   ],
+   "bits_change": false,
+   "status": "new",
+   "note": "off = main = DEVIATION 2900 _bswz heaviest-causal-tile-first map (already the NVIDIA and AMD default word, so the proposed desc arm IS main). asc: _blk_map ignores SWZ (rollback, every estash kernel). zdot_asc: only the estash zdot kernel takes the ascending decode (the H100 leg measured _bswz costing zdot +6 regs, 4->3 blocks/SM, 14.79->15.61 ms). paired not built (EXPERIMENTS.md). Forward arms reach fwd r2 (lm-forward, transformer-forward); zdot_asc reaches only backward (train lanes). No bits: _blk_map is a bijection."
+  },
+  "gemm_ozaki_linalg": {
+   "define": "MOJOLEARN_IDN_GEMM_OZAKI_LINALG",
+   "kind": "int_sweep",
+   "arms": {
+    "off": [],
+    "4": [
+     "MOJOLEARN_IDN_GEMM_OZAKI_LINALG=1",
+     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4"
+    ],
+    "5": [
+     "MOJOLEARN_IDN_GEMM_OZAKI_LINALG=1",
+     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5"
+    ],
+    "6": [
+     "MOJOLEARN_IDN_GEMM_OZAKI_LINALG=1",
+     "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=6"
+    ]
+   },
+   "default": "off",
+   "legal_set": [
+    4,
+    5,
+    6
+   ],
+   "source": [
+    "gemm/host_entry.mojo:74",
+    "gemm/host_entry.mojo:157",
+    "gemm/neural_dispatch.mojo:155"
+   ],
+   "binding": "_mojolearn_linalg",
+   "bits_change": true,
+   "status": "new",
+   "exclusive_with": [
+    "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE",
+    "MOJOLEARN_IDN_NEURAL_CHAINS"
+   ],
+   "note": "Routes gemm/host_entry.mojo through gemm.neural_dispatch.identical_gemm_into; each arm carries the Ozaki slice count it needs (comptime assert without it). BITS CHANGE: new profile (exact int8 diagonal sums, one RNE epilogue); same words on NVIDIA and AMD by construction; the host column runs the same construction (PIECES kernel) and changes together. k > ozaki_max_k[S] falls back to the incumbent. Quality: fp32-equivalent error bound at S>=4 (neural_ozaki.mojo header); the grid quality check applies."
+  },
+  "gemm_tile_min_blocks": {
+   "define": "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",
+   "kind": "int_sweep",
+   "arms": {
+    "0": [
+     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=0"
+    ],
+    "128": [
+     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=128"
+    ],
+    "192": [
+     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"
+    ],
+    "256": [
+     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=256"
+    ],
+    "384": [
+     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=384"
+    ],
+    "512": [
+     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=512"
+    ],
+    "1024": [
+     "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=1024"
+    ],
+    "off": []
+   },
+   "default": "off",
+   "legal_set": [
+    0,
+    128,
+    192,
+    256,
+    384,
+    512,
+    1024
+   ],
+   "source": [
+    "gemm/checks/gemm_identical.mojo:4081",
+    "gemm/checks/gemm_identical.mojo:4166"
+   ],
+   "binding": [
+    "_mojolearn_byte_lm",
+    "_mojolearn_transformer",
+    "_mojolearn_training",
+    "_mojolearn_mamba",
+    "_mojolearn_x_cnn",
+    "_mojolearn_linalg"
+   ],
+   "bits_change": false,
+   "status": "new",
+   "note": "Define-ized MOJOLEARN_GEMM_TILE_MIN_BLOCKS (env knob); the define wins over the env var when defined. off = column default (AMD 1024, NVIDIA 192). Arms equal to a column default are expected neutral on that column. Execution plan only. Reaches every gemm_identical tuned-tile caller in the build (classical included): never pack with classical."
+  },
+  "gemm_tile_short_k": {
+   "define": "MOJOLEARN_IDN_GEMM_TILE_SHORT_K",
+   "kind": "int_sweep",
+   "arms": {
+    "off": [],
+    "0": [
+     "MOJOLEARN_IDN_GEMM_TILE_SHORT_K=0"
+    ],
+    "512": [
+     "MOJOLEARN_IDN_GEMM_TILE_SHORT_K=512"
+    ],
+    "1024": [
+     "MOJOLEARN_IDN_GEMM_TILE_SHORT_K=1024"
+    ]
+   },
+   "default": "off",
+   "legal_set": [
+    0,
+    512,
+    1024
+   ],
+   "source": [
+    "gemm/checks/gemm_identical.mojo:4082",
+    "gemm/checks/gemm_identical.mojo:4141"
+   ],
+   "binding": [
+    "_mojolearn_byte_lm",
+    "_mojolearn_transformer",
+    "_mojolearn_training",
+    "_mojolearn_mamba",
+    "_mojolearn_x_cnn",
+    "_mojolearn_linalg"
+   ],
+   "bits_change": false,
+   "status": "new",
+   "note": "Define-ized MOJOLEARN_GEMM_TILE_SHORT_K; define wins over the env var. off = column default (NVIDIA 512, else 0). Inert on AMD (min_k default 0 already steps down at every k) and wherever the block floor is 0. Execution plan only."
+  },
+  "gemm_split_min_leaves": {
+   "define": "MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES",
+   "kind": "int_sweep",
+   "arms": {
+    "off": [],
+    "3": [
+     "MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES=3"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES=2"
+    ]
+   },
+   "default": "off",
+   "legal_set": [
+    4,
+    3,
+    2
+   ],
+   "source": [
+    "gemm/checks/gemm_identical.mojo:4302"
+   ],
+   "binding": [
+    "_mojolearn_byte_lm",
+    "_mojolearn_transformer",
+    "_mojolearn_training",
+    "_mojolearn_mamba",
+    "_mojolearn_x_cnn",
+    "_mojolearn_linalg"
+   ],
+   "bits_change": false,
+   "status": "new",
+   "note": "off = 4 (main). Lifts the split-plan floor P >= 4 to 3 or 2 leaves: short-contraction products with outputs under the split cap get P x the blocks with the same leaves and fold tree (check_device_is_launch_invariant). Under 3/2 the P=3 batch-invariance fixtures see the split plan id (same words)."
+  },
+  "m3_angle_parallel": {
+   "define": "MOJOLEARN_IDN_M3_ANGLE_PARALLEL",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/ops/mamba3_siso.mojo:522",
+    "mamba/impl/ops/mamba3_siso.mojo:2057",
+    "mamba/host/gen/mamba3_siso.mojo:526"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": true,
+   "status": "kept",
+   "note": "Existing define, newly gridded. Default angle kernel is b*nh*r_ang threads each serial over L tokens; the parallel arm is an integer chain (bits change vs the serial float chain; the host gen copy reads the same define, host changes together). Reference-quality check owed before any default flip."
+  },
+  "m3_angle_block": {
+   "define": "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32 / _128",
+   "kind": "int_sweep",
+   "arms": {
+    "64": [],
+    "32": [
+     "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32=1"
+    ],
+    "128": [
+     "MOJOLEARN_IDN_M3_ANGLE_BLOCK_128=1"
+    ]
+   },
+   "default": "64",
+   "source": [
+    "mamba/impl/ops/mamba3_siso.mojo:534"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "note": "Block size of the parallel angle kernel; only read with m3_angle_parallel on. Timing only."
+  },
+  "m3_s17_tail": {
+   "define": "MOJOLEARN_IDN_M3_S17_TAIL_DBUF / _PIPE",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "dbuf": [
+     "MOJOLEARN_IDN_M3_S17_TAIL_DBUF=1"
+    ],
+    "pipe": [
+     "MOJOLEARN_IDN_M3_S17_TAIL_PIPE=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/modules/mamba3_backward.mojo:2378",
+    "mamba/impl/modules/mamba3_backward.mojo:2384",
+    "mamba/impl/modules/mamba3_backward.mojo:2552"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "note": "Mamba-3 backward S17 tail staging, mamba3_backward_s17_operands_into via mamba3_prefill_backward_on. One control, two arms (DBUF wins if both are set, so they are never combined). Needs the shared tail (no MAMBA3_S17_TAIL_NAIVE)."
+  },
+  "attn_fwd_tq_rule": {
+   "define": "MOJOLEARN_ATTN_FWD_TQ_RULE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_ATTN_FWD_TQ_RULE=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "transformer/impl/llama/fused_attention.mojo:636",
+    "transformer/impl/llama/fused_attention.mojo:11045"
+   ],
+   "binding": [
+    "_mojolearn_byte_lm",
+    "_mojolearn_transformer",
+    "_mojolearn_training"
+   ],
+   "bits_change": false,
+   "status": "kept",
+   "note": "Opt-in per-launch forward TQ rule (attn_fwd_rows_for may pick 16). Non-trial builds only, estash default word, head dim 64. Inert under MOJOLEARN_ATTN_TILE_RULE_OFF. Same bits.",
+   "exclusive_with": [
+    "MOJOLEARN_ATTN_TILE_RULE_OFF"
+   ]
+  },
+  "attn_tile_rule_off": {
+   "define": "MOJOLEARN_ATTN_TILE_RULE_OFF",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_ATTN_TILE_RULE_OFF=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "transformer/impl/llama/fused_attention.mojo:4537",
+    "transformer/impl/llama/fused_attention.mojo:4579",
+    "transformer/impl/llama/fused_attention.mojo:4592"
+   ],
+   "binding": [
+    "_mojolearn_byte_lm",
+    "_mojolearn_transformer",
+    "_mojolearn_training"
+   ],
+   "bits_change": false,
+   "status": "kept",
+   "note": "Rollback arm of the Oct 4 per-launch dq/dkdv tile rule (pins dq rows to ATTN_DQ_TQ and dk/dv keys to the old 32): the owed rule-removal A/B with the old rule as arm B. Backward only (train lanes). Same bits."
+  },
+  "gemm_kpack_rpt4": {
+   "define": "MOJOLEARN_GEMM_KPACK_RPT4",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_GEMM_KPACK_RPT4=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gemm/checks/gemm_identical.mojo:8031"
+   ],
+   "binding": [
+    "_mojolearn_byte_lm",
+    "_mojolearn_transformer",
+    "_mojolearn_training",
+    "_mojolearn_mamba",
+    "_mojolearn_x_cnn",
+    "_mojolearn_linalg"
+   ],
+   "bits_change": false,
+   "status": "kept",
+   "note": "NVIDIA kpack TUNED_128 body at 4 rows per thread (64-row tile). AMD takes the MFMA body for TUNED_128 calls: inert there. MOJOLEARN_GEMM_KPACK_CPT4 is not gridded: lib_gemm_kpack_narrow_for already selects the narrow column count on NVIDIA, so it is a no-op. EXPERIMENTS.md lists RPT4 as OPEN/unmeasured. Schedule only, same bits. Reaches classical callers."
+  },
+  "gemm_fs2": {
+   "define": "MOJOLEARN_IDN_GEMM_FS2",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_GEMM_FS2=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gemm/checks/gemm_identical.mojo:7326",
+    "gemm/checks/gemm_identical.mojo:8196",
+    "gemm/checks/gemm_identical.mojo:8444"
+   ],
+   "binding": [
+    "_mojolearn_byte_lm",
+    "_mojolearn_transformer",
+    "_mojolearn_training",
+    "_mojolearn_mamba",
+    "_mojolearn_x_cnn",
+    "_mojolearn_linalg"
+   ],
+   "bits_change": false,
+   "status": "kept",
+   "note": "NVIDIA only: fold-split 2 for TUNED_128 calls whose fold bound is <= 2 leaves; does nothing under LEGACY_SHAPE_NV_FS4 or GEMM_NV_FS4_OFF. Never run before (EXPERIMENTS.md). Schedule only, same bits. Reaches classical callers.",
+   "exclusive_with": [
+    "MOJOLEARN_LEGACY_SHAPE_NV_FS4"
+   ]
+  }
+ },
+ "algorithms": {
+  "neural:lm-train-step": {
+   "binding": "_mojolearn_byte_lm",
+   "route": "byte_lm train step -> training/byte_lm.mojo byte_train_step_resident -> modeling_llama decoder (llama_attention_forward -> fused attention fwd r2 / estash backward _launch_bwd_estash) + GEMMs via gemm.neural_dispatch.identical_gemm_into -> gemm_identical (choose_gemm_plan_tiles / gemm_tile_step_down / kpack body)",
+   "controls": [
+    "attn_tile_order",
+    "attn_fwd_tq_rule",
+    "attn_tile_rule_off",
+    "grouped_projections_v2",
+    "neural_gemm_ozaki_slices",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2"
+   ],
+   "interaction_groups": [
+    [
+     "attn_tile_order",
+     "attn_fwd_tq_rule",
+     "attn_tile_rule_off",
+     "attn_softmax",
+     "attn_stash",
+     "attn_scale_mask"
+    ],
+    [
+     "grouped_projections_v2",
+     "neural_gemm_pair",
+     "neural_gemm_schedule"
+    ],
+    [
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2",
+     "gemm_leaf",
+     "neural_gemm_schedule"
+    ]
+   ]
+  },
+  "neural:lm-forward": {
+   "binding": "_mojolearn_byte_lm",
+   "route": "byte_lm forward (forward_only) -> modeling_llama decoder -> fused attention fwd r2 + head GEMM via neural_dispatch",
+   "controls": [
+    "attn_tile_order",
+    "attn_fwd_tq_rule",
+    "grouped_projections_v2",
+    "neural_gemm_ozaki_slices",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2"
+   ],
+   "interaction_groups": [
+    [
+     "attn_tile_order",
+     "attn_fwd_tq_rule",
+     "attn_softmax",
+     "attn_scale_mask"
+    ],
+    [
+     "grouped_projections_v2",
+     "neural_gemm_pair",
+     "neural_gemm_schedule"
+    ],
+    [
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2",
+     "gemm_leaf",
+     "neural_gemm_schedule"
+    ]
+   ]
+  },
+  "neural:transformer-forward": {
+   "binding": "_mojolearn_transformer",
+   "route": "transformer binding (forward_only) -> modeling_llama llama_attention_forward -> fused attention fwd r2; projections via neural_dispatch",
+   "controls": [
+    "attn_tile_order",
+    "attn_fwd_tq_rule",
+    "grouped_projections_v2",
+    "neural_gemm_ozaki_slices",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2"
+   ],
+   "interaction_groups": [
+    [
+     "attn_tile_order",
+     "attn_fwd_tq_rule",
+     "attn_softmax",
+     "attn_scale_mask",
+     "nn20_split_kv"
+    ],
+    [
+     "grouped_projections_v2",
+     "neural_gemm_pair",
+     "neural_gemm_schedule"
+    ],
+    [
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2",
+     "gemm_leaf",
+     "neural_gemm_schedule"
+    ]
+   ]
+  },
+  "neural:samba-forward": {
+   "binding": "_mojolearn_mamba + _mojolearn_transformer",
+   "route": "python samba stack -> mamba3 layers (_mojolearn_mamba mamba3_block_forward -> m3_siso_forward angle kernel; projections idn_gemm_ws -> neural_dispatch) + attention layers (_mojolearn_transformer -> llama_attention_forward)",
+   "controls": [
+    "attn_tile_order",
+    "attn_fwd_tq_rule",
+    "attn_softmax",
+    "grouped_projections_v2",
+    "m3_angle_parallel",
+    "m3_angle_block",
+    "neural_gemm_ozaki_slices",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2"
+   ],
+   "interaction_groups": [
+    [
+     "attn_tile_order",
+     "attn_fwd_tq_rule",
+     "attn_softmax",
+     "nn20_split_kv"
+    ],
+    [
+     "m3_angle_parallel",
+     "m3_angle_block"
+    ],
+    [
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2"
+    ]
+   ]
+  },
+  "neural:samba-train-step": {
+   "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
+   "route": "python samba step -> training.samba_ops linear/head via neural_dispatch + mamba3 tape forward (angle kernel) and mamba3_prefill_backward_on -> mamba3_backward_s17_operands_into + transformer attention fwd/bwd",
+   "controls": [
+    "attn_tile_order",
+    "attn_fwd_tq_rule",
+    "attn_tile_rule_off",
+    "grouped_projections_v2",
+    "m3_angle_parallel",
+    "m3_angle_block",
+    "m3_s17_tail",
+    "neural_gemm_ozaki_slices",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2"
+   ],
+   "interaction_groups": [
+    [
+     "attn_tile_order",
+     "attn_fwd_tq_rule",
+     "attn_tile_rule_off",
+     "attn_softmax",
+     "attn_stash"
+    ],
+    [
+     "m3_angle_parallel",
+     "m3_angle_block",
+     "m3_angle_carry_cache"
+    ],
+    [
+     "m3_s17_tail",
+     "m3_angle_carry_cache"
+    ],
+    [
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2",
+     "gemm_leaf",
+     "neural_gemm_schedule"
+    ]
+   ]
+  },
+  "neural:mlp-train-step": {
+   "binding": "_mojolearn_training",
+   "route": "_mojolearn_training mlp step -> training/mlp_ops.mojo mlp_train_step_host -> _gemm -> neural_dispatch.identical_gemm_into",
+   "controls": [
+    "neural_gemm_ozaki_slices",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2"
+   ],
+   "interaction_groups": [
+    [
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2",
+     "gemm_leaf",
+     "neural_gemm_schedule",
+     "neural_gemm_epilogue"
+    ]
+   ]
+  },
+  "neural:mamba1-forward": {
+   "binding": "_mojolearn_mamba",
+   "route": "_mojolearn_mamba mamba1_forward -> modeling_mamba.mojo:1918 mamba_proj_gemm (mamba/impl/modules/idn_gemm_ws.mojo:78) -> gemm.neural_dispatch.identical_gemm_into (ROLE_PROJECTION)",
+   "controls": [
+    "neural_gemm_schedule",
+    "gemm_leaf",
+    "neural_gemm_chains",
+    "neural_gemm_ozaki_slices",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2"
+   ],
+   "interaction_groups": [
+    [
+     "neural_gemm_schedule",
+     "gemm_leaf",
+     "neural_gemm_chains",
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2"
+    ]
+   ],
+   "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist)."
+  },
+  "neural:mamba2-forward": {
+   "binding": "_mojolearn_mamba",
+   "route": "_mojolearn_mamba mamba2_forward -> mamba2.mojo:1222 mamba_proj_gemm (mamba/impl/modules/idn_gemm_ws.mojo:78) -> gemm.neural_dispatch.identical_gemm_into (ROLE_PROJECTION)",
+   "controls": [
+    "neural_gemm_schedule",
+    "gemm_leaf",
+    "neural_gemm_chains",
+    "neural_gemm_ozaki_slices",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2"
+   ],
+   "interaction_groups": [
+    [
+     "neural_gemm_schedule",
+     "gemm_leaf",
+     "neural_gemm_chains",
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2"
+    ]
+   ],
+   "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist)."
+  },
+  "neural:mamba3-forward": {
+   "binding": "_mojolearn_mamba",
+   "route": "_mojolearn_mamba mamba3_forward_fresh -> mamba3.mojo:1479/1761 mamba_proj_gemm (+ m3_siso_forward angle kernel) (mamba/impl/modules/idn_gemm_ws.mojo:78) -> gemm.neural_dispatch.identical_gemm_into (ROLE_PROJECTION)",
+   "controls": [
+    "neural_gemm_schedule",
+    "gemm_leaf",
+    "neural_gemm_chains",
+    "neural_gemm_ozaki_slices",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2",
+    "m3_angle_parallel",
+    "m3_angle_block"
+   ],
+   "interaction_groups": [
+    [
+     "neural_gemm_schedule",
+     "gemm_leaf",
+     "neural_gemm_chains",
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2"
+    ],
+    [
+     "m3_angle_parallel",
+     "m3_angle_block"
+    ]
+   ],
+   "note": "Replaces the unmapped neural:mamba-forward entry of neural-gemm-attn-dedupe.json (that lane does not exist)."
+  },
+  "neural:cnn-clf": {
+   "binding": "_mojolearn_x_cnn",
+   "route": "fit: CNNClassifier.fit (python/mojolearn/_expansion_cnn.py:1423 dev_epoch=True) -> x_cnn_fit_epoch_d (bindings/_mojolearn_x_cnn.mojo:1401) -> x_cnn/device.mojo conv_block_forward_into :2872 / conv_block_backward_into :2948 (_conv_relu_on_device :2817, pool_relu_rows_bwd_at :2995, _col2im :3022, bias_grad_gemm :3014, res_gather_pair_perm :2643), device_gemm :530 -> gemm.neural_dispatch.identical_gemm_into; predict: x_cnn_conv_block_forward_r -> conv_block_forward_into",
+   "controls": [
+    "ni10_cnn_tape",
+    "ni11_direct_taps64",
+    "ni12_implicit_conv",
+    "ni14_bounded_col2im",
+    "ni14_tiled_col2im",
+    "ni15_bias_no_ones",
+    "ni18_epoch_gather",
+    "nn46_gather_bounds",
+    "cnn_conv_relu",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2"
+   ],
+   "interaction_groups": [
+    [
+     "ni14_bounded_col2im",
+     "ni14_tiled_col2im",
+     "nn46_gather_bounds"
+    ],
+    [
+     "ni12_implicit_conv",
+     "neural_gemm_ozaki_slices"
+    ],
+    [
+     "ni15_bias_no_ones",
+     "neural_gemm_ozaki_slices"
+    ],
+    [
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2",
+     "neural_gemm_ozaki_slices"
+    ]
+   ],
+   "not_reached": [
+    "ni10_cnn_tape",
+    "ni11_direct_taps64",
+    "cnn_conv_relu"
+   ],
+   "note": "Board config (tools/bench_board_algos.py:1068): 1x28x28, Conv-ReLU-MaxPool x2 (8,16), k3, batch 128. Not reached: ni10 (tape ~11 MB, under the 64 MiB budget), ni11 (block 1 ckk 9 already direct, block 2 ckk 72 > 64), cnn_conv_relu (both arms live in the no-pool branch; both board blocks pool)."
+  },
+  "gemm:gemm": {
+   "binding": "_mojolearn_linalg",
+   "route": "linalg gemm_binding (bindings/_mojolearn_linalg.mojo:211) -> gemm/host_entry.mojo identical_gemm_host -> gemm_identical.identical_gemm_into (main) | gemm.neural_dispatch.identical_gemm_into (gemm_ozaki_linalg)",
+   "controls": [
+    "gemm_ozaki_linalg",
+    "gemm_contract_leaf",
+    "gemm_tile_min_blocks",
+    "gemm_tile_short_k",
+    "gemm_split_min_leaves",
+    "gemm_kpack_rpt4",
+    "gemm_fs2"
+   ],
+   "interaction_groups": [
+    [
+     "gemm_tile_min_blocks",
+     "gemm_tile_short_k",
+     "gemm_split_min_leaves",
+     "gemm_kpack_rpt4",
+     "gemm_fs2",
+     "gemm_contract_leaf",
+     "gemm_group_slack",
+     "gemm_one_page",
+     "gemm_compact_live_tile",
+     "gemm_global_workspace"
+    ]
+   ]
+  }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_ATTN_DQ_MFMA",
+   "reason": "Not gridded (AMD): the dq MFMA kernel aborts (rc 134) on the #65 stack (bench/results/pr63-amd-mfma-20261001 SUMMARY.md:17-19); repair before gridding."
+  },
+  {
+   "define": "MOJOLEARN_ATTN_DKDV_MFMA",
+   "reason": "Not gridded (AMD): engages only at BJ == 32 (fused_attention.mojo dkdv launch) while the AMD tile rule picks 16, so it silently no-ops on main; needs a BJ 16 body or a pairing first."
+  },
+  {
+   "define": "MOJOLEARN_GEMM_KPACK_CPT4",
+   "reason": "No-op on NVIDIA (lib_gemm_kpack_narrow_for already selects it), inert on AMD."
+  },
+  {
+   "define": "MOJOLEARN_IDN_ATTN_TILE_ORDER=desc|paired",
+   "reason": "desc is main (DEVIATION 2900 _bswz); paired not built (EXPERIMENTS.md)."
+  }
+ ],
+ "notes": {
+  "ozaki": "neural_gemm_ozaki_slices (neural-ozaki-gemm.json) is now declared for every neural lane whose GEMMs go through gemm/neural_dispatch (NI07 bypasses it for q/k/v when on).",
+  "nn20": "nn20_split_kv (neural-fusions.json): off arm is now main (no define); the NN20 profile comes from its parent attn_softmax (transitive parent closure in tools/six_lane_grid.py).",
+  "gemm_leaf": "gemm_leaf=all256 split into gemm_contract_leaf (neural-gemm-attn-dedupe.json), declared for gemm:gemm only; gemm_leaf keeps the neural-scope arms."
+ }
+}

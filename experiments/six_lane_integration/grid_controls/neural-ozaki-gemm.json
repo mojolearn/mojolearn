@@ -34,7 +34,12 @@
    "binding": "_mojolearn_x_cnn",
    "bits_change": true,
    "status": "new",
-   "notes": "Ozaki scheme: S int8 slices per row/column with a shared power-of-two scale, S(S+1)/2 int8 MMA products (IMMA m16n8k32 sm_80+, MFMA 16x16x32 i8 gfx942) into S exact Int32 diagonals, k split across blocks with exact Int32 atomic adds, one integer RNE epilogue. Identical bits on every column by construction (integer sums; PIECES kernel on columns with no int8 unit incl. host). Mutually exclusive with the other NN* neural GEMM routes (comptime assert). Also forces CNN direct-conv off (NEURAL_GEMM_EXPERIMENT_ENABLED). Products with k > ozaki_max_k[S] (131071/104857/64512) use the incumbent. Accuracy evidence owed: gemm/experiments/neural_ozaki_check.mojo."
+   "notes": "Ozaki scheme: S int8 slices per row/column with a shared power-of-two scale, S(S+1)/2 int8 MMA products (IMMA m16n8k32 sm_80+, MFMA 16x16x32 i8 gfx942) into S exact Int32 diagonals, k split across blocks with exact Int32 atomic adds, one integer RNE epilogue. Identical bits on every column by construction (integer sums; PIECES kernel on columns with no int8 unit incl. host). Mutually exclusive with the other NN* neural GEMM routes (comptime assert). Also forces CNN direct-conv off (NEURAL_GEMM_EXPERIMENT_ENABLED). Products with k > ozaki_max_k[S] (131071/104857/64512) use the incumbent. Accuracy evidence owed: gemm/experiments/neural_ozaki_check.mojo. Declared (neural-small.json) for every neural lane whose GEMMs go through gemm/neural_dispatch: lm-*, transformer-forward, samba-*, mlp-train-step, mamba1/2/3-forward, cnn-clf. exclusive_with = gemm/neural_dispatch.mojo:170 assert (_ROUTES == 0 and not NEURAL_PROFILE_CHANGED). MOJOLEARN_IDN_GEMM_LEAF arms 1/2 (NN03) trip the same assert; arm 3 is refused with it too (conservative, unmeasured).",
+   "exclusive_with": [
+    "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE",
+    "MOJOLEARN_IDN_NEURAL_CHAINS",
+    "MOJOLEARN_IDN_GEMM_LEAF"
+   ]
   }
  },
  "algorithms": {
