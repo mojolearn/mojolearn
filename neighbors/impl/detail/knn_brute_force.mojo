@@ -74,8 +74,7 @@ from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.os import getenv
 
-from experiments.classical_identical_ideas.graph_controls import C29_STREAM_TOPK, KNN_DIRECT_DISTANCE
-from neighbors.impl.detail.classical_stream_topk import classical_stream_topk_kernel
+from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
 from core.expand_distances import expand_distances_kernel
 from core.device_fold import device_compact_equal_i32
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
@@ -807,7 +806,9 @@ def tiled_brute_force_knn(
     The candidate adds 4*n_index*n_features bytes, once per public request.
     Allocation failure is an explicit failure, never an unrecorded fallback.
     """
-    comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
+    # KNN_DIRECT_DISTANCE: every transposed spelling is the expanded form;
+    # the direct form's one device spelling is the row-major direct tile.
+    comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL and not KNN_DIRECT_DISTANCE:
         var resolved = resolve_metric(metric, is_sqrt)
         if (resolved == DIST_L2_EXPANDED or resolved == DIST_L2_SQRT_EXPANDED) and n_queries > 0 and n_index > 0 and n_features > 0 and n_index <= 2147483647 and n_features <= 2147483647:
             comptime if KNN_RESIDENT_CACHE:
@@ -1940,20 +1941,15 @@ def brute_force_knn_impl(
     # is in; see DEVIATION 36 above the constants for the measurements.
     var mtr = resolve_metric(metric, is_sqrt)
 
-    # C29/C30 default OFF, source integration only. All Euclidean callers,
-    # including large k, share this exact list merge; other metrics retain
-    # their configured arithmetic and production route.
-    comptime if C29_STREAM_TOPK or KNN_DIRECT_DISTANCE:
-        if row_major_query and row_major_index and (mtr == DIST_L2_EXPANDED or mtr == DIST_L2_SQRT_EXPANDED):
-            ctx.enqueue_function[classical_stream_topk_kernel](
-                queries.unsafe_ptr(), index.unsafe_ptr(), query_norm.unsafe_ptr(), index_norm.unsafe_ptr(),
-                out_dist.unsafe_ptr(), out_idx.unsafe_ptr(), Int32(n_queries), Int32(n_index),
-                Int32(n_features), Int32(k), Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
-                grid_dim=((n_queries + 127) // 128, 1, 1), block_dim=(128, 1, 1),
-            )
-            return
-
-    comptime if KNN_CERTIFIED_MMA:
+    # C29_STREAM_TOPK (one thread per query walking every index row) was
+    # deleted 2026-10-07: forbidden serial shape, incumbent selectors are
+    # block-per-row-per-tile. KNN_DIRECT_DISTANCE no longer routes here; it
+    # keeps ONE device spelling, the row-major direct tile
+    # (`pinned_distance_tile_direct_kernel[KNN_DIRECT_DISTANCE]`), which is
+    # what core/knn_host_predict.mojo's host twin computes. The certified MMA
+    # and transposed-layout routes compute the expanded form only, so they
+    # are closed under KNN_DIRECT_DISTANCE (here and in tiled_brute_force_knn).
+    comptime if KNN_CERTIFIED_MMA and not KNN_DIRECT_DISTANCE:
         if (
             (mtr == DIST_L2_EXPANDED or mtr == DIST_L2_SQRT_EXPANDED)
             and row_major_query

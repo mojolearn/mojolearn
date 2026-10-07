@@ -201,26 +201,6 @@
       "grid": "exclude",
       "note": "UNREACHED on the board: every SGD-family estimator defaults to the minibatch route (_sgd_mb_grid): SGDClassifier/Regressor batch 4096, Perceptron/PA 256, SGDOneClassSVM 4096 in IDENTICAL. SGD_PS_CHUNK only affects batch_size=0 fits. Compiled (rc=0) at 79aa4a19c for sm_89 OFF and =32 before the no-compile rule."
     },
-    "c20_row_cache": {
-      "define": "MOJOLEARN_CLASSICAL_C20_ROW_CACHE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C20_ROW_CACHE"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "svm/impl/kernelcache.mojo:194",
-        "svm/impl/kernelcache.mojo:322"
-      ],
-      "binding": "_mojolearn_svm",
-      "bits_change": true,
-      "status": "kept",
-      "grid": "exclude_recommended",
-      "note": "SHAPE VIOLATION: host loop over the n_ws (1024) working-set rows, 3 launches per row (~3072 serialized launches per SMO iteration) including a grid=1/block=1 publish kernel (kernelcache.mojo:337), and a full n_rows kernel row per row (10x the n_ws^2 tile work). Returns early, so it MASKS c20_pair_load (square tile site) and c22_triangle. Expected loser by construction; recommend delete without a run."
-    },
     "c20_pair_load": {
       "define": "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD",
       "kind": "switch",
@@ -238,7 +218,7 @@
       "binding": "_mojolearn_svm",
       "bits_change": false,
       "status": "kept",
-      "note": "fused row+norm gather, parallel over n_ws*n_cols, no reduction."
+      "note": "fused row+norm gather, parallel over n_ws*n_cols, no reduction. 2026-10-07: C20_ROW_CACHE deleted; its early return hid the square-tile site (kernelcache.mojo get_square_tile_without_caching), now reachable again on every SVC/SVR fit. The square-tile half was never measured: OWES its own A/B (off vs on) before any keep."
     },
     "c21_extrema": {
       "define": "MOJOLEARN_CLASSICAL_C21_EXTREMA",
@@ -274,46 +254,7 @@
       "binding": "_mojolearn_svm",
       "bits_change": true,
       "status": "kept",
-      "note": "fires only for the SMO square tile (m==n, same pointer); n*n grid with half idle, classical_dot fixed leaf tree. Not reached by kernel-ridge, kernel-pca, ocsvm (catalog claims removed)."
-    },
-    "c29_stream_topk": {
-      "define": "MOJOLEARN_C29_STREAM_TOPK",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C29_STREAM_TOPK"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "neighbors/impl/detail/knn_brute_force.mojo:1945",
-        "neighbors/impl/detail/classical_stream_topk.mojo:28"
-      ],
-      "binding": "_mojolearn",
-      "bits_change": true,
-      "status": "kept",
-      "grid": "exclude_recommended",
-      "note": "SHAPE VIOLATION: one thread per query, serial over ALL n_index rows with O(k) insertion (classical:knn: 4k threads x 400k candidates x (d+64)); replaces the tiled distance + selection + fixed partial merge. Gate is `C29_STREAM_TOPK or C30_DIRECT_DISTANCE`, so C30 (lane L1) alone also turns it on. Expected loser by construction."
-    },
-    "c29_tile": {
-      "define": "MOJOLEARN_C29_TILE",
-      "kind": "int_sweep",
-      "arms": {
-        "256": [],
-        "128": [
-          "MOJOLEARN_C29_TILE=128"
-        ]
-      },
-      "default": "256",
-      "source": [
-        "experiments/classical_identical_ideas/graph_controls.mojo:13",
-        "neighbors/impl/detail/classical_stream_topk.mojo:28"
-      ],
-      "binding": "_mojolearn",
-      "bits_change": false,
-      "status": "split_from:C29_TILE_128",
-      "note": "pure column-loop chunking; meaningful only with c29_stream_topk (or C30) on."
+      "note": "fires only for the SMO square tile (m==n, same pointer); n*n grid with half idle, classical_dot fixed leaf tree. Not reached by kernel-ridge, kernel-pca, ocsvm (catalog claims removed). 2026-10-07: C20_ROW_CACHE deleted; it returned before kernel_op, so C22 is reachable again through the incumbent square tile. Never measured on its own: OWES its own A/B (off vs on), bits change."
     },
     "c52_pair_rows": {
       "define": "MOJOLEARN_C52_PAIR_ROWS",
@@ -603,86 +544,58 @@
     },
     "classical:svc": {
       "binding": "_mojolearn_svm",
-      "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_ROW_CACHE, C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
+      "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
       "controls": [
-        "c20_row_cache",
         "c20_pair_load",
         "c21_extrema",
         "c22_triangle"
       ],
       "interaction_groups": [
         [
-          "c20_row_cache",
           "c20_pair_load",
           "c21_extrema",
           "c22_triangle"
         ]
       ],
-      "note": "C20_ROW_CACHE masks C22 and the square-tile C20_PAIR_LOAD site. Recommended grid without row_cache: pair_load x extrema x triangle = 8 arms."
+      "note": "C20_ROW_CACHE deleted 2026-10-07 (serial shape); C22 and the square-tile C20_PAIR_LOAD site are reachable again. Grid: pair_load x extrema x triangle = 8 arms."
     },
     "more:svr": {
       "binding": "_mojolearn_svm",
-      "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_ROW_CACHE, C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
+      "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
       "controls": [
-        "c20_row_cache",
         "c20_pair_load",
         "c21_extrema",
         "c22_triangle"
       ],
       "interaction_groups": [
         [
-          "c20_row_cache",
           "c20_pair_load",
           "c21_extrema",
           "c22_triangle"
         ]
       ],
-      "note": "C20_ROW_CACHE masks C22 and the square-tile C20_PAIR_LOAD site. Recommended grid without row_cache: pair_load x extrema x triangle = 8 arms."
+      "note": "C20_ROW_CACHE deleted 2026-10-07 (serial shape); C22 and the square-tile C20_PAIR_LOAD site are reachable again. Grid: pair_load x extrema x triangle = 8 arms."
     },
     "classical:knn": {
       "binding": "_mojolearn",
-      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> knn_brute_force.mojo:1945 gate",
-      "controls": [
-        "c29_stream_topk",
-        "c29_tile"
-      ],
-      "interaction_groups": [
-        [
-          "c29_stream_topk",
-          "c29_tile",
-          "C30_DIRECT_DISTANCE(lane L1, knn split)"
-        ]
-      ]
+      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> tiled_brute_force_knn (C29 gate deleted 2026-10-07)",
+      "controls": [],
+      "interaction_groups": [],
+      "note": "C29_STREAM_TOPK and C29_TILE deleted 2026-10-07 (serial shape). No classical-misc control left on this route; KNN_DIRECT_DISTANCE (lane L1 knn split) now changes only the distance spelling."
     },
     "more:knn-clf": {
       "binding": "_mojolearn",
-      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> knn_brute_force.mojo:1945 gate",
-      "controls": [
-        "c29_stream_topk",
-        "c29_tile"
-      ],
-      "interaction_groups": [
-        [
-          "c29_stream_topk",
-          "c29_tile",
-          "C30_DIRECT_DISTANCE(lane L1, knn split)"
-        ]
-      ]
+      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> tiled_brute_force_knn (C29 gate deleted 2026-10-07)",
+      "controls": [],
+      "interaction_groups": [],
+      "note": "C29_STREAM_TOPK and C29_TILE deleted 2026-10-07 (serial shape). No classical-misc control left on this route; KNN_DIRECT_DISTANCE (lane L1 knn split) now changes only the distance spelling."
     },
     "more:knn-reg": {
       "binding": "_mojolearn",
-      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> knn_brute_force.mojo:1945 gate",
-      "controls": [
-        "c29_stream_topk",
-        "c29_tile"
-      ],
-      "interaction_groups": [
-        [
-          "c29_stream_topk",
-          "c29_tile",
-          "C30_DIRECT_DISTANCE(lane L1, knn split)"
-        ]
-      ]
+      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> tiled_brute_force_knn (C29 gate deleted 2026-10-07)",
+      "controls": [],
+      "interaction_groups": [],
+      "note": "C29_STREAM_TOPK and C29_TILE deleted 2026-10-07 (serial shape). No classical-misc control left on this route; KNN_DIRECT_DISTANCE (lane L1 knn split) now changes only the distance spelling."
     },
     "classical:kde": {
       "binding": "_mojolearn_estimators",
@@ -833,6 +746,18 @@
     {
       "define": "catalog arms",
       "reason": "C58 16 arms -> 5 (4 singles + combined; the 4 controls touch disjoint kernels/workloads, so the 11 combos measure nothing new). Duplicate combo arms equal to :combined dropped for C02, C05, C17, C20."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C20_ROW_CACHE",
+      "reason": "forbidden serial shape; incumbent parallel. Host loop over n_ws working-set rows, 3 launches per row incl. a 1x1 publish kernel (kernelcache.mojo:327-338). Incumbent square tile is gather + identical GEMM. Code, kernels and slot buffers deleted; guard rejects the define; recoverable at origin/integration/switches-20261007 608a7cf4a (lane serial-cleanup, 2026-10-07)"
+    },
+    {
+      "define": "MOJOLEARN_C29_STREAM_TOPK",
+      "reason": "forbidden serial shape; incumbent parallel. One thread per query walking every index row with O(k) insertion (classical_stream_topk.mojo). Incumbent top-k is block-per-row-per-column-tile + fixed merges. Gate (knn_brute_force.mojo:1946) and kernel file deleted; MOJOLEARN_KNN_DIRECT_DISTANCE no longer routes there: it keeps only the row-major direct tile pinned_distance_tile_direct_kernel (certified MMA and transposed-layout routes closed under it) and its unchanged host twin core/knn_host_predict.mojo; guard rejects the define; recoverable at origin/integration/switches-20261007 608a7cf4a (lane serial-cleanup, 2026-10-07)"
+    },
+    {
+      "define": "MOJOLEARN_C29_TILE",
+      "reason": "loop-blocking knob of the deleted C29 stream kernel only (C29_REFERENCE_TILE); guard rejects the define; recoverable at origin/integration/switches-20261007 608a7cf4a (lane serial-cleanup, 2026-10-07)"
     }
   ],
   "owed_removal_ab": [

@@ -21,8 +21,8 @@ The scans are maxima / minima of (value, index) under a total order with
 the LAST index on an equal value and NaN never taken: libsvm's `>=` / `<=`
 scans ascending. Any reduction order returns the item's index and value,
 so the device's alpha, iteration count and gradients are the item's bits.
-rho is the blocked fold `ocsvm_rho_part_item` / `ocsvm_rho_fin_item`, the
-item's `ocsvm_rho`.
+rho is the blocked fold `ocsvm_rho_part_item`, then the fixed pairwise
+tree `ocsvm_rho_level_item` (one launch per level), the item's `ocsvm_rho`.
 
 State (int32 `st`): it, stop, go, the pending (i, j); float32 `sf` the
 pending (alpha_i, alpha_j). Each launch reads only the slots the launch
@@ -38,7 +38,7 @@ from max.gpu.sync import barrier
 
 from x_neighbors.items import (
     FP, IP, _add, _sub, xn_fold_blocks, ocsvm_g0, ocsvm_obj, ocsvm_pair, ocsvm_g_step,
-    ocsvm_rho_part_item, ocsvm_rho_fin_item,
+    ocsvm_rho_part_item, ocsvm_rho_level_item, ocsvm_rho_level_items, ocsvm_rho_levels_done,
 )
 from x_neighbors.device_ops import xn_ctx, _grid, _tid, _buf, _buf_i, _down, _down_i, BLOCK, kernel_kernel
 from std.python import PythonObject
@@ -609,10 +609,13 @@ def ocsvm_rho_part_kernel(g: FP, alpha: FP, cv: FP, pf: FP, pc: IP, n_: Int64):
         ocsvm_rho_part_item(t, g, alpha, cv, pf, pc, Int(n_))
 
 
-def ocsvm_rho_fin_kernel(pf: FP, pc: IP, info: FP, n_: Int64):
+def ocsvm_rho_level_kernel(pf: FP, pc: IP, info: FP, nb_: Int64, stride_: Int64):
+    """One level of the rho partials' pairwise tree, one thread per item
+    (`ocsvm_rho_level_item`); was one thread walking all n / 2048 partials
+    (lane serial-cleanup, 2026-10-07)."""
     var t = _tid()
-    if t < 1:
-        ocsvm_rho_fin_item(t, pf, pc, info, Int(n_))
+    if t < ocsvm_rho_level_items(Int(nb_), Int(stride_)):
+        ocsvm_rho_level_item(t, pf, pc, info, Int(nb_), Int(stride_))
 
 
 def op_ocsvm(q: Int, cv: Int, alpha: Int, info: Int, iters: Int, n: Int, eps: Float32, max_iter: Int) raises:
@@ -908,10 +911,19 @@ def _ocsvm_solve(
         d_g.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cv.unsafe_ptr(), d_pf.unsafe_ptr(), d_pc.unsafe_ptr(), Int64(n),
         grid_dim=_grid(nf), block_dim=(BLOCK if nf > 1 else 1),
     )
-    ctx.enqueue_function[ocsvm_rho_fin_kernel](
-        d_pf.unsafe_ptr(), d_pc.unsafe_ptr(), d_info.unsafe_ptr(), Int64(n),
-        grid_dim=_grid(1), block_dim=1,
-    )
+    # The partials fold in a fixed pairwise tree, one launch per level over
+    # that level's items (log2(nf) launches, each parallel); the last
+    # level's item 0 writes rho. The host's ocsvm_rho runs the same items.
+    var stride = 1
+    while True:
+        var items = ocsvm_rho_level_items(nf, stride)
+        ctx.enqueue_function[ocsvm_rho_level_kernel](
+            d_pf.unsafe_ptr(), d_pc.unsafe_ptr(), d_info.unsafe_ptr(), Int64(nf), Int64(stride),
+            grid_dim=_grid(items), block_dim=(BLOCK if items > 1 else 1),
+        )
+        if ocsvm_rho_levels_done(nf, stride):
+            break
+        stride *= 2
     _down(ctx, d_alpha, alpha, n)
     _down(ctx, d_info, info, 1)
     ctx.synchronize()

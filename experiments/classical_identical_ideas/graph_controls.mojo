@@ -8,10 +8,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime C29_STREAM_TOPK = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C29_STREAM_TOPK"]()
-# C29 reference tile: integer sweep -D MOJOLEARN_C29_TILE=128|256 (was the
-# boolean MOJOLEARN_C29_TILE_128); absent = 256. Acts only under the C29 gate.
-comptime C29_REFERENCE_TILE = get_defined_int["MOJOLEARN_C29_TILE", 256]()
+# C29_STREAM_TOPK and its MOJOLEARN_C29_TILE knob were deleted 2026-10-07
+# (one thread per query over every index row); refused in
+# core/six_lane_experiment_guards.mojo.
 # C30 split per algorithm family (lane classical-kmeans, 2026-10-07). The old
 # MOJOLEARN_C30_DIRECT_DISTANCE changed about 12 algorithms at once, so a grid
 # could not separate them. Each family now has its own define with the old C30

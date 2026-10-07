@@ -456,28 +456,34 @@ def ocsvm_rho_from(sum_free: Float32, lb: Float32, ub: Float32, nr_free: Int) ->
     return ftz(identical_mul(_add(ub, lb), Float32(0.5)))
 
 
-@always_inline
 def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
     """libsvm's calculate_rho, y = +1 throughout, as a blocked fold: block
-    partials (ocsvm_rho_part), then the partials ascending (the free sum
-    from zero; lb / ub by the scan's strict `>` / `<`, which a fold of the
-    block results in order reproduces exactly). The GPU runs the same
-    partials as items (ocsvm_rho_part_item, ocsvm_rho_fin_item)."""
-    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
-    var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
-    var ub = pos_inf
-    var lb = neg_inf
-    var nr_free = 0
-    var sum_free = Float32(0)
-    for b in range(xn_fold_blocks(n)):
-        var p = ocsvm_rho_part(g, alpha, cv, n, b)
-        sum_free = _add(sum_free, p[0])
-        if p[1] > lb:
-            lb = p[1]
-        if p[2] < ub:
-            ub = p[2]
-        nr_free += p[3]
-    return ocsvm_rho_from(sum_free, lb, ub, nr_free)
+    partials (ocsvm_rho_part_item), then the partials in a fixed pairwise
+    tree (`ocsvm_rho_level_item`, levels stride = 1, 2, 4, ...). lb / ub are
+    maxima / minima and the free count an integer sum, exact in any order;
+    the free sum takes the tree's order. The GPU launches the same items
+    (ocsvm_rho_part_kernel, then one ocsvm_rho_level_kernel per level), so
+    the host column and every GPU column have the same word."""
+    var nb = xn_fold_blocks(n)
+    var pfl = List[Float32](length=max(3 * nb, 1), fill=Float32(0))
+    var pcl = List[Int32](length=max(nb, 1), fill=Int32(0))
+    var pf = FP(unsafe_from_address=Int(pfl.unsafe_ptr()))
+    var pc = IP(unsafe_from_address=Int(pcl.unsafe_ptr()))
+    for b in range(nb):
+        ocsvm_rho_part_item(b, g, alpha, cv, pf, pc, n)
+    var info = InlineArray[Float32, 1](fill=Float32(0))
+    var ip = FP(unsafe_from_address=Int(info.unsafe_ptr()))
+    var stride = 1
+    while True:
+        for t in range(ocsvm_rho_level_items(nb, stride)):
+            ocsvm_rho_level_item(t, pf, pc, ip, nb, stride)
+        if ocsvm_rho_levels_done(nb, stride):
+            break
+        stride *= 2
+    var r = info[0]
+    _ = pfl^
+    _ = pcl^
+    return r
 
 
 def ocsvm_rho_part_item(t: Int, g: FP, alpha: FP, cv: FP, pf: FP, pc: IP, n: Int):
@@ -489,24 +495,49 @@ def ocsvm_rho_part_item(t: Int, g: FP, alpha: FP, cv: FP, pf: FP, pc: IP, n: Int
     pc.unsafe_store(t, Int32(p[3]))
 
 
-def ocsvm_rho_fin_item(t: Int, pf: FP, pc: IP, info: FP, n: Int):
-    """ONE item: ocsvm_rho's fold of the block partials, ascending."""
-    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
-    var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
-    var ub = pos_inf
-    var lb = neg_inf
-    var nr_free = 0
-    var sum_free = Float32(0)
-    for b in range(xn_fold_blocks(n)):
-        sum_free = _add(sum_free, pf.unsafe_load(3 * b))
-        var plb = pf.unsafe_load(3 * b + 1)
-        var pub = pf.unsafe_load(3 * b + 2)
-        if plb > lb:
-            lb = plb
-        if pub < ub:
-            ub = pub
-        nr_free += Int(pc.unsafe_load(b))
-    info.unsafe_store(0, ocsvm_rho_from(sum_free, lb, ub, nr_free))
+@always_inline
+def ocsvm_rho_levels_done(nb: Int, stride: Int) -> Bool:
+    """Whether the level at `stride` is the rho fold's last (slot 0 then
+    holds every partial)."""
+    return 2 * stride >= nb
+
+
+@always_inline
+def ocsvm_rho_level_items(nb: Int, stride: Int) -> Int:
+    """Items of the rho fold's level at `stride` (at least one, so the last
+    level's item 0 always runs and writes rho)."""
+    return max((nb + 2 * stride - 1) // (2 * stride), 1)
+
+
+def ocsvm_rho_level_item(t: Int, pf: FP, pc: IP, info: FP, nb: Int, stride: Int):
+    """One item of the rho partials' fixed pairwise tree (lane serial-cleanup,
+    2026-10-07; was one item walking all partials ascending). Level `stride`
+    (1, 2, 4, ...): slot i = 2 * stride * t takes slot i + stride when it
+    exists: the free sum by `_add(slot i, slot j)`, lb / ub by strict `>` /
+    `<`, the free count an integer sum (exact in any order). Each item owns
+    its two slots, so a level is race-free in place and its shape is a
+    function of nb alone. On the last level item 0 writes libsvm's rho from
+    slot 0 (no partials: the empty fold's (0, -inf, +inf, 0)). The device
+    launches each level over its items; the host (`ocsvm_rho`) runs the same
+    items level by level, so every column has the same word."""
+    var i = 2 * stride * t
+    var j = i + stride
+    if j < nb:
+        pf.unsafe_store(3 * i, _add(pf.unsafe_load(3 * i), pf.unsafe_load(3 * j)))
+        var plb = pf.unsafe_load(3 * j + 1)
+        if plb > pf.unsafe_load(3 * i + 1):
+            pf.unsafe_store(3 * i + 1, plb)
+        var pub = pf.unsafe_load(3 * j + 2)
+        if pub < pf.unsafe_load(3 * i + 2):
+            pf.unsafe_store(3 * i + 2, pub)
+        pc.unsafe_store(i, pc.unsafe_load(i) + pc.unsafe_load(j))
+    if t == 0 and ocsvm_rho_levels_done(nb, stride):
+        if nb > 0:
+            info.unsafe_store(0, ocsvm_rho_from(pf.unsafe_load(0), pf.unsafe_load(1), pf.unsafe_load(2), Int(pc.unsafe_load(0))))
+        else:
+            info.unsafe_store(0, ocsvm_rho_from(
+                Float32(0), bitcast[DType.float32](UInt32(0xFF800000)), bitcast[DType.float32](UInt32(0x7F800000)), 0
+            ))
 
 
 def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int, eps: Float32, max_iter: Int):
