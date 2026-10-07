@@ -232,5 +232,161 @@ class RealInputTests(unittest.TestCase):
         self.assertTrue(all(j['blocked'] for j in q['jobs']))  # no recipes: every job stays blocked
 
 
+# ---------------------------------------------------------------- FAST mode (Apple M3)
+import six_lane_grid_fast as F  # noqa: E402
+
+
+def fctrl(key, define, on=None, both=(), both_env=None, kind='switch'):
+    c = F._ctrl(key, define, on if on is not None else [define], list(both), both_env or {}, ['x'], [], [], 't', [], kind=kind)
+    return c
+
+
+def falgo(aid, controls, groups=(), binding_of=None, family='algos'):
+    return dict(id=aid, family=family, lane=aid.split(':', 1)[1], controls=list(controls), groups=[list(g) for g in groups],
+                not_reached=[], arm_restrict={}, notes=[], binding_of=binding_of or {k: 'x_prep' for k in controls},
+                workloads=[aid + '@dataset=taxi', aid + '@dataset=istella'])
+
+
+class FastGuardTests(unittest.TestCase):
+    def test_env_with_build_define_refused(self):
+        g = F.FastGuards(env_names={'MOJOLEARN_E'})
+        self.assertTrue(g.problems(['MOJOLEARN_E=1', 'MOJOLEARN_D=1']))
+        self.assertEqual(g.problems(['MOJOLEARN_E=1']), [])
+        self.assertEqual(g.problems(['MOJOLEARN_D=1']), [])
+
+    def test_one_binding_per_line(self):
+        g = F.FastGuards(binding_of={'MOJOLEARN_A': 'arima', 'MOJOLEARN_B': 'tsa'})
+        self.assertTrue(g.problems(['MOJOLEARN_A=1', 'MOJOLEARN_B=1']))
+        self.assertEqual(g.problems(['MOJOLEARN_A=1']), [])
+
+    def test_card_pairs(self):
+        g = F.FastGuards(pairs=[('MOJOLEARN_G05', 'MOJOLEARN_PACK', 'card')])
+        self.assertTrue(g.problems(['MOJOLEARN_G05=1', 'MOJOLEARN_PACK=1']))
+
+
+class FastPlanTests(unittest.TestCase):
+    def test_all_on_drops_env_and_crosses_stay_pure(self):
+        controls = {k: fctrl(k, 'MOJOLEARN_' + k) for k in ('A', 'B')}
+        controls['E'] = fctrl('E', 'MOJOLEARN_E', on=['MOJOLEARN_E=1'], kind='env')
+        algo = falgo('algos:lane', ['A', 'B', 'E'], groups=[['A', 'B']])
+        reach = {k: {'algos:lane'} for k in controls}
+        guards = F.FastGuards(env_names={'MOJOLEARN_E'})
+        plan = G.plan_algorithm(algo, controls, reach, guards)
+        tiers = [c['tier'] for c in plan['configs']]
+        self.assertEqual(tiers.count('single'), 3)
+        self.assertEqual([d['control'] for d in plan['dropped_from_all_on']], ['E'])
+        for c in plan['configs']:
+            self.assertEqual(guards.problems(c['defines']), [], c['id'])
+
+    def test_incumbent_keeps_prerequisite_unless_member(self):
+        controls = {'NB': fctrl('NB', 'MOJOLEARN_NB'), 'P03': fctrl('P03', 'MOJOLEARN_P03', on=['MOJOLEARN_NB', 'MOJOLEARN_P03'], both=['MOJOLEARN_NB'])}
+        algo = falgo('algos:nb', ['NB', 'P03'])
+        reach = {k: {'algos:nb'} for k in controls}
+        plan = G.plan_algorithm(algo, controls, reach, F.FastGuards())
+        by = {c['tier'] + ':' + ','.join(c['assignment']): F.finish_config(c, algo, controls, set()) for c in plan['configs']}
+        self.assertEqual(by['single:P03']['incumbent_defines'], ['MOJOLEARN_NB=1'])
+        self.assertEqual(by['single:P03']['candidate_build_defines'], ['MOJOLEARN_NB=1', 'MOJOLEARN_P03=1'])
+        self.assertEqual(by['all_on:NB,P03']['incumbent_defines'], [])  # NB is a member: candidate only
+
+    def test_env_config_and_tools(self):
+        controls = {'E': fctrl('E', 'MOJOLEARN_E', on=['MOJOLEARN_E=1'], kind='env'), 'T': fctrl('T', 'MOJOLEARN_T')}
+        algo = falgo('trees:gbdt-x', ['E', 'T'], binding_of={'E': 'gbdt', 'T': 'gbdt'}, family='trees')
+        reach = {k: {'trees:gbdt-x'} for k in controls}
+        plan = G.plan_algorithm(algo, controls, reach, F.FastGuards(env_names={'MOJOLEARN_E'}))
+        done = {','.join(c['assignment']): F.finish_config(c, algo, controls, {'MOJOLEARN_E'}) for c in plan['configs']}
+        self.assertEqual(done['E']['tool'], 'afc_env')
+        self.assertEqual(done['E']['candidate_env'], {'MOJOLEARN_E': '1'})
+        self.assertEqual(done['T']['tool'], 'aft')
+
+    def test_flags(self):
+        self.assertEqual(F.dflags(['MOJOLEARN_A=1', 'MOJOLEARN_K=4']), '-D MOJOLEARN_A -D MOJOLEARN_K=4')
+        self.assertEqual(F.envstr({'B': '1', 'A': '2'}), 'A=2 B=1')
+
+    def test_binding_resolution(self):
+        c = fctrl('C', 'MOJOLEARN_C')
+        c['bindings'], c['paths'] = ['metrics', 'x_decomp'], ['p.mojo']
+        orig = F.reaches
+        try:
+            F.reaches = lambda b, paths: True
+            self.assertEqual(F.resolve_binding(c, 'umap')[0], 'metrics')       # LANE_PY_BINDINGS picks one
+            self.assertIsNone(F.resolve_binding(c, 'no-such-lane')[0])         # ambiguous: refused, not guessed
+            F.reaches = lambda b, paths: b == 'x_decomp'
+            self.assertEqual(F.resolve_binding(c, 'no-such-lane')[0], 'x_decomp')
+            F.reaches = lambda b, paths: False
+            self.assertIsNone(F.resolve_binding(c, 'no-such-lane')[0])
+        finally:
+            F.reaches = orig
+        e = fctrl('E', 'MOJOLEARN_E', on=['MOJOLEARN_E=1'], kind='env')
+        e['bindings'] = []
+        self.assertEqual(F.resolve_binding(e, 'autoarima')[0], 'arima')
+
+
+class FastRealInputTests(unittest.TestCase):
+    """End-to-end on the committed FAST sources; invariants, not counts."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.plan, cls.matrix, cls.build, cls.queue = F.generate_fast()
+
+    def test_no_identical_anything(self):
+        defines = [d for j in self.build['jobs'] for d in j['defines'] + list(j['environment'])]
+        defines += [d for c in self.matrix['configurations'] for arm in 'AB' for d in c[arm]['defines'] + list(c[arm]['environment'])]
+        self.assertFalse([d for d in defines if 'NUMERIC_IDENTICAL' in d])
+        self.assertFalse([q['tag'] for q in self.queue if 'NUMERIC_IDENTICAL' in q['command']])
+        self.assertTrue(self.plan['verdict_rule']['identity'].startswith('NOT_REQUIRED'))
+        for cell in self.matrix['cells']:
+            self.assertEqual((cell['vendor'], cell['identity'], cell['mode']), ('apple', 'NOT_REQUIRED', 'fast'))
+
+    def test_queue_lines(self):
+        kinds = [q['kind'] for q in self.queue]
+        self.assertEqual(kinds, sorted(kinds))  # every A/A ('aa') before every A/B ('ab')
+        tags = [q['tag'] for q in self.queue]
+        self.assertEqual(len(tags), len(set(tags)))
+        for q in self.queue:
+            self.assertTrue(q['line'].startswith("lq add m3 CMD lane/apple-fast"), q['line'])
+            cmd = q['command']
+            if 'aft_ab.sh' in cmd:
+                self.assertRegex(cmd, r'aft_ab\.sh \S+ \S+ \S+ 1 "')        # pairs 1
+            elif 'afc_ab_def.sh' in cmd:
+                self.assertRegex(cmd, r'afc_ab_def\.sh \S+ \S+ \S+ \S+ 1 1 "')  # reps 1, rounds 1
+            else:
+                self.assertRegex(cmd, r'afc_ab\.sh \S+ \S+ \S+ 1 1 "')
+            if q['kind'] == 'ab' and q['tool'] != 'afc_env':
+                self.assertIn('main-' + q['binding'] + '/A.so', cmd)  # FAST main restored after the line
+        cells = {(c['configuration'], c['workload_id']) for c in self.matrix['cells']}
+        self.assertEqual(cells, {(q['configuration'], q['workload_id']) for q in self.queue if q['kind'] == 'ab'})
+
+    def test_cap_guards_and_arms(self):
+        for aid, a in self.plan['algorithms'].items():
+            self.assertLessEqual(len(a['configs']), G.CAP, aid)
+            self.assertEqual(len({c['binding'] for c in a['configs']} - {None}) <= len(a['bindings']), True)
+        for c in self.matrix['configurations']:
+            self.assertEqual(c['candidate_arm'], 'B')
+            self.assertTrue(set(c['A']['defines']) <= set(c['B']['defines']) or c['grid']['kind'] == 'env', c['id'])
+            added = {d.split('=')[0] for d in set(c['B']['defines']) - set(c['A']['defines'])}
+            self.assertFalse({d for d in added if d.endswith('_OFF')}, c['id'])  # promoted _OFF arms are never the candidate
+            self.assertEqual(G.harness_problems(c['B']['defines']), [], c['id'])
+
+    def test_builds(self):
+        s = self.plan['summary']
+        self.assertEqual(s['builds_after_packing'], len(self.build['jobs']))
+        self.assertLessEqual(s['builds_after_packing'], s['builds_before_packing'])
+        for j in self.build['jobs']:
+            self.assertEqual((j['vendor'], j['mode']), ('apple', 'fast'))
+
+    def test_nothing_silent(self):
+        controls, *_ = F.load_all()
+        placed = {k for a in self.plan['algorithms'].values() for k in a['declared_controls']}
+        excluded = {e['control'] for e in self.plan['excluded']}
+        self.assertEqual(set(controls) - placed - excluded, set())
+
+    def test_committed_outputs_fresh(self):
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(F.main_fast(check=True), 0)
+            self.assertEqual(G.main(['--check']), 0)  # the IDENTICAL outputs are untouched by FAST mode
+
+
 if __name__ == '__main__':
     unittest.main()

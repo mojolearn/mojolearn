@@ -1044,7 +1044,21 @@ def main(argv=None):
     p.add_argument('--out', type=Path, default=OUT_DIR)
     p.add_argument('--cap', type=int, default=CAP)
     p.add_argument('--check', action='store_true', help='fail if committed outputs differ from a fresh generation')
+    p.add_argument('--mode', choices=('identical', 'fast'), default='identical',
+                   help='identical (default): NVIDIA + AMD IDENTICAL grid; fast: Apple FAST trees + classical grid (tools/six_lane_grid_fast.py)')
+    p.add_argument('--vendor', choices=('apple',), help='FAST vendor (fast mode only; apple = M3 Ultra, Metal)')
+    p.add_argument('--queue-branch', help='fast mode: the lane/apple-fast* branch the M3 queue lines name')
     args = p.parse_args(argv)
+    if args.mode == 'fast':
+        import six_lane_grid_fast as F
+        if args.vendor not in (None, 'apple'):
+            p.error('--mode fast supports --vendor apple only')
+        branch = args.queue_branch or F.QUEUE_BRANCH
+        if not branch.startswith('lane/apple-fast'):
+            p.error('only lane/apple-fast* branches may target m3')
+        return F.main_fast(out=args.out if args.out != OUT_DIR else F.OUT_DIR, cap=args.cap, check=args.check, branch=branch)
+    if args.vendor or args.queue_branch:
+        p.error('--vendor / --queue-branch apply to --mode fast only')
     plan, matrix, build_plan = generate(cap=args.cap)
     if args.check:
         import tempfile
