@@ -366,12 +366,8 @@ comptime ANY_LOSS_SABOTAGE = (
 # retaining both output stores and the L14/L16 rounding seams. This is a
 # memory/launch experiment for every row/vocabulary size, never a board route.
 # Compilation, four-column identity, task quality and full-model A/B are pending.
-comptime NN52_CE_WEIGHT_GRAD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN52_CE_WEIGHT_GRAD"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    and not ANY_LOSS_SABOTAGE
-)
+# L11 (2026-10-07): NN52's define is retired; NI33's
+# MOJOLEARN_IDN_CE_GRAD_FUSED selects the same fused kernel below.
 
 
 def loss_sabotage_name() -> String:
@@ -1795,7 +1791,7 @@ def identical_ce_backward_into(
     comptime if SAB_GRAD_DIVISOR_IS_N:
         divisor = Float32(n_rows)
 
-    comptime if (NN52_CE_WEIGHT_GRAD or IDN_CE_GRAD_FUSED) and not ANY_LOSS_SABOTAGE:
+    comptime if IDN_CE_GRAD_FUSED and not ANY_LOSS_SABOTAGE:
         step_count_launch()
         ctx.enqueue_function[ce_weights_dlogits_kernel](
             weights.unsafe_ptr(), dlogits.unsafe_ptr(), expo.unsafe_ptr(),
