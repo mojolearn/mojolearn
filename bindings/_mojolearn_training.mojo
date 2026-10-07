@@ -136,6 +136,16 @@ from training.samba_afn import (
     samba_afn_norm_head_forward_binding,
     samba_afn_tail_train_binding,
 )
+# lane S1 samba-resident (2026-10-07): the device-resident Samba forward and
+# train step, registered only under -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP
+# (IDENTICAL); `samba_resident_enabled` is registered always so the Python
+# shell can ask (training/samba_resident.mojo).
+from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
+from training.samba_resident import (
+    SambaResidentSession,
+    samba_resident_forward,
+    samba_resident_train_step,
+)
 from core.philox_neural import neural_rng_host
 
 
@@ -1507,6 +1517,147 @@ def samba_head_loss_binding(
     return PythonObject(count)
 
 
+# ===========================================================================
+# THE DEVICE-RESIDENT SAMBA FORWARD AND TRAIN STEP (lane S1 samba-resident,
+# 2026-10-07; -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP, IDENTICAL, default off).
+# One `_SambaResidentSession` per Python `SambaStack` (samba_resident_open),
+# then one call per forward (samba_resident_forward) or per optimizer step
+# (samba_resident_step): the registry, the gradient, the activations and the
+# block stages stay on the device; the Python side keeps no per-layer loop.
+# The optimizer's moments are the Python optimizer's resident pair (an
+# `optimizer_resident_open` handle). Same kernels, operands and order as the
+# per-op route, which stays as arm B (training/samba_resident.mojo).
+# ===========================================================================
+
+
+def samba_resident_enabled_binding() raises -> PythonObject:
+    """Whether this build carries the resident Samba entries."""
+    return PythonObject(IDN_SAMBA_RESIDENT_STEP)
+
+
+def samba_resident_open_binding(
+    layers: PythonObject, params: PythonObject, param_addr: PythonObject
+) raises -> PythonObject:
+    """Open a stack's residency. `layers` = one code per layer in stack order
+    (0 mamba3, 1 attention); `params` = [vocab, d_model, n_heads, n_kv_heads,
+    head_dim, intermediate, tie_embeddings (0/1), norm_eps (float), n_total]
+    (the attention shape slots are 0 when the stack has no attention layer);
+    `param_addr` = the flat float32 registry (n_total floats, read once here).
+    Returns the session object; pass it to the two entries below."""
+    comptime if not IDN_SAMBA_RESIDENT_STEP:
+        raise Error("samba_resident_open: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+    else:
+        _params(params, 9, "samba_resident_open")
+        var kinds = List[Int]()
+        for i in range(len(layers)):  # small-loop(layers: one kind code per layer): reads codes, not data
+            kinds.append(Int(py=layers[i]))
+        var vocab = Int(py=params[0])
+        var dm = Int(py=params[1])
+        var nh = Int(py=params[2])
+        var nkv = Int(py=params[3])
+        var hd = Int(py=params[4])
+        var it = Int(py=params[5])
+        var tie = Int(py=params[6]) != 0
+        var eps = Float32(Float64(py=params[7]))
+        var n_total = Int(py=params[8])
+        var pp = _f32_ptr(Int(py=param_addr))
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        var session = SambaResidentSession(
+            ctx, kinds, vocab, dm, nh, nkv, hd, it, tie, eps, n_total, pp
+        )
+        return PythonObject(alloc=session^)
+
+
+def samba_resident_forward_binding(
+    session: PythonObject, addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`SambaStack.forward`, resident. addresses = [params (n_total f32,
+    read), ids (b*l i32), logits (b*l*vocab f32, written)]; params = [b, l].
+    Returns `b * l * vocab`."""
+    comptime if not IDN_SAMBA_RESIDENT_STEP:
+        raise Error("samba_resident_forward: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+    else:
+        var owner = session.downcast_value_ptr[SambaResidentSession]()
+        var a = _addrs(addresses, 3, "samba_resident_forward")
+        _params(params, 2, "samba_resident_forward")
+        var b = Int(py=params[0])
+        var l = Int(py=params[1])
+        if owner[].busy:
+            raise Error("samba_resident_forward: session busy")
+        owner[].busy = True
+        var cells = 0
+        try:
+            with GILReleased(Python()):
+                cells = samba_resident_forward(
+                    owner[], _f32_ptr(a[0]), _i32_ptr(a[1]), _f32_ptr(a[2]), b, l
+                )
+        except error:
+            owner[].busy = False
+            raise error
+        owner[].busy = False
+        return PythonObject(cells)
+
+
+def samba_resident_step_binding(
+    session: PythonObject, addresses: PythonObject, params: PythonObject,
+    handle: PythonObject,
+) raises -> PythonObject:
+    """`SambaStack.train_step` at accumulation_steps 1, resident.
+    addresses = [params (n_total f32, read and WRITTEN IN PLACE), ids (b*l
+    i32), targets (b*l i32), offsets (J+1 i32), buf_initialized (J i32,
+    written), info (3 f32, written: clip_ran, total_norm, coef), loss (1 f32,
+    written)]; params = [b, l] + the `optimizer_step` params list (its 12 or
+    13 slots, word for word); `handle` = the optimizer's resident moments
+    (`optimizer_resident_open`, n_total floats). Returns `count`, the number
+    of targets that are not the ignore index."""
+    comptime if not IDN_SAMBA_RESIDENT_STEP:
+        raise Error("samba_resident_step: built without MOJOLEARN_IDN_SAMBA_RESIDENT_STEP")
+    else:
+        var owner = session.downcast_value_ptr[SambaResidentSession]()
+        var a = _addrs(addresses, 7, "samba_resident_step")
+        if len(params) != 14 and len(params) != 15:
+            raise Error(
+                "samba_resident_step: params must contain 14 or 15 values, got "
+                + String(len(params))
+            )
+        var b = Int(py=params[0])
+        var l = Int(py=params[1])
+        var n_tensors = Int(py=params[2])
+        var kind = Int(py=params[3])
+        var t = Int(py=params[4])
+        var nesterov = Int(py=params[5])
+        var lr = Float32(Float64(py=params[6]))
+        var beta1 = Float32(Float64(py=params[7]))
+        var beta2 = Float32(Float64(py=params[8]))
+        var eps = Float32(Float64(py=params[9]))
+        var weight_decay = Float32(Float64(py=params[10]))
+        var momentum = Float32(Float64(py=params[11]))
+        var dampening = Float32(Float64(py=params[12]))
+        var max_norm = Float32(Float64(py=params[13]))
+        if len(params) == 15 and Int(py=params[14]) != 0:
+            raise Error("samba_resident_step: maximize is not carried by the resident step (SambaStack never sets it)")
+        var h = _opt_pool_handle(handle, owner[].n_total)
+        if owner[].busy:
+            raise Error("samba_resident_step: session busy")
+        owner[].busy = True
+        var count = 0
+        try:
+            with GILReleased(Python()):
+                var pool = _OPT_POOL.get_or_create_ptr()
+                count = samba_resident_train_step(
+                    owner[], _f32_ptr(a[0]), _i32_ptr(a[1]), _i32_ptr(a[2]), _f32_ptr(a[6]),
+                    pool[].m[h], pool[].v[h], pool[].sp[h], pool[].sg[h],
+                    _i32_ptr(a[3]), _i32_ptr(a[4]), _f32_ptr(a[5]),
+                    b, l, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps,
+                    weight_decay, momentum, dampening, max_norm,
+                )
+        except error:
+            owner[].busy = False
+            raise error
+        owner[].busy = False
+        return PythonObject(count)
+
+
 def accumulate_binding(
     addresses: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -1711,6 +1862,13 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[residual_dropout_backward_binding]("residual_dropout_backward")
         m.def_function[linear_backward_binding]("linear_backward")
         m.def_function[samba_head_loss_binding]("samba_head_loss")
+        m.def_function[samba_resident_enabled_binding]("samba_resident_enabled")
+        comptime if IDN_SAMBA_RESIDENT_STEP:
+            # lane S1 samba-resident: IDENTICAL only, behind its define
+            _ = m.add_type[SambaResidentSession]("_SambaResidentSession")
+            m.def_function[samba_resident_open_binding]("samba_resident_open")
+            m.def_function[samba_resident_forward_binding]("samba_resident_forward")
+            m.def_function[samba_resident_step_binding]("samba_resident_step")
         comptime if AFN_SAMBA_FUSE:
             m.def_function[samba_afn_norm_head_forward_binding]("samba_afn_norm_head_forward")
             m.def_function[samba_afn_tail_train_binding]("samba_afn_tail_train")

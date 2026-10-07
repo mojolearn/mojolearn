@@ -919,62 +919,11 @@ class _Optimizer(NumericModeMixin):
                    self.n_total)
             )
 
-        if self.lr_schedule is not None:
-            self.lr = float(self.lr_schedule.lr_at(self.t + 1))
-        cfg = self._config()
-        max_norm_f = 0.0 if max_norm is None else float(max_norm)
-        if max_norm is not None and not (max_norm_f > 0.0):
-            raise ValueError(
-                "mojolearn.%s.step: max_norm must be > 0 or None, got %r; "
-                "None is how 'no clipping' is spelled "
-                "(python/mojolearn/_training_impl.py)"
-                % (self._where, max_norm)
-            )
-
         flat_p, packed_p = _pack(self.params, pprobes)
         flat_g, packed_g = _pack(gs, gprobes)
         self.packed_ = bool(packed_p or packed_g)
         info = zeros((3,), "<f4")
-        self.t += 1
-
-        # `params` is, in this exact order (mirrored word for word in
-        # `bindings/_mojolearn_training.mojo::optimizer_step_binding`):
-        #
-        #     0   n_tensors       J; `offsets` holds J + 1 int32
-        #     1   kind            0 = SGD, 1 = Adam, 2 = AdamW
-        #     2   t               the step number, ONE-BASED; first step is 1
-        #     3   nesterov        0 or 1
-        #     4   lr              (float)
-        #     5   beta1           (float; Adam and AdamW only)
-        #     6   beta2           (float; Adam and AdamW only)
-        #     7   eps             (float; Adam and AdamW only)
-        #     8   weight_decay    (float)
-        #     9   momentum        (float; SGD only)
-        #     10  dampening       (float; SGD only)
-        #     11  max_norm        (float; <= 0 turns the gradient-norm clip
-        #                          OFF)
-        #     12  maximize        0 or 1: the step reads the sign-flipped
-        #                          gradient (training/maximize.mojo)
-        #
-        # A silent reorder here is a WRONG ANSWER and not a crash: swap
-        # `beta1` and `beta2` and every step still returns a full buffer of
-        # plausible floats. If you change this list, change the comment in
-        # the binding in the same edit.
-        plist = [
-            int(len(self.params)),
-            int(self._KIND),
-            int(self.t),
-            int(cfg["nesterov"]),
-            float(cfg["lr"]),
-            float(cfg["beta1"]),
-            float(cfg["beta2"]),
-            float(cfg["eps"]),
-            float(cfg["weight_decay"]),
-            float(cfg["momentum"]),
-            float(cfg["dampening"]),
-            max_norm_f,
-            1 if getattr(self, "maximize", False) else 0,
-        ]
+        cfg, plist = self._step_begin(max_norm)
 
         # `_load` and not `self._bind()`: the two resolve the same
         # module, and `_load` additionally reads the tier back OUT of
@@ -1031,7 +980,73 @@ class _Optimizer(NumericModeMixin):
             _unpack_into(flat_p, self.params, pprobes)
         if max_norm is not None and packed_g:
             _unpack_into(flat_g, gs, gprobes)
+        return self._step_finish(info, cfg)
 
+    def _step_begin(self, max_norm):
+        """The scalar bookkeeping every step does before its ONE binding
+        call: the schedule's learning rate for this step, the `max_norm`
+        refusal, the one-based step counter, and the `params` list the
+        binding reads. Shared by `step` and by the device-resident Samba
+        step (`_samba_impl.SambaStack._train_step_resident`, lane S1
+        samba-resident), which runs the same optimizer entry on the same
+        registry from inside its one call. Returns `(cfg, plist)`."""
+        if self.lr_schedule is not None:
+            self.lr = float(self.lr_schedule.lr_at(self.t + 1))
+        cfg = self._config()
+        max_norm_f = 0.0 if max_norm is None else float(max_norm)
+        if max_norm is not None and not (max_norm_f > 0.0):
+            raise ValueError(
+                "mojolearn.%s.step: max_norm must be > 0 or None, got %r; "
+                "None is how 'no clipping' is spelled "
+                "(python/mojolearn/_training_impl.py)"
+                % (self._where, max_norm)
+            )
+        self.t += 1
+
+        # `params` is, in this exact order (mirrored word for word in
+        # `bindings/_mojolearn_training.mojo::optimizer_step_binding`):
+        #
+        #     0   n_tensors       J; `offsets` holds J + 1 int32
+        #     1   kind            0 = SGD, 1 = Adam, 2 = AdamW
+        #     2   t               the step number, ONE-BASED; first step is 1
+        #     3   nesterov        0 or 1
+        #     4   lr              (float)
+        #     5   beta1           (float; Adam and AdamW only)
+        #     6   beta2           (float; Adam and AdamW only)
+        #     7   eps             (float; Adam and AdamW only)
+        #     8   weight_decay    (float)
+        #     9   momentum        (float; SGD only)
+        #     10  dampening       (float; SGD only)
+        #     11  max_norm        (float; <= 0 turns the gradient-norm clip
+        #                          OFF)
+        #     12  maximize        0 or 1: the step reads the sign-flipped
+        #                          gradient (training/maximize.mojo)
+        #
+        # A silent reorder here is a WRONG ANSWER and not a crash: swap
+        # `beta1` and `beta2` and every step still returns a full buffer of
+        # plausible floats. If you change this list, change the comment in
+        # the binding in the same edit.
+        plist = [
+            int(len(self.params)),
+            int(self._KIND),
+            int(self.t),
+            int(cfg["nesterov"]),
+            float(cfg["lr"]),
+            float(cfg["beta1"]),
+            float(cfg["beta2"]),
+            float(cfg["eps"]),
+            float(cfg["weight_decay"]),
+            float(cfg["momentum"]),
+            float(cfg["dampening"]),
+            max_norm_f,
+            1 if getattr(self, "maximize", False) else 0,
+        ]
+        return cfg, plist
+
+    def _step_finish(self, info, cfg):
+        """After the binding call: the clip report (`info` = clip_ran,
+        total_norm, coef) and the learning rate the step used. Returns the
+        pre-clip total norm, or None when the clip did not run."""
         if info[0] != 0.0:
             self.total_norm_ = float(info[1])
             self.clip_coef_ = float(info[2])
