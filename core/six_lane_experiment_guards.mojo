@@ -32,8 +32,8 @@ def _check_configuration() -> Bool:
     # Deleted 2026-10-07 (lane serial-cleanup): forbidden serial shape; incumbent route is parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C20_ROW_CACHE"](), "removed: C20_ROW_CACHE was a host loop of 3 launches per working-set row (one 1x1); forbidden serial shape, incumbent square tile is parallel"
     comptime assert not is_defined["MOJOLEARN_C60_DIFF_REUSE"](), "removed: C60_DIFF_REUSE was dead code (select_d never reaches d == 2)"
-    comptime assert not is_defined["MOJOLEARN_C29_TILE_128"](), "retired: use -D MOJOLEARN_C29_TILE=128|256"
-    comptime assert get_defined_int["MOJOLEARN_C29_TILE",256]() == 128 or get_defined_int["MOJOLEARN_C29_TILE",256]() == 256, "invalid MOJOLEARN_C29_TILE (128|256)"
+    # Deleted 2026-10-07 (lane serial-cleanup): forbidden serial shape; incumbent kNN selectors are parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.
+    comptime assert not (is_defined["MOJOLEARN_C29_STREAM_TOPK"]() or is_defined["MOJOLEARN_C29_TILE"]() or is_defined["MOJOLEARN_C29_TILE_128"]()), "removed: C29_STREAM_TOPK (and MOJOLEARN_C29_TILE) was one thread per query walking every index row; forbidden serial shape, incumbent kNN top-k is parallel"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]() == 1 or get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]() == 2, "invalid neural STAGE_DEPTH configuration"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]() == 1, "invalid neural STAGE_PAD configuration"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_FILL_BLOCKS",1]() > 0, "positive neural resource budget required"
