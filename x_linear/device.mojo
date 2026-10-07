@@ -3633,8 +3633,8 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     comptime if RIDGECV_FF_BLOCKED:
         # unit B with the blocked float-float statistics: two partial passes,
         # two folds, one solve block per alpha, then the predictions and scores
-        var nbf = fold_blocks(n)
-        wcap = max(wcap, rff_blocks(rff_mcols(d, 1) * nbf) + rff_blocks(d + 1) + rff_blocks(rff_stats(d, 1) * nbf)
+        var nbw = fold_blocks(n)
+        wcap = max(wcap, rff_blocks(rff_mcols(d, 1) * nbw) + rff_blocks(d + 1) + rff_blocks(rff_stats(d, 1) * nbw)
                    + rff_blocks(rff_stats(d, 1)) + na + _xg_blocks(nt_max * na) + _xg_blocks(kbm) + _xg_blocks(na * kbm)
                    + _xg_blocks(na))
         var prep_wit = Witness(ctx, _xg_blocks(k * (d + 1)) + _xg_blocks(k * (d + 1) * (d + 1)))
