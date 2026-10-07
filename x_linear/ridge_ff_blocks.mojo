@@ -43,7 +43,7 @@ dependent float-float operations; the team cuts that to d^2 steps.
 from std.gpu import block_idx, block_dim, thread_idx
 from x_linear.ops import FP, IP, ld, st, ldi, sti, i2f
 from x_linear.ff import (
-    FF, ff_of, ff_add, ff_add_f, ff_sub, ff_mul, ff_mul_f, ff_div, ff_sqrt, ff_f32, ff_ld, ff_st,
+    ff_of, ff_add, ff_add_f, ff_sub, ff_mul, ff_mul_f, ff_div, ff_sqrt, ff_f32, ff_ld, ff_st,
     ff_cholesky, ff_chol_solve, ff_centered, two_prod,
 )
 from x_linear.tops import upper_cell, FOLD_BLOCK, fold_blocks
