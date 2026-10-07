@@ -1,0 +1,66 @@
+{
+  "schema": "mojolearn.benchmark-source-review/1",
+  "source_sha": "2f1fbd9ea274d3d0c964895e2038939cff72a8a9",
+  "previous_document": "experiments/six_lane_integration/benchmark-before-targeted-20261007.json",
+  "previous_document_sha256": "2fa7e90d0023aa7b905260391eebc347b69ca4caa16d8d431d0ba5005a052eb6",
+  "generator": "tools/six_lane_ab.py:freeze_benchmarks",
+  "generator_use": "Called once; selected only the two reviewed file records, preserving all other frozen records and policies. No catalog/matrix regeneration.",
+  "reviewed_files": [
+    {
+      "path": "tools/bench_board.py",
+      "old_source_ref": "74967f7119a802d30216f4198d1d9c47bc4165fd",
+      "old_blob": "c1f135ba251dc9199d489cad4e2e04b5d0c12c57",
+      "old_sha256": "7a02bbed66f1570326565a49da45b3dd643e084c7faca56d219c990411f584a2",
+      "new_sha256": "499cd9f485cf088be56f0c8d6e4b9c5ddc820ea020fc1d367081fd4acc08bab5",
+      "changed_existing_functions": [
+        "main"
+      ],
+      "added_functions": [],
+      "removed_functions": []
+    },
+    {
+      "path": "tools/performance_measurement_board.py",
+      "old_source_ref": "2d062b7d458ad50fe5b58e2137fc101eb6d2e556",
+      "old_blob": "01c1b7ed19f84ef8666b006233a6f8e97d247429",
+      "old_sha256": "bae31f4642a8adf38ac007e92a921a070e742e1c7672ffdf5b495b2ed1c219c9",
+      "new_sha256": "8c79f37936431376ad612a7a5c9e8e5c30aead26f49a1cae92ca73c67a77989f",
+      "changed_existing_functions": [
+        "build",
+        "write"
+      ],
+      "added_functions": [
+        "anchor",
+        "attempt_anchor",
+        "control_table",
+        "control_values",
+        "coverage_anchor",
+        "coverage_data",
+        "display",
+        "evidence_link",
+        "experiment_details",
+        "flatten",
+        "observed_seconds",
+        "profile_anchor",
+        "profile_data",
+        "quality_metrics",
+        "quality_summary"
+      ],
+      "removed_functions": []
+    }
+  ],
+  "semantic_review": {
+    "tools/bench_board.py": "Only explicit HIP/native IDENTICAL manifest admission and shared parent/worker physical hardware witness. No estimator settings, datasets, metrics, timer boundary, workload sizes or opponent roster changed; source/runtime/file-integrity checks remain. Preliminary gpu_set_refusal does not establish all per-lane dependencies.",
+    "tools/performance_measurement_board.py": "Only retained evidence display: itemized pending scope, requested versus recorded toggles, per-attempt saved quality metrics, seconds formatting, links and failure disclosure. Existing admission/status/timing-ratio calculations are unchanged; build function prior to final returned presentation metadata is AST-identical to recorded source."
+  },
+  "remaining_frozen_files_unchanged": 14,
+  "changed_incumbent_module_assignments": {},
+  "validation": {
+    "source_read_exit": 0,
+    "metadata_generation_exit": 0,
+    "models": 0,
+    "compilations": 0,
+    "numerical_verification": 0,
+    "tests": 0
+  },
+  "qualification": "No measurement, identity or runtime admission is inferred from a metadata hash refresh."
+}
