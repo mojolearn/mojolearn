@@ -37,8 +37,13 @@ comptime RF_SAMPLE_SET = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined
 comptime RF_SAMPLE_ARM = get_defined_int["MOJOLEARN_TREES_RF_SAMPLE", -1]()
 comptime RF_SAMPLE_SORTED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 1
 comptime RF_SAMPLE_FUSED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 2
-comptime T11 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T11"]()
-comptime T11_LEVELS = get_defined_int["MOJOLEARN_TREES_T11_LEVELS", 8]()
+# T11 device frontier levels per header drain: one int sweep
+# `-D MOJOLEARN_TREES_T11_LEVELS=1|2|4|8|16` (absent = incumbent K=4, or the
+# older K1/K2/K8 arms). Scheduling only, no bit moves. RF K1/K2/K8 already
+# measured "no combined improvement" (forest-final-decisions 2026-10-05), so
+# the RF grid should start at 16; ET has no such record.
+comptime T11 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T11_LEVELS"]()
+comptime T11_LEVELS = get_defined_int["MOJOLEARN_TREES_T11_LEVELS", 4]()
 comptime T12 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T12"]()
 comptime T12_BYTES = get_defined_int["MOJOLEARN_TREES_T12_BYTES", 256*1024*1024]()
 comptime T13 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T13"]()
