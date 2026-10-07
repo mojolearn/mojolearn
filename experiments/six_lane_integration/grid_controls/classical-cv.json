@@ -1,0 +1,224 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "classical-cv",
+ "branch": "lane/classical-cv",
+ "head": "HEAD_PLACEHOLDER",
+ "controls": {
+  "enetcv_fold_blocks": {
+   "define": "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "16": [
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+    ],
+    "32": [
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32"
+    ],
+    "64": [
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/linear_controls.mojo:46",
+    "x_linear/enetcv_blocks.mojo",
+    "x_linear/cd_grid.mojo:727",
+    "x_linear/cd.mojo:244",
+    "x_linear/cd.mojo:283",
+    "bindings/_mojolearn_x_linear_host.mojo:113"
+   ],
+   "binding": "_mojolearn_x_linear (device grid) + _mojolearn_x_linear_host (host column)",
+   "bits_change": true,
+   "status": "new",
+   "note": "Arm value = chunks per fold (fixed constant, not a data shape). Every row read once per pass (vs F+1 full scans), TwoSum/Dot2 compensated chunk partials, chunks merged ascending, training sets by parallel-axis rule over folds ascending. Each arm is its own bits version; NV and AMD must match per arm. NOT COMPILED-VERIFIED on host (lanes no longer compile); sm_90 device binding compiled rc=0 with =32 before the rule change."
+  },
+  "c18_residual_next": {
+   "define": "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_linear/cd.mojo:69",
+    "x_linear/cd.mojo:83",
+    "x_linear/cd.mojo:593",
+    "x_linear/cd.mojo:610"
+   ],
+   "binding": "_mojolearn_x_linear",
+   "bits_change": false,
+   "status": "kept",
+   "note": "Measured alone neutral and quality-equal (T.C18.residual-only: NV 1.009/1.006/0.970/1.007, AMD 1.004/1.034/0.946/0.974 lasso taxi/istella, enet taxi/istella). Forwarding only; coordinate order and FMA unchanged."
+  },
+  "c13_fold_stats_ridgecv": {
+   "define": "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "experiments/classical_identical_ideas/linear_controls.mojo:33",
+    "x_linear/device.mojo:3618",
+    "x_linear/ridgecv.mojo:207"
+   ],
+   "binding": "_mojolearn_x_linear",
+   "bits_change": true,
+   "status": "split_from:MOJOLEARN_CLASSICAL_C13_FOLD_STATS",
+   "note": "RidgeCV half of C13 (lane/ridgecv-c13, merged here, unchanged). Default ON in IDENTICAL; `_OFF` is the rollback arm."
+  },
+  "c13_logcv_weights": {
+   "define": "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_linear/logcv_grid.mojo:289",
+    "x_linear/logcv_grid.mojo:552",
+    "x_linear/logcv.mojo:220"
+   ],
+   "binding": "_mojolearn_x_linear",
+   "bits_change": true,
+   "status": "kept",
+   "note": "Untouched by this lane; only reaches fits with sample weights (swb)."
+  }
+ },
+ "algorithms": {
+  "expanded:lasso-cv": {
+   "binding": "_mojolearn_x_linear",
+   "route": "fit: python _enetcv_fit -> x_linear_fit ALGO_ENETCV -> device.mojo enetcv_fit_grid (cd_grid.mojo): spans, prep stats [enetcv_fold_blocks | staged means+gram], ecv_grid_kernel, ecv_path_kernel (t_enet_gram_cd [c18_residual_next]), score, refit; predict: x_linear_decision",
+   "controls": [
+    "enetcv_fold_blocks",
+    "c18_residual_next"
+   ],
+   "interaction_groups": [
+    [
+     "enetcv_fold_blocks",
+     "c18_residual_next"
+    ]
+   ]
+  },
+  "expanded:enet-cv": {
+   "binding": "_mojolearn_x_linear",
+   "route": "same as lasso-cv with l1_ratio grid",
+   "controls": [
+    "enetcv_fold_blocks",
+    "c18_residual_next"
+   ],
+   "interaction_groups": [
+    [
+     "enetcv_fold_blocks",
+     "c18_residual_next"
+    ]
+   ]
+  },
+  "expanded:ridge-cv": {
+   "binding": "_mojolearn_x_linear",
+   "route": "fit: ALGO_RIDGE_KFOLD -> device.mojo _ridge_kfold_grid (C13 kfold grams at device.mojo:3618); not touched by this lane",
+   "controls": [
+    "c13_fold_stats_ridgecv"
+   ],
+   "interaction_groups": []
+  },
+  "expanded:logreg-cv": {
+   "binding": "_mojolearn_x_linear",
+   "route": "fit: ALGO_LOGCV -> logcv_grid.mojo logcv_fit_grid; not touched by this lane",
+   "controls": [
+    "c13_logcv_weights"
+   ],
+   "interaction_groups": []
+  }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS",
+   "reason": "measured loser T.C13.only: lasso-cv taxi 4.01x NV / 1.40x AMD, enet-cv taxi 0.79x/1.35x, istella ~1.1x both; Taxi quality FAIL both vendors (F-fold full-n rescans, plain f32 serial sums). Replaced by enetcv_fold_blocks. EXPERIMENTS row added."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C18_TILE64",
+   "reason": "per brief. Correction: it DID have an implementation (solver/impl/cd.mojo CD_FUSED_STEPS 64 vs 128, plain Lasso/ElasticNet, not the CV route); never measured. Deleted; recoverable at lane/ridgecv-c13@c59be1781."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH",
+   "reason": "per brief. Correction: implemented in solver/impl/cd.mojo (plain Lasso/ElasticNet Gram prefetch), never measured. Deleted; recoverable at c59be1781."
+  }
+ ],
+ "cv_local_profiles": {
+  "summary": "The 18 T.CV.local.* profiles (targeted-ab-20261007) contain NO CV-route control of their own except C13 (old combined define), C18_RESIDUAL_NEXT, and global IDENTICAL rollbacks: MOJOLEARN_IDN_HPDEV_FOLDS_OFF / IDN_HPDEV_CAST_OFF (bindings/hotpath_device.mojo, device fold-id/cast hot paths), MOJOLEARN_FTZ_HW_OFF + FTZ_NO_CLASS (checks/numerics.mojo flush spelling), MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF (x_linear/finite_device.mojo input finiteness check). All profile defines are in the A arm; B is the incumbent.",
+  "fastest": {
+   "de099bccad76": {
+    "defines": [],
+    "note": "incumbent reproduction (A = B = no defines). lasso-cv taxi 0.240 NV is A/A NOISE, not a speedup; NV lasso/enet-cv single-sample ratios swing 0.24-2.4 with identical code, so NV CV timings need more than one sample or a larger effect to read."
+   },
+   "5b95f394132e": {
+    "defines": [
+     "MOJOLEARN_FTZ_HW_OFF=1",
+     "MOJOLEARN_FTZ_NO_CLASS=1",
+     "MOJOLEARN_IDN_HPDEV_CAST_OFF=1"
+    ],
+    "nv": {
+     "lasso-cv istella": 0.356,
+     "enet-cv taxi": 0.769,
+     "lasso-cv taxi": 0.777
+    },
+    "amd": "0.925-0.991",
+    "note": "global rollbacks only; within the NV A/A noise band"
+   },
+   "25fdcd3067b2": {
+    "defines": [
+     "MOJOLEARN_IDN_HPDEV_CAST_OFF=1"
+    ],
+    "nv": {
+     "enet-cv istella": 0.489,
+     "lasso-cv istella": 1.993
+    },
+    "note": "same code, opposite NV signs on istella: noise"
+   },
+   "4210e28ea16c": {
+    "defines": [
+     "MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1",
+     "MOJOLEARN_IDN_HPDEV_FOLDS_OFF=1"
+    ],
+    "note": "contains C13 (CD half): taxi quality FAIL"
+   },
+   "56910b67cfd3": {
+    "defines": [
+     "MOJOLEARN_FTZ_HW_OFF=1",
+     "MOJOLEARN_FTZ_NO_CLASS=1",
+     "MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF=1"
+    ],
+    "nv": {
+     "enet-cv istella": 0.444
+    }
+   },
+   "874a0fa1a14e": {
+    "defines": [
+     "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+     "MOJOLEARN_IDN_HPDEV_CAST_OFF=1"
+    ],
+    "nv": {
+     "enet-cv istella": 0.687,
+     "lasso-cv taxi": 0.799
+    }
+   }
+  },
+  "verdict": "No CV.local profile shows a consistent win on AMD (all 0.84-1.16 except C13-containing ones, which fail quality). Every profile containing C13 (a8952d6bcb79, e6430f146f9a, 4210e28ea16c, f364954c07b8) fails Taxi quality on both vendors."
+ },
+ "evidence": [
+  "experiments/six_lane_integration/measurements/20261006/board.json (cards T.CV.local.*, T.C13.*, T.C18.residual-only)",
+  "~/mojolearn-evidence/board_summary_20261007.txt",
+  "~/mojolearn-evidence/classical-cv-cvlocal-profiles.txt"
+ ]
+}
