@@ -68,7 +68,7 @@ from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
 from core.pinned_reduce import pinned_block_sum
-from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -818,8 +818,173 @@ def blocked_acc_blocks(n_samples: Int) -> Int:
 
 def blocked_acc_table_cells(n_samples: Int, n_features: Int, n_clusters: Int) -> Int:
     """Int32 cells the caller's scratch table must hold for the sums (pass
-    `n_features = 1` for the weights)."""
-    return blocked_acc_blocks(n_samples) * n_clusters * n_features
+    `n_features = 1` for the weights); IDN_KMEANS_CENTROID_FOLD adds its
+    group partials behind the block rows."""
+    var blocks = blocked_acc_blocks(n_samples)
+    return blocks * n_clusters * n_features + centroid_fold_scratch_cells(blocks, n_clusters * n_features)
+
+
+# lane/classical-structural (2026-10-07), IDENTICAL only, default off:
+# `-D MOJOLEARN_IDN_KMEANS_CENTROID_FOLD`. `fold_block_table_kernel` gives one
+# thread per output cell a serial chain over EVERY row block: k*d threads (a
+# single block on one SM at small k*d) each walk n/BLOCK_ACC_ROWS dependent
+# loads, twice per iteration (sums, weights), and on a multi-die part those
+# loads cross the fabric from one die. Here the fold is a two-level parallel
+# fold: level 1 is a grid of (32-cell tile x group) blocks, each of whose
+# 32 x 8 threads sums a fixed strided subset of the row blocks (coalesced
+# across the 32 cells) and folds its 8 lane partials through shared memory
+# in a fixed halving order into ONE partial per (group, cell), written into
+# the table's scratch tail; level 2 is one thread per cell over the groups
+# in ascending order. Cost reasoning: with G groups the longest chain is
+# n_blocks / (8 G) loads instead of n_blocks, and tiles x G blocks cover the
+# machine's SMs for any k*d; G is capped so level 2 stays a short chain.
+# Bits: the table holds Int32 fixed-point addends and Int32 (two's-complement,
+# wrapping) addition is associative and commutative, so every grouping of
+# the row blocks yields the SAME words (the host twin `host_accumulate`
+# already folds 8192-row chunks in a different grouping from the device's
+# 256-row blocks and matches today). No bit moves; the host column is
+# unchanged. The table is never modified (the gated arms refold an untouched
+# table past convergence), only its scratch tail is written.
+comptime IDN_KMEANS_CENTROID_FOLD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_KMEANS_CENTROID_FOLD"]()
+)
+comptime CF_COLS = 32  # cells per level-1 tile: one coalesced 128-byte row of the table
+comptime CF_LANES = 8  # row-block lanes per tile (CF_COLS * CF_LANES = 256 threads)
+# Group cap: 64 groups x 8 lanes = 512 concurrent chains per cell tile, enough
+# in-flight loads to cover memory latency on any GPU of this class, and the
+# level-2 chain stays at most 64 loads.
+comptime CF_GROUPS_MAX = 64
+
+
+def centroid_fold_groups(n_blocks: Int) -> Int:
+    var g = n_blocks if n_blocks < CF_GROUPS_MAX else CF_GROUPS_MAX
+    return g if g > 0 else 1
+
+
+def centroid_fold_scratch_cells(n_blocks: Int, cells: Int) -> Int:
+    """Int32 cells the fold's level-1 partials need behind the row blocks
+    (0 when the arm is compiled out)."""
+    comptime if IDN_KMEANS_CENTROID_FOLD:
+        return centroid_fold_groups(n_blocks) * cells
+    else:
+        return 0
+
+
+def centroid_fold_part_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    table: MutPointer[Int32, MutAnyOrigin],
+    n_blocks_in: Int32,
+    cells_in: Int32,
+    groups_in: Int32,
+):
+    """Level 1 of IDN_KMEANS_CENTROID_FOLD. Block (tile, group), threads
+    (tx: cell in tile, ty: lane): lane ty sums row blocks
+    `b = group + groups * (ty + CF_LANES * q)`, q = 0, 1, ...; the 8 lane
+    partials fold `s[ty] += s[ty + step]`, step = 4, 2, 1; lane 0 writes
+    `part[group * cells + cell]`."""
+    var n_blocks = Int(n_blocks_in)
+    var cells = Int(cells_in)
+    var groups = Int(groups_in)
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var cell = Int(block_idx.x) * CF_COLS + tx
+    var g = Int(block_idx.y)
+    var acc = Int32(0)
+    if cell < cells:
+        var b = g + groups * ty
+        while b < n_blocks:
+            acc += table.unsafe_load(b * cells + cell)
+            b += groups * CF_LANES
+    var s = stack_allocation[
+        CF_COLS * CF_LANES,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    s.unsafe_store(ty * CF_COLS + tx, acc)
+    barrier()
+    var step = CF_LANES // 2
+    while step > 0:
+        if ty < step:
+            s.unsafe_store(
+                ty * CF_COLS + tx,
+                s.unsafe_load(ty * CF_COLS + tx) + s.unsafe_load((ty + step) * CF_COLS + tx),
+            )
+        barrier()
+        step //= 2
+    if ty == 0 and cell < cells:
+        part.unsafe_store(g * cells + cell, s.unsafe_load(tx))
+
+
+def centroid_fold_final_kernel[
+    store: Bool = False
+](
+    out_i32: MutPointer[Int32, MutAnyOrigin],
+    part: MutPointer[Int32, MutAnyOrigin],
+    groups_in: Int32,
+    cells_in: Int32,
+):
+    """Level 2 of IDN_KMEANS_CENTROID_FOLD: thread `cell` folds the group
+    partials in ascending group order; `store` as in
+    `fold_block_table_kernel`."""
+    var groups = Int(groups_in)
+    var cells = Int(cells_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= cells:
+        return
+    var acc = Int32(0)
+    for g in range(groups):
+        acc += part.unsafe_load(g * cells + cell)
+    comptime if store:
+        out_i32.unsafe_store(cell, acc)
+    else:
+        out_i32.unsafe_store(cell, out_i32.unsafe_load(cell) + acc)
+
+
+def launch_block_table_fold[
+    store: Bool = False
+](
+    ctx: DeviceContext,
+    out_i32: MutPointer[Int32, MutAnyOrigin],
+    table: MutPointer[Int32, MutAnyOrigin],
+    n_blocks: Int,
+    cells: Int,
+) raises:
+    """`out (+)= sum over row blocks of table[b][cell]`: the serial per-cell
+    fold, or under IDN_KMEANS_CENTROID_FOLD the two-level parallel fold whose
+    level-1 partials live in the table's scratch tail (every table is sized
+    by `blocked_acc_table_cells` / `kmeans_fused_table_cells`, which include
+    it)."""
+    comptime if IDN_KMEANS_CENTROID_FOLD:
+        var groups = centroid_fold_groups(n_blocks)
+        var part = table + n_blocks * cells
+        ctx.enqueue_function[centroid_fold_part_kernel](
+            part,
+            table,
+            Int32(n_blocks),
+            Int32(cells),
+            Int32(groups),
+            grid_dim=((cells + CF_COLS - 1) // CF_COLS, groups, 1),
+            block_dim=(CF_COLS, CF_LANES, 1),
+        )
+        comptime final_kern = centroid_fold_final_kernel[store]
+        ctx.enqueue_function[final_kern](
+            out_i32,
+            part,
+            Int32(groups),
+            Int32(cells),
+            grid_dim=((cells + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+            block_dim=(BLOCK_ACC_TPB, 1, 1),
+        )
+    else:
+        comptime fold_kern = fold_block_table_kernel[store]
+        ctx.enqueue_function[fold_kern](
+            out_i32,
+            table,
+            Int32(n_blocks),
+            Int32(cells),
+            grid_dim=((cells + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+            block_dim=(BLOCK_ACC_TPB, 1, 1),
+        )
 
 
 def accumulate_centroid_sums_blocked_kernel[
@@ -1026,15 +1191,7 @@ def launch_accumulate_centroid_sums_blocked[
         block_dim=(BLOCK_ACC_TPB, 1, 1),
     )
     var cells = n_clusters * n_features
-    comptime fold_kern = fold_block_table_kernel[store]
-    ctx.enqueue_function[fold_kern](
-        sums_i32.unsafe_ptr(),
-        table.unsafe_ptr(),
-        Int32(n_blocks),
-        Int32(cells),
-        grid_dim=((cells + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
-        block_dim=(BLOCK_ACC_TPB, 1, 1),
-    )
+    launch_block_table_fold[store](ctx, sums_i32.unsafe_ptr(), table.unsafe_ptr(), n_blocks, cells)
 
 
 def launch_accumulate_weight_per_cluster_blocked[
@@ -1062,15 +1219,7 @@ def launch_accumulate_weight_per_cluster_blocked[
         grid_dim=((n_blocks + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
         block_dim=(BLOCK_ACC_TPB, 1, 1),
     )
-    comptime fold_kern_w = fold_block_table_kernel[store]
-    ctx.enqueue_function[fold_kern_w](
-        weight_i32.unsafe_ptr(),
-        table.unsafe_ptr(),
-        Int32(n_blocks),
-        Int32(n_clusters),
-        grid_dim=((n_clusters + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
-        block_dim=(BLOCK_ACC_TPB, 1, 1),
-    )
+    launch_block_table_fold[store](ctx, weight_i32.unsafe_ptr(), table.unsafe_ptr(), n_blocks, n_clusters)
 
 
 def copy_f32_gated_kernel(
@@ -1148,15 +1297,7 @@ def launch_accumulate_centroid_sums_blocked_gated[
         block_dim=(BLOCK_ACC_TPB, 1, 1),
     )
     var cells = n_clusters * n_features
-    comptime fold_kern = fold_block_table_kernel[store]
-    ctx.enqueue_function[fold_kern](
-        sums_i32.unsafe_ptr(),
-        table.unsafe_ptr(),
-        Int32(n_blocks),
-        Int32(cells),
-        grid_dim=((cells + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
-        block_dim=(BLOCK_ACC_TPB, 1, 1),
-    )
+    launch_block_table_fold[store](ctx, sums_i32.unsafe_ptr(), table.unsafe_ptr(), n_blocks, cells)
 
 
 def launch_accumulate_weight_per_cluster_blocked_gated[
@@ -1185,12 +1326,4 @@ def launch_accumulate_weight_per_cluster_blocked_gated[
         grid_dim=((n_blocks + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
         block_dim=(BLOCK_ACC_TPB, 1, 1),
     )
-    comptime fold_kern_w = fold_block_table_kernel[store]
-    ctx.enqueue_function[fold_kern_w](
-        weight_i32.unsafe_ptr(),
-        table.unsafe_ptr(),
-        Int32(n_blocks),
-        Int32(n_clusters),
-        grid_dim=((n_clusters + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
-        block_dim=(BLOCK_ACC_TPB, 1, 1),
-    )
+    launch_block_table_fold[store](ctx, weight_i32.unsafe_ptr(), table.unsafe_ptr(), n_blocks, n_clusters)

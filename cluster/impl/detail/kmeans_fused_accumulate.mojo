@@ -15,7 +15,7 @@ centroids in shared memory, assigns each of its rows (one thread per row),
 writes the label and minimum distance, and adds the row's quantized Int32
 addends into a shared-memory table with shared atomics. The block then STORES
 its table row `table[b][c][f]` / `table_w[b][c]`, and the incumbent's
-`fold_block_table_kernel` sums the blocks. X is read once per iteration
+the block-table fold (`launch_block_table_fold`) sums the blocks. X is read once per iteration
 (the accumulation re-reads the row the thread just assigned, from cache).
 
 WHY NO BIT MOVES.
@@ -49,7 +49,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
-from cluster.checks.reduce_by_key import BLOCK_ACC_TPB, fold_block_table_kernel
+from cluster.checks.reduce_by_key import BLOCK_ACC_TPB, launch_block_table_fold, centroid_fold_scratch_cells
 from cluster.impl.distance.fused_distance_nn.simt_kernel import (
     FUSED_CLAMP_PRECISION,
     FUSED_MAX,
@@ -211,8 +211,10 @@ def kmeans_assign_accumulate_kernel[
 
 
 def kmeans_fused_table_cells(n_samples: Int, n_features: Int, n_clusters: Int) -> Int:
-    """Int32 cells of the sums table (`n_features = 1`: the weights table)."""
-    return kmeans_fused_blocks(n_samples) * n_clusters * n_features
+    """Int32 cells of the sums table (`n_features = 1`: the weights table);
+    IDN_KMEANS_CENTROID_FOLD adds its group partials behind the block rows."""
+    var blocks = kmeans_fused_blocks(n_samples)
+    return blocks * n_clusters * n_features + centroid_fold_scratch_cells(blocks, n_clusters * n_features)
 
 
 def launch_kmeans_fused_accumulate[
@@ -266,20 +268,5 @@ def launch_kmeans_fused_accumulate[
         block_dim=(KF_TPB, 1, 1),
     )
     var cells = n_clusters * n_features
-    comptime fold = fold_block_table_kernel[store]
-    ctx.enqueue_function[fold](
-        sums_i32.unsafe_ptr(),
-        table.unsafe_ptr(),
-        Int32(n_blocks),
-        Int32(cells),
-        grid_dim=((cells + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
-        block_dim=(BLOCK_ACC_TPB, 1, 1),
-    )
-    ctx.enqueue_function[fold](
-        weight_i32.unsafe_ptr(),
-        table_w.unsafe_ptr(),
-        Int32(n_blocks),
-        Int32(n_clusters),
-        grid_dim=((n_clusters + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
-        block_dim=(BLOCK_ACC_TPB, 1, 1),
-    )
+    launch_block_table_fold[store](ctx, sums_i32.unsafe_ptr(), table.unsafe_ptr(), n_blocks, cells)
+    launch_block_table_fold[store](ctx, weight_i32.unsafe_ptr(), table_w.unsafe_ptr(), n_blocks, n_clusters)
