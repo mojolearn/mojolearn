@@ -16,7 +16,9 @@ from std.memory import bitcast
 from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, RUN, run_block
 from checks.numerics import ftz
 from x_prep.prims import add, acc_add, sub, mul, div
-from x_prep.idn_fold import IDN_TE_GLOBAL_TREE, IDN_TE_ENC_TREE, TREE_W, LTLanes, lt_zero, lt_tree
+from x_prep.idn_fold import (
+    IDN_TE_GLOBAL_TREE, IDN_TE_ENC_TREE, IDN_TE_BLOCKED, TREE_W, TEB, LTLanes, lt_zero, lt_tree, blt_close,
+)
 
 
 def te_global_lt(t: Int, f: FP, q: IP):
@@ -179,11 +181,197 @@ def te_enc_lt(t: Int, f: FP, q: IP):
     st(f, p(q, 10) + t, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
 
 
+# ------------------------------------------------- the blocked order (BLT)
+def te_global_blt(t: Int, f: FP, q: IP):
+    """`te_global_unit`'s q and t in the blocked order (IDN_TE_BLOCKED,
+    x_prep/idn_fold.mojo `BLT`): rows in TEB-row blocks, block m's tree
+    (lane i mod TREE_W) closing into lane m mod TREE_W of the outer tree;
+    the count exact; then the squared deviations from the mean the same
+    way. x_prep/idn_blocked.mojo spells it on the device (part kernel per
+    block, fold kernel per unit)."""
+    var n = p(q, 1)
+    var T = p(q, 2)
+    var Y = p(q, 0)
+    var FO = p(q, 3)
+    var fi = t // T
+    var tt = t % T
+    var a = LTLanes(fill=Float32(0))
+    var b = LTLanes(fill=Float32(0))
+    var cnt = 0
+    var nb = (n + TEB - 1) // TEB
+    for m in range(nb):
+        for i in range(m * TEB, min(n, (m + 1) * TEB)):
+            if Int(ld(f, FO + i)) == fi:
+                continue
+            var l = i % TREE_W
+            a[l] = add(a[l], ld(f, Y + i * T + tt))
+            cnt += 1
+        blt_close(a, b, m)
+    var s = lt_tree(b)
+    var mean = Float32(0)
+    var ss = Float32(0)
+    if cnt > 0:
+        mean = div(s, Float32(cnt))
+        lt_zero(b)
+        for m in range(nb):
+            for i in range(m * TEB, min(n, (m + 1) * TEB)):
+                if Int(ld(f, FO + i)) == fi:
+                    continue
+                var l = i % TREE_W
+                var e = sub(ld(f, Y + i * T + tt), mean)
+                a[l] = add(a[l], mul(e, e))
+            blt_close(a, b, m)
+        ss = div(lt_tree(b), Float32(cnt))
+    st(f, p(q, 4) + 2 * t, mean)
+    st(f, p(q, 4) + 2 * t + 1, ss)
+
+
+@always_inline
+def _te_pos(f: FP, rp: FP, BF: Int, BY: Int, R: Int, Y: Int, T: Int, tt: Int, FO: Int, k: Int) -> Tuple[Int, Float32]:
+    """Bucket position k's (fold, target) as `te_enc_lt_fold` reads them:
+    the gathered words (BF >= 0) or row rp[R + k]'s."""
+    if BF >= 0:
+        return (Int(ld(f, BF + k)), ld(f, BY + k))
+    var i = ldi(rp, R + k)
+    return (Int(ld(f, FO + i)), ld(f, Y + i * T + tt))
+
+
+def te_enc_blt_fold(f: FP, rp: FP, BF: Int, BY: Int, R: Int, Y: Int, T: Int, tt: Int, FO: Int, lo: Int, hi: Int,
+                    fi: Int, smooth: Float32, mut s: Float32, mut cnt: Int, mut mean: Float32, mut ssd: Float32):
+    """`te_enc_lt_fold`'s arguments and outputs in the blocked order (`BLT`):
+    the category's bucket positions k in [lo, hi) cut at the TEB-aligned
+    block boundaries of the column's bucket array, block m's tree (lane
+    k mod TREE_W) closing into lane m mod TREE_W of the outer tree; rows of
+    fold fi add nothing. The sum and count; with smooth < 0 and a count,
+    the mean and the squared deviations the same way (else they stay 0)."""
+    var a = LTLanes(fill=Float32(0))
+    var b = LTLanes(fill=Float32(0))
+    var c = 0
+    if hi > lo:
+        for m in range(lo // TEB, (hi - 1) // TEB + 1):
+            for k in range(max(lo, m * TEB), min(hi, (m + 1) * TEB)):
+                var v = _te_pos(f, rp, BF, BY, R, Y, T, tt, FO, k)
+                if v[0] == fi:
+                    continue
+                var l = k % TREE_W
+                a[l] = add(a[l], v[1])
+                c += 1
+            blt_close(a, b, m)
+    s = lt_tree(b)
+    cnt = c
+    mean = Float32(0)
+    ssd = Float32(0)
+    if smooth < Float32(0) and c > 0:
+        mean = div(s, Float32(c))
+        lt_zero(b)
+        for m in range(lo // TEB, (hi - 1) // TEB + 1):
+            for k in range(max(lo, m * TEB), min(hi, (m + 1) * TEB)):
+                var v = _te_pos(f, rp, BF, BY, R, Y, T, tt, FO, k)
+                if v[0] == fi:
+                    continue
+                var l = k % TREE_W
+                var e = sub(v[1], mean)
+                a[l] = add(a[l], mul(e, e))
+            blt_close(a, b, m)
+        ssd = lt_tree(b)
+
+
+def te_enc_blt(t: Int, f: FP, q: IP):
+    """`te_enc_unit`'s q and t in the blocked order (`BLT`). With BK > 0 the
+    bucket gives the positions; else every row is scanned: the category's
+    first position is the number of rows of lower categories, and its rows'
+    positions follow in row order, so the blocks are the bucket's. The
+    device spelling is x_prep/idn_blocked.mojo, the host column's
+    x_prep/host/target.mojo (its own bucket, the same positions)."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var T = p(q, 4)
+    var cmax = p(q, 6)
+    var tt = t % T
+    var r = t // T
+    var cat = r % cmax
+    var r2 = r // cmax
+    var j = r2 % d
+    var fi = r2 // d
+    if cat >= Int(ld(f, p(q, 7) + j)):
+        return
+    var ymean = ld(f, p(q, 8) + 2 * (fi * T + tt))
+    var yvar = ld(f, p(q, 8) + 2 * (fi * T + tt) + 1)
+    var smooth = ld(f, p(q, 9))
+    var s = Float32(0)
+    var cnt = 0
+    var mean = Float32(0)
+    var ssd = Float32(0)
+    var bk = p(q, 11)
+    if bk > 0:
+        var S = bk - 1 + j * (cmax + 1)
+        var lo = ldi(f, S + cat)
+        var hi = ldi(f, S + cat + 1)
+        var gb = p(q, 13)
+        var BF = -1
+        var BY = 0
+        if gb > 0:
+            BF = gb - 1 + j * n
+            BY = gb - 1 + d * n + (j * T + tt) * n
+        te_enc_blt_fold(f, f, BF, BY, p(q, 12) + j * n, p(q, 3), T, tt, p(q, 5), lo, hi, fi, smooth, s, cnt,
+                        mean, ssd)
+        st(f, p(q, 10) + t, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
+        return
+    # no buckets: position lo + rank, lo = the rows of lower categories
+    var lo = 0
+    for i in range(n):
+        var code = Int(ld(f, p(q, 0) + i * d + j))
+        if code >= 0 and code < cat:
+            lo += 1
+    var a = LTLanes(fill=Float32(0))
+    var b = LTLanes(fill=Float32(0))
+    var k = lo
+    var m = lo // TEB
+    for i in range(n):
+        if Int(ld(f, p(q, 0) + i * d + j)) != cat:
+            continue
+        if k // TEB != m:
+            blt_close(a, b, m)
+            m = k // TEB
+        if Int(ld(f, p(q, 5) + i)) != fi:
+            var l = k % TREE_W
+            a[l] = add(a[l], ld(f, p(q, 3) + i * T + tt))
+            cnt += 1
+        k += 1
+    if k > lo:
+        blt_close(a, b, m)
+    s = lt_tree(b)
+    if smooth < Float32(0) and cnt > 0:
+        mean = div(s, Float32(cnt))
+        lt_zero(b)
+        k = lo
+        m = lo // TEB
+        for i in range(n):
+            if Int(ld(f, p(q, 0) + i * d + j)) != cat:
+                continue
+            if k // TEB != m:
+                blt_close(a, b, m)
+                m = k // TEB
+            if Int(ld(f, p(q, 5) + i)) != fi:
+                var l = k % TREE_W
+                var e = sub(ld(f, p(q, 3) + i * T + tt), mean)
+                a[l] = add(a[l], mul(e, e))
+            k += 1
+        if k > lo:
+            blt_close(a, b, m)
+        ssd = lt_tree(b)
+    st(f, p(q, 10) + t, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
+
+
 def te_global_unit(t: Int, f: FP, q: IP):
     """q = [Y, n, T, FOLD, META]; t = fi*T + tt. META[2t] = mean,
     META[2t+1] = population variance of target column tt over fold fi's rows
     (rows loaded RUN at a time, folded ascending). IDN_TE_GLOBAL_TREE: both
-    folds in the lane-tree order (x_prep/idn_fold.mojo, `te_global_lt`)."""
+    folds in the lane-tree order (x_prep/idn_fold.mojo, `te_global_lt`);
+    IDN_TE_BLOCKED: the blocked order (`te_global_blt`)."""
+    comptime if IDN_TE_BLOCKED:
+        te_global_blt(t, f, q)
+        return
     comptime if IDN_TE_GLOBAL_TREE:
         te_global_lt(t, f, q)
         return
@@ -417,7 +605,11 @@ def te_enc_unit(t: Int, f: FP, q: IP):
     ("auto") encoding; else (sum + s*mean) / (count + s). With BK > 0 the
     rows walked are category cat's bucket (`te_bucket`, ascending), else
     every row; either way the rows of cat outside fold fi, in row order.
-    IDN_TE_ENC_TREE: the lane-tree order (`te_enc_lt`)."""
+    IDN_TE_ENC_TREE: the lane-tree order (`te_enc_lt`); IDN_TE_BLOCKED: the
+    blocked order (`te_enc_blt`)."""
+    comptime if IDN_TE_BLOCKED:
+        te_enc_blt(t, f, q)
+        return
     comptime if IDN_TE_ENC_TREE:
         te_enc_lt(t, f, q)
         return
