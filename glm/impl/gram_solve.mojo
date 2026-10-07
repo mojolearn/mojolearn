@@ -93,11 +93,14 @@ def gs_info_init_kernel(info: F32Ptr):
         info.unsafe_store(0, Float32(0))
 
 
-def gs_chol_step_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
+def gs_chol_step_kernel(a: F32Ptr, adiag: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
     """Column step j of `chol_serial`, one thread per row i >= j (the
     statements of x_decomp/device.mojo `chol_step_kernel`: row j's thread is
     `chol_diag`; every row i > j re-forms the same pivot chain and runs
-    `chol_col_elem`'s statements with it)."""
+    `chol_col_elem`'s statements with it). The chain starts from `adiag[j]`,
+    the equilibrated diagonal's untouched copy, which is the word a[j, j]
+    holds when the step starts (only this step's row-j thread ever writes
+    a[j, j]): the same value, read from a word no thread of the step writes."""
     var jj = Int(j)
     var nn = Int(n)
     var i = jj + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -106,7 +109,7 @@ def gs_chol_step_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
     if i == jj:
         chol_diag(a, info, jj, nn)
         return
-    var acc = ftz(a.unsafe_load(jj * nn + jj))
+    var acc = ftz(adiag.unsafe_load(jj))
     for p in range(jj):
         var l = ftz(a.unsafe_load(jj * nn + p))
         acc = ftz(identical_mul_add(-l, l, acc))
@@ -244,7 +247,7 @@ def linear_gram_fit_host(
     ctx.enqueue_function[gs_info_init_kernel](_p(d_info), grid_dim=1, block_dim=1)
     for j in range(d):
         ctx.enqueue_function[gs_chol_step_kernel](
-            _p(d_a), _p(d_info), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
+            _p(d_a), _p(d_adiag), _p(d_info), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
         )
     ctx.enqueue_function[gs_trust_kernel](
         _p(d_a), _p(d_adiag), _p(d_info), _p(d_flag), Int32(d), grid_dim=1, block_dim=1
