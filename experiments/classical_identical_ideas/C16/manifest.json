@@ -155,7 +155,7 @@
         "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
         "MOJOLEARN_CLASSICAL_C17_OVR",
         "MOJOLEARN_CLASSICAL_C17_LS_TRIALS",
-        "MOJOLEARN_CLASSICAL_C19_ORDERED_128"
+        "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
       ],
       "baseline_defines": [],
       "source_gaps": [
@@ -251,7 +251,7 @@
       ],
       "candidate_defines": [
         "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
-        "MOJOLEARN_CLASSICAL_C19_ORDERED_128"
+        "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
       ],
       "baseline_defines": [],
       "source_gaps": [

@@ -5,10 +5,12 @@ NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED �
 Geometry bounds describe work/storage, never dataset or benchmark dimensions.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime C29_STREAM_TOPK = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C29_STREAM_TOPK"]()
-comptime C29_REFERENCE_TILE = 128 if is_defined["MOJOLEARN_C29_TILE_128"]() else 256
+# C29 reference tile: integer sweep -D MOJOLEARN_C29_TILE=128|256 (was the
+# boolean MOJOLEARN_C29_TILE_128); absent = 256. Acts only under the C29/C30 gate.
+comptime C29_REFERENCE_TILE = get_defined_int["MOJOLEARN_C29_TILE", 256]()
 comptime C30_DIRECT_DISTANCE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C30_DIRECT_DISTANCE"]()
 comptime C30_REGISTER_ROWS = 4 if is_defined["MOJOLEARN_C30_ROWS_4"]() else 2
 comptime C31_DEVICE_BUCKETS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C31_DEVICE_BUCKETS"]()

@@ -28,7 +28,7 @@
           "name": "stream_topk_tile_128",
           "a_defines": [
             "MOJOLEARN_C29_STREAM_TOPK",
-            "MOJOLEARN_C29_TILE_128"
+            "MOJOLEARN_C29_TILE=128"
           ],
           "b_defines": [],
           "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
@@ -36,7 +36,7 @@
           "mode": "identical",
           "requires": [],
           "modifier_requires": {
-            "MOJOLEARN_C29_TILE_128": "MOJOLEARN_C29_STREAM_TOPK"
+            "MOJOLEARN_C29_TILE=128": "MOJOLEARN_C29_STREAM_TOPK"
           }
         }
       ],

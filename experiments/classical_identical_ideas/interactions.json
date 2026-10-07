@@ -27,7 +27,7 @@
         "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS",
         "MOJOLEARN_C37_ROW_PANELS",
         "MOJOLEARN_C37_PANEL_128",
-        "MOJOLEARN_C52_PAIR_128"
+        "MOJOLEARN_C52_PAIR_ROWS=128"
       ],
       "baseline_defines": [],
       "source_gaps": [
@@ -187,7 +187,7 @@
       "candidate_defines": [
         "MOJOLEARN_CLASSICAL_C06_ROWS2",
         "MOJOLEARN_C29_STREAM_TOPK",
-        "MOJOLEARN_C29_TILE_128",
+        "MOJOLEARN_C29_TILE=128",
         "MOJOLEARN_C30_DIRECT_DISTANCE",
         "MOJOLEARN_C30_ROWS_4",
         "MOJOLEARN_C32_COUNT_FUSION",
@@ -444,7 +444,7 @@
         "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
         "MOJOLEARN_CLASSICAL_C17_OVR",
         "MOJOLEARN_CLASSICAL_C17_LS_TRIALS",
-        "MOJOLEARN_CLASSICAL_C19_ORDERED_128"
+        "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
       ],
       "baseline_defines": [],
       "source_gaps": [
@@ -559,7 +559,7 @@
       ],
       "candidate_defines": [
         "MOJOLEARN_C29_STREAM_TOPK",
-        "MOJOLEARN_C29_TILE_128",
+        "MOJOLEARN_C29_TILE=128",
         "MOJOLEARN_C31_DEVICE_BUCKETS",
         "MOJOLEARN_C32_COUNT_FUSION",
         "MOJOLEARN_C32_EMIT_FUSION",

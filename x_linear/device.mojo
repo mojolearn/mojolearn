@@ -37,7 +37,7 @@ from x_linear.sgd import (
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C17_OVR, C19_ORDERED_128, C19_ORDERED_32, C16_GLM_FUSED
+from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C17_OVR, C19_SGD_CHUNK, C16_GLM_FUSED
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device, xlin_finite_host
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
@@ -1931,7 +1931,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
 # C19: scheduling only; preserve sample order/time index and per-sample updates.
 # Fixed bounded launch budgets, independent of dataset dimensions.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime SGD_PS_CHUNK = 32 if C19_ORDERED_32 else (128 if C19_ORDERED_128 else 2048)
+comptime SGD_PS_CHUNK = C19_SGD_CHUNK
 # the per-problem scalar state ps[SGD_PS_ST c ..]: intercept, u, objective,
 # the one-class intercept's low word, wscale hi, wscale lo
 comptime SGD_PS_ST = 6

@@ -4,15 +4,17 @@ NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED �
 A enables one named candidate; B omits it, preserving all incumbent switches.
 These controls must never select a FAST or neural runtime path.
 """
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-# C52: independent numerical profiles, not scheduling-dependent leaves.
-comptime C52_PAIR_128 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C52_PAIR_128"]()
-comptime C52_PAIR_512 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C52_PAIR_512"]()
-comptime C52_PAIR = C52_PAIR_128 or C52_PAIR_512
-comptime C52_ROWS = 512 if C52_PAIR_512 else 128
+# C52: ONE switch with named arms (was PAIR_128/PAIR_512, two defines where 512
+# silently won when both were on). -D MOJOLEARN_C52_PAIR_ROWS=128|512 selects
+# the KDE pair-combine route with that fixed leaf (a numerical profile shared
+# by the device and the host oracle, not a scheduling leaf); absent = incumbent
+# route. Legal set enforced in core/six_lane_experiment_guards.mojo.
+comptime C52_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C52_PAIR_ROWS"]()
+comptime C52_ROWS = get_defined_int["MOJOLEARN_C52_PAIR_ROWS", 128]()
 # C53: independent GMM/BGMM centered-component staging arms.
 comptime C53_CENTER4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_CENTER4"]()
 comptime C53_BGMM_STATS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_BGMM_STATS"]()

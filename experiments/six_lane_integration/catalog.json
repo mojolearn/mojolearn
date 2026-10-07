@@ -207,7 +207,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF64=1",
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -226,7 +226,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_128": [
+            "MOJOLEARN_C52_PAIR_ROWS=128": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF64": [
@@ -255,7 +255,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF64=1",
-              "MOJOLEARN_C52_PAIR_512=1"
+              "MOJOLEARN_C52_PAIR_ROWS=512"
             ],
             "environment": {},
             "runtime": {}
@@ -274,7 +274,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_512": [
+            "MOJOLEARN_C52_PAIR_ROWS=512": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF64": [
@@ -303,7 +303,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF128=1",
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -322,7 +322,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_128": [
+            "MOJOLEARN_C52_PAIR_ROWS=128": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF128": [
@@ -351,7 +351,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF128=1",
-              "MOJOLEARN_C52_PAIR_512=1"
+              "MOJOLEARN_C52_PAIR_ROWS=512"
             ],
             "environment": {},
             "runtime": {}
@@ -370,7 +370,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_512": [
+            "MOJOLEARN_C52_PAIR_ROWS=512": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF128": [
@@ -4628,7 +4628,7 @@
         {
           "A": {
             "defines": [
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1"
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
             ],
             "environment": {},
             "runtime": {}
@@ -4647,7 +4647,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_CLASSICAL_C19_ORDERED_128": [
+            "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128": [
               "experiments/classical_identical_ideas/linear_controls.mojo"
             ]
           },
@@ -4673,7 +4673,7 @@
         {
           "A": {
             "defines": [
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_32=1"
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32"
             ],
             "environment": {},
             "runtime": {}
@@ -4692,7 +4692,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_CLASSICAL_C19_ORDERED_32": [
+            "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32": [
               "experiments/classical_identical_ideas/linear_controls.mojo"
             ]
           },
@@ -7054,7 +7054,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1"
+              "MOJOLEARN_C29_TILE=128"
             ],
             "environment": {},
             "runtime": {}
@@ -7076,7 +7076,7 @@
             "MOJOLEARN_C29_STREAM_TOPK": [
               "experiments/classical_identical_ideas/graph_controls.mojo"
             ],
-            "MOJOLEARN_C29_TILE_128": [
+            "MOJOLEARN_C29_TILE=128": [
               "experiments/classical_identical_ideas/graph_controls.mojo"
             ]
           },
@@ -7104,7 +7104,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1"
+              "MOJOLEARN_C29_TILE=128"
             ],
             "environment": {},
             "runtime": {}
@@ -7126,7 +7126,7 @@
             "MOJOLEARN_C29_STREAM_TOPK": [
               "experiments/classical_identical_ideas/graph_controls.mojo"
             ],
-            "MOJOLEARN_C29_TILE_128": [
+            "MOJOLEARN_C29_TILE=128": [
               "experiments/classical_identical_ideas/graph_controls.mojo"
             ]
           },
@@ -9880,7 +9880,7 @@
         {
           "A": {
             "defines": [
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -9899,7 +9899,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_128": [
+            "MOJOLEARN_C52_PAIR_ROWS=128": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -9920,7 +9920,7 @@
         {
           "A": {
             "defines": [
-              "MOJOLEARN_C52_PAIR_512=1"
+              "MOJOLEARN_C52_PAIR_ROWS=512"
             ],
             "environment": {},
             "runtime": {}
@@ -9939,7 +9939,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_512": [
+            "MOJOLEARN_C52_PAIR_ROWS=512": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -92644,7 +92644,7 @@
               "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS=1",
               "MOJOLEARN_C37_ROW_PANELS=1",
               "MOJOLEARN_C37_PANEL_128=1",
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -92954,7 +92954,7 @@
             "defines": [
               "MOJOLEARN_CLASSICAL_C06_ROWS2=1",
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1",
+              "MOJOLEARN_C29_TILE=128",
               "MOJOLEARN_C30_DIRECT_DISTANCE=1",
               "MOJOLEARN_C30_ROWS_4=1",
               "MOJOLEARN_C32_COUNT_FUSION=1",
@@ -93437,7 +93437,7 @@
               "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
               "MOJOLEARN_CLASSICAL_C17_OVR=1",
               "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1"
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
             ],
             "environment": {},
             "runtime": {}
@@ -93699,7 +93699,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1",
+              "MOJOLEARN_C29_TILE=128",
               "MOJOLEARN_C31_DEVICE_BUCKETS=1",
               "MOJOLEARN_C32_COUNT_FUSION=1",
               "MOJOLEARN_C32_EMIT_FUSION=1",
@@ -94438,7 +94438,7 @@
               "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
               "MOJOLEARN_CLASSICAL_C18_TILE64=1",
               "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH=1",
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1",
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128",
               "MOJOLEARN_CLASSICAL_C20_ROW_CACHE=1",
               "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1",
               "MOJOLEARN_CLASSICAL_C21_EXTREMA=1",
@@ -94455,7 +94455,7 @@
               "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR=1",
               "MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES=1",
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1",
+              "MOJOLEARN_C29_TILE=128",
               "MOJOLEARN_C30_DIRECT_DISTANCE=1",
               "MOJOLEARN_C30_ROWS_4=1",
               "MOJOLEARN_C31_DEVICE_BUCKETS=1",
@@ -94479,7 +94479,7 @@
               "MOJOLEARN_C42_ACTIVE_TRIANGLE=1",
               "MOJOLEARN_C43_RESIDENT_NORMALIZATION=1",
               "MOJOLEARN_C44_SAMPLING_DESCRIPTORS=1",
-              "MOJOLEARN_C52_PAIR_128=1",
+              "MOJOLEARN_C52_PAIR_ROWS=128",
               "MOJOLEARN_C53_CENTER4=1",
               "MOJOLEARN_C53_BGMM_STATS=1",
               "MOJOLEARN_C54_PREDICT_TILES=1",

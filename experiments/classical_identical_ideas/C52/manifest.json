@@ -17,7 +17,7 @@
   ],
   "validation_paths": [],
   "candidate_defines": [
-    "MOJOLEARN_C52_PAIR_128"
+    "MOJOLEARN_C52_PAIR_ROWS=128"
   ],
   "baseline_defines": [],
   "depends_on": [],
@@ -120,7 +120,7 @@
     "pair128": {
       "name": "pair128",
       "candidate_defines": [
-        "MOJOLEARN_C52_PAIR_128"
+        "MOJOLEARN_C52_PAIR_ROWS=128"
       ],
       "baseline_defines": [],
       "candidate_ids": [
@@ -142,7 +142,7 @@
     "pair512": {
       "name": "pair512",
       "candidate_defines": [
-        "MOJOLEARN_C52_PAIR_512"
+        "MOJOLEARN_C52_PAIR_ROWS=512"
       ],
       "baseline_defines": [],
       "candidate_ids": [

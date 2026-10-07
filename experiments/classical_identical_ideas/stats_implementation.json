@@ -15,7 +15,7 @@
         {
           "name": "pair128",
           "candidate_defines": [
-            "MOJOLEARN_C52_PAIR_128"
+            "MOJOLEARN_C52_PAIR_ROWS=128"
           ],
           "baseline_defines": [],
           "default_enabled": false,
@@ -24,7 +24,7 @@
         {
           "name": "pair512",
           "candidate_defines": [
-            "MOJOLEARN_C52_PAIR_512"
+            "MOJOLEARN_C52_PAIR_ROWS=512"
           ],
           "baseline_defines": [],
           "default_enabled": false,

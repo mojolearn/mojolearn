@@ -812,7 +812,7 @@
         {
           "arm": "ordered_128",
           "candidate_defines": [
-            "MOJOLEARN_CLASSICAL_C19_ORDERED_128"
+            "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
           ],
           "baseline_defines": [],
           "requires_defines": [],
@@ -823,7 +823,7 @@
         {
           "arm": "ordered_32",
           "candidate_defines": [
-            "MOJOLEARN_CLASSICAL_C19_ORDERED_32"
+            "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32"
           ],
           "baseline_defines": [],
           "requires_defines": [],

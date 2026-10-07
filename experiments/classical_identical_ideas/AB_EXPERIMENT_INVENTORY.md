@@ -451,8 +451,8 @@ Status: NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VE
 
 | Selectable configuration | A compiler defines | B |
 |---|---|---|
-| `ordered_128` | `MOJOLEARN_CLASSICAL_C19_ORDERED_128` | Incumbent; no new C defines |
-| `ordered_32` | `MOJOLEARN_CLASSICAL_C19_ORDERED_32` | Incumbent; no new C defines |
+| `ordered_128` | `MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128` | Incumbent; no new C defines |
+| `ordered_32` | `MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32` | Incumbent; no new C defines |
 
 Production source: [x_linear/device.mojo](../../x_linear/device.mojo).
 
@@ -668,7 +668,7 @@ Status: NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VE
 | Selectable configuration | A compiler defines | B |
 |---|---|---|
 | `stream_topk` | `MOJOLEARN_C29_STREAM_TOPK` | Incumbent; no new C defines |
-| `stream_topk_tile_128` | `MOJOLEARN_C29_STREAM_TOPK`, `MOJOLEARN_C29_TILE_128` | Incumbent; no new C defines |
+| `stream_topk_tile_128` | `MOJOLEARN_C29_STREAM_TOPK`, `MOJOLEARN_C29_TILE=128` | Incumbent; no new C defines |
 
 Production source: [neighbors/impl/detail/knn_brute_force.mojo](../../neighbors/impl/detail/knn_brute_force.mojo), [neighbors/impl/detail/classical_stream_topk.mojo](../../neighbors/impl/detail/classical_stream_topk.mojo), [neighbors/estimator.mojo](../../neighbors/estimator.mojo), [core/knn_host_predict.mojo](../../core/knn_host_predict.mojo).
 
@@ -993,8 +993,8 @@ New extension; incumbent source linked below.
 
 | Selectable configuration | A compiler defines | B |
 |---|---|---|
-| `pair128` | `MOJOLEARN_C52_PAIR_128` | Incumbent; no new C defines |
-| `pair512` | `MOJOLEARN_C52_PAIR_512` | Incumbent; no new C defines |
+| `pair128` | `MOJOLEARN_C52_PAIR_ROWS=128` | Incumbent; no new C defines |
+| `pair512` | `MOJOLEARN_C52_PAIR_ROWS=512` | Incumbent; no new C defines |
 
 Production source: [kde/pair_lse.mojo](../../kde/pair_lse.mojo), [kde/impl/neighbors/kernel_density.mojo](../../kde/impl/neighbors/kernel_density.mojo), [kde/host/kde_oracle.mojo](../../kde/host/kde_oracle.mojo).
 

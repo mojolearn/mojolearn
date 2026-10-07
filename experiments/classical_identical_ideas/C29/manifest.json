@@ -156,7 +156,7 @@
       "name": "stream_topk_tile_128",
       "candidate_defines": [
         "MOJOLEARN_C29_STREAM_TOPK",
-        "MOJOLEARN_C29_TILE_128"
+        "MOJOLEARN_C29_TILE=128"
       ],
       "baseline_defines": [],
       "candidate_ids": [
@@ -195,7 +195,7 @@
       ],
       "candidate_defines": [
         "MOJOLEARN_C29_STREAM_TOPK",
-        "MOJOLEARN_C29_TILE_128"
+        "MOJOLEARN_C29_TILE=128"
       ],
       "baseline_defines": [],
       "source_gaps": [
@@ -239,7 +239,7 @@
       ],
       "candidate_defines": [
         "MOJOLEARN_C29_STREAM_TOPK",
-        "MOJOLEARN_C29_TILE_128",
+        "MOJOLEARN_C29_TILE=128",
         "MOJOLEARN_C31_DEVICE_BUCKETS",
         "MOJOLEARN_C32_COUNT_FUSION",
         "MOJOLEARN_C32_EMIT_FUSION",
