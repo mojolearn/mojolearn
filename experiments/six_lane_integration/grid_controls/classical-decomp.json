@@ -1,0 +1,322 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "classical-decomp",
+ "branch": "lane/classical-decomp",
+ "head": "f0bbeef91",
+ "controls": {
+  "C01_LEAF": {
+   "define": "MOJOLEARN_CLASSICAL_C01_LEAF",
+   "kind": "int_sweep",
+   "arms": {
+    "32": [],
+    "64": [
+     "MOJOLEARN_CLASSICAL_C01_LEAF=64"
+    ],
+    "128": [
+     "MOJOLEARN_CLASSICAL_C01_LEAF=128"
+    ]
+   },
+   "default": "32",
+   "source": [
+    "x_metrics/common.mojo:46",
+    "experiments/classical_identical_ideas/shared_controls.mojo:15"
+   ],
+   "binding": "_mojolearn_x_metrics",
+   "bits_change": true,
+   "status": "split_from:C01_LEAF64/C01_LEAF128"
+  },
+  "C01_MEAN": {
+   "define": "MOJOLEARN_CLASSICAL_C01_MEAN",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_C01_MEAN"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/xtdz_coalesced.mojo:379",
+    "core/blocked_moments.mojo:505",
+    "decomposition/host/pca_oracle.mojo:245"
+   ],
+   "binding": "_mojolearn_estimators",
+   "bits_change": true,
+   "status": "split_from:C01_LEAF64/C01_LEAF128 (rewritten row-parallel)"
+  },
+  "PCA_COV": {
+   "define": "MOJOLEARN_CLASSICAL_PCA_COV",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "c04": [
+     "MOJOLEARN_CLASSICAL_PCA_COV=4"
+    ],
+    "c23": [
+     "MOJOLEARN_CLASSICAL_PCA_COV=23"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "decomposition/impl/linalg/detail/pca.mojo:214",
+    "decomposition/impl/linalg/detail/pca.mojo:227",
+    "core/blocked_moments.mojo:521",
+    "core/blocked_moments.mojo:553",
+    "decomposition/host/pca_oracle.mojo:737"
+   ],
+   "binding": "_mojolearn_estimators",
+   "bits_change": true,
+   "status": "split_from:C04_LOAD_CENTER(PCA)+C23_CENTERED_PANELS(PCA), both rewritten row-parallel; c04 keeps the old C04 cell values, c23 is a new one-pass Chan profile"
+  },
+  "C04_LDA": {
+   "define": "MOJOLEARN_CLASSICAL_C04_LDA",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_C04_LDA"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_prep/units.mojo:79",
+    "bindings/_mojolearn_x_prep.mojo:319",
+    "python/mojolearn/_expansion_prep.py:3521"
+   ],
+   "binding": "_mojolearn_x_prep",
+   "bits_change": true,
+   "status": "split_from:C04_LOAD_CENTER (renamed, behavior unchanged; lane L4 owns LDA logic)"
+  },
+  "C23_MCD": {
+   "define": "MOJOLEARN_CLASSICAL_C23_MCD",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_C23_MCD"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_decomp/mcd.mojo:196",
+    "x_decomp/kit_device.mojo:991",
+    "x_decomp/device.mojo:2630",
+    "x_decomp/kit_device.mojo:474"
+   ],
+   "binding": "_mojolearn_x_decomp",
+   "bits_change": true,
+   "status": "split_from:C23_CENTERED_PANELS (rewritten row-parallel, same panel-256 cell values)"
+  },
+  "TSVD_FUSED_STATS": {
+   "define": "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "decomposition/estimator.mojo:453",
+    "core/blocked_moments.mojo:580",
+    "decomposition/host/pca_oracle.mojo:819"
+   ],
+   "binding": "_mojolearn_estimators",
+   "bits_change": true,
+   "status": "new"
+  },
+  "C24_TSQR": {
+   "define": "MOJOLEARN_CLASSICAL_C24_PANEL8,MOJOLEARN_CLASSICAL_C24_ROWS2048,MOJOLEARN_CLASSICAL_C24_TREE4",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "panel8": [
+     "MOJOLEARN_CLASSICAL_C24_PANEL8"
+    ],
+    "rows2048": [
+     "MOJOLEARN_CLASSICAL_C24_ROWS2048"
+    ],
+    "tree4": [
+     "MOJOLEARN_CLASSICAL_C24_TREE4"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_decomp/tsqr_core.mojo:51",
+    "x_decomp/tsqr_core.mojo:52",
+    "x_decomp/tsqr_core.mojo:56",
+    "x_decomp/qr_sliced.mojo:82"
+   ],
+   "binding": "_mojolearn_x_decomp",
+   "bits_change": true,
+   "status": "kept (code unchanged); reach corrected: NOT pca (covariance_eigh) and NOT tsvd (gemm_tn Gram + eig); TSQR consumers only"
+  },
+  "C25_PROJECTION_REUSE": {
+   "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "kernel_methods/estimator.mojo:209",
+    "kernel_methods/estimator.mojo:2639",
+    "kernel_methods/estimator.mojo:2739"
+   ],
+   "binding": "_mojolearn_kernel_methods",
+   "bits_change": true,
+   "status": "kept (code unchanged); reach corrected: RBFSampler/Nystroem only, NOT more:tsvd / randomized-svd"
+  }
+ },
+ "algorithms": {
+  "classical:pca": {
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "route": "fit: PCA.fit -> pca_fit_binding -> pca_fit_host -> compute_covariance (PCA_COV arm | column_mean_launch [C01_MEAN] + split-K/gemm_tn) -> eig_and_truncate; transform: pca_transform (gemm, no control)",
+   "controls": [
+    "C01_MEAN",
+    "PCA_COV"
+   ],
+   "interaction_groups": [
+    [
+     "C01_MEAN",
+     "PCA_COV"
+    ]
+   ],
+   "note": "PCA_COV=23 skips column_mean_launch, so C01_MEAN is inert under it; C01_MEAN x {off, c04} is a real crossing"
+  },
+  "more:tsvd": {
+   "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
+   "route": "fit: TruncatedSVD.fit -> tsvd_fit (gemm_tn Gram + eig, no control) -> tsvd_explained_host (TSVD_FUSED_STATS | gemm_nt + 2x _column_variance -> column_mean_launch [C01_MEAN]); transform: tsvd_transform (gemm_nt, no control)",
+   "controls": [
+    "C01_MEAN",
+    "TSVD_FUSED_STATS"
+   ],
+   "interaction_groups": [
+    [
+     "C01_MEAN",
+     "TSVD_FUSED_STATS"
+    ]
+   ],
+   "note": "TSVD_FUSED_STATS bypasses _column_variance, so C01_MEAN is inert under it"
+  },
+  "classical:pca@svd_solver=full": {
+   "binding": "_mojolearn_estimators",
+   "route": "fit: pca_fit_full -> svd_full.mojo column_mean_launch [C01_MEAN] -> center -> SVD",
+   "controls": [
+    "C01_MEAN"
+   ],
+   "interaction_groups": [],
+   "note": "only if the board times svd_solver='full'"
+  },
+  "expanded:min-cov-det": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "fit: MinCovDet._fast_mcd_native -> x_decomp_mcd -> mcd.mojo emp_cov_at [C23_MCD] -> Kit.classical_centered_gram (device.mojo bm_centered_gram_panels)",
+   "controls": [
+    "C23_MCD"
+   ],
+   "interaction_groups": [
+    [
+     "C23_MCD",
+     "C57_CANDIDATE_STATE"
+    ]
+   ],
+   "note": "C23_MCD takes precedence over C57 in emp_cov_at (both edit the same function; owned by the stats lane)"
+  },
+  "expanded:elliptic-envelope": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "as min-cov-det",
+   "controls": [
+    "C23_MCD"
+   ],
+   "interaction_groups": [
+    [
+     "C23_MCD",
+     "C57_CANDIDATE_STATE"
+    ]
+   ]
+  },
+  "expanded:incremental-pca": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "fit: per-batch Kit partial fits (kit colmean/mm/svd); no column_mean_launch, no compute_covariance",
+   "controls": [],
+   "interaction_groups": [],
+   "note": "no control of this lane reaches it (catalog C23 claim false)"
+  },
+  "expanded:randomized-svd": {
+   "binding": "_mojolearn_x_decomp",
+   "route": "_randomized_decompose -> _rsvd_core (Kit.mm, Kit.orth -> qr_sliced [C24_TREE4], Kit.svd)",
+   "controls": [
+    "C24_TSQR"
+   ],
+   "interaction_groups": [],
+   "note": "C25 does not reach it; C24 reach via Kit.orth is read from source, not traced"
+  },
+  "expanded:lda-clf@lda_outputs": {
+   "binding": "_mojolearn_x_prep",
+   "route": "transform (solver != eigen): x_prep op 178 centered_matmul [C04_LDA]",
+   "controls": [
+    "C04_LDA"
+   ],
+   "interaction_groups": [],
+   "note": "crossing with C55-DA/C56 belongs to lane L4"
+  },
+  "expanded:sgd-reg@regression_report": {
+   "binding": "_mojolearn_x_metrics",
+   "route": "regression metrics PairSum leaf [C01_LEAF]",
+   "controls": [
+    "C01_LEAF"
+   ],
+   "interaction_groups": []
+  },
+  "classical:ols": {
+   "binding": "_mojolearn_x_decomp / _mojolearn_linalg",
+   "route": "TSQR least squares (tsqr_core) [C24]",
+   "controls": [
+    "C24_TSQR"
+   ],
+   "interaction_groups": []
+  },
+  "more:nystroem": {
+   "binding": "_mojolearn_kernel_methods",
+   "route": "kernel_methods/estimator.mojo:2639 [C25]",
+   "controls": [
+    "C25_PROJECTION_REUSE"
+   ],
+   "interaction_groups": []
+  },
+  "more:rbf-sampler": {
+   "binding": "_mojolearn_kernel_methods",
+   "route": "kernel_methods/estimator.mojo:209 [C25]",
+   "controls": [
+    "C25_PROJECTION_REUSE"
+   ],
+   "interaction_groups": []
+  }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_CLASSICAL_C01_LEAF64",
+   "reason": "replaced by MOJOLEARN_CLASSICAL_C01_LEAF=64 (metrics) and MOJOLEARN_CLASSICAL_C01_MEAN (mean kernel); serial one-thread-per-column mean deleted"
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C01_LEAF128",
+   "reason": "replaced by MOJOLEARN_CLASSICAL_C01_LEAF=128 and MOJOLEARN_CLASSICAL_C01_MEAN"
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C04_LOAD_CENTER",
+   "reason": "split: PCA use is MOJOLEARN_CLASSICAL_PCA_COV=4 (rewritten row-parallel), LDA use is MOJOLEARN_CLASSICAL_C04_LDA"
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS",
+   "reason": "split: PCA use is MOJOLEARN_CLASSICAL_PCA_COV=23 (one-pass Chan rewrite), MCD use is MOJOLEARN_CLASSICAL_C23_MCD; no LDA/QDA code ever read it; per-cell serial kernel deleted"
+  }
+ ],
+ "notes": [
+  "All new code is UNCOMPILED (lanes never compile, 2026-10-07); the orchestrator build compiles it.",
+  "C24's three knobs are independent parameters (panel width, leaf rows, merge arity), kept as separate on/off defines; the review's suggestion to fold them into integer sweeps was not applied because the brief says not to change their code."
+ ]
+}
