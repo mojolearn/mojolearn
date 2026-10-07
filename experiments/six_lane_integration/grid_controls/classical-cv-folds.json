@@ -18,7 +18,7 @@
     "experiments/classical_identical_ideas/linear_controls.mojo:61",
     "x_linear/ridge_ff_blocks.mojo",
     "x_linear/device.mojo:3715",
-    "x_linear/device.mojo:3885",
+    "x_linear/device.mojo:3887",
     "x_linear/ridgecv.mojo:275",
     "x_linear/ridge.mojo:349"
    ],

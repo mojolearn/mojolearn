@@ -41,7 +41,7 @@ weighted Ridge's). The one-thread Cholesky was latency bound at d^3 / 6
 dependent float-float operations; the team cuts that to d^2 steps.
 """
 from std.gpu import block_idx, block_dim, thread_idx
-from x_linear.ops import FP, IP, ld, st, i2f
+from x_linear.ops import FP, IP, ld, st, ldi, sti, i2f
 from x_linear.ff import (
     FF, ff_of, ff_add, ff_add_f, ff_sub, ff_mul, ff_mul_f, ff_div, ff_sqrt, ff_f32, ff_ld, ff_st,
     ff_cholesky, ff_chol_solve, ff_centered, two_prod,
@@ -292,10 +292,23 @@ def rff_stats_host(x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, w
 
 
 # ------------------------------------------------------------ the device kernels
+# The statistics kernels take a gate word: they do nothing while it is zero.
+# The k-fold grid sets it on the device from the alphas' trust flags
+# (`rff_untrusted_kernel`), so no host step decides whether a fold needs the
+# float-float pass; the refit passes a word set to one.
+
+
+def rff_untrusted_kernel(trust: FP, na: Int32, gate: IP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread per alpha: an untrusted float32 factor (`kf_solve_kernel`'s
+    trust word != 1) sets the gate (every writer stores the same one)."""
+    var a = Int(block_idx.x) * RFF_TPB + Int(thread_idx.x)
+    if a < Int(na) and ld(trust, a) != Float32(1):
+        sti(gate, 0, 1)
+    witness_end(wf, woff, nonce)
 
 
 def rff_mean_part_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, sw: Int32, wo: Int32, s: Int32, e: Int32,
-                         ph: FP, pl: FP, wf: IP, woff: Int32, nonce: Int32):
+                         ph: FP, pl: FP, gate: IP, wf: IP, woff: Int32, nonce: Int32):
     """Thread (column, block): `rff_mean_part`; adjacent threads take
     adjacent columns of one row block."""
     var nn = Int(n)
@@ -303,24 +316,24 @@ def rff_mean_part_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, sw: Int32
     var tn = Int(t_n)
     var mc = rff_mcols(dd, tn)
     var t = Int(block_idx.x) * RFF_TPB + Int(thread_idx.x)
-    if t < mc * fold_blocks(nn):
+    if ldi(gate, 0) != 0 and t < mc * fold_blocks(nn):
         rff_mean_part(x, y, nn, dd, tn, sw != 0, Int(wo), Int(s), Int(e), t % mc, t // mc, ph, pl)
     witness_end(wf, woff, nonce)
 
 
-def rff_mean_fold_kernel(n: Int32, d: Int32, t_n: Int32, fi: Int32, ph: FP, pl: FP, sh: FP, sl: FP,
+def rff_mean_fold_kernel(n: Int32, d: Int32, t_n: Int32, fi: Int32, ph: FP, pl: FP, sh: FP, sl: FP, gate: IP,
                          wf: IP, woff: Int32, nonce: Int32):
     """Thread per mean: `rff_mean_fold`."""
     var dd = Int(d)
     var tn = Int(t_n)
     var u = Int(block_idx.x) * RFF_TPB + Int(thread_idx.x)
-    if u < dd + tn:
+    if ldi(gate, 0) != 0 and u < dd + tn:
         rff_mean_fold(u, Int(n), dd, tn, fi != 0, ph, pl, sh, sl)
     witness_end(wf, woff, nonce)
 
 
 def rff_cell_part_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, sw: Int32, wo: Int32, s: Int32, e: Int32,
-                         sh: FP, sl: FP, ph: FP, pl: FP, wf: IP, woff: Int32, nonce: Int32):
+                         sh: FP, sl: FP, ph: FP, pl: FP, gate: IP, wf: IP, woff: Int32, nonce: Int32):
     """Thread (cell, block): `rff_cell_part`; adjacent threads take adjacent
     cells of one row block (the `rw_gram_parts_kernel` mapping)."""
     var nn = Int(n)
@@ -328,18 +341,18 @@ def rff_cell_part_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, sw: Int32
     var tn = Int(t_n)
     var stats = rff_stats(dd, tn)
     var t = Int(block_idx.x) * RFF_TPB + Int(thread_idx.x)
-    if t < stats * fold_blocks(nn):
+    if ldi(gate, 0) != 0 and t < stats * fold_blocks(nn):
         rff_cell_part(x, y, nn, dd, tn, sw != 0, Int(wo), Int(s), Int(e), t % stats, t // stats, sh, sl, ph, pl)
     witness_end(wf, woff, nonce)
 
 
-def rff_cell_fold_kernel(n: Int32, d: Int32, t_n: Int32, ph: FP, pl: FP, sh: FP, sl: FP,
+def rff_cell_fold_kernel(n: Int32, d: Int32, t_n: Int32, ph: FP, pl: FP, sh: FP, sl: FP, gate: IP,
                          wf: IP, woff: Int32, nonce: Int32):
     """Thread per cell: `rff_cell_fold`."""
     var dd = Int(d)
     var tn = Int(t_n)
     var c = Int(block_idx.x) * RFF_TPB + Int(thread_idx.x)
-    if c < rff_stats(dd, tn):
+    if ldi(gate, 0) != 0 and c < rff_stats(dd, tn):
         rff_cell_fold(c, Int(n), dd, tn, ph, pl, sh, sl)
     witness_end(wf, woff, nonce)
 

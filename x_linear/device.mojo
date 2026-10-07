@@ -39,7 +39,7 @@ from x_linear.sgd import (
 from checks.numerics import identical_pow
 from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C17_OVR, C19_SGD_CHUNK, C16_GLM_FUSED, RIDGECV_FF_BLOCKED
 from x_linear.ridge_ff_blocks import (
-    RFF_TPB, rff_blocks, rff_stats, rff_mcols, rff_part_words, rff_mean_part_kernel, rff_mean_fold_kernel,
+    RFF_TPB, rff_blocks, rff_stats, rff_mcols, rff_part_words, rff_mean_part_kernel, rff_mean_fold_kernel, rff_untrusted_kernel,
     rff_cell_part_kernel, rff_cell_fold_kernel, rff_kf_solve_kernel, rff_solve_kernel,
 )
 from x_linear.team import TEAM_SLOTS
@@ -3610,6 +3610,7 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var dph = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
     var dpl = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](max(ffa * TEAM_SLOTS, 1))
+    var dgate = ctx.enqueue_create_buffer[DType.int32](1)
     var hfp = fp.copy()
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
@@ -3634,9 +3635,9 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
         # unit B with the blocked float-float statistics: two partial passes,
         # two folds, one solve block per alpha, then the predictions and scores
         var nbw = fold_blocks(n)
-        wcap = max(wcap, rff_blocks(rff_mcols(d, 1) * nbw) + rff_blocks(d + 1) + rff_blocks(rff_stats(d, 1) * nbw)
-                   + rff_blocks(rff_stats(d, 1)) + na + _xg_blocks(nt_max * na) + _xg_blocks(kbm) + _xg_blocks(na * kbm)
-                   + _xg_blocks(na))
+        wcap = max(wcap, rff_blocks(na) + rff_blocks(rff_mcols(d, 1) * nbw) + rff_blocks(d + 1)
+                   + rff_blocks(rff_stats(d, 1) * nbw) + rff_blocks(rff_stats(d, 1)) + na + _xg_blocks(nt_max * na)
+                   + _xg_blocks(kbm) + _xg_blocks(na * kbm) + _xg_blocks(na))
         var prep_wit = Witness(ctx, _xg_blocks(k * (d + 1)) + _xg_blocks(k * (d + 1) * (d + 1)))
         var attempt = 0
         while True:
@@ -3711,44 +3712,50 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
         while True:
             var nonce = wit.begin()
             var wo = 0
-            var have_ff = False
             comptime if RIDGECV_FF_BLOCKED:
                 # lane/classical-cv-folds: the fold's float-float statistics as
                 # FOLD_BLOCK-row block partials folded blocks ascending, then one
-                # solve block team per alpha (trusted alphas' blocks idle)
-                for a in range(na):
-                    if htr[a] != Float32(1):
-                        have_ff = True
-                if have_ff:
-                    var nbf = fold_blocks(n)
-                    var mc = rff_mcols(d, 1)
-                    var stats = rff_stats(d, 1)
-                    ctx.enqueue_function[rff_mean_part_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1),
-                                                               Int32(0), Int32(n), s, e, dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                               wit.p(), Int32(wo), nonce,
-                                                               grid_dim=rff_blocks(mc * nbf), block_dim=RFF_TPB)
-                    wo += rff_blocks(mc * nbf)
-                    ctx.enqueue_function[rff_mean_fold_kernel](Int32(n), Int32(d), Int32(1), Int32(fi), dph.unsafe_ptr(),
-                                                               dpl.unsafe_ptr(), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                               wit.p(), Int32(wo), nonce,
-                                                               grid_dim=rff_blocks(d + 1), block_dim=RFF_TPB)
-                    wo += rff_blocks(d + 1)
-                    ctx.enqueue_function[rff_cell_part_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1),
-                                                               Int32(0), Int32(n), s, e, dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                               dph.unsafe_ptr(), dpl.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                               grid_dim=rff_blocks(stats * nbf), block_dim=RFF_TPB)
-                    wo += rff_blocks(stats * nbf)
-                    ctx.enqueue_function[rff_cell_fold_kernel](Int32(n), Int32(d), Int32(1), dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                               dsh.unsafe_ptr(), dsl.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                               grid_dim=rff_blocks(stats), block_dim=RFF_TPB)
-                    wo += rff_blocks(stats)
-                    ctx.enqueue_function[rff_kf_solve_kernel](Int32(d), Int32(fi), dal.unsafe_ptr(), Int32(na), dtr.unsafe_ptr(),
-                                                              dsh.unsafe_ptr(), dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(),
-                                                              dfh.unsafe_ptr(), dfl.unsafe_ptr(), dtmp.unsafe_ptr(), dtw.unsafe_ptr(),
-                                                              dw.unsafe_ptr(), db.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                              grid_dim=na, block_dim=RFF_TPB)
-                    wo += na
+                # solve block team per alpha. Whether the fold needs them is
+                # decided on the device: the trust flags set a gate word the
+                # statistics kernels read (idle when every alpha is trusted),
+                # and a trusted alpha's solve block does nothing.
+                var nbf = fold_blocks(n)
+                var mc = rff_mcols(d, 1)
+                var stats = rff_stats(d, 1)
+                ctx.enqueue_memset(dgate, Int32(0))
+                ctx.enqueue_function[rff_untrusted_kernel](dtr.unsafe_ptr(), Int32(na), dgate.unsafe_ptr(),
+                                                           wit.p(), Int32(wo), nonce,
+                                                           grid_dim=rff_blocks(na), block_dim=RFF_TPB)
+                wo += rff_blocks(na)
+                ctx.enqueue_function[rff_mean_part_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1),
+                                                           Int32(0), Int32(n), s, e, dph.unsafe_ptr(), dpl.unsafe_ptr(),
+                                                           dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                           grid_dim=rff_blocks(mc * nbf), block_dim=RFF_TPB)
+                wo += rff_blocks(mc * nbf)
+                ctx.enqueue_function[rff_mean_fold_kernel](Int32(n), Int32(d), Int32(1), Int32(fi), dph.unsafe_ptr(),
+                                                           dpl.unsafe_ptr(), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                           dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                           grid_dim=rff_blocks(d + 1), block_dim=RFF_TPB)
+                wo += rff_blocks(d + 1)
+                ctx.enqueue_function[rff_cell_part_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1),
+                                                           Int32(0), Int32(n), s, e, dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                           dph.unsafe_ptr(), dpl.unsafe_ptr(), dgate.unsafe_ptr(),
+                                                           wit.p(), Int32(wo), nonce,
+                                                           grid_dim=rff_blocks(stats * nbf), block_dim=RFF_TPB)
+                wo += rff_blocks(stats * nbf)
+                ctx.enqueue_function[rff_cell_fold_kernel](Int32(n), Int32(d), Int32(1), dph.unsafe_ptr(), dpl.unsafe_ptr(),
+                                                           dsh.unsafe_ptr(), dsl.unsafe_ptr(), dgate.unsafe_ptr(),
+                                                           wit.p(), Int32(wo), nonce,
+                                                           grid_dim=rff_blocks(stats), block_dim=RFF_TPB)
+                wo += rff_blocks(stats)
+                ctx.enqueue_function[rff_kf_solve_kernel](Int32(d), Int32(fi), dal.unsafe_ptr(), Int32(na), dtr.unsafe_ptr(),
+                                                          dsh.unsafe_ptr(), dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(),
+                                                          dfh.unsafe_ptr(), dfl.unsafe_ptr(), dtmp.unsafe_ptr(), dtw.unsafe_ptr(),
+                                                          dw.unsafe_ptr(), db.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                          grid_dim=na, block_dim=RFF_TPB)
+                wo += na
             else:
+                var have_ff = False
                 for a in range(na):
                     if htr[a] == Float32(1):
                         continue
@@ -3826,6 +3833,7 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     _ = dph^
     _ = dpl^
     _ = dtw^
+    _ = dgate^
 
 
 
@@ -3862,6 +3870,8 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     var dph = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
     var dpl = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](TEAM_SLOTS if RIDGECV_FF_BLOCKED else 1)
+    var dgate = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(dgate, Int32(1))
     var dout = ctx.enqueue_create_buffer[DType.float32](t_n * d + t_n + 1)
     var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
     var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
@@ -3888,21 +3898,23 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
             var wo = 0
             ctx.enqueue_function[rff_mean_part_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if sw else 0),
                                                        Int32(n * t_n), Int32(0), Int32(0), dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                       wit.p(), Int32(wo), nonce,
+                                                       dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
                                                        grid_dim=rff_blocks(mc * nbf), block_dim=RFF_TPB)
             wo += rff_blocks(mc * nbf)
             ctx.enqueue_function[rff_mean_fold_kernel](Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0), dph.unsafe_ptr(),
                                                        dpl.unsafe_ptr(), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                       wit.p(), Int32(wo), nonce,
+                                                       dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
                                                        grid_dim=rff_blocks(nm), block_dim=RFF_TPB)
             wo += rff_blocks(nm)
             ctx.enqueue_function[rff_cell_part_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if sw else 0),
                                                        Int32(n * t_n), Int32(0), Int32(0), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                       dph.unsafe_ptr(), dpl.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                       dph.unsafe_ptr(), dpl.unsafe_ptr(), dgate.unsafe_ptr(),
+                                                       wit.p(), Int32(wo), nonce,
                                                        grid_dim=rff_blocks(stats * nbf), block_dim=RFF_TPB)
             wo += rff_blocks(stats * nbf)
             ctx.enqueue_function[rff_cell_fold_kernel](Int32(n), Int32(d), Int32(t_n), dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                       dsh.unsafe_ptr(), dsl.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                       dsh.unsafe_ptr(), dsl.unsafe_ptr(), dgate.unsafe_ptr(),
+                                                       wit.p(), Int32(wo), nonce,
                                                        grid_dim=rff_blocks(stats), block_dim=RFF_TPB)
             wo += rff_blocks(stats)
             ctx.enqueue_function[rff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
@@ -3943,6 +3955,7 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     _ = dph^
     _ = dpl^
     _ = dtw^
+    _ = dgate^
     _ = dout^
     _ = dfh^
     _ = dfl^
