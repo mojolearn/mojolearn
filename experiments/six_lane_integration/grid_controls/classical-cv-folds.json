@@ -2,7 +2,7 @@
  "schema": "mojolearn.grid-controls/1",
  "lane": "classical-cv-folds",
  "branch": "lane/classical-cv-folds",
- "head": "beb8afb810fc",
+ "head": "f010fea8907e",
  "controls": {
   "ridgecv_ff_blocked": {
    "define": "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED",

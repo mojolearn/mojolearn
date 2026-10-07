@@ -31239,10 +31239,10 @@
    },
    "classical-cv-folds": {
     "branch": "lane/classical-cv-folds",
-    "head": "beb8afb810fc",
+    "head": "f010fea8907e",
     "lane": "classical-cv-folds",
     "path": "experiments/six_lane_integration/grid_controls/classical-cv-folds.json",
-    "sha256": "9de4dfc6ea92cb683e95fcda06cf7aaa310fde22ff7899bdc6c1fc756449dfa5"
+    "sha256": "d02973c935ddc613866cabf1dc57c78e8906899968d52d3dea485c545fc72d7d"
    },
    "classical-decomp": {
     "branch": "lane/classical-decomp",
