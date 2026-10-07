@@ -52,6 +52,52 @@ def write(path,value):
     temp.replace(path)
 
 
+def remaining_catalog(cells):
+    """Index exact selections; combined receipts never credit their members."""
+    path=REPO/'experiments/six_lane_integration/catalog.json'
+    raw=path.read_bytes();catalog=json.loads(raw)
+    entries={entry['id']:entry for entry in catalog['entries']}
+    member_records=dict(entries)
+    for entry in catalog['entries']:
+        for arm in entry.get('arms',[]):
+            member_records[arm['id']]=dict(entry,affected_workloads=arm.get('workloads',entry.get('affected_workloads',[])))
+    rows=[]
+    for kind,records in [('entry',catalog['entries']),('interaction',catalog['interactions'])]:
+        for record in records:
+            selection_ids={record['id']}|{arm['id'] for arm in record.get('arms',[])}
+            direct=[cell for cell in cells if cell['id'] in selection_ids]
+            members=[member_records[key] for key in record.get('members',[]) if key in member_records]
+            unresolved_members=[key for key in record.get('members',[]) if key not in member_records]
+            modes=sorted({item['mode'] for item in [record]+members if item.get('mode')})
+            # Recipes can be IDs or structured workload descriptors; retain both.
+            by_workload={json.dumps(value,sort_keys=True):value for item in [record]+members
+                         for value in item.get('affected_workloads',[])}
+            workloads=[by_workload[key] for key in sorted(by_workload)]
+            role=record.get('campaign_role','interaction_plan')
+            rows.append(dict(id=record['id'],kind=kind,role=role,title=record.get('title',record['id']),
+                modes=modes,mode_policy='Authored mode, or union of referenced member modes',
+                status='DIRECT_RECEIPTS_RETAINED_PENDING_ADMISSION' if direct else
+                       'SOURCE_REJECTED_NO_DIRECT_RECEIPT' if role=='source_rejected' else
+                       'NO_DIRECT_RECEIPT_IN_THIS_CAMPAIGN',
+                direct_attempts=len(direct),complete_pairs=sum(c.get('execution_status')=='MEASURED_FULL' for c in direct),
+                quality_failed=sum(c['status']=='QUALITY_FAILED' for c in direct),
+                selection_only=record.get('selection_only',False),members=record.get('members',[]),
+                unresolved_members=unresolved_members,
+                recipe_status='SOURCE_RECIPE_UNRESOLVED' if not modes or not workloads or unresolved_members else 'REQUIRES_FULL_RECIPE_AND_ARTIFACT_ADMISSION',
+                affected_workloads=workloads,arm_ids=sorted(selection_ids-{record['id']}),
+                authored_prerequisites=record.get('prerequisites',[]),authored_gaps=record.get('gaps',[]),
+                source_record=record.get('source_record'),source_status=record.get('source_status'),
+                receipts=[c['evidence'] for c in direct]))
+    return dict(schema='mojolearn.campaign-remaining-work/1',catalog_source=str(path.relative_to(REPO)),
+        catalog_sha256=hashlib.sha256(raw).hexdigest(),entries=len(catalog['entries']),interactions=len(catalog['interactions']),
+        roles={role:sum(e.get('campaign_role')==role for e in catalog['entries']) for role in
+               ['new_candidate','incumbent_dependency','source_rejected']},
+        direct_selection_count=sum(bool(row['direct_attempts']) for row in rows),
+        policy='Campaign-local exact selection coverage, not a global claim of never measured. Combined members get no individual credit. A missing receipt does not establish runnable artifacts or require repeating historically decided work. Selection-only plans and rejected sources are not executable queues. Catalog source prerequisites are authored metadata, not a current binary readiness audit.',
+        outside_catalog='Original I01–I24/A01–A08/N01–N08/F01–F20 cards and historical decisions require their own cross-reference; see experiments/AB_EXPERIMENT_INDEX.md. They are not automatically queued again.',
+        rows=rows)
+
+
 def main():
     cells=[];summary=[];seen=set()
     review_path=ROOT/'quality-review/classical-12-pair-quality-review.json'
@@ -207,6 +253,7 @@ def main():
             quality_failed=sum(c['status']=='QUALITY_FAILED' for c in rows),remaining_scope=remaining[vendor]))
     evidence_inputs={}
     for label,relative in [('apple_pending','apple/restart-readiness/status.json'),
+                           ('apple_readiness','apple/restart-readiness/readiness-summary.json'),
                            ('amd_capture','amd/terminal-preservation-audit/status.json'),
                            ('amd_release','amd/release/termination-proof.json'),
                            ('nvidia_release','nvidia-native/owner-attempt-02/termination-proof.json')]:
@@ -225,9 +272,17 @@ def main():
                 ' pairs completed; '+apple_pending.get('status','STATUS_UNAVAILABLE')+
                 '; freeze '+apple_pending.get('harness_freeze','UNKNOWN')+'. Original launch-tag error and released-host evidence are retained.',
             evidence='campaign-coverage.json: apple_pending'))
+    apple_readiness=evidence_inputs.get('apple_readiness',{}).get('record',{})
+    if apple_readiness.get('mlp_pending_cells'):
+        pending_work.append(dict(vendor='apple',scope='Apple FAST MLP classifier/regressor × Taxi/Istella',
+            reason=str(apple_readiness['mlp_pending_cells'])+' additional pending pairs; '+apple_readiness.get('mlp_blocker','Readiness unresolved'),
+            evidence='campaign-coverage.json: apple_readiness'))
+    remaining=remaining_catalog(cells)
+    write(OUT/'remaining-work.json',remaining)
     write(OUT/'campaign-coverage.json',dict(coverage=coverage,pending_work=pending_work,evidence_inputs=evidence_inputs,
+          remaining_catalog={k:v for k,v in remaining.items() if k!='rows'},
           latest_combined_defaults_promoted=False,all_experiments_complete=False))
-    write(OUT/'inventory.json',inventory);write(OUT/'index.json',dict(cells=cells,notes=notes,decisions=decisions,coverage=coverage,pending_work=pending_work))
+    write(OUT/'inventory.json',inventory);write(OUT/'index.json',dict(cells=cells,notes=notes,decisions=decisions,coverage=coverage,pending_work=pending_work,remaining_catalog=remaining))
     write(OUT/'retained-pairs.json',dict(updated_at=time.time(),pairs=summary))
     with (ROOT/'board-publication.log').open('a') as log:
         p=subprocess.run(['python3',str(REPO/'tools/performance_measurement_board.py'),

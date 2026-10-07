@@ -84,7 +84,8 @@ def build(inventory, index):
             'cards': list(cards.values()), 'notes': index.get('notes', []),
             'decisions': index.get('decisions', []),
             'coverage': index.get('coverage', []),
-            'pending_work': index.get('pending_work', [])}
+            'pending_work': index.get('pending_work', []),
+            'remaining_catalog': index.get('remaining_catalog', {})}
 
 
 def escape(value):
@@ -94,6 +95,19 @@ def escape(value):
 def write(board, out):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
+    remaining=board.get('remaining_catalog',{})
+    if remaining:
+        lines=['# Itemized experiment coverage', '', remaining['policy'], '',
+               f"{remaining['entries']} catalog entries; {remaining['interactions']} interaction plans; {remaining['direct_selection_count']} exact selections have campaign receipts.", '',
+               'Roles: '+', '.join(f'{key}: {value}' for key,value in remaining['roles'].items())+'.', '',
+               remaining['outside_catalog'], '',
+               'Full workload, arm, source, prerequisite and receipt details are in [remaining-work.json](remaining-work.json). No missing timing is filled with zero or inferred from another configuration.', '',
+               '| Selection | Role | Mode | Campaign evidence | Recipe admission | Complete pairs | Quality failures |',
+               '|---|---|---|---|---|---:|---:|']
+        for row in remaining['rows']:
+            values=[row['id'],row['role'],', '.join(row['modes']) or 'UNRESOLVED',row['status'],row['recipe_status'],row['complete_pairs'],row['quality_failed']]
+            lines.append('| '+' | '.join(map(escape,values))+' |')
+        (out/'REMAINING.md').write_text('\n'.join(lines)+'\n')
     variants = [('BOARD', board)]
     for vendor in ['apple', 'amd', 'nvidia']:
         variants.append((vendor, dict(board, cards=[dict(c, cells=[x for x in c['cells'] if x['vendor'] == vendor],
@@ -127,6 +141,11 @@ def write(board, out):
                     continue
                 lines.append('| ' + ' | '.join(escape(row.get(k, '')) for k in
                     ('label', 'complete_pairs', 'failed_attempts', 'quality_failed', 'remaining_scope')) + ' |')
+        if data.get('remaining_catalog'):
+            remaining=data['remaining_catalog']
+            lines += ['', '## Individual experiment coverage', '',
+                      f"[Itemized coverage ledger](REMAINING.md): {remaining['entries']} catalog entries and {remaining['interactions']} interaction plans; only {remaining['direct_selection_count']} exact selections have receipts in this campaign. Combined timings do not qualify individual members.", '',
+                      'Unrun, source-rejected and previously decided work remain distinct. This ledger is not a claim that every listed entry has runnable binaries.']
         lines += ['', '## Captured evidence', '',
                   'Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.', '',
                   '| Candidate | Vendor / route | Case | Scope | Status | Admitted A/B | Observed A/B | Evidence |',

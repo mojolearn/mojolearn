@@ -15,6 +15,12 @@ Counts are retained complete A/B pairs, not individually decided experiment swit
 |---|---:|---:|---:|---|
 | NVIDIA native / IDENTICAL | 99 | 2 | 4 | Native combined configurations measured; PTX, individual controls and other full-workload recipe gaps remain pending. |
 
+## Individual experiment coverage
+
+[Itemized coverage ledger](REMAINING.md): 375 catalog entries and 128 interaction plans; only 2 exact selections have receipts in this campaign. Combined timings do not qualify individual members.
+
+Unrun, source-rejected and previously decided work remain distinct. This ledger is not a claim that every listed entry has runnable binaries.
+
 ## Captured evidence
 
 Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.

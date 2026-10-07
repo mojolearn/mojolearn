@@ -16,6 +16,12 @@ Counts are retained complete A/B pairs, not individually decided experiment swit
 |---|---:|---:|---:|---|
 | Apple / FAST | 86 | 3 | 5 | See unrun scope for additional FAST pairs; earlier array-preservation and quality limitations remain. |
 
+## Individual experiment coverage
+
+[Itemized coverage ledger](REMAINING.md): 375 catalog entries and 128 interaction plans; only 2 exact selections have receipts in this campaign. Combined timings do not qualify individual members.
+
+Unrun, source-rejected and previously decided work remain distinct. This ledger is not a claim that every listed entry has runnable binaries.
+
 ## Captured evidence
 
 Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.
@@ -158,6 +164,7 @@ These are not completed measurements and have no inferred timing. This summary d
 |---|---|---|
 | Apple FAST LogReg/LinearSVC × Taxi/Istella | 0/4 pairs completed; BLOCKED_ALLOCATE_HOSTS_UNCONDITIONAL_SCP_DENY; freeze 779cd5453425139e00229fb99cfa4ec852d7677c. Original launch-tag error and released-host evidence are retained. | campaign-coverage.json: apple_pending |
 | Individual candidates, alternative arms and other affected workloads | This campaign measured complete-proposed combinations, not every individual catalog entry. Missing recipes, incompatible artifacts and untested interactions remain pending; do not infer constituent winners. | experiments/six_lane_integration/catalog.json |
+| Apple FAST MLP classifier/regressor × Taxi/Istella | 4 additional pending pairs; No retained accepted Apple FAST x_sequence pair; IDENTICAL cannot substitute | campaign-coverage.json: apple_readiness |
 
 ## Failed or quality-rejected attempts
 

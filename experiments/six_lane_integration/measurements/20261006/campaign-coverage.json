@@ -49,6 +49,12 @@
       "scope": "Individual candidates, alternative arms and other affected workloads",
       "reason": "This campaign measured complete-proposed combinations, not every individual catalog entry. Missing recipes, incompatible artifacts and untested interactions remain pending; do not infer constituent winners.",
       "evidence": "experiments/six_lane_integration/catalog.json"
+    },
+    {
+      "vendor": "apple",
+      "scope": "Apple FAST MLP classifier/regressor \u00d7 Taxi/Istella",
+      "reason": "4 additional pending pairs; No retained accepted Apple FAST x_sequence pair; IDENTICAL cannot substitute",
+      "evidence": "campaign-coverage.json: apple_readiness"
     }
   ],
   "evidence_inputs": {
@@ -155,6 +161,75 @@
         "future_placement_plan": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/future-placement-plan.json"
       }
     },
+    "apple_readiness": {
+      "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/readiness-summary.json",
+      "sha256": "007cb3e9e3a3abd044139efe35948275102cad4d8ccb56a1226c923bb018539b",
+      "record": {
+        "updated_at": "2026-10-06T21:57:47.660058+00:00",
+        "freeze": "779cd5453425139e00229fb99cfa4ec852d7677c",
+        "placement_status": "BLOCKED_ALLOCATE_HOSTS_UNCONDITIONAL_SCP_DENY",
+        "continuation_pid": 10545,
+        "continuation_alive": false,
+        "controller": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/reuse-owned-host.py",
+        "payload": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/deployment-payload-summary.json",
+        "ready_full_cells": 4,
+        "ready_algorithms": [
+          "LogisticRegression",
+          "LinearSVC"
+        ],
+        "datasets": [
+          "credit-card Taxi full",
+          "Istella full"
+        ],
+        "mlp_pending_cells": 4,
+        "mlp_blocker": "No retained accepted Apple FAST x_sequence pair; IDENTICAL cannot substitute",
+        "original_valid_pairs": 86,
+        "original_nb_source_blocked": 4,
+        "preservation_limitation": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/emergency-preservation-correction.json",
+        "builds": 0,
+        "models_executed": 0,
+        "resource_status": "OWNED_HOST_RELEASED",
+        "host": "h-04545dd0c2d7a2870",
+        "release_proof": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/release-host-response.json",
+        "pending_full_cells": 4,
+        "measurements_started": false,
+        "current_blocker": {
+          "operation": "ec2:AllocateHosts",
+          "sid": "DenyAllocatingDedicatedHosts",
+          "policy_id": "p-e4y3ng11",
+          "conditions": null,
+          "tag_exception_exists": false
+        },
+        "prior_launch_failure": {
+          "operation": "ec2:RunInstances",
+          "sid": "DenyMacLaunchOutsideBoard",
+          "cause": "Request lane tag mismatch",
+          "actual_lane": "six-lane-apple-restart",
+          "required_lane": "mojolearn-board-resume",
+          "blanket_runinstances_ban": false,
+          "original_request_sha256": "dc8e8414c7a535e6f2cb503e6332c2ed526802847ecba3ebeeadcf9afcf1a4c4",
+          "original_token": "mojolearn-qn4-existing-host-779cd545-20261006"
+        },
+        "future_placement_plan": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/future-placement-plan.json",
+        "reports": {
+          "allocation": {
+            "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-apple-allocation-denial/DIAGNOSIS.json",
+            "copy": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/peer-allocation-DIAGNOSIS.json",
+            "sha256": "c970b04b81d34766950dd1f71be0305448219ec6fa494fb55bc6b682bf0f9755"
+          },
+          "launch": {
+            "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-apple-runinstances-denial/DIAGNOSIS.json",
+            "copy": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/peer-launch-DIAGNOSIS.json",
+            "sha256": "f17ac13c2bc95910457f1236070c1f5a9df706bcfbcbda8371b97d40d7ecece8"
+          },
+          "admin_note": {
+            "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-apple-allocation-denial/IAM_ADMIN_NOTE.txt",
+            "copy": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/peer-admin_note-IAM_ADMIN_NOTE.txt",
+            "sha256": "b9253022ee9f46f82c827c523e89a417a53547f75e576104f92427fdcc1f094f"
+          }
+        }
+      }
+    },
     "amd_capture": {
       "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/terminal-preservation-audit/status.json",
       "sha256": "e3fb881d7fcc6428b70ada9183ebe1c2df8014f331b2f428c558c8c6ffeb0797",
@@ -230,6 +305,21 @@
         "verified_at": 1791321814.101747
       }
     }
+  },
+  "remaining_catalog": {
+    "schema": "mojolearn.campaign-remaining-work/1",
+    "catalog_source": "experiments/six_lane_integration/catalog.json",
+    "catalog_sha256": "7acb465d4fbeb6c2e5f0bb45ca06a8a6c133a3da6f56cab2752788bb160c7879",
+    "entries": 375,
+    "interactions": 128,
+    "roles": {
+      "new_candidate": 353,
+      "incumbent_dependency": 20,
+      "source_rejected": 2
+    },
+    "direct_selection_count": 2,
+    "policy": "Campaign-local exact selection coverage, not a global claim of never measured. Combined members get no individual credit. A missing receipt does not establish runnable artifacts or require repeating historically decided work. Selection-only plans and rejected sources are not executable queues. Catalog source prerequisites are authored metadata, not a current binary readiness audit.",
+    "outside_catalog": "Original I01\u2013I24/A01\u2013A08/N01\u2013N08/F01\u2013F20 cards and historical decisions require their own cross-reference; see experiments/AB_EXPERIMENT_INDEX.md. They are not automatically queued again."
   },
   "latest_combined_defaults_promoted": false,
   "all_experiments_complete": false
