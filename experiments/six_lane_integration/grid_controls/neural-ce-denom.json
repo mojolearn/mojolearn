@@ -1,0 +1,85 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "neural-ce-denom",
+ "branch": "lane/neural-ce-denom",
+ "head": "60b184499",
+ "controls": {
+  "ce_denom_rowfold": {
+   "define": "MOJOLEARN_IDN_CE_DENOM_ROWFOLD",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_CE_DENOM_ROWFOLD=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/neural_identical_experiments.mojo:57",
+    "training/checks/loss.mojo:1359",
+    "training/checks/loss.mojo:1455",
+    "training/checks/loss.mojo:1832",
+    "training/checks/loss.mojo:1887",
+    "core/six_lane_experiment_guards.mojo:58"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": false,
+   "status": "new",
+   "exclusive_with": [
+    "MOJOLEARN_IDN_GEMM_LEAF=1",
+    "MOJOLEARN_IDN_GEMM_LEAF=2",
+    "MOJOLEARN_IDN_NEURAL_CHAINS"
+   ],
+   "board": "lm-train-step, samba-train-step",
+   "tags": [],
+   "note": "Toggle idea neural #3. The CE softmax denominator (loss L4, and L9 under smoothing) is routed as the (rows, 1, vocab) ones-GEMV, which choose_gemm_plan_tiles lands on PLAN_SPLIT_16_1X1: 1/16 of each block's threads own a cell, a rows x P workspace plane and a second fold launch. The switch computes the same gemm_oracle cell with one block per row, one thread per leaf (contract_leaf_size/contract_leaf_count), the tuned kernel's own per-step seam (_tuned_step) and the contract's 7.2 fold tree level by level in shared memory: execution plan only, same bits on NVIDIA, AMD and the host column (no host change). Leaf counts past CE_TPB threads keep the routed GEMM (same bits). Refused (comptime assert) together with MOJOLEARN_IDN_GEMM_LEAF=1|2 and Refused (comptime assert) together with MOJOLEARN_IDN_NEURAL_CHAINS: the neural GEMM profile spells a different chain. Also reached by samba-train-step through training/estimator.mojo identical_ce_loss_resident -> identical_ce_forward_into (_mojolearn_training). Interacts with neural_gemm_schedule (the GEMM route it bypasses for L4/L9), gemm_leaf=all256 (contract leaf, followed by both arms) and the other CE controls (ce_token_fold, ce_grad_fused) on the same loss step."
+  }
+ },
+ "algorithms": {
+  "neural:lm-train-step": {
+   "binding": "_mojolearn_byte_lm",
+   "route": "fit step: training/byte_lm.mojo:1488 identical_ce_forward_into -> training/checks/loss.mojo L4 (and L9 under smoothing): _ce_denom_rowfold_into | identical_gemm_into(expo, ones, n_rows, 1, vocab)",
+   "controls": [
+    "ce_denom_rowfold"
+   ],
+   "interaction_groups": [
+    [
+     "ce_denom_rowfold",
+     "neural_gemm_schedule",
+     "neural_gemm_schedule_roles",
+     "gemm_leaf"
+    ],
+    [
+     "ce_denom_rowfold",
+     "ce_token_fold",
+     "ce_grad_fused"
+    ]
+   ]
+  },
+  "neural:samba-train-step": {
+   "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
+   "route": "training step: _mojolearn_training samba_head_loss_host (training/samba_ops.mojo:432) -> training/estimator.mojo identical_ce_loss_resident -> identical_ce_forward_into -> loss.mojo L4/L9 as above",
+   "controls": [
+    "ce_denom_rowfold"
+   ],
+   "interaction_groups": [
+    [
+     "ce_denom_rowfold",
+     "neural_gemm_schedule",
+     "neural_gemm_schedule_roles",
+     "gemm_leaf"
+    ]
+   ]
+  }
+ },
+ "removed": [],
+ "notes": {
+  "bits": "No bit change: the row fold is an execution plan of the same gemm_oracle (contract 6.1, 7). Identity is the NV == AMD output hash of the ID lines; the host digest is unchanged by construction.",
+  "run_owed": [
+   "lq add nv ID lane/neural-ce-denom lm-train-step,samba-train-step <board ds> ENV=MOJOLEARN_IDN_CE_DENOM_ROWFOLD=1",
+   "lq add amd ID lane/neural-ce-denom lm-train-step,samba-train-step <board ds> ENV=MOJOLEARN_IDN_CE_DENOM_ROWFOLD=1",
+   "lq add nv RACE lane/neural-ce-denom lm-train-step,samba-train-step <board ds> ARMS=off,on BUILDS=MOJOLEARN_IDN_CE_DENOM_ROWFOLD=1",
+   "lq add amd RACE lane/neural-ce-denom lm-train-step,samba-train-step <board ds> ARMS=off,on BUILDS=MOJOLEARN_IDN_CE_DENOM_ROWFOLD=1"
+  ]
+ }
+}
