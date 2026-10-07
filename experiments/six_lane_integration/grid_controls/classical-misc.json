@@ -1,0 +1,891 @@
+{
+  "schema": "mojolearn.grid-controls/1",
+  "lane": "classical-misc",
+  "branch": "lane/classical-misc",
+  "head": "a554ae5a2",
+  "head_note": "head = last code commit before this file; the file is committed on top of it.",
+  "controls": {
+    "c02_stats_pair": {
+      "define": "MOJOLEARN_CLASSICAL_C02_STATS_PAIR",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C02_STATS_PAIR"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "preprocessing/standard.mojo:63"
+      ],
+      "binding": "_mojolearn_preprocessing",
+      "bits_change": true,
+      "status": "kept",
+      "note": "256-lane fixed halving tree, two streams per barrier; StandardScaler mean pass only (finite input)."
+    },
+    "c02_linear_pair": {
+      "define": "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "glm/impl/center_device.mojo:302"
+      ],
+      "binding": "_mojolearn_estimators,_mojolearn_x_decomp",
+      "bits_change": true,
+      "status": "kept",
+      "note": "row-block x column exact integer accumulation + incumbent cs_fold_kernel; bits_change assumed until the ID check."
+    },
+    "c05_phase_scratch": {
+      "define": "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "x_metrics/plan.mojo:359",
+        "x_metrics/plan.mojo:570"
+      ],
+      "binding": "_mojolearn_x_metrics",
+      "bits_change": false,
+      "status": "kept",
+      "note": "host arena offset planning only. Board @report workloads currently raise in the adapter (metric_workloads.py:58, report settings pending) before any report: NOT MEASURABLE until that is fixed."
+    },
+    "c05_ols_phase": {
+      "define": "MOJOLEARN_CLASSICAL_C05_OLS_PHASE",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C05_OLS_PHASE"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "glm/estimator.mojo:119",
+        "glm/estimator.mojo:208",
+        "glm/estimator.mojo:340"
+      ],
+      "binding": "_mojolearn_estimators",
+      "bits_change": false,
+      "status": "kept",
+      "grid": "exclude",
+      "note": "UNREACHED: classical:ols takes the TSQR route (x_decomp/api.mojo:585 IDN_OLS_ONE_ENTRY) and never calls ols_fit; :208 is FAST-Apple only, :340 weighted only."
+    },
+    "c14_group_rhs": {
+      "define": "MOJOLEARN_CLASSICAL_C14_GROUP_RHS",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C14_GROUP_RHS"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "x_decomp/device.mojo:2143",
+        "x_linear/ridge.mojo:294",
+        "x_linear/ridge.mojo:195",
+        "x_decomp/cells.mojo:1534"
+      ],
+      "binding": "_mojolearn_x_decomp,_mojolearn_x_linear",
+      "bits_change": true,
+      "status": "kept",
+      "note": "Reach fixed (catalog narrowed): grouping only acts on lu-solve (64 RHS; trs_group_kernel, 16 active threads replacing cell-parallel trs_diag_kernel: expected loser). ridge-clf (binary, T=1) and the ridge-cv REFIT reach t_ridge_solve_best with count=1 (no grouping). The RidgeCV fold solve kf_solve_kernel (x_linear/device.mojo:3444) has one RHS per (fold, alpha) factor, so RHS grouping cannot apply there; the ridge-cv speedup is C13 (review section 3). ridge.mojo:195 and cells.mojo:1534 are host-only."
+    },
+    "c15_factor_solve": {
+      "define": "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "x_linear/bayes.mojo:902",
+        "x_linear/bayes.mojo:922"
+      ],
+      "binding": "_mojolearn_x_linear",
+      "bits_change": true,
+      "status": "kept",
+      "note": "ARD only; lead thread does a fixed-order dk triangular solve."
+    },
+    "c16_glm_fused": {
+      "define": "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C16_GLM_FUSED"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "x_linear/device.mojo:2946",
+        "x_linear/device.mojo:3292"
+      ],
+      "binding": "_mojolearn_x_linear",
+      "bits_change": true,
+      "status": "kept",
+      "note": "removes one launch per GLM iteration; one thread per row."
+    },
+    "c17_ls_trials": {
+      "define": "MOJOLEARN_CLASSICAL_C17_LS_TRIALS",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C17_LS_TRIALS"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "glm/impl/qn/qn_linesearch.mojo:171",
+        "glm/impl/qn/qn_linesearch.mojo:236"
+      ],
+      "binding": "_mojolearn_estimators",
+      "bits_change": false,
+      "status": "kept",
+      "note": "switches qn line search to 2 speculative trials accepted in original order; logreg-cv NOT reached (own L-BFGS)."
+    },
+    "c17_ovr": {
+      "define": "MOJOLEARN_CLASSICAL_C17_OVR",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C17_OVR"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "x_linear/device.mojo:1395"
+      ],
+      "binding": "_mojolearn_x_linear",
+      "bits_change": false,
+      "status": "kept",
+      "grid": "exclude",
+      "note": "UNREACHED on the board: SGD minibatch one-vs-rest with >1 problem only; board sgd-clf is binary."
+    },
+    "c19_sgd_chunk": {
+      "define": "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK",
+      "kind": "int_sweep",
+      "arms": {
+        "2048": [],
+        "128": [
+          "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
+        ],
+        "32": [
+          "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32"
+        ]
+      },
+      "default": "2048",
+      "source": [
+        "experiments/classical_identical_ideas/linear_controls.mojo:43",
+        "x_linear/device.mojo:1934"
+      ],
+      "binding": "_mojolearn_x_linear",
+      "bits_change": false,
+      "status": "split_from:C19_ORDERED_128+C19_ORDERED_32",
+      "grid": "exclude",
+      "note": "UNREACHED on the board: every SGD-family estimator defaults to the minibatch route (_sgd_mb_grid): SGDClassifier/Regressor batch 4096, Perceptron/PA 256, SGDOneClassSVM 4096 in IDENTICAL. SGD_PS_CHUNK only affects batch_size=0 fits. Compiled (rc=0) at 79aa4a19c for sm_89 OFF and =32 before the no-compile rule."
+    },
+    "c20_row_cache": {
+      "define": "MOJOLEARN_CLASSICAL_C20_ROW_CACHE",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C20_ROW_CACHE"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "svm/impl/kernelcache.mojo:194",
+        "svm/impl/kernelcache.mojo:322"
+      ],
+      "binding": "_mojolearn_svm",
+      "bits_change": true,
+      "status": "kept",
+      "grid": "exclude_recommended",
+      "note": "SHAPE VIOLATION: host loop over the n_ws (1024) working-set rows, 3 launches per row (~3072 serialized launches per SMO iteration) including a grid=1/block=1 publish kernel (kernelcache.mojo:337), and a full n_rows kernel row per row (10x the n_ws^2 tile work). Returns early, so it MASKS c20_pair_load (square tile site) and c22_triangle. Expected loser by construction; recommend delete without a run."
+    },
+    "c20_pair_load": {
+      "define": "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "svm/impl/kernelcache.mojo:347",
+        "svm/impl/kernelcache.mojo:410"
+      ],
+      "binding": "_mojolearn_svm",
+      "bits_change": false,
+      "status": "kept",
+      "note": "fused row+norm gather, parallel over n_ws*n_cols, no reduction."
+    },
+    "c21_extrema": {
+      "define": "MOJOLEARN_CLASSICAL_C21_EXTREMA",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C21_EXTREMA"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "svm/impl/smoblocksolve.mojo:201"
+      ],
+      "binding": "_mojolearn_svm",
+      "bits_change": false,
+      "status": "kept",
+      "note": "4-way shared-memory extrema tree under a total (value,key) order (in-block TPB=256 and cross-block). Skips the SAB_FMAX_HWMAX sabotage arms."
+    },
+    "c22_triangle": {
+      "define": "MOJOLEARN_CLASSICAL_C22_TRIANGLE",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_CLASSICAL_C22_TRIANGLE"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "svm/impl/distance/kernel_matrices.mojo:534"
+      ],
+      "binding": "_mojolearn_svm",
+      "bits_change": true,
+      "status": "kept",
+      "note": "fires only for the SMO square tile (m==n, same pointer); n*n grid with half idle, classical_dot fixed leaf tree. Not reached by kernel-ridge, kernel-pca, ocsvm (catalog claims removed)."
+    },
+    "c29_stream_topk": {
+      "define": "MOJOLEARN_C29_STREAM_TOPK",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_C29_STREAM_TOPK"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "neighbors/impl/detail/knn_brute_force.mojo:1945",
+        "neighbors/impl/detail/classical_stream_topk.mojo:28"
+      ],
+      "binding": "_mojolearn",
+      "bits_change": true,
+      "status": "kept",
+      "grid": "exclude_recommended",
+      "note": "SHAPE VIOLATION: one thread per query, serial over ALL n_index rows with O(k) insertion (classical:knn: 4k threads x 400k candidates x (d+64)); replaces the tiled distance + selection + fixed partial merge. Gate is `C29_STREAM_TOPK or C30_DIRECT_DISTANCE`, so C30 (lane L1) alone also turns it on. Expected loser by construction."
+    },
+    "c29_tile": {
+      "define": "MOJOLEARN_C29_TILE",
+      "kind": "int_sweep",
+      "arms": {
+        "256": [],
+        "128": [
+          "MOJOLEARN_C29_TILE=128"
+        ]
+      },
+      "default": "256",
+      "source": [
+        "experiments/classical_identical_ideas/graph_controls.mojo:13",
+        "neighbors/impl/detail/classical_stream_topk.mojo:28"
+      ],
+      "binding": "_mojolearn",
+      "bits_change": false,
+      "status": "split_from:C29_TILE_128",
+      "note": "pure column-loop chunking; meaningful only with c29_stream_topk (or C30) on."
+    },
+    "c52_pair_rows": {
+      "define": "MOJOLEARN_C52_PAIR_ROWS",
+      "kind": "arms",
+      "arms": {
+        "off": [],
+        "128": [
+          "MOJOLEARN_C52_PAIR_ROWS=128"
+        ],
+        "512": [
+          "MOJOLEARN_C52_PAIR_ROWS=512"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "experiments/classical_identical_ideas/stats_controls.mojo:16",
+        "kde/impl/neighbors/kernel_density.mojo:3548",
+        "kde/impl/neighbors/kernel_density.mojo:3699",
+        "kde/impl/neighbors/kernel_density.mojo:3792",
+        "kde/host/kde_oracle.mojo:295"
+      ],
+      "binding": "_mojolearn_estimators (+ _mojolearn_estimators_host: build the host column with the same define)",
+      "bits_change": true,
+      "status": "split_from:C52_PAIR_128+C52_PAIR_512",
+      "note": "leaf 256 -> 128|512 and pair_parts combine tree; host oracle follows the same define."
+    },
+    "c58_shared_prep": {
+      "define": "MOJOLEARN_C58_SHARED_PREP",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_C58_SHARED_PREP"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "holtwinters/impl/internal/hw_estimate.mojo:947",
+        "holtwinters/impl/internal/hw_estimate_launch.mojo:70"
+      ],
+      "binding": "_mojolearn_tsa",
+      "bits_change": false,
+      "status": "kept",
+      "note": "per-series scale computed once instead of by every thread of every start block; exact power-of-2 scale."
+    },
+    "c58_series4": {
+      "define": "MOJOLEARN_C58_SERIES4",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_C58_SERIES4"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "holtwinters/impl/internal/hw_estimate.mojo:703",
+        "holtwinters/impl/internal/hw_estimate_launch.mojo:126"
+      ],
+      "binding": "_mojolearn_tsa",
+      "bits_change": false,
+      "status": "kept",
+      "grid": "exclude",
+      "note": "UNREACHED on the board: serial estimate arm only (frequency + 5 > HW_EST_BLOCK=64); board ets uses seasonal_periods=24."
+    },
+    "c58_forecast4": {
+      "define": "MOJOLEARN_C58_FORECAST4",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_C58_FORECAST4"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "sequence/exec_device.mojo:236",
+        "sequence/exec_device.mojo:880"
+      ],
+      "binding": "_mojolearn_x_sequence",
+      "bits_change": false,
+      "status": "kept",
+      "note": "4 series per thread: 64 series -> 16 threads in one block; 4x less parallelism, likely slower. garch does NOT reach it (team_kernel)."
+    },
+    "c58_team_mib": {
+      "define": "MOJOLEARN_C58_TEAM_MIB",
+      "kind": "int_sweep",
+      "arms": {
+        "256": [],
+        "64": [
+          "MOJOLEARN_C58_TEAM_MIB=64"
+        ]
+      },
+      "default": "256",
+      "source": [
+        "experiments/classical_identical_ideas/stats_controls.mojo:34",
+        "sequence/fit_team_py.mojo:54"
+      ],
+      "binding": "_mojolearn_x_sequence",
+      "bits_change": false,
+      "status": "split_from:C58_TEAM64",
+      "grid": "exclude",
+      "note": "memory budget; at board size (64 series, prophet ~13.6 MB, garch ~6.8 MB) G=64 either way: no-op."
+    },
+    "c59_trial_state": {
+      "define": "MOJOLEARN_C59_TRIAL_STATE",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_C59_TRIAL_STATE"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "arima/impl/batched_kalman.mojo:673",
+        "arima/impl/fast_eval_ws.mojo:343"
+      ],
+      "binding": "_mojolearn_arima",
+      "bits_change": false,
+      "status": "kept",
+      "note": "one observation copy instead of N+1; indexing only."
+    },
+    "c60_lag4": {
+      "define": "MOJOLEARN_C60_LAG4",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_C60_LAG4"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "tsa/impl/timeSeries/stationarity.mojo:233",
+        "tsa/impl/select_d_fast.mojo:202"
+      ],
+      "binding": "_mojolearn_tsa",
+      "bits_change": false,
+      "status": "kept",
+      "note": "4 adjacent cells per thread, ascending per-cell sums; autoarima d=0 round only (max_d=1)."
+    },
+    "c61_same_component_skip": {
+      "define": "MOJOLEARN_C61_SAME_COMPONENT_SKIP",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_C61_SAME_COMPONENT_SKIP"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "experiments/classical_identical_ideas/graph_controls.mojo:43",
+        "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:290",
+        "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:325"
+      ],
+      "binding": "_mojolearn_hdbscan",
+      "bits_change": false,
+      "status": "new",
+      "note": "NEW (this lane, NOT COMPILED): in sparse_mr_search_tiled_kernel (NV/AMD default arm) skip a j tile when every listed point of the block and every j of the tile share one component; those cells are already excluded by the epilogue (cj != ci), so outputs are identical. Block-uniform flag via two barriers; per-block uniform-component scan is one thread over the fixed SMR_TI (not a runtime size). Gain depends on later Boruvka rounds; unmeasured."
+    },
+    "arima_search_reuse": {
+      "define": "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE",
+      "kind": "switch",
+      "arms": {
+        "off": [],
+        "on": [
+          "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE"
+        ]
+      },
+      "default": "off",
+      "source": [
+        "arima/impl/fast_order_search.mojo:125",
+        "python/mojolearn/_x_sequence_autoarima.py"
+      ],
+      "binding": "_mojolearn_arima",
+      "bits_change": false,
+      "status": "kept",
+      "note": "EXISTING define (name says FAST but it is gated only on ARIMA_ORDER_BATCH, which is on under IDENTICAL on every vendor). AutoARIMA adopts the order search fit instead of refitting; aic/bic come from the device ic kernel (lane arima-ics). Apple FAST: taxi-hourly 16386 -> 9872 ms. Must confirm IDENTICAL outputs equal the refit (ID check) before keeping."
+    }
+  },
+  "algorithms": {
+    "expanded:standard-scaler": {
+      "binding": "_mojolearn_preprocessing",
+      "route": "fit: StandardScaler.fit -> standard_fit_direct -> preprocessing/estimator.mojo:253 -> standard_chunks_kernel[False]",
+      "controls": [
+        "c02_stats_pair"
+      ],
+      "interaction_groups": []
+    },
+    "classical:ols": {
+      "binding": "_mojolearn_x_decomp",
+      "route": "fit: LinearRegression.fit -> x_decomp_ols_tsqr_r -> ols_tsqr_factor -> col_sums_pair_buf (x_decomp/device.mojo:4145)",
+      "controls": [
+        "c02_linear_pair"
+      ],
+      "interaction_groups": []
+    },
+    "more:ridge": {
+      "binding": "_mojolearn_estimators",
+      "route": "fit: Ridge.fit -> _classical_xy_means -> lm_col_sums_pair -> col_sums_pair_device",
+      "controls": [
+        "c02_linear_pair"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:lu-solve": {
+      "binding": "_mojolearn_x_decomp",
+      "route": "solve -> x_decomp_lu_gesv -> launch_lu_solve -> launch_trisolve -> launch_trs_tri (x_decomp/device.mojo:2143)",
+      "controls": [
+        "c14_group_rhs"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:ridge-clf": {
+      "binding": "_mojolearn_x_linear",
+      "route": "fit: _ridge_run -> x_linear_fit(ALGO_RIDGE) -> ridge_fit_grid -> ra_best_kernel -> t_ridge_solve_best (x_linear/ridge.mojo:294), T=1",
+      "controls": [
+        "c14_group_rhs"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:ridge-cv": {
+      "binding": "_mojolearn_x_linear",
+      "route": "fit: _ridge_kfold_grid -> kf_solve_kernel (no C14) ; refit -> t_ridge_solve_best (C14, T=1)",
+      "controls": [
+        "c14_group_rhs"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:ard": {
+      "binding": "_mojolearn_x_linear",
+      "route": "fit: ARDRegression -> ard_fit_grid -> _ard_sc_body -> _t_ard_coef (x_linear/bayes.mojo:902)",
+      "controls": [
+        "c15_factor_solve"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:poisson": {
+      "binding": "_mojolearn_x_linear",
+      "route": "fit: _GLMBase -> _glm_fit_grid -> glm_obj_map_kernel (x_linear/device.mojo:2946)",
+      "controls": [
+        "c16_glm_fused"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:gamma": {
+      "binding": "_mojolearn_x_linear",
+      "route": "fit: _GLMBase -> _glm_fit_grid -> glm_obj_map_kernel (x_linear/device.mojo:2946)",
+      "controls": [
+        "c16_glm_fused"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:tweedie": {
+      "binding": "_mojolearn_x_linear",
+      "route": "fit: _GLMBase -> _glm_fit_grid -> glm_obj_map_kernel (x_linear/device.mojo:2946)",
+      "controls": [
+        "c16_glm_fused"
+      ],
+      "interaction_groups": []
+    },
+    "more:logreg": {
+      "binding": "_mojolearn_estimators",
+      "route": "fit: qn_fit/qn_fit_ovr -> qn_minimize -> min_lbfgs -> ls_backtrack (glm/impl/qn/qn_linesearch.mojo:171)",
+      "controls": [
+        "c17_ls_trials"
+      ],
+      "interaction_groups": []
+    },
+    "more:linearsvc": {
+      "binding": "_mojolearn_estimators",
+      "route": "fit: qn_fit/qn_fit_ovr -> qn_minimize -> min_lbfgs -> ls_backtrack (glm/impl/qn/qn_linesearch.mojo:171)",
+      "controls": [
+        "c17_ls_trials"
+      ],
+      "interaction_groups": []
+    },
+    "more:linearsvr": {
+      "binding": "_mojolearn_estimators",
+      "route": "fit: qn_fit/qn_fit_ovr -> qn_minimize -> min_lbfgs -> ls_backtrack (glm/impl/qn/qn_linesearch.mojo:171)",
+      "controls": [
+        "c17_ls_trials"
+      ],
+      "interaction_groups": []
+    },
+    "classical:svc": {
+      "binding": "_mojolearn_svm",
+      "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_ROW_CACHE, C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
+      "controls": [
+        "c20_row_cache",
+        "c20_pair_load",
+        "c21_extrema",
+        "c22_triangle"
+      ],
+      "interaction_groups": [
+        [
+          "c20_row_cache",
+          "c20_pair_load",
+          "c21_extrema",
+          "c22_triangle"
+        ]
+      ],
+      "note": "C20_ROW_CACHE masks C22 and the square-tile C20_PAIR_LOAD site. Recommended grid without row_cache: pair_load x extrema x triangle = 8 arms."
+    },
+    "more:svr": {
+      "binding": "_mojolearn_svm",
+      "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_ROW_CACHE, C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
+      "controls": [
+        "c20_row_cache",
+        "c20_pair_load",
+        "c21_extrema",
+        "c22_triangle"
+      ],
+      "interaction_groups": [
+        [
+          "c20_row_cache",
+          "c20_pair_load",
+          "c21_extrema",
+          "c22_triangle"
+        ]
+      ],
+      "note": "C20_ROW_CACHE masks C22 and the square-tile C20_PAIR_LOAD site. Recommended grid without row_cache: pair_load x extrema x triangle = 8 arms."
+    },
+    "classical:knn": {
+      "binding": "_mojolearn",
+      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> knn_brute_force.mojo:1945 gate",
+      "controls": [
+        "c29_stream_topk",
+        "c29_tile"
+      ],
+      "interaction_groups": [
+        [
+          "c29_stream_topk",
+          "c29_tile",
+          "C30_DIRECT_DISTANCE(lane L1, knn split)"
+        ]
+      ]
+    },
+    "more:knn-clf": {
+      "binding": "_mojolearn",
+      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> knn_brute_force.mojo:1945 gate",
+      "controls": [
+        "c29_stream_topk",
+        "c29_tile"
+      ],
+      "interaction_groups": [
+        [
+          "c29_stream_topk",
+          "c29_tile",
+          "C30_DIRECT_DISTANCE(lane L1, knn split)"
+        ]
+      ]
+    },
+    "more:knn-reg": {
+      "binding": "_mojolearn",
+      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> knn_brute_force.mojo:1945 gate",
+      "controls": [
+        "c29_stream_topk",
+        "c29_tile"
+      ],
+      "interaction_groups": [
+        [
+          "c29_stream_topk",
+          "c29_tile",
+          "C30_DIRECT_DISTANCE(lane L1, knn split)"
+        ]
+      ]
+    },
+    "classical:kde": {
+      "binding": "_mojolearn_estimators",
+      "route": "score_samples: kde_score_samples_binding -> kernel_density.mojo:4029 chunk-LSE pass -> kde_chunk_rows_for (:3548) -> reduce kernels (:3699, :3792)",
+      "controls": [
+        "c52_pair_rows"
+      ],
+      "interaction_groups": []
+    },
+    "more:ets": {
+      "binding": "_mojolearn_tsa",
+      "route": "fit: ExponentialSmoothing -> holtwinters_fit -> runner.mojo:354 -> hw_estimate_launch.mojo:58 (parallel arm, d=29<=64)",
+      "controls": [
+        "c58_shared_prep"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:theta": {
+      "binding": "_mojolearn_x_sequence",
+      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
+      "controls": [
+        "c58_forecast4"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:optimized-theta": {
+      "binding": "_mojolearn_x_sequence",
+      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
+      "controls": [
+        "c58_forecast4"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:dynamic-theta": {
+      "binding": "_mojolearn_x_sequence",
+      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
+      "controls": [
+        "c58_forecast4"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:dynamic-optimized-theta": {
+      "binding": "_mojolearn_x_sequence",
+      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
+      "controls": [
+        "c58_forecast4"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:auto-theta": {
+      "binding": "_mojolearn_x_sequence",
+      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
+      "controls": [
+        "c58_forecast4"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:damped-ets": {
+      "binding": "_mojolearn_x_sequence",
+      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
+      "controls": [
+        "c58_forecast4"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:garch": {
+      "binding": "_mojolearn_x_sequence",
+      "route": "fit: garch_binding/prophet -> fit_team_py _group -> launch_team -> team_kernel",
+      "controls": [
+        "c58_team_mib"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:prophet": {
+      "binding": "_mojolearn_x_sequence",
+      "route": "fit: garch_binding/prophet -> fit_team_py _group -> launch_team -> team_kernel",
+      "controls": [
+        "c58_team_mib"
+      ],
+      "interaction_groups": []
+    },
+    "more:arima": {
+      "binding": "_mojolearn_arima",
+      "route": "fit: ARIMA.fit -> arima/estimator.mojo:511 batched_fit_x -> batched_fit.mojo:498 -> FastEvalWS loop kernel (batched_kalman.mojo:673)",
+      "controls": [
+        "c59_trial_state"
+      ],
+      "interaction_groups": []
+    },
+    "expanded:autoarima": {
+      "binding": "_mojolearn_tsa (select_d) + _mojolearn_arima (fits)",
+      "route": "select_d -> select_d_host -> auto_arima.mojo:74 -> select_d_fast (C60_LAG4, stationarity.mojo:233); order search -> fast_order_search (search reuse) ; per-order ARIMA.fit (C59)",
+      "controls": [
+        "c60_lag4",
+        "c59_trial_state",
+        "arima_search_reuse"
+      ],
+      "interaction_groups": [
+        [
+          "c59_trial_state",
+          "arima_search_reuse"
+        ]
+      ]
+    },
+    "classical:hdbscan": {
+      "binding": "_mojolearn_hdbscan",
+      "route": "fit: hdbscan/impl/runner.mojo:316 -> single_linkage.mojo:201 -> sparse_mr_mst.mojo sparse_mr_search_tiled_kernel (SMR_TILED, NV/AMD default)",
+      "controls": [
+        "c61_same_component_skip"
+      ],
+      "interaction_groups": [
+        [
+          "c61_same_component_skip",
+          "C30_DIRECT_DISTANCE(lane L1, graph split)"
+        ]
+      ]
+    }
+  },
+  "removed": [
+    {
+      "define": "MOJOLEARN_C60_DIFF_REUSE",
+      "reason": "dead code: gated d_ == 2 branch unreachable (select_d loops d_ < d_max <= 2 - D). Code, arms (diff_reuse, combo, combined) deleted; guard rejects the define."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C19_ORDERED_128",
+      "reason": "merged into MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128 (guard rejects the old name)"
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C19_ORDERED_32",
+      "reason": "merged into MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32"
+    },
+    {
+      "define": "MOJOLEARN_C52_PAIR_128",
+      "reason": "merged into MOJOLEARN_C52_PAIR_ROWS=128"
+    },
+    {
+      "define": "MOJOLEARN_C52_PAIR_512",
+      "reason": "merged into MOJOLEARN_C52_PAIR_ROWS=512"
+    },
+    {
+      "define": "MOJOLEARN_C29_TILE_128",
+      "reason": "merged into MOJOLEARN_C29_TILE=128"
+    },
+    {
+      "define": "MOJOLEARN_C58_TEAM64",
+      "reason": "merged into MOJOLEARN_C58_TEAM_MIB=64"
+    },
+    {
+      "define": "catalog arms",
+      "reason": "C58 16 arms -> 5 (4 singles + combined; the 4 controls touch disjoint kernels/workloads, so the 11 combos measure nothing new). Duplicate combo arms equal to :combined dropped for C02, C05, C17, C20."
+    }
+  ],
+  "owed_removal_ab": [
+    {
+      "define": "MOJOLEARN_LEGACY_SHAPE_KNN_BOARD",
+      "source": "neighbors/impl/detail/knn_brute_force.mojo:198",
+      "A": "default build (size rule knn_large_request(n_index, n_queries): n_queries>=1024 and n_index*n_queries>=2^28)",
+      "B": [
+        "MOJOLEARN_LEGACY_SHAPE_KNN_BOARD"
+      ],
+      "effect": "gates only NVIDIA vector index loads (:1003) and Apple preflight metadata (:1014), both bit-neutral; no effect on AMD. classical:knn (k=64, sqrt metric) flips: A vector on, B off. knn-clf/reg (uniform weights, unrooted) unaffected.",
+      "vendors": [
+        "nvidia"
+      ],
+      "shapes": "neighbors of 400000x4000x32: n_index {300000, 400000, 500000}, n_queries {3000, 4000, 5000}, d {32, 64}, k {10, 15, 64}, metric euclidean (sqrt), plus one non-board dataset (e.g. a 1M x 16 random index)",
+      "status": "RUN OWED (not expressible as one lq RACE line: needs a committed neighbor-shape script); delete the define after it lands"
+    }
+  ],
+  "ideas": [
+    {
+      "workload": "classical:svc",
+      "idea": "raise the fused gradient update cap IUF_MAX_K 64 -> 128 (svm/.../idn_update_f.mojo:49,176): one leaf, no fold, bits unchanged",
+      "why_not_now": "board svc data is d=11 (already <=64) or 220 (>128): no board gain"
+    },
+    {
+      "workload": "classical:svc",
+      "idea": "top-k working-set pick instead of a full stable radix sort of n_train keys every SMO iteration (workingset.mojo:307-316); fused update for k>128 folding leaves in gemm/contract order",
+      "why_not_now": "bigger rewrite; needs fixed tie order design"
+    },
+    {
+      "workload": "classical:hdbscan",
+      "idea": "smr_scan_blocks_kernel is ONE block over runtime g=m/256 (sparse_mr_mst.mojo ~:690, launched ~:1145): replace with a two-level multi-block scan (rule violation, small cost)",
+      "why_not_now": "owner lane for hdbscan (C34) should fix; flagged"
+    },
+    {
+      "workload": "classical:hdbscan",
+      "idea": "prune candidates j whose core-distance key exceeds the row upper bound",
+      "why_not_now": "needs care around the NaN refusal path"
+    },
+    {
+      "workload": "umap",
+      "idea": "degree-ordered vertex permutation in the epoch kernels (optimizer_identical_device.mojo:142) built once with core/fast_radix_sort.mojo: same per-vertex chain, less divergence",
+      "why_not_now": "gain uncertain; the bigger lever is the quadratic exact kNN shared with neighbors"
+    },
+    {
+      "workload": "more:arima / expanded:autoarima",
+      "idea": "parallelize each member Kalman step across lanes (rd^2 covariance update entries, same chain per entry); the filter is one thread per (series x gradient member) serial over n_obs",
+      "why_not_now": "rewrite of the batched_kalman loop kernel"
+    }
+  ],
+  "findings": [
+    "No IDENTICAL GPU board times exist for svc, hdbscan, umap or arima in measurements/20261006; they must be measured before ranking ideas.",
+    "Main checkout pixi env (~/CascadeProjects/mojolearn/.pixi) fails `mojo build` with \"unable to locate module std\"; worktree envs work.",
+    "catalog.json, build_plan.json and build_coverage.json were edited surgically (arms removed / workloads narrowed); matrix.json.gz was NOT regenerated: run `python3 tools/six_lane_ab.py refresh` at integration (it rewrote ~120k lines on this lean worktree, so it was not committed here)."
+  ]
+}

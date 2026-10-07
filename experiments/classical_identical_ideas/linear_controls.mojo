@@ -60,8 +60,12 @@ comptime C17_LS_TRIALS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C17_L
 # Evidence: experiments/six_lane_integration/measurements/20261006/retained-pairs.json
 # and BOARD.md; C13+C18 quality failures do not establish C18 as their cause.
 comptime C18_RESIDUAL_NEXT = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT"]()
-comptime C19_ORDERED_128 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C19_ORDERED_128"]()
-comptime C19_ORDERED_32 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C19_ORDERED_32"]()
+# C19: ONE integer sweep (was ORDERED_128/ORDERED_32, two defines where 32
+# silently won when both were on). SGD_PS samples per ordered launch; legal
+# set {32, 128, 2048}; absent = 2048 = incumbent. Sample order, time index and
+# per-sample updates are unchanged; only the launch/witness granularity moves.
+# Legal set enforced in core/six_lane_experiment_guards.mojo.
+comptime C19_SGD_CHUNK = get_defined_int["MOJOLEARN_CLASSICAL_C19_SGD_CHUNK", 2048]() if CLASSICAL_IDN else 2048
 comptime C20_ROW_CACHE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_ROW_CACHE"]()
 comptime C20_PAIR_LOAD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"]()
 comptime C21_EXTREMA = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"]()

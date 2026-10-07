@@ -207,7 +207,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF64=1",
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -226,7 +226,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_128": [
+            "MOJOLEARN_C52_PAIR_ROWS=128": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF64": [
@@ -255,7 +255,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF64=1",
-              "MOJOLEARN_C52_PAIR_512=1"
+              "MOJOLEARN_C52_PAIR_ROWS=512"
             ],
             "environment": {},
             "runtime": {}
@@ -274,7 +274,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_512": [
+            "MOJOLEARN_C52_PAIR_ROWS=512": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF64": [
@@ -303,7 +303,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF128=1",
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -322,7 +322,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_128": [
+            "MOJOLEARN_C52_PAIR_ROWS=128": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF128": [
@@ -351,7 +351,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_CLASSICAL_C01_LEAF128=1",
-              "MOJOLEARN_C52_PAIR_512=1"
+              "MOJOLEARN_C52_PAIR_ROWS=512"
             ],
             "environment": {},
             "runtime": {}
@@ -370,7 +370,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_512": [
+            "MOJOLEARN_C52_PAIR_ROWS=512": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF128": [
@@ -694,9 +694,7 @@
       "affected_workloads": [
         "expanded:standard-scaler",
         "classical:ols",
-        "more:ridge",
-        "expanded:gaussian-nb",
-        "classical:pca"
+        "more:ridge"
       ],
       "arms": [
         {
@@ -735,11 +733,7 @@
           ],
           "source_selectable": true,
           "workloads": [
-            "expanded:standard-scaler",
-            "classical:ols",
-            "more:ridge",
-            "expanded:gaussian-nb",
-            "classical:pca"
+            "expanded:standard-scaler"
           ]
         },
         {
@@ -779,59 +773,8 @@
           ],
           "source_selectable": true,
           "workloads": [
-            "expanded:standard-scaler",
             "classical:ols",
-            "more:ridge",
-            "expanded:gaussian-nb",
-            "classical:pca"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_CLASSICAL_C02_STATS_PAIR=1",
-              "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
-            ],
-            "MOJOLEARN_CLASSICAL_C02_STATS_PAIR": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
-            ]
-          },
-          "id": "I.C.C02:combo_paired_stats_linear_pair",
-          "name": "combo_paired_stats_linear_pair",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
-            "Weighted linear means keep incumbent scaling and sums. GPU schedules both exact streams together; host uses its incumbent exact sums under the same new binding."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "expanded:standard-scaler",
-            "classical:ols",
-            "more:ridge",
-            "expanded:gaussian-nb",
-            "classical:pca"
+            "more:ridge"
           ]
         },
         {
@@ -877,9 +820,7 @@
           "workloads": [
             "expanded:standard-scaler",
             "classical:ols",
-            "more:ridge",
-            "expanded:gaussian-nb",
-            "classical:pca"
+            "more:ridge"
           ]
         }
       ],
@@ -959,6 +900,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -1231,8 +1175,7 @@
       ],
       "affected_workloads": [
         "expanded:sgd-reg@regression_report",
-        "expanded:sgd-clf@ranking_report",
-        "classical:ols"
+        "expanded:sgd-clf@ranking_report"
       ],
       "arms": [
         {
@@ -1272,8 +1215,7 @@
           "source_selectable": true,
           "workloads": [
             "expanded:sgd-reg@regression_report",
-            "expanded:sgd-clf@ranking_report",
-            "classical:ols"
+            "expanded:sgd-clf@ranking_report"
           ]
         },
         {
@@ -1312,57 +1254,7 @@
             "Default TSQR does not allocate these Gram/inverse buffers; do not claim its reach. No cross-call cache."
           ],
           "source_selectable": true,
-          "workloads": [
-            "expanded:sgd-reg@regression_report",
-            "expanded:sgd-clf@ranking_report",
-            "classical:ols"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH=1",
-              "MOJOLEARN_CLASSICAL_C05_OLS_PHASE=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_CLASSICAL_C05_OLS_PHASE": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
-            ],
-            "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
-            ]
-          },
-          "id": "I.C.C05:combo_phase_scratch_ols_phase",
-          "name": "combo_phase_scratch_ols_phase",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
-            "Default TSQR does not allocate these Gram/inverse buffers; do not claim its reach. No cross-call cache."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "expanded:sgd-reg@regression_report",
-            "expanded:sgd-clf@ranking_report",
-            "classical:ols"
-          ]
+          "workloads": []
         },
         {
           "A": {
@@ -1406,8 +1298,7 @@
           "source_selectable": true,
           "workloads": [
             "expanded:sgd-reg@regression_report",
-            "expanded:sgd-clf@ranking_report",
-            "classical:ols"
+            "expanded:sgd-clf@ranking_report"
           ]
         }
       ],
@@ -1480,6 +1371,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -3462,11 +3356,6 @@
         "repeated linear solves"
       ],
       "affected_workloads": [
-        "classical:ols",
-        "more:ridge",
-        "more:gpr",
-        "expanded:pls",
-        "expanded:lstsq",
         "expanded:lu-solve",
         "expanded:ridge-clf",
         "expanded:ridge-cv"
@@ -3510,11 +3399,6 @@
           ],
           "source_selectable": true,
           "workloads": [
-            "classical:ols",
-            "more:ridge",
-            "more:gpr",
-            "expanded:pls",
-            "expanded:lstsq",
             "expanded:lu-solve",
             "expanded:ridge-clf",
             "expanded:ridge-cv"
@@ -3619,6 +3503,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -3629,11 +3516,7 @@
         "covariance consumers with solve-only needs"
       ],
       "affected_workloads": [
-        "expanded:bayesian-ridge",
-        "expanded:ard",
-        "more:ridge",
-        "expanded:min-cov-det",
-        "expanded:elliptic-envelope"
+        "expanded:ard"
       ],
       "arms": [
         {
@@ -3673,11 +3556,7 @@
           ],
           "source_selectable": true,
           "workloads": [
-            "expanded:bayesian-ridge",
-            "expanded:ard",
-            "more:ridge",
-            "expanded:min-cov-det",
-            "expanded:elliptic-envelope"
+            "expanded:ard"
           ]
         }
       ],
@@ -3744,6 +3623,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -3755,9 +3637,6 @@
         "LinearSVC/SVR"
       ],
       "affected_workloads": [
-        "more:logreg",
-        "more:linearsvc",
-        "more:linearsvr",
         "expanded:poisson",
         "expanded:gamma",
         "expanded:tweedie"
@@ -3800,9 +3679,6 @@
           ],
           "source_selectable": true,
           "workloads": [
-            "more:logreg",
-            "more:linearsvc",
-            "more:linearsvr",
             "expanded:poisson",
             "expanded:gamma",
             "expanded:tweedie"
@@ -3876,6 +3752,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -3886,8 +3765,7 @@
       "affected_workloads": [
         "more:logreg",
         "more:linearsvc",
-        "more:linearsvr",
-        "expanded:logreg-cv"
+        "more:linearsvr"
       ],
       "arms": [
         {
@@ -3927,12 +3805,7 @@
             "Do not claim unchanged old I12 OVR/exact-trial experiments as new."
           ],
           "source_selectable": true,
-          "workloads": [
-            "more:logreg",
-            "more:linearsvc",
-            "more:linearsvr",
-            "expanded:logreg-cv"
-          ]
+          "workloads": []
         },
         {
           "A": {
@@ -3974,56 +3847,7 @@
           "workloads": [
             "more:logreg",
             "more:linearsvc",
-            "more:linearsvr",
-            "expanded:logreg-cv"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_CLASSICAL_C17_OVR=1",
-              "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_CLASSICAL_C17_LS_TRIALS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
-            ],
-            "MOJOLEARN_CLASSICAL_C17_OVR": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
-            ]
-          },
-          "id": "I.C.C17:combo_ovr_waves_line_search_pairs",
-          "name": "combo_ovr_waves_line_search_pairs",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "OVR arm changes scheduling waves, not full model-state allocation.",
-            "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
-            "Do not claim unchanged old I12 OVR/exact-trial experiments as new."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:logreg",
-            "more:linearsvc",
-            "more:linearsvr",
-            "expanded:logreg-cv"
+            "more:linearsvr"
           ]
         },
         {
@@ -4070,8 +3894,7 @@
           "workloads": [
             "more:logreg",
             "more:linearsvc",
-            "more:linearsvr",
-            "expanded:logreg-cv"
+            "more:linearsvr"
           ]
         }
       ],
@@ -4141,6 +3964,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -4616,19 +4442,12 @@
         "PassiveAggressive",
         "SGDOneClassSVM"
       ],
-      "affected_workloads": [
-        "expanded:sgd-clf",
-        "expanded:sgd-reg",
-        "expanded:perceptron",
-        "expanded:pa-clf",
-        "expanded:pa-reg",
-        "expanded:sgd-ocsvm"
-      ],
+      "affected_workloads": [],
       "arms": [
         {
           "A": {
             "defines": [
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1"
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
             ],
             "environment": {},
             "runtime": {}
@@ -4647,7 +4466,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_CLASSICAL_C19_ORDERED_128": [
+            "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128": [
               "experiments/classical_identical_ideas/linear_controls.mojo"
             ]
           },
@@ -4661,19 +4480,12 @@
             "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter."
           ],
           "source_selectable": true,
-          "workloads": [
-            "expanded:sgd-clf",
-            "expanded:sgd-reg",
-            "expanded:perceptron",
-            "expanded:pa-clf",
-            "expanded:pa-reg",
-            "expanded:sgd-ocsvm"
-          ]
+          "workloads": []
         },
         {
           "A": {
             "defines": [
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_32=1"
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32"
             ],
             "environment": {},
             "runtime": {}
@@ -4692,7 +4504,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_CLASSICAL_C19_ORDERED_32": [
+            "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32": [
               "experiments/classical_identical_ideas/linear_controls.mojo"
             ]
           },
@@ -4706,14 +4518,7 @@
             "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter."
           ],
           "source_selectable": true,
-          "workloads": [
-            "expanded:sgd-clf",
-            "expanded:sgd-reg",
-            "expanded:perceptron",
-            "expanded:pa-clf",
-            "expanded:pa-reg",
-            "expanded:sgd-ocsvm"
-          ]
+          "workloads": []
         }
       ],
       "bindings": [],
@@ -4777,6 +4582,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -4787,8 +4595,7 @@
       ],
       "affected_workloads": [
         "classical:svc",
-        "more:svr",
-        "expanded:ocsvm"
+        "more:svr"
       ],
       "arms": [
         {
@@ -4831,8 +4638,7 @@
           "source_selectable": true,
           "workloads": [
             "classical:svc",
-            "more:svr",
-            "expanded:ocsvm"
+            "more:svr"
           ]
         },
         {
@@ -4875,56 +4681,7 @@
           "source_selectable": true,
           "workloads": [
             "classical:svc",
-            "more:svr",
-            "expanded:ocsvm"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_CLASSICAL_C20_ROW_CACHE=1",
-              "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
-            ],
-            "MOJOLEARN_CLASSICAL_C20_ROW_CACHE": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
-            ]
-          },
-          "id": "I.C.C20:combo_row_cache_pair_load",
-          "name": "combo_row_cache_pair_load",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
-            "Unsupported precomputed kernel routes preserve incumbent handling.",
-            "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
-            "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "classical:svc",
-            "more:svr",
-            "expanded:ocsvm"
+            "more:svr"
           ]
         },
         {
@@ -4971,8 +4728,7 @@
           "source_selectable": true,
           "workloads": [
             "classical:svc",
-            "more:svr",
-            "expanded:ocsvm"
+            "more:svr"
           ]
         }
       ],
@@ -5045,6 +4801,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -5055,8 +4814,7 @@
       ],
       "affected_workloads": [
         "classical:svc",
-        "more:svr",
-        "expanded:ocsvm"
+        "more:svr"
       ],
       "arms": [
         {
@@ -5098,8 +4856,7 @@
           "source_selectable": true,
           "workloads": [
             "classical:svc",
-            "more:svr",
-            "expanded:ocsvm"
+            "more:svr"
           ]
         }
       ],
@@ -5167,6 +4924,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -5177,11 +4937,8 @@
         "covariance and classical Gram users"
       ],
       "affected_workloads": [
-        "more:kernel-ridge",
-        "expanded:kernel-pca",
         "classical:svc",
-        "more:svr",
-        "expanded:ocsvm"
+        "more:svr"
       ],
       "arms": [
         {
@@ -5223,11 +4980,8 @@
           ],
           "source_selectable": true,
           "workloads": [
-            "more:kernel-ridge",
-            "expanded:kernel-pca",
             "classical:svc",
-            "more:svr",
-            "expanded:ocsvm"
+            "more:svr"
           ]
         }
       ],
@@ -5301,6 +5055,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -6996,12 +6753,7 @@
       "affected_workloads": [
         "classical:knn",
         "more:knn-clf",
-        "more:knn-reg",
-        "expanded:lof",
-        "expanded:label-propagation",
-        "expanded:label-spreading",
-        "expanded:isomap",
-        "expanded:lle"
+        "more:knn-reg"
       ],
       "arms": [
         {
@@ -7042,19 +6794,14 @@
           "workloads": [
             "classical:knn",
             "more:knn-clf",
-            "more:knn-reg",
-            "expanded:lof",
-            "expanded:label-propagation",
-            "expanded:label-spreading",
-            "expanded:isomap",
-            "expanded:lle"
+            "more:knn-reg"
           ]
         },
         {
           "A": {
             "defines": [
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1"
+              "MOJOLEARN_C29_TILE=128"
             ],
             "environment": {},
             "runtime": {}
@@ -7076,7 +6823,7 @@
             "MOJOLEARN_C29_STREAM_TOPK": [
               "experiments/classical_identical_ideas/graph_controls.mojo"
             ],
-            "MOJOLEARN_C29_TILE_128": [
+            "MOJOLEARN_C29_TILE=128": [
               "experiments/classical_identical_ideas/graph_controls.mojo"
             ]
           },
@@ -7092,19 +6839,14 @@
           "workloads": [
             "classical:knn",
             "more:knn-clf",
-            "more:knn-reg",
-            "expanded:lof",
-            "expanded:label-propagation",
-            "expanded:label-spreading",
-            "expanded:isomap",
-            "expanded:lle"
+            "more:knn-reg"
           ]
         },
         {
           "A": {
             "defines": [
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1"
+              "MOJOLEARN_C29_TILE=128"
             ],
             "environment": {},
             "runtime": {}
@@ -7126,7 +6868,7 @@
             "MOJOLEARN_C29_STREAM_TOPK": [
               "experiments/classical_identical_ideas/graph_controls.mojo"
             ],
-            "MOJOLEARN_C29_TILE_128": [
+            "MOJOLEARN_C29_TILE=128": [
               "experiments/classical_identical_ideas/graph_controls.mojo"
             ]
           },
@@ -7142,12 +6884,7 @@
           "workloads": [
             "classical:knn",
             "more:knn-clf",
-            "more:knn-reg",
-            "expanded:lof",
-            "expanded:label-propagation",
-            "expanded:label-spreading",
-            "expanded:isomap",
-            "expanded:lle"
+            "more:knn-reg"
           ]
         }
       ],
@@ -7216,6 +6953,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -9880,7 +9620,7 @@
         {
           "A": {
             "defines": [
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -9899,7 +9639,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_128": [
+            "MOJOLEARN_C52_PAIR_ROWS=128": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -9920,7 +9660,7 @@
         {
           "A": {
             "defines": [
-              "MOJOLEARN_C52_PAIR_512=1"
+              "MOJOLEARN_C52_PAIR_ROWS=512"
             ],
             "environment": {},
             "runtime": {}
@@ -9939,7 +9679,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C52_PAIR_512": [
+            "MOJOLEARN_C52_PAIR_ROWS=512": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -10026,6 +9766,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -10985,15 +10728,7 @@
           ],
           "source_selectable": true,
           "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
+            "more:ets"
           ]
         },
         {
@@ -11033,17 +10768,7 @@
             "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
           ],
           "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
+          "workloads": []
         },
         {
           "A": {
@@ -11083,21 +10808,18 @@
           ],
           "source_selectable": true,
           "workloads": [
-            "more:ets",
             "expanded:theta",
             "expanded:optimized-theta",
             "expanded:dynamic-theta",
             "expanded:dynamic-optimized-theta",
             "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
+            "expanded:damped-ets"
           ]
         },
         {
           "A": {
             "defines": [
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11116,7 +10838,7 @@
           "conflicts": [],
           "declared_runtime": {},
           "define_sources": {
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -11132,559 +10854,6 @@
           ],
           "source_selectable": true,
           "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_SERIES4=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_SERIES4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_SHARED_PREP": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_hw_scale_once_hw_series4",
-          "name": "combo_hw_scale_once_hw_series4",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_FORECAST4=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_FORECAST4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_SHARED_PREP": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_hw_scale_once_forecast_series4",
-          "name": "combo_hw_scale_once_forecast_series4",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_FORECAST4=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_FORECAST4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_SERIES4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_hw_series4_forecast_series4",
-          "name": "combo_hw_series4_forecast_series4",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_FORECAST4=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_FORECAST4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_SERIES4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_SHARED_PREP": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_hw_scale_once_hw_series4_forecast_series4",
-          "name": "combo_hw_scale_once_hw_series4_forecast_series4",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_SHARED_PREP": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_TEAM64": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_hw_scale_once_team64",
-          "name": "combo_hw_scale_once_team64",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_SERIES4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_TEAM64": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_hw_series4_team64",
-          "name": "combo_hw_series4_team64",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_SERIES4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_SHARED_PREP": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_TEAM64": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_hw_scale_once_hw_series4_team64",
-          "name": "combo_hw_scale_once_hw_series4_team64",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_FORECAST4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_TEAM64": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_forecast_series4_team64",
-          "name": "combo_forecast_series4_team64",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_FORECAST4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_SHARED_PREP": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_TEAM64": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_hw_scale_once_forecast_series4_team64",
-          "name": "combo_hw_scale_once_forecast_series4_team64",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_FORECAST4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_SERIES4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_TEAM64": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_hw_series4_forecast_series4_team64",
-          "name": "combo_hw_series4_forecast_series4_team64",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
             "expanded:garch",
             "expanded:prophet"
           ]
@@ -11695,7 +10864,7 @@
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
+              "MOJOLEARN_C58_TEAM_MIB=64"
             ],
             "environment": {},
             "runtime": {}
@@ -11723,68 +10892,7 @@
             "MOJOLEARN_C58_SHARED_PREP": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ],
-            "MOJOLEARN_C58_TEAM64": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C58:combo_hw_scale_once_hw_series4_forecast_series4_team64",
-          "name": "combo_hw_scale_once_hw_series4_forecast_series4_team64",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
-            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
-            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "more:ets",
-            "expanded:theta",
-            "expanded:optimized-theta",
-            "expanded:dynamic-theta",
-            "expanded:dynamic-optimized-theta",
-            "expanded:auto-theta",
-            "expanded:damped-ets",
-            "expanded:garch",
-            "expanded:prophet"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C58_SHARED_PREP=1",
-              "MOJOLEARN_C58_SERIES4=1",
-              "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C58_FORECAST4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_SERIES4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_SHARED_PREP": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C58_TEAM64": [
+            "MOJOLEARN_C58_TEAM_MIB=64": [
               "experiments/classical_identical_ideas/stats_controls.mojo"
             ]
           },
@@ -11883,6 +10991,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -12003,6 +11114,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -12044,140 +11158,6 @@
           },
           "id": "I.C.C60:lag4",
           "name": "lag4",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
-            "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
-            "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
-            "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "expanded:autoarima"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C60_DIFF_REUSE=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C60_DIFF_REUSE": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C60:diff_reuse",
-          "name": "diff_reuse",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
-            "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
-            "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
-            "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "expanded:autoarima"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C60_LAG4=1",
-              "MOJOLEARN_C60_DIFF_REUSE=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C60_DIFF_REUSE": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C60_LAG4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C60:combo_lag4_diff_reuse",
-          "name": "combo_lag4_diff_reuse",
-          "parameters": {},
-          "prerequisites": [],
-          "reference_policy": "frozen incumbent defaults; authored reference retained separately",
-          "source_gaps": [
-            "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
-            "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
-            "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
-            "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
-          ],
-          "source_selectable": true,
-          "workloads": [
-            "expanded:autoarima"
-          ]
-        },
-        {
-          "A": {
-            "defines": [
-              "MOJOLEARN_C60_LAG4=1",
-              "MOJOLEARN_C60_DIFF_REUSE=1"
-            ],
-            "environment": {},
-            "runtime": {}
-          },
-          "B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_B": {
-            "defines": [],
-            "environment": {},
-            "runtime": {}
-          },
-          "authored_reference_differs": false,
-          "conflicts": [],
-          "declared_runtime": {},
-          "define_sources": {
-            "MOJOLEARN_C60_DIFF_REUSE": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ],
-            "MOJOLEARN_C60_LAG4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
-            ]
-          },
-          "id": "I.C.C60:combined",
-          "name": "combined",
           "parameters": {},
           "prerequisites": [],
           "reference_policy": "frozen incumbent defaults; authored reference retained separately",
@@ -12262,6 +11242,9 @@
         "amd",
         "apple",
         "host"
+      ],
+      "source_gaps": [
+        "lane classical-misc reach audit 2026-10-07 (source reading, GPU IDENTICAL, board parameters): arm workloads narrowed to routes that execute the gated code; see experiments/six_lane_integration/grid_controls/classical-misc.json."
       ]
     },
     {
@@ -92644,7 +91627,7 @@
               "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS=1",
               "MOJOLEARN_C37_ROW_PANELS=1",
               "MOJOLEARN_C37_PANEL_128=1",
-              "MOJOLEARN_C52_PAIR_128=1"
+              "MOJOLEARN_C52_PAIR_ROWS=128"
             ],
             "environment": {},
             "runtime": {}
@@ -92954,7 +91937,7 @@
             "defines": [
               "MOJOLEARN_CLASSICAL_C06_ROWS2=1",
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1",
+              "MOJOLEARN_C29_TILE=128",
               "MOJOLEARN_C30_DIRECT_DISTANCE=1",
               "MOJOLEARN_C30_ROWS_4=1",
               "MOJOLEARN_C32_COUNT_FUSION=1",
@@ -93437,7 +92420,7 @@
               "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
               "MOJOLEARN_CLASSICAL_C17_OVR=1",
               "MOJOLEARN_CLASSICAL_C17_LS_TRIALS=1",
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1"
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
             ],
             "environment": {},
             "runtime": {}
@@ -93699,7 +92682,7 @@
           "A": {
             "defines": [
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1",
+              "MOJOLEARN_C29_TILE=128",
               "MOJOLEARN_C31_DEVICE_BUCKETS=1",
               "MOJOLEARN_C32_COUNT_FUSION=1",
               "MOJOLEARN_C32_EMIT_FUSION=1",
@@ -94164,10 +93147,9 @@
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1",
+              "MOJOLEARN_C58_TEAM_MIB=64",
               "MOJOLEARN_C59_TRIAL_STATE=1",
-              "MOJOLEARN_C60_LAG4=1",
-              "MOJOLEARN_C60_DIFF_REUSE=1"
+              "MOJOLEARN_C60_LAG4=1"
             ],
             "environment": {},
             "runtime": {}
@@ -94438,7 +93420,7 @@
               "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
               "MOJOLEARN_CLASSICAL_C18_TILE64=1",
               "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH=1",
-              "MOJOLEARN_CLASSICAL_C19_ORDERED_128=1",
+              "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128",
               "MOJOLEARN_CLASSICAL_C20_ROW_CACHE=1",
               "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD=1",
               "MOJOLEARN_CLASSICAL_C21_EXTREMA=1",
@@ -94455,7 +93437,7 @@
               "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR=1",
               "MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES=1",
               "MOJOLEARN_C29_STREAM_TOPK=1",
-              "MOJOLEARN_C29_TILE_128=1",
+              "MOJOLEARN_C29_TILE=128",
               "MOJOLEARN_C30_DIRECT_DISTANCE=1",
               "MOJOLEARN_C30_ROWS_4=1",
               "MOJOLEARN_C31_DEVICE_BUCKETS=1",
@@ -94479,7 +93461,7 @@
               "MOJOLEARN_C42_ACTIVE_TRIANGLE=1",
               "MOJOLEARN_C43_RESIDENT_NORMALIZATION=1",
               "MOJOLEARN_C44_SAMPLING_DESCRIPTORS=1",
-              "MOJOLEARN_C52_PAIR_128=1",
+              "MOJOLEARN_C52_PAIR_ROWS=128",
               "MOJOLEARN_C53_CENTER4=1",
               "MOJOLEARN_C53_BGMM_STATS=1",
               "MOJOLEARN_C54_PREDICT_TILES=1",
@@ -94490,10 +93472,9 @@
               "MOJOLEARN_C58_SHARED_PREP=1",
               "MOJOLEARN_C58_SERIES4=1",
               "MOJOLEARN_C58_FORECAST4=1",
-              "MOJOLEARN_C58_TEAM64=1",
+              "MOJOLEARN_C58_TEAM_MIB=64",
               "MOJOLEARN_C59_TRIAL_STATE=1",
-              "MOJOLEARN_C60_LAG4=1",
-              "MOJOLEARN_C60_DIFF_REUSE=1"
+              "MOJOLEARN_C60_LAG4=1"
             ],
             "environment": {},
             "runtime": {}

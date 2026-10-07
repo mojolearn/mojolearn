@@ -4,16 +4,17 @@ NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED �
 A enables one named candidate; B omits it, preserving all incumbent switches.
 These controls must never select a FAST or neural runtime path.
 """
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-# C52: independent numerical profiles, not scheduling-dependent leaves.
-comptime C52_PAIR_128 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C52_PAIR_128"]()
-comptime C52_PAIR_512 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C52_PAIR_512"]()
-comptime C52_PAIR = C52_PAIR_128 or C52_PAIR_512
-comptime C52_ROWS = 512 if C52_PAIR_512 else 128
+# C52: ONE switch with named arms (was PAIR_128/PAIR_512, two defines where 512
+# silently won when both were on). -D MOJOLEARN_C52_PAIR_ROWS=128|512 selects
+# the KDE pair-combine route with that fixed leaf (a numerical profile shared
+# by the device and the host oracle, not a scheduling leaf); absent = incumbent
+# route. Legal set enforced in core/six_lane_experiment_guards.mojo.
+comptime C52_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C52_PAIR_ROWS"]()
+comptime C52_ROWS = get_defined_int["MOJOLEARN_C52_PAIR_ROWS", 128]()
 # C53: independent GMM/BGMM centered-component staging arms.
 comptime C53_CENTER4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_CENTER4"]()
 comptime C53_BGMM_STATS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_BGMM_STATS"]()
@@ -33,8 +34,12 @@ comptime C57_CANDIDATE_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C57
 comptime C58_SHARED_PREP = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SHARED_PREP"]()
 comptime C58_SERIES4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_SERIES4"]()
 comptime C58_FORECAST4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_FORECAST4"]()
-comptime C58_TEAM64 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C58_TEAM64"]()
+# C58 team state budget in MiB: integer sweep -D MOJOLEARN_C58_TEAM_MIB=64|256
+# (was the boolean MOJOLEARN_C58_TEAM64); absent = 256 = incumbent. A memory
+# budget only: it sets series per launch slice, never per-series arithmetic.
+comptime C58_TEAM_MIB = get_defined_int["MOJOLEARN_C58_TEAM_MIB", 256]() if CLASSICAL_IDENTICAL else 256
 comptime C59_TRIAL_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C59_TRIAL_STATE"]()
 # C60: shared detrended observations across independent lag tasks.
 comptime C60_LAG4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C60_LAG4"]()
-comptime C60_DIFF_REUSE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C60_DIFF_REUSE"]()
+# C60_DIFF_REUSE removed 2026-10-07 (lane classical-misc): dead code. It fired only
+# for d_ == 2, but select_d loops d_ in range(d_max) with d_max <= 2 - D, so d_ <= 1.

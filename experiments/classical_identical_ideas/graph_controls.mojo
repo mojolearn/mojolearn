@@ -9,7 +9,9 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime C29_STREAM_TOPK = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C29_STREAM_TOPK"]()
-comptime C29_REFERENCE_TILE = 128 if is_defined["MOJOLEARN_C29_TILE_128"]() else 256
+# C29 reference tile: integer sweep -D MOJOLEARN_C29_TILE=128|256 (was the
+# boolean MOJOLEARN_C29_TILE_128); absent = 256. Acts only under the C29 gate.
+comptime C29_REFERENCE_TILE = get_defined_int["MOJOLEARN_C29_TILE", 256]()
 # C30 split per algorithm family (lane classical-kmeans, 2026-10-07). The old
 # MOJOLEARN_C30_DIRECT_DISTANCE changed about 12 algorithms at once, so a grid
 # could not separate them. Each family now has its own define with the old C30
@@ -87,3 +89,10 @@ comptime C41_FUSED_MINIMA = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C41_FUSED_
 comptime C42_ACTIVE_TRIANGLE = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C42_ACTIVE_TRIANGLE"]()
 comptime C43_RESIDENT_NORMALIZATION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C43_RESIDENT_NORMALIZATION"]()
 comptime C44_SAMPLING_DESCRIPTORS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C44_SAMPLING_DESCRIPTORS"]()
+# C61 (lane classical-misc, 2026-10-07): HDBSCAN sparse mutual-reachability
+# Boruvka search, tiled kernel (NVIDIA/AMD default): skip a j tile whose points
+# all lie in the block's single component. Those cells are excluded anyway, so
+# outputs are bit-identical; only the d-long chains of dead cells are saved.
+# Fixed order unchanged (per-point min over the total (key, j) order).
+# NOT TESTED — NOT MEASURED. Default OFF.
+comptime C61_SAME_COMPONENT_SKIP = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C61_SAME_COMPONENT_SKIP"]()
