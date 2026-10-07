@@ -2,7 +2,7 @@
  "schema": "mojolearn.grid-controls/1",
  "lane": "classical-cv",
  "branch": "lane/classical-cv",
- "head": "HEAD_PLACEHOLDER",
+ "head": "0410922f36b2",
  "controls": {
   "enetcv_fold_blocks": {
    "define": "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS",
