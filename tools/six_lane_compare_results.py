@@ -18,6 +18,9 @@ import re
 import sys
 import subprocess
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from six_lane_timing import scored  # noqa: E402
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = 'mojolearn.six-lane-comparison-input/1'
@@ -461,13 +464,39 @@ def compare_cases(manifest, base):
                 history_policy='Explicit history summaries and all previous_receipt/log references retained; history never substitutes for selected current evidence.')
 
 
-def board_inputs(report, catalog, previous_inventory=None, previous_index=None):
+VOTING_ROUTES = {'nvidia': 'nvidia-native', 'amd': 'amd', 'apple': 'apple'}
+
+
+def timing_verdict(case, floors):
+    """Scored-clock A/B verdict for one case against A/A floors (six_lane_timing)."""
+    from six_lane_timing import PHASES, VOTERS, judge, log_ratios
+    table = (floors or {}).get('floors', {})
+    per_vendor = {}
+    for vendor, route in VOTING_ROUTES.items():
+        arms = case.get('columns', {}).get(route, {}).get('arms', {})
+        a, b = (arms.get(x, {}).get('result') for x in ('A', 'B'))
+        if not isinstance(a, dict) or not isinstance(b, dict):
+            continue
+        ratios = log_ratios(a, b)
+        if ratios is None:
+            continue
+        floor = table.get(str(case.get('workload_id')) + '|' + vendor)
+        per_vendor[vendor] = dict(log_ratio={p: ratios[p] for p in PHASES}, timing_source=ratios['source'],
+                                  floor=floor['floor'] if floor else None,
+                                  floor_evidence=floor['evidence'] if floor else None)
+    voters = VOTERS.get(case.get('mode'), VOTERS['identical'])
+    phases = {p: judge(per_vendor, voters, p) for p in PHASES}
+    return dict(verdict=phases['scored']['verdict'], phases=phases, vendors=per_vendor, voters=list(voters))
+
+
+def board_inputs(report, catalog, previous_inventory=None, previous_index=None, floors=None):
     cards = {r['id']: dict(id=r['id'], title=r['title'], mode=r['mode'], vendors=r['vendors'])
              for r in catalog['entries']}
     inventory = copy.deepcopy(previous_inventory) if previous_inventory else dict(campaign='six-lane-integration', candidates=[])
     index = copy.deepcopy(previous_index) if previous_index else dict(cells=[], notes=[], decisions=[])
     known = {c['id']: c for c in inventory['candidates']}
     for case in report['cases']:
+        case_timing = timing_verdict(case, floors)
         for ident in case.get('implementation_ids') or []:
             require(ident in cards, 'unknown implementation ID: ' + ident)
             require(cards[ident]['mode'] == case['mode'], 'catalog mode differs: ' + ident)
@@ -491,6 +520,8 @@ def board_inputs(report, catalog, previous_inventory=None, previous_index=None):
                             identity_arms=case['arms'], capture_issues={a: v.get('issues', []) for a, v in arms.items()},
                             task_quality={a: v.get('result', {}).get('task_quality', {'status': 'PENDING'}) for a, v in arms.items()},
                             retained_timings={a: v.get('result', {}).get('timings') for a, v in arms.items()},
+                            scored_timings={a: scored(v.get('result', {}).get('timings')) for a, v in arms.items()},
+                            timing_verdict=case_timing,
                             attempt=value.get('attempt'), history=value.get('history'), runs=value.get('runs'),
                             promotion_vote=case['mode'] == 'fast' or vendor in ('nvidia', 'amd'))
                 if case['status'] == 'MISMATCH':
@@ -501,6 +532,8 @@ def board_inputs(report, catalog, previous_inventory=None, previous_index=None):
                     index['cells'].append(cell)
     inventory['identity_policy'] = report['policy']
     inventory['evidence_policy'] = 'Retained full-workload receipts; quality and identity remain explicit. No automatic admission, opponent ratios or default promotion.'
+    inventory['timing_policy'] = ('Scored clock = fit + transform/predict only (full_operation_seconds kept as a record). '
+                                  'A timing verdict needs |log(A/B)| above the workload A/A floor on every voting vendor, all agreeing in direction.')
     note = 'Comparison inputs retain pending evidence; use the existing board tool. Historical cells are preserved; no new MEASURED rows or opponent ratios are synthesized.'
     if note not in index.setdefault('notes', []):
         index['notes'].append(note)
@@ -522,6 +555,7 @@ def main(argv=None):
     parser.add_argument('--catalog', type=Path, default=ROOT / 'experiments/six_lane_integration/catalog.json')
     parser.add_argument('--previous-inventory', type=Path)
     parser.add_argument('--previous-index', type=Path)
+    parser.add_argument('--aa-floors', type=Path, help='six_lane_timing floors output; without it every timing verdict is NO_VERDICT')
     args = parser.parse_args(argv)
     global ACCEPT_KERNEL_EQUIVALENT
     ACCEPT_KERNEL_EQUIVALENT = bool(args.accept_kernel_equivalent_sources)
@@ -538,7 +572,11 @@ def main(argv=None):
         old_index, xh = read(args.previous_index)
         report['inputs']['previous_board'] = dict(inventory=str(args.previous_inventory.resolve()), inventory_sha256=ih,
                                                  index=str(args.previous_index.resolve()), index_sha256=xh)
-    inventory, index = board_inputs(report, catalog, old_inventory, old_index)
+    floors = None
+    if args.aa_floors:
+        floors, fh = read(args.aa_floors)
+        report['inputs'].update(aa_floors=str(args.aa_floors.resolve()), aa_floors_sha256=fh)
+    inventory, index = board_inputs(report, catalog, old_inventory, old_index, floors)
     args.out.mkdir(parents=True, exist_ok=False)
     write(args.out / 'report.json', report)
     write(args.out / 'inventory.json', inventory)
