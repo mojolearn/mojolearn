@@ -12,6 +12,8 @@ Inputs
   --verdicts  grid-verdicts.json from `six_lane_timing.py verdicts`        (optional; repeatable)
   --identity  summary.json from `six_lane_compare_results.py`              (optional; repeatable)
   --quality   quality-review.json rows (candidate_vs_baseline.verdict)      (optional; repeatable)
+  --phase2-matrix  phase-2 grid-matrix.json.gz (six_lane_grid.py --survivors), merged with --matrix so
+              phase-2 crosses are judged against the phase-1 singles (optional)
 
 Outputs (in --out): grid-decisions.json and GRID_DECISIONS.md.
 
@@ -212,6 +214,24 @@ def predicted_from_singles(single_verdicts):
     return 'UNKNOWN'
 
 
+def merge_matrices(phase1, phase2):
+    """Phase-1 + phase-2 grid matrices as one (phase-2 reuses phase-1 ids only for the same assignment)."""
+    out = dict(phase1)
+    by_id = {c['id']: c for c in phase1.get('configurations', [])}
+    merged = list(phase1.get('configurations', []))
+    for c in phase2.get('configurations', []):
+        prev = by_id.get(c['id'])
+        if prev is not None:
+            if (prev.get('grid') or {}).get('assignment') != (c.get('grid') or {}).get('assignment'):
+                raise ValueError('phase-2 configuration ' + c['id'] + ' reuses a phase-1 id with another assignment')
+            continue
+        merged.append(dict(c, grid=dict(c.get('grid') or {}, phase=2)))
+    out['configurations'] = merged
+    out['cells'] = list(phase1.get('cells', [])) + [x for x in phase2.get('cells', []) if x.get('configuration') not in by_id]
+    out['merged_phase2'] = dict(schema=phase2.get('schema'), configurations=len(merged) - len(by_id))
+    return out
+
+
 def decide(matrix, tidx, iidx, qidx, mode='identical'):
     fast = mode == 'fast'
     configs = [c for c in matrix.get('configurations', []) if (c.get('grid') or {}).get('algorithm')]
@@ -282,8 +302,8 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
         interactions = []
         for c in cfgs:
             g = c['grid']
-            if g.get('tier') not in ('cross', 'all_on'):
-                continue
+            if g.get('tier') in (None, 'single'):
+                continue  # every multi-control tier (cross, all_on, triple, factorial, all_survivors, cross_across)
             ev = evidence[c['id']]
             if ev['verdict'] in ('UNMEASURED', 'IDENTITY_INCOMPLETE'):
                 continue
@@ -325,7 +345,12 @@ def decide(matrix, tidx, iidx, qidx, mode='identical'):
                     quality='board quality metric of B vs FAST main (A), tools/af_quality.py rel 1e-3 / abs 1e-6 (the af_board_apply gate); WORSE holds',
                     arm=rule['arm'].replace('HOLD_*: identity MISMATCH or quality WORSE', 'HOLD_QUALITY: quality WORSE'),
                     promotion='a PROMOTE arm becomes the FAST default with a *_OFF rollback and an EXPERIMENTS.md row; DELETE arms are removed from the code')
-    return dict(schema=SCHEMA, mode=mode, matrix_schema=matrix.get('schema'), base_main=matrix.get('base_main'),
+    extra = {}
+    if matrix.get('merged_phase2'):
+        extra['merged_phase2'] = matrix['merged_phase2']
+        rule['phase2'] = ('phase-1 and phase-2 matrices merged: interactions of phase-2 crosses are judged against the '
+                          'phase-1 singles of the same algorithm')
+    return dict(schema=SCHEMA, mode=mode, matrix_schema=matrix.get('schema'), base_main=matrix.get('base_main'), **extra,
                 counts=dict(controls=len(control_summary), arms=sum(len(c['arms']) for c in control_summary.values()),
                             configurations=len(configs), by_recommendation=dict(sorted(totals.items()))),
                 controls=dict(sorted(control_summary.items())), algorithms=algorithms,
@@ -394,12 +419,16 @@ def main(argv=None):
     p.add_argument('--verdicts', type=Path, action='append', help='six_lane_timing.py verdicts output (repeatable)')
     p.add_argument('--identity', type=Path, action='append', help='six_lane_compare_results.py summary.json (repeatable)')
     p.add_argument('--quality', type=Path, action='append', help='quality review rows (repeatable)')
+    p.add_argument('--phase2-matrix', type=Path, help='phase-2 grid-matrix.json.gz (tools/six_lane_grid.py --survivors) merged '
+                                                       'with --matrix so interactions are judged against the phase-1 singles')
     p.add_argument('--out', type=Path)
     args = p.parse_args(argv)
     fast = args.mode == 'fast'
     if fast and args.identity:
         p.error('--mode fast takes no --identity: FAST needs no identical anything')
     matrix = load_json(args.matrix or (FAST_MATRIX if fast else MATRIX))
+    if args.phase2_matrix:
+        matrix = merge_matrices(matrix, load_json(args.phase2_matrix))
     args.out = args.out or (FAST_OUT_DIR if fast else OUT_DIR)
     dec = decide(matrix, timing_index(load_many(args.verdicts), voters=FAST_VOTERS if fast else None),
                  identity_index(load_many(args.identity)), quality_index(load_many(args.quality)), mode=args.mode)
