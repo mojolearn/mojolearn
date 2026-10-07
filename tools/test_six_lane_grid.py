@@ -388,5 +388,119 @@ class FastRealInputTests(unittest.TestCase):
             self.assertEqual(G.main(['--check']), 0)  # the IDENTICAL outputs are untouched by FAST mode
 
 
+class CrossModeTests(unittest.TestCase):
+    """--crosses pairwise / pairwise+triples / auto and the --survivors phase 2 on a synthetic group."""
+
+    def setUp(self):
+        self.g = G.Guards(GUARD_TEXT)
+        self.controls = {
+            'p': ctrl('p', 'MOJOLEARN_P', {'off': [], 'on': ['MOJOLEARN_P']}),
+            'q': ctrl('q', 'MOJOLEARN_Q', {'off': [], '1': ['MOJOLEARN_Q=1'], '2': ['MOJOLEARN_Q=2']}, kind='arms'),
+            't': ctrl('t', 'MOJOLEARN_T', {'off': [], 'a': ['MOJOLEARN_T=1'], 'b': ['MOJOLEARN_T=2'], 'c': ['MOJOLEARN_T=3']}, kind='arms'),
+            'u': ctrl('u', 'MOJOLEARN_U', {'off': [], 'on': ['MOJOLEARN_U']}),
+        }
+        G.harness_problems = lambda defines: []
+
+    def tearDown(self):
+        import importlib
+        importlib.reload(G)
+
+    def plan(self, controls=('p', 'q', 't'), **kw):
+        a = algo('x:t', controls, groups=[['p', 'q', 't']])
+        return G.plan_algorithm(a, self.controls, {k: {'x:t'} for k in controls}, self.g, kw.pop('cap', 0), **kw)
+
+    @staticmethod
+    def tiers(p):
+        out = {}
+        for c in p['configs']:
+            out[c['tier']] = out.get(c['tier'], 0) + 1
+        return out
+
+    def test_pairwise_counts(self):
+        # pairs: p x q (1*2) + p x t (1*3) + q x t (2*3) = 11; singles 1 + 2 + 3 = 6; all-on 1
+        self.assertEqual(self.tiers(self.plan(crosses='pairwise')), {'single': 6, 'all_on': 1, 'cross': 11})
+        # triples: 1*2*3 = 6, after every pair
+        p = self.plan(crosses='pairwise+triples')
+        self.assertEqual(self.tiers(p), {'single': 6, 'all_on': 1, 'cross': 11, 'triple': 5})  # one triple == all-on
+        order = [c['tier'] for c in p['configs']]
+        self.assertLess(max(i for i, t in enumerate(order) if t == 'cross'), min(i for i, t in enumerate(order) if t == 'triple'))
+        full = self.plan(crosses='full')
+        self.assertEqual(self.tiers(full)['cross'], 2 * 3 * 4 - 1 - 6 - 1)  # whole product minus singles, all-on
+
+    def test_pairwise_cap_cuts_configs_not_groups(self):
+        p = self.plan(crosses='pairwise', cap=8)  # 6 singles + all-on + 1 pair
+        self.assertEqual(len(p['configs']), 8)
+        self.assertEqual(p['configs'][-1]['tier'], 'cross')
+        self.assertEqual(sum(g['configs'] for g in p['deferred_groups']), 10)
+        full = self.plan(crosses='full', cap=8)
+        self.assertEqual(self.tiers(full).get('cross', 0), 0)  # group-atomic: the whole group is deferred
+
+    def test_auto_factorial_and_fallback(self):
+        p = self.plan(crosses='auto')
+        self.assertEqual(p['regime'], 'factorial')
+        self.assertEqual(p['factorial_product'], 23)
+        self.assertEqual(len(p['configs']), 23)  # every combination exactly once
+        self.assertEqual(self.tiers(p), {'single': 6, 'all_on': 1, 'factorial': 16})
+        self.assertEqual(len({tuple(c['defines']) for c in p['configs']}), 23)
+        q = self.plan(crosses='auto', full_budget=22, cap=16)
+        self.assertEqual(q['regime'], 'pairwise')
+        self.assertEqual(len(q['configs']), 16)
+        self.assertFalse(any(c['tier'] == 'factorial' for c in q['configs']))
+        big = self.plan(crosses='auto', cap=16)
+        self.assertEqual(len(big['configs']), 23)  # the cap does not apply to factorial algorithms
+
+    def phase1(self):
+        def row(cid, assign, verdict, ratio=None):
+            return frozenset(assign.items()), dict(configuration=cid, verdict=verdict, tier='single', combined_ratio=ratio)
+        return dict([row('s1', {'p': 'on'}, 'FASTER', 0.9), row('s2', {'q': '1'}, 'NEUTRAL', 1.0), row('s3', {'q': '2'}, 'SLOWER', 1.2),
+                     row('s4', {'t': 'a'}, 'FASTER', 0.8), row('s5', {'t': 'b'}, 'UNMEASURED'), row('s6', {'u': 'on'}, 'FASTER', 0.7),
+                     row('c1', {'p': 'on', 'q': '1'}, 'NEUTRAL')])
+
+    def test_survivors_filter_reuse_and_across(self):
+        p = self.plan(controls=('p', 'q', 't', 'u'), crosses='pairwise', phase1=self.phase1())
+        states = {(e['control'], e['arm']): e['state'] for e in p['survivors']['arms']}
+        self.assertEqual(states, {('p', 'on'): 'survived', ('q', '1'): 'survived', ('q', '2'): 'dropped', ('t', 'a'): 'survived',
+                                  ('t', 'b'): 'not_measured', ('t', 'c'): 'not_measured', ('u', 'on'): 'survived'})
+        self.assertEqual(p['survivors']['faster'], {'p': ['on'], 't': ['a'], 'u': ['on']})
+        got = [(c['tier'], c['assignment']) for c in p['configs']]
+        self.assertEqual(got, [('cross', {'p': 'on', 't': 'a'}), ('cross', {'q': '1', 't': 'a'}),
+                               ('all_survivors', {'p': 'on', 'q': '1', 't': 'a', 'u': 'on'}),
+                               ('cross_across', {'p': 'on', 'u': 'on'}), ('cross_across', {'t': 'a', 'u': 'on'})])
+        self.assertEqual([r['phase1_configuration'] for r in p['reused']], ['c1'])  # measured in phase 1: not re-emitted
+        self.assertFalse(any(c['tier'] == 'single' for c in p['configs']))
+        t = self.plan(controls=('p', 'q', 't', 'u'), crosses='pairwise+triples', phase1=self.phase1())
+        self.assertIn(('triple', {'p': 'on', 'q': '1', 't': 'a'}), [(c['tier'], c['assignment']) for c in t['configs']])
+
+    def test_no_survivors_says_why(self):
+        p = self.plan(phase1={}, crosses='pairwise')
+        self.assertEqual(p['configs'], [])
+        self.assertEqual(p['survivors']['counts'], {'not_measured': 6})
+        self.assertTrue(all(e['verdict'] == 'NOT_IN_DECISIONS' for e in p['survivors']['arms']))
+
+    def test_default_is_full(self):
+        a = algo('x:t', ['p', 'q', 't'], groups=[['p', 'q', 't']])
+        reach = {k: {'x:t'} for k in 'pqt'}
+        self.assertEqual(G.plan_algorithm(a, self.controls, reach, self.g, 16),
+                         G.plan_algorithm(a, self.controls, reach, self.g, 16, crosses='full'))
+        self.assertNotIn('regime', G.plan_algorithm(a, self.controls, reach, self.g, 16))
+
+
+class DefaultOutputsTests(unittest.TestCase):
+    def test_identical_and_fast_check_pass_with_defaults(self):
+        import contextlib
+        import io
+        import six_lane_grid_fast as F
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(G.main(['--check']), 0)
+            self.assertEqual(G.main(['--mode', 'fast', '--check']), 0)
+            self.assertEqual(F.main_fast(check=True), 0)
+
+    def test_extended_options_refused_in_fast_mode(self):
+        import contextlib
+        import io
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            G.main(['--mode', 'fast', '--crosses', 'pairwise'])
+
+
 if __name__ == '__main__':
     unittest.main()
