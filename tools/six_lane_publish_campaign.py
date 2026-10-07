@@ -15,6 +15,8 @@ import shutil
 import subprocess
 import time
 
+from six_lane_review_history import publish_review_history
+
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--campaign-root',type=Path,required=True)
 parser.add_argument('--out',type=Path,required=True)
@@ -385,11 +387,7 @@ def main():
     review['publication_repair']='Original review retained externally; links relocated by exact receipt SHA256 into controller-qualified paths. Distinct failed and repaired attempts no longer collide.'
     write(OUT/'quality-review.json',review)
     if next_review['rows']:write(OUT/'next-quality-review.json',next_review)
-    previous_reviews=load(OUT/'continuation-quality-reviews.json',{'rows':[]})['rows']
-    review_versions={hashlib.sha256(json.dumps(row,sort_keys=True).encode()).hexdigest():row
-                     for row in previous_reviews+extra_reviews}
-    write(OUT/'continuation-quality-reviews.json',dict(rows=list(review_versions.values()),
-        policy='Saved review versions bound to exact receipt SHA256; no quality recomputation or default admission.'))
+    review_history=publish_review_history(OUT,extra_reviews)
     if (ROOT/'quality-review/historical-istella-opponents.json').exists():shutil.copyfile(ROOT/'quality-review/historical-istella-opponents.json',OUT/'historical-istella-opponents.json')
     decisions=[dict(candidate=c['id']+'/'+c['case'],
                     decision='NOT PROMOTED: '+c['quality_reason'],
@@ -479,7 +477,7 @@ def main():
     write(OUT/'campaign-coverage.json',dict(coverage=coverage,pending_work=pending_work,evidence_inputs=evidence_inputs,
           remaining_catalog={k:v for k,v in remaining.items() if k!='rows'},
           latest_combined_defaults_promoted=False,all_experiments_complete=False))
-    write(OUT/'inventory.json',inventory);write(OUT/'index.json',dict(cells=cells,notes=notes,decisions=decisions,coverage=coverage,pending_work=pending_work,remaining_catalog=remaining))
+    write(OUT/'inventory.json',inventory);write(OUT/'index.json',dict(cells=cells,notes=notes,decisions=decisions,coverage=coverage,pending_work=pending_work,remaining_catalog=remaining,review_history=review_history))
     write(OUT/'retained-pairs.json',dict(updated_at=time.time(),pairs=summary))
     with (ROOT/'board-publication.log').open('a') as log:
         p=subprocess.run(['python3',str(REPO/'tools/performance_measurement_board.py'),
