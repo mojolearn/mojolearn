@@ -3,8 +3,8 @@
   "manifests": [
     {
       "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/board-continuation.json",
-      "sha256": "cff4f7918d1c073b1a08127dcee792a9f8fb6d0ab85ea5e04786ffaabdaa0ba6",
-      "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/cff4f7918d1c073b1a08127dcee792a9f8fb6d0ab85ea5e04786ffaabdaa0ba6/board-continuation.json",
+      "sha256": "6c2fad5d2795f8804ba0552f69debc4bcc619610685a6705c958ab37b79f879c",
+      "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/6c2fad5d2795f8804ba0552f69debc4bcc619610685a6705c958ab37b79f879c/board-continuation.json",
       "id": "targeted-ab-20261007",
       "source_available": true,
       "inputs": [
@@ -17,8 +17,8 @@
         },
         {
           "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
-          "sha256": "8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7",
-          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8364835aba2c5fbc4f1e966e9b3e3f0a2d922705ffad926ffc486bf655c7a9b7/targeted-quality.json",
+          "sha256": "c4d1a7775375b7f89a49be3153c68ff7a1bb0e9c629bd7e314d1baa604599f8f",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/c4d1a7775375b7f89a49be3153c68ff7a1bb0e9c629bd7e314d1baa604599f8f/targeted-quality.json",
           "kind": "quality_review",
           "status": "RETAINED"
         }
@@ -29,14 +29,14 @@
           "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements",
           "route": "native-sm90",
           "status": "AVAILABLE",
-          "receipt_files": 17
+          "receipt_files": 100
         },
         {
           "vendor": "amd",
           "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements",
           "route": "amd-native-gfx942",
           "status": "AVAILABLE",
-          "receipt_files": 20
+          "receipt_files": 108
         }
       ]
     }

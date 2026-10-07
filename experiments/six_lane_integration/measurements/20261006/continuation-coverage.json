@@ -13343,16 +13343,19 @@
       "members": [
         "I.C.C18"
       ],
-      "attempts": 5,
-      "complete_pairs": 3,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
       "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
       "receipts": [
-        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/47d0e9c0d197d26c80e2/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/51404940ade2d36c81a6/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9a604a138bcd1a3009a9/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.8ef93f089139a761eed26f535b632c4e055dfb5236aed0defcd278abefa68c8c.json",
         "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/24e8e0542e4f54ab5ad8/attempt-0001/receipt.json",
         "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/55f5904de0bbd6d47f43/attempt-0001/receipt.3aabfcf5ad7c7de76eb76c3cd205963f423cbf56b164b114582d9972f27617b0.json",
         "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e6b98819c437ea37d9ee/attempt-0001/receipt.304bb8832cf9a90081f13f44cce223cb6554dcbc3d126d9727f09fd28531e665.json",
-        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f62864b0630b9ce03071/attempt-0001/receipt.json"
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f62864b0630b9ce03071/attempt-0001/receipt.abd177daf5d8ac58abae46c7cd91fbe57db86da33679024a867f7672298e1ea9.json"
       ]
     },
     {
@@ -13405,11 +13408,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2bf4b3e9c25cb546c71b/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61c883edeef8df4e4ff6/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b80e71d1b363beafd13a/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e50bcc37e0142ad233a6/attempt-0001/receipt.8f1373e86f8c948cf7a11f2e7975f244af8a3e1cb214da0ba4fee53bc11ae04e.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/228363dbaa8dc1b8dd02/attempt-0001/receipt.dc0a6abb5f0dbc2d08e0830976bce3c01d6f704892def0684be481eb43feb0fe.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/3b5ea7fc3e6d7c72361a/attempt-0001/receipt.101820952ed9c7f766d9c332a7f5c10bb537bc5091ccab684b0a0f7a3e6fe739.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/ba1b52dcc8186621c10d/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/c8df451dacd8b86c4faf/attempt-0001/receipt.json"
+      ]
     },
     {
       "id": "T.CV.local.25fdcd3067b2",
@@ -13417,11 +13429,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/111a1de0eda200c4207c/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1cbdc068cfad5441dd00/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7363f44cf9fd07492be0/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ed61baeb975129a480cf/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/2371f20265e2b9746375/attempt-0001/receipt.9ce62ca99ed1967d64112093e18de197a8c126cb755cc87c06c85c2a1bd3ec35.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/533c914f436a104e1c92/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/68f532af62a1cd8cf27e/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/994e595def6bb1d9c76d/attempt-0001/receipt.722c69e36d45532046c420b8616ab2592bffd0f0482cd91dd2ab662d46529762.json"
+      ]
     },
     {
       "id": "T.CV.local.26c607b84d31",
@@ -13501,11 +13522,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
-      "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "attempts": 8,
+      "complete_pairs": 8,
+      "quality_failed": 4,
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5cb4dedaaed7ef311a8f/attempt-0001/receipt.c55f0227d6eb709f3d30eee37c002b63731b8c80d0fa7c9d604af9084db97eb9.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/626d834d2f6c499c186e/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/816b328135aec94355fa/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f593649f7046c4efcd61/attempt-0001/receipt.011127fb272eb5be5ac1106faf6ca9c5a4db02678469c392bcfac53082f42a33.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/08b2e3a7225a30ac3ed5/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/659827202996890f4ba8/attempt-0001/receipt.db785378342f40c151546ddb15d464089557bec457f704f414c91c3bd8fe846c.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/a759de0e1d644a9688a5/attempt-0001/receipt.79ac846d0e6f1118529696d8bf8c7d19c31e4e661bca3d3b52ed8024f075d2b4.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e154e93d4089f0e27b3f/attempt-0001/receipt.097beba0adb625653b3795377453f7b6f744ead5311353140fbb5d6c5ab7c086.json"
+      ]
     },
     {
       "id": "T.CV.local.426d5c94ba58",
@@ -13537,11 +13567,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/029d63b9273714076f9f/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/14d9a8191cd42715b536/attempt-0001/receipt.e349db9d58761c00d25e99e901aa86ae14dd19d54365a3668328edba865db113.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2ce46e60891e60d7af7d/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/dce7dc54ced12083e966/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/9820f30f4d886f54641a/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/bba6e5f7a91ded138627/attempt-0001/receipt.b921faba7bd933618140510a766a0d80a4d17b8a8f6e09dae14ee2c9e6c23ed0.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f2ac04eea2c30b2c62c1/attempt-0001/receipt.cfee5a61fee05fcc9a2c335031d322c89bfb166332e53371910616d87d99ccc1.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/ffad0951679e32adc695/attempt-0001/receipt.json"
+      ]
     },
     {
       "id": "T.CV.local.4c17c43f1dcf",
@@ -13549,11 +13588,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7620c327fe49ddcdb796/attempt-0001/receipt.03e5add0ba810686885d2f8072ef072e8ca4e4768d08665ca6423d94f67e305b.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c51f49f1ef3e073a250/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/da492f76e577be7f77f5/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fac901f2d6d8cdbf874e/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/1ebd8b28eb5a29514253/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/370d22c4da074f047bd5/attempt-0001/receipt.2d46b2b621f97696ccb3e57f4a9f72e1e7e4583c3dfcc5ac3f929fa4b7a29078.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/72d41348a5559438eb1a/attempt-0001/receipt.8b86ef5fac3d8acf8d19064275b84b71ea1634ec2ec6098115499c8a91cbe55e.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/db97b76059049b95dcc3/attempt-0001/receipt.718281f7408eaa6609539e90f3ae90ad5b4e6c41fb31b0dec65dd3a2bac95141.json"
+      ]
     },
     {
       "id": "T.CV.local.4de1ac4c8112",
@@ -13573,11 +13621,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/59a4a935cec424ebb419/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99b190e8f08a225c7332/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b219f4bacd9f4040ba7/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bdda3a6a99a2a96ae6c6/attempt-0001/receipt.1f2957c4e7a37701009449f50edfc6fbae34c4e823b51e9d72bb8a076b21de4a.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/071d0e6ad3e239f8a563/attempt-0001/receipt.84385f7d9b50d647cde2064f83ada4f3e54983c8851f67c53044ffe4d0fff8bf.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/29ae7c427aea5f002ec0/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/ce75cf50fbf52f044bd1/attempt-0001/receipt.19d2c5041e727bd4a31f7c91f54bcc792b60a261ff9f2cc6068a1586d634dc2b.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/ec685c61b501decbfdfb/attempt-0001/receipt.json"
+      ]
     },
     {
       "id": "T.CV.local.5addd299d853",
@@ -13585,11 +13642,16 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 4,
+      "complete_pairs": 4,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/0ddfd8f230a1a7dfc3da/attempt-0001/receipt.9b9eb4e6e9fe8172dbd019a0bafb78ec46f3c7868b2434e3a1133d1384da0e9b.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/51d7a1fc3f6e2f2ef9fa/attempt-0001/receipt.d0f00bc5ea034d75ccf8e28fd5d0213b22bc18ac9935e2c145b319f82459392f.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/a61d650302f3354fcc13/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/aa84a827d84c64d353a6/attempt-0001/receipt.143ef10dd1d7d86dbc0bb55d3d073552774e1d59da82229dd48af61f0eb9edcb.json"
+      ]
     },
     {
       "id": "T.CV.local.5b95f394132e",
@@ -13597,11 +13659,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/726c9a11bd5909685c55/attempt-0001/receipt.26bdc0854b3edd95cf0eb723903fa409e70cf086cd252b21aab6766420b3773a.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/78b8cf70d3609f7bf839/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d14da02ee4b4eb881e95/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f5d979a0b3b8335c0014/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/2b4e90c6223ddc009930/attempt-0001/receipt.84de5d091d5c32cfd3dc9fbb0f3db98141ea09633ceaf2a23dd98e6ab9eae5d7.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/da1aaec328b412a2295b/attempt-0001/receipt.da24627e8e593600fc28cf3722da49accc1640fabf4916e191a833a606f67a1c.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f83a3a80946b37d265f5/attempt-0001/receipt.5a00a2e79976a92cc43d5a785fb59e77098b4759f29a3b20e0385ffdb29d47a7.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f89a5ebb26ecc39a6238/attempt-0001/receipt.json"
+      ]
     },
     {
       "id": "T.CV.local.60f09333701d",
@@ -13681,11 +13752,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5a61b1976ccfb76739c9/attempt-0001/receipt.2375de7e17bf54e9f1d25f86dfa1d3616dcaad4b75fc5000e638d16e5c2d2a0c.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/66585b08b948599f1ede/attempt-0001/receipt.cd79d8d67b0723938ee288b12893e6b666a6dbf1a833133c49ac9144502ba5ef.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/860b43ae6e51336b141b/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ab3c437bbfe26fa5b325/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/0000ac280f350354f3da/attempt-0001/receipt.fa12550e441e2426eaa2311b56b46ec87a05caaa6bae12639dad6e1c503ceca6.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/39e67dd6a9d55ad8d30c/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/7dc2a5bf4c518c40ee6f/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/ac97feb7c761f6cd4f9f/attempt-0001/receipt.2c669e88006a5f3315c466befd189162387aa56e9a9fc4d8014a415890dd8fb9.json"
+      ]
     },
     {
       "id": "T.CV.local.7f14710a8274",
@@ -13741,11 +13821,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/26036ffb056d4cdc7417/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3a58cc68659a80ad4b20/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ba60dbc2213f9edade7a/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f27ccefc2818cfe8d073/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/4cd42455409bcb054a53/attempt-0001/receipt.7ca57511928cda30f7efa2709a1b358c5f2dab261d4550c72d21433273550260.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/5dcb5dc78f680b1dd90c/attempt-0001/receipt.d9fa7983c40bda3d30683f650ee34286108e2ad4b82ff0c5d60b9b7c50fa65db.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/da9e2e1d04551ba4e9f2/attempt-0001/receipt.46092b322657d14a4cca5fc54add3b64c0e53b27a6979791f61801c2370736f4.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e310516fe689634ff918/attempt-0001/receipt.json"
+      ]
     },
     {
       "id": "T.CV.local.8ed86cebb151",
@@ -13789,11 +13878,16 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 4,
+      "complete_pairs": 4,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/c3bbeb3562b35f46e1cf/attempt-0001/receipt.bc7d926d300b40d5c4b00a0bb4c90f32fd3e8c3c67ae1a773f9123523c06141e.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/cd5b8e255d9351b88d2d/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/d420d30269abf6dbf0fb/attempt-0001/receipt.ada7345fcef706dceb3b7f982d0447b7fd1d7d4c18b4a10e592869812f2689af.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/d908cd8b1149056a35be/attempt-0001/receipt.json"
+      ]
     },
     {
       "id": "T.CV.local.9c0718c0659d",
@@ -13837,11 +13931,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
-      "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "attempts": 8,
+      "complete_pairs": 8,
+      "quality_failed": 4,
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/34ab40bac913a76aec18/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6422fac533289608328b/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf3f84f003228706d0be/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d08053b65437468ca140/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/0024cc773f1249ca9e82/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/57a35d46f80ca477082e/attempt-0001/receipt.fdf4e0c3fda7fedcc3e96b89933b9915fbdde2d0321b275633e00adf3844acfb.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/bc7b128f3a1eaf0e346c/attempt-0001/receipt.b784351578b925edf37228888bdea1203a43dae475620edd87b37aef5f1fe28c.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f572e7326745e5fb02b7/attempt-0001/receipt.json"
+      ]
     },
     {
       "id": "T.CV.local.af2c963cb0ce",
@@ -13969,11 +14072,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3f8b82244388722b36b7/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8029c8db5c14e9c672c4/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f56fadc13b00da2175fd/attempt-0001/receipt.76b5992a1a05122e86a222c00c78fcf6353e50702f4991a52f0c6fbe8e91e8d6.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fa05eda4f5869e429b76/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/1f7dcc77c31d354d9331/attempt-0001/receipt.085c3864526d9b854913e4ae0df3697f9bb15eb36188f9d90b8074aa5047de18.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/c28a93fa1f698c0a02ce/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/c61fa7ef1f135e3982b4/attempt-0001/receipt.2d9693fca13a21f8257df8aa1de7e848b767e0004aa57e19d32cc854aa1330a3.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/d8e68180277c9e0c2f89/attempt-0001/receipt.json"
+      ]
     },
     {
       "id": "T.CV.local.cae449b50635",
@@ -13981,11 +14093,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a376febd0f4a57d44e7a/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a42415c247a088965dca/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ef85386b0a6c0b2ef89b/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f74f23b5f1bbd73560fd/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/32d102277402f5a41941/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/856ed6f71fae7741fa07/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/d9127fa08100c6d1eff2/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/edd29c51562376ace777/attempt-0001/receipt.a2168d955304279e8bfdfb012efd30161e0ba139ca12c647e809987206b546d3.json"
+      ]
     },
     {
       "id": "T.CV.local.d9b04dd8d9f0",
@@ -14005,11 +14126,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8b43ca1aa7f8a5569d0f/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c1c67600adb873689b3/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e2975cdf3d53a2ec8496/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f82556c80ef2b8187cae/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/11131e362abac3d90371/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/7f3da3e3beb7fa59f070/attempt-0001/receipt.88dae08223bcccb8b5d9d7c3dae77fcee6cf89dbd3513399fb93df236434dff0.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/9f55e2dfd920c543b64e/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/c73af3d10f6b5521fb6f/attempt-0001/receipt.2563bbdfdca835bf6c6af134930336c378090b6d18a277554b1ca7695377eb13.json"
+      ]
     },
     {
       "id": "T.CV.local.db2eef76b5fa",
@@ -14110,11 +14240,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
-      "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "attempts": 8,
+      "complete_pairs": 8,
+      "quality_failed": 4,
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2329c1c6d0f279761c2d/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/394330707fd638afc43a/attempt-0001/receipt.71e420aea4262e7c7de0310b55fffbd5ecb287168e5c9255407fe59678b98415.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/457a537af5e96a2c24c0/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9e05722544b7f8c5cc1f/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/30a1d6ce8dd6301b52c1/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/52a988a04c5de0c41242/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/a9e501059f919e360a96/attempt-0001/receipt.b5de3cf923da43d7f2dec1bdb544f6c9e9d3bc58651580cfa178d05ac3157ef3.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/bb80194b220a46124954/attempt-0001/receipt.json"
+      ]
     },
     {
       "id": "T.CV.local.f243c596bff6",
@@ -14134,11 +14273,20 @@
         "I.C.C13",
         "I.C.C18"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
-      "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "attempts": 8,
+      "complete_pairs": 8,
+      "quality_failed": 4,
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/08a755295bb89091cc70/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2c79b18ab250a725c636/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/685e7cf63b47f7fde2d7/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6b38ab97adf113aa909a/attempt-0001/receipt.fd7eeac49a6755da07e0b4c2d5c7d31d2a58ad80d6415c1605a508d2bdfbc8bb.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/07eec041b140d0cfb97a/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/1e8fc4439d9e06d59b6f/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/a5da662d6661d386474e/attempt-0001/receipt.42a158d2438fba5887b3cc3d9d4d64c271505245f3422f5967e09e3cc4df86db.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/a7ef20c6c31bd4b11ee2/attempt-0001/receipt.d8eda4737e03863b72af084a62c342bca4cb20e070a0c1057ec38b0314d7621a.json"
+      ]
     },
     {
       "id": "T.CV.local.f88ceebbf031",
@@ -14333,11 +14481,20 @@
         "I.N.NI58",
         "I.N.NI59"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/38928c02ed2c35af3343/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5559cba282e3db50f398/attempt-0001/receipt.55f845dbf5d059737162e3570516f948083872dfd1a32935f763270e6118e67b.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8454febec213ca782283/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/c974dc40aa40f2549155/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/16fad6b114f0e1b2cbfb/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/1a43be7438d7c6ed2d50/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/31f243430f9f3f3147d9/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e832ea4bd7e8c5ea8e3d/attempt-0001/receipt.4ede964d7817140d2f554a083c1c1ec5f130ac8f8fd8cdc9d5d9df737c5dc2c8.json"
+      ]
     },
     {
       "id": "T.combined.minus-C13-C18",
@@ -14520,11 +14677,20 @@
         "I.N.NI58",
         "I.N.NI59"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1981486684c39cb7f509/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5e07e40b6ceef1c5e078/attempt-0001/receipt.92e3cd9ab2be92d3a0a8d37085b97add0670ffb894b34fc622541e38d21b1662.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7a4b73a821dc6bf90408/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e6261da8cfbb7a6655eb/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/0dc2f57c29361876ea1c/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/345a40bc338e13b593ea/attempt-0001/receipt.bee873eb4211571d1d05892fc47252d2db535d6d6bd7b7064cc131613f30e614.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/699dd3b40db96f5ad6f0/attempt-0001/receipt.6414b0241c681347341b4c6a7617c01d8e8a6408c56114f0696a43fb27e74a49.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/fd5590ba6db3dbd75a35/attempt-0001/receipt.524e991251c1750166a54a834ae3681ef7a975525b3a4b5386ba87f3340cb747.json"
+      ]
     },
     {
       "id": "T.combined.minus-C55",
@@ -14707,11 +14873,20 @@
         "I.N.NI58",
         "I.N.NI59"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
+      "attempts": 8,
+      "complete_pairs": 8,
       "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6295dfb45e4447c64d77/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/81c7729ed6eceb610740/attempt-0001/receipt.b26760d9975a12e2ce1bb6d96a38beeea2a8dab0df8b6386b3339ca4941c1acf.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf6a12554a864102b2de/attempt-0001/receipt.96849300116b5856f59294fedfefee1cbe149c6c26826a470dc64690e6e1b3dc.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e9c5a887a10f16f7e492/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/0cbada01291cbc97680b/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/60d8c146c8502439658c/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/daf484b32f8b4e5cc04f/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f8d76ae4374ed237d6ca/attempt-0001/receipt.json"
+      ]
     },
     {
       "id": "T.combined.reproduction",
@@ -14894,11 +15069,28 @@
         "I.N.NI58",
         "I.N.NI59"
       ],
-      "attempts": 0,
-      "complete_pairs": 0,
-      "quality_failed": 0,
-      "status": "PENDING_MEASUREMENT",
-      "receipts": []
+      "attempts": 16,
+      "complete_pairs": 16,
+      "quality_failed": 8,
+      "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
+      "receipts": [
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2e059451964d90968061/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/334095a3465857ea9434/attempt-0001/receipt.576ded849cd6191d0687299e2a8742fa7035332574576d5d37d41bc0442088b1.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/41bf5dab451f761555e4/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61269f74f29737912923/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/80f84030e7abdcf8f3e2/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a4312acc4bd1fddcf09f/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b641feda5c2241faf598/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e1447e0d669bee705f2e/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/0fb164e46c4768cc0980/attempt-0001/receipt.7d866ee4620568399ead22adf4265c11a19f6f9d529ddb5df62c83556c52f385.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/1905ad1c660021d7eb03/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/5a6ba4492a7eefdb8121/attempt-0001/receipt.f63d615fa1c90f08a7ff39e92a490f7227240e533be5717d2b3bace8695efda2.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/7ddf09bc3ee22129b87c/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/a46a57711bfe5e3f76ce/attempt-0001/receipt.7c98119379ff28b0f6af96a58e46ac6425ee6856f9ac9608b27aa5414172f8e9.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/b43eff3a0f490cead5e5/attempt-0001/receipt.c2c6c2140920b94bc32ecaea2ab442ed841002c09f8114bb12de9bd322e2381d.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/eea22479d86088586b6a/attempt-0001/receipt.json",
+        "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f37daa480587cc3832d2/attempt-0001/receipt.json"
+      ]
     }
   ],
   "policy": "Exact continuation IDs stay separate from catalog IDs. Members/aliases are cross-links, not automatic constituent measurement or promotion credit."

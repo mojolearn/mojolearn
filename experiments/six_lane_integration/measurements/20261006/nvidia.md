@@ -9,11 +9,11 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | T.C13.only | identical | PENDING_ADMISSION, QUALITY_FAILED | 4 |
 | T.C55.only | identical | PENDING_ADMISSION, QUALITY_FAILED | 4 |
 | T.C13.C18 | identical | PENDING_ADMISSION, QUALITY_FAILED | 4 |
-| T.C18.residual-only | identical | IN_PROGRESS | 0 |
-| T.combined.minus-C13 | identical | PENDING_MEASUREMENT | 0 |
-| T.combined.minus-C13-C18 | identical | PENDING_MEASUREMENT | 0 |
-| T.combined.minus-C55 | identical | PENDING_MEASUREMENT | 0 |
-| T.combined.reproduction | identical | PENDING_MEASUREMENT | 0 |
+| T.C18.residual-only | identical | PENDING_ADMISSION | 4 |
+| T.combined.minus-C13 | identical | PENDING_ADMISSION | 4 |
+| T.combined.minus-C13-C18 | identical | PENDING_ADMISSION | 4 |
+| T.combined.minus-C55 | identical | PENDING_ADMISSION | 4 |
+| T.combined.reproduction | identical | PENDING_ADMISSION, QUALITY_FAILED | 8 |
 | I.C.C01:leaf128 | identical | PENDING_MEASUREMENT | 0 |
 | I.C.C01:leaf64 | identical | PENDING_MEASUREMENT | 0 |
 | I.C.C01:profile_c01_leaf128_c37_row_panels | identical | PENDING_MEASUREMENT | 0 |
@@ -115,22 +115,22 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | T.CV.local.de099bccad76 | identical | PENDING_ADMISSION | 4 |
 | T.CV.local.bb9ba62bd9a3 | identical | PENDING_MEASUREMENT | 0 |
 | T.CV.local.bb286656b51d | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.4c17c43f1dcf | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.ca4bcc07ecfe | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.25fdcd3067b2 | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.710590f636c2 | identical | PENDING_MEASUREMENT | 0 |
+| T.CV.local.4c17c43f1dcf | identical | PENDING_ADMISSION | 4 |
+| T.CV.local.ca4bcc07ecfe | identical | PENDING_ADMISSION | 4 |
+| T.CV.local.25fdcd3067b2 | identical | PENDING_ADMISSION | 4 |
+| T.CV.local.710590f636c2 | identical | PENDING_ADMISSION | 4 |
 | T.CV.local.e5174d506044 | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.a8952d6bcb79 | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.e6430f146f9a | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.4210e28ea16c | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.f364954c07b8 | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.874a0fa1a14e | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.47b36b46b020 | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.1d489e1a5ca4 | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.d9f7769600f0 | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.5b95f394132e | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.cae449b50635 | identical | PENDING_MEASUREMENT | 0 |
-| T.CV.local.56910b67cfd3 | identical | PENDING_MEASUREMENT | 0 |
+| T.CV.local.a8952d6bcb79 | identical | PENDING_ADMISSION, QUALITY_FAILED | 4 |
+| T.CV.local.e6430f146f9a | identical | PENDING_ADMISSION, QUALITY_FAILED | 4 |
+| T.CV.local.4210e28ea16c | identical | PENDING_ADMISSION, QUALITY_FAILED | 4 |
+| T.CV.local.f364954c07b8 | identical | PENDING_ADMISSION, QUALITY_FAILED | 4 |
+| T.CV.local.874a0fa1a14e | identical | PENDING_ADMISSION | 4 |
+| T.CV.local.47b36b46b020 | identical | PENDING_ADMISSION | 4 |
+| T.CV.local.1d489e1a5ca4 | identical | PENDING_ADMISSION | 4 |
+| T.CV.local.d9f7769600f0 | identical | PENDING_ADMISSION | 4 |
+| T.CV.local.5b95f394132e | identical | PENDING_ADMISSION | 4 |
+| T.CV.local.cae449b50635 | identical | PENDING_ADMISSION | 4 |
+| T.CV.local.56910b67cfd3 | identical | PENDING_ADMISSION | 4 |
 | T.CV.local.5addd299d853 | identical | PENDING_MEASUREMENT | 0 |
 | T.CV.local.939213337b9a | identical | PENDING_MEASUREMENT | 0 |
 | T.CV.local.426d5c94ba58 | identical | PENDING_MEASUREMENT | 0 |
@@ -183,7 +183,7 @@ Counts are retained complete A/B pairs, not individually decided experiment swit
 
 | Vendor / mode | Complete pairs | Original failed attempts | Quality-rejected pairs | Remaining scope |
 |---|---:|---:|---:|---|
-| NVIDIA / IDENTICAL | 115 | 2 | 10 | See exact selection and route receipts. PTX and unrecorded individual/full-workload scopes remain pending. |
+| NVIDIA / IDENTICAL | 199 | 2 | 22 | See exact selection and route receipts. PTX and unrecorded individual/full-workload scopes remain pending. |
 
 ## Individual experiment coverage
 
@@ -312,11 +312,94 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 | T.C13.C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.20229 | 5.53773 | — | 1.1200 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-34134fc0557a1c64) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b1c11584d78ed1948ad/attempt-0001/receipt.json>) |
 | T.C13.C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.25058 | 6.03156 | — | 1.0363 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-b44480bdd26a614b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ebc643bc218228636fa5/attempt-0001/receipt.json>) |
 | T.C13.C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.43969 | 2.06398 | — | 2.1510 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-6319650fb820f0b4) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json>) |
-| T.C18.residual-only | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | IN_PROGRESS | — | — | — | — | NOT_ASSESSED; metrics not recorded | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-e09c74c54be07353) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.json>) |
+| T.C18.residual-only | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.10109 | 2.08275 | — | 1.0088 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-c0d88ca12c012d0b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/47d0e9c0d197d26c80e2/attempt-0001/receipt.json>) |
+| T.C18.residual-only | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.65859 | 5.62429 | — | 1.0061 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-d4cf713f8bf64c9a) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/51404940ade2d36c81a6/attempt-0001/receipt.json>) |
+| T.C18.residual-only | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.06289 | 2.12744 | — | 0.9697 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-b32661e921d62ee8) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9a604a138bcd1a3009a9/attempt-0001/receipt.json>) |
+| T.C18.residual-only | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.63483 | 5.5973 | — | 1.0067 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-1ca9cbac03165f57) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.8ef93f089139a761eed26f535b632c4e055dfb5236aed0defcd278abefa68c8c.json>) |
+| T.combined.minus-C13 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.13916 | 2.11615 | — | 1.0109 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-52f6a4254c4a89d7) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/38928c02ed2c35af3343/attempt-0001/receipt.json>) |
+| T.combined.minus-C13 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.63105 | 5.57635 | — | 1.0098 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-f8fed67958af299f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5559cba282e3db50f398/attempt-0001/receipt.55f845dbf5d059737162e3570516f948083872dfd1a32935f763270e6118e67b.json>) |
+| T.combined.minus-C13 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.10861 | 2.09693 | — | 1.0056 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-3bf77696122abd9e) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8454febec213ca782283/attempt-0001/receipt.json>) |
+| T.combined.minus-C13 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.62303 | 5.6152 | — | 1.0014 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-8e5d3efee2c74663) / [details](#attempt-759d36fe9a5a6604) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/c974dc40aa40f2549155/attempt-0001/receipt.json>) |
+| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.55887 | 5.60254 | — | 0.9922 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-1c3e0b87fb1fa1a2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1981486684c39cb7f509/attempt-0001/receipt.json>) |
+| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.13617 | 6.31044 | — | 0.3385 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-97e5ada8eeee93aa) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5e07e40b6ceef1c5e078/attempt-0001/receipt.92e3cd9ab2be92d3a0a8d37085b97add0670ffb894b34fc622541e38d21b1662.json>) |
+| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.0538 | 6.10082 | — | 0.3366 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-a4e0cc889f416207) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7a4b73a821dc6bf90408/attempt-0001/receipt.json>) |
+| T.combined.minus-C13-C18 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.56626 | 5.57469 | — | 0.9985 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-c5bae06aee08a1f5) / [details](#attempt-4dcd2caefccfa172) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e6261da8cfbb7a6655eb/attempt-0001/receipt.json>) |
+| T.combined.minus-C55 | nvidia/native-sm90 | expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.41452 | 1.41323 | — | 1.0009 | PENDING; accuracy A/B=0.720538/0.720538; logloss A/B=1.14088/1.14088 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-c8d7aac35081af69) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6295dfb45e4447c64d77/attempt-0001/receipt.json>) |
+| T.combined.minus-C55 | nvidia/native-sm90 | expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.74991 | 3.69336 | — | 1.8276 | PENDING; accuracy A/B=0.913584/0.913584; logloss A/B=0.233661/0.233661 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-42b4fe3fbad8b160) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/81c7729ed6eceb610740/attempt-0001/receipt.b26760d9975a12e2ce1bb6d96a38beeea2a8dab0df8b6386b3339ca4941c1acf.json>) |
+| T.combined.minus-C55 | nvidia/native-sm90 | expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 8.28944 | 6.79572 | — | 1.2198 | PENDING; accuracy A/B=0.868346/0.868346; logloss A/B=3.74303/3.74303 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-776e2df67b56c4c1) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf6a12554a864102b2de/attempt-0001/receipt.96849300116b5856f59294fedfefee1cbe149c6c26826a470dc64690e6e1b3dc.json>) |
+| T.combined.minus-C55 | nvidia/native-sm90 | expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.71804 | 2.24903 | — | 1.2085 | PENDING; accuracy A/B=0.763624/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-3d240367ffc8c870) / [details](#attempt-a6468b4671a7c5c6) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e9c5a887a10f16f7e492/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.2753 | 7.78284 | — | 0.8063 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-ea7bf436c35909f2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2e059451964d90968061/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 6.13175 | 1.56304 | — | 3.9230 | QUALITY_FAILED; accuracy A/B=0.71871/0.720538; logloss A/B=1.17689/1.14088 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-d46e5d797dc221f0) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/334095a3465857ea9434/attempt-0001/receipt.576ded849cd6191d0687299e2a8742fa7035332574576d5d37d41bc0442088b1.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.70554 | 3.74197 | — | 1.5247 | PENDING; accuracy A/B=0.86872/0.868346; logloss A/B=3.7338/3.74303 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-72d44872b8132886) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/41bf5dab451f761555e4/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 5.43547 | 2.06793 | — | 2.6285 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-698132a51d7f1f3c) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61269f74f29737912923/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.87168 | 3.70012 | — | 1.3166 | QUALITY_FAILED; accuracy A/B=0.912628/0.913584; logloss A/B=0.234086/0.233661 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-2a3d628ebab76e92) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/80f84030e7abdcf8f3e2/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.44386 | 2.12596 | — | 2.0903 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-6169e0b0391158e5) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a4312acc4bd1fddcf09f/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.32247 | 1.49496 | — | 2.2225 | PENDING; accuracy A/B=0.763616/0.763624; logloss A/B=0.538246/0.538246 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-d0039350096b1191) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b641feda5c2241faf598/attempt-0001/receipt.json>) |
+| T.combined.reproduction | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.30239 | 5.60606 | — | 1.1242 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-fc3fe1098e8ed269) / [details](#attempt-bcc85e2296e44f4d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e1447e0d669bee705f2e/attempt-0001/receipt.json>) |
 | T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.53694 | 7.30433 | — | 0.7580 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-cf6699a20196b824) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/047dc5950c1d73fd8b3c/attempt-0001/receipt.e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63.json>) |
 | T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.55214 | 5.56559 | — | 0.9976 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-584a6a32814434a0) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/060dd5184930208ceb52/attempt-0001/receipt.json>) |
 | T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.04858 | 8.52406 | — | 0.2403 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-363833106ef4062d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf523bdc7b56fd295b5c/attempt-0001/receipt.json>) |
 | T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.11957 | 2.09734 | — | 1.0106 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-8c447e84c35153e9) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ce3fe6a01c8948daa84e/attempt-0001/receipt.json>) |
+| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.60836 | 5.6288 | — | 0.9964 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-31f2635f79335391) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7620c327fe49ddcdb796/attempt-0001/receipt.03e5add0ba810686885d2f8072ef072e8ca4e4768d08665ca6423d94f67e305b.json>) |
+| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.63137 | 5.574 | — | 1.0103 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-36bafc897ee53400) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c51f49f1ef3e073a250/attempt-0001/receipt.json>) |
+| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.08435 | 2.1513 | — | 0.9689 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-64346b896472aa87) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/da492f76e577be7f77f5/attempt-0001/receipt.json>) |
+| T.CV.local.4c17c43f1dcf | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.13766 | 2.10536 | — | 1.0153 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-378c477026f75f77) / [details](#attempt-0755f89937a5f723) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fac901f2d6d8cdbf874e/attempt-0001/receipt.json>) |
+| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.09551 | 2.08445 | — | 1.0053 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-b745df58d90dca25) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3f8b82244388722b36b7/attempt-0001/receipt.json>) |
+| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.13228 | 2.10415 | — | 1.0134 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-d764101c7a39bfa0) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8029c8db5c14e9c672c4/attempt-0001/receipt.json>) |
+| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.63105 | 5.58706 | — | 1.0079 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-60a14a9f32747197) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f56fadc13b00da2175fd/attempt-0001/receipt.76b5992a1a05122e86a222c00c78fcf6353e50702f4991a52f0c6fbe8e91e8d6.json>) |
+| T.CV.local.ca4bcc07ecfe | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.59622 | 5.56621 | — | 1.0054 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-d78a1ffec4506513) / [details](#attempt-e0e4be300d2b742a) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fa05eda4f5869e429b76/attempt-0001/receipt.json>) |
+| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.60335 | 2.11996 | — | 0.7563 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-0bc02b15ec3b34c5) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/111a1de0eda200c4207c/attempt-0001/receipt.json>) |
+| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.61711 | 2.09775 | — | 0.7709 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-46b8e21e61c37523) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1cbdc068cfad5441dd00/attempt-0001/receipt.json>) |
+| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.07365 | 10.3852 | — | 0.4885 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-c989778422bbb55b) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7363f44cf9fd07492be0/attempt-0001/receipt.json>) |
+| T.CV.local.25fdcd3067b2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 11.1087 | 5.57484 | — | 1.9927 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-a7b9a63d6e07b986) / [details](#attempt-a2844b44b89ddc8f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ed61baeb975129a480cf/attempt-0001/receipt.json>) |
+| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.8052 | 5.5763 | — | 1.0410 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-0e88252bb670b050) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5a61b1976ccfb76739c9/attempt-0001/receipt.2375de7e17bf54e9f1d25f86dfa1d3616dcaad4b75fc5000e638d16e5c2d2a0c.json>) |
+| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.11765 | 2.12078 | — | 0.9985 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-740234899f242030) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/66585b08b948599f1ede/attempt-0001/receipt.cd79d8d67b0723938ee288b12893e6b666a6dbf1a833133c49ac9144502ba5ef.json>) |
+| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 11.9775 | 5.56302 | — | 2.1531 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-8197fb0cd63a6331) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/860b43ae6e51336b141b/attempt-0001/receipt.json>) |
+| T.CV.local.710590f636c2 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.13485 | 2.10444 | — | 1.0144 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-38baba74dc983b41) / [details](#attempt-fd3d3c4b2c4be802) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ab3c437bbfe26fa5b325/attempt-0001/receipt.json>) |
+| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 5.38364 | 2.24136 | — | 2.4020 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-edbb495afcb11721) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/34ab40bac913a76aec18/attempt-0001/receipt.json>) |
+| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 12.9849 | 9.10238 | — | 1.4265 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-a86c9149bb5f5b68) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6422fac533289608328b/attempt-0001/receipt.json>) |
+| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 12.8747 | 11.6233 | — | 1.1077 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-c05483975555697f) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf3f84f003228706d0be/attempt-0001/receipt.json>) |
+| T.CV.local.a8952d6bcb79 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 5.57533 | 3.46583 | — | 1.6087 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-f034d8aac494c23d) / [details](#attempt-51193d383e6c5753) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d08053b65437468ca140/attempt-0001/receipt.json>) |
+| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.91385 | 3.2365 | — | 1.5183 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-12d124bddfcf3124) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2329c1c6d0f279761c2d/attempt-0001/receipt.json>) |
+| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 12.9076 | 5.60664 | — | 2.3022 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-3f3e971f485ed798) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/394330707fd638afc43a/attempt-0001/receipt.71e420aea4262e7c7de0310b55fffbd5ecb287168e5c9255407fe59678b98415.json>) |
+| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 9.76553 | 5.6235 | — | 1.7366 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-d2d269eab43d852c) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/457a537af5e96a2c24c0/attempt-0001/receipt.json>) |
+| T.CV.local.e6430f146f9a | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 3.92051 | 2.05226 | — | 1.9103 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-443f779a9f0f386f) / [details](#attempt-5cc72e284b9b9ef8) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9e05722544b7f8c5cc1f/attempt-0001/receipt.json>) |
+| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.22509 | 13.5456 | — | 0.4596 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-adbc217b39d7a7ae) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5cb4dedaaed7ef311a8f/attempt-0001/receipt.c55f0227d6eb709f3d30eee37c002b63731b8c80d0fa7c9d604af9084db97eb9.json>) |
+| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.43286 | 2.08827 | — | 2.1227 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-f959064f7a86d183) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/626d834d2f6c499c186e/attempt-0001/receipt.json>) |
+| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.44663 | 2.82696 | — | 1.5729 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-dc62d05da75d55ff) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/816b328135aec94355fa/attempt-0001/receipt.json>) |
+| T.CV.local.4210e28ea16c | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 7.60287 | 5.55529 | — | 1.3686 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-1280909b5c10ec7c) / [details](#attempt-a5ef358e658afb29) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f593649f7046c4efcd61/attempt-0001/receipt.011127fb272eb5be5ac1106faf6ca9c5a4db02678469c392bcfac53082f42a33.json>) |
+| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.45653 | 3.15633 | — | 1.4119 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.90876/0.909072; rmse A/B=4.69844/4.69041 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-4dd74a71aef7051e) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/08a755295bb89091cc70/attempt-0001/receipt.json>) |
+| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 13.4888 | 5.6068 | — | 2.4058 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-f9804bcbbb2a4d7d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2c79b18ab250a725c636/attempt-0001/receipt.json>) |
+| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 6.14314 | 5.77668 | — | 1.0634 | PENDING; finite A/B=true/true; r2 A/B=0.330583/0.321614; rmse A/B=0.682721/0.68728 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-21716a13d7e3852c) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/685e7cf63b47f7fde2d7/attempt-0001/receipt.json>) |
+| T.CV.local.f364954c07b8 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | QUALITY_FAILED | 4.47387 | 2.15542 | — | 2.0756 | QUALITY_FAILED; finite A/B=true/true; r2 A/B=0.908803/0.909122; rmse A/B=4.69735/4.68913 | [toggles](#toggles-5b22eb188282181b) / [details](#attempt-71e8f3f18b97cf19) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6b38ab97adf113aa909a/attempt-0001/receipt.fd7eeac49a6755da07e0b4c2d5c7d31d2a58ad80d6415c1605a508d2bdfbc8bb.json>) |
+| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.63826 | 2.04979 | — | 0.7992 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-947e1abe740ec967) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/26036ffb056d4cdc7417/attempt-0001/receipt.json>) |
+| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.62012 | 2.08111 | — | 1.2590 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-5326142d98391079) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3a58cc68659a80ad4b20/attempt-0001/receipt.json>) |
+| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 8.90481 | 12.9548 | — | 0.6874 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-11d4df3d62748273) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ba60dbc2213f9edade7a/attempt-0001/receipt.json>) |
+| T.CV.local.874a0fa1a14e | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.15889 | 5.72878 | — | 0.9005 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-2ff74ec84b56dae6) / [details](#attempt-cfcbd685df26b6fb) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f27ccefc2818cfe8d073/attempt-0001/receipt.json>) |
+| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 3.11031 | 2.58268 | — | 1.2043 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-eeeb77d811860adf) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/029d63b9273714076f9f/attempt-0001/receipt.json>) |
+| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.88047 | 7.59103 | — | 0.7747 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-d07a173c5ed4a9c3) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/14d9a8191cd42715b536/attempt-0001/receipt.e349db9d58761c00d25e99e901aa86ae14dd19d54365a3668328edba865db113.json>) |
+| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.97339 | 2.04638 | — | 1.4530 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-93cc187f089dc2a6) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2ce46e60891e60d7af7d/attempt-0001/receipt.json>) |
+| T.CV.local.47b36b46b020 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.80315 | 5.51137 | — | 1.0529 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-b9c4e3406852e7ad) / [details](#attempt-1e5df1a8e315b3f2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/dce7dc54ced12083e966/attempt-0001/receipt.json>) |
+| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.09263 | 2.07054 | — | 1.0107 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-70235d26a1850d4d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2bf4b3e9c25cb546c71b/attempt-0001/receipt.json>) |
+| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 7.26767 | 5.58555 | — | 1.3012 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-953828fce8028929) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61c883edeef8df4e4ff6/attempt-0001/receipt.json>) |
+| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.07125 | 2.08357 | — | 0.9941 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-b13a393715af5da4) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b80e71d1b363beafd13a/attempt-0001/receipt.json>) |
+| T.CV.local.1d489e1a5ca4 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 9.89882 | 5.60497 | — | 1.7661 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-d8f3af1f61ff0d7f) / [details](#attempt-7227df12decca5a2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e50bcc37e0142ad233a6/attempt-0001/receipt.8f1373e86f8c948cf7a11f2e7975f244af8a3e1cb214da0ba4fee53bc11ae04e.json>) |
+| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.06324 | 2.04539 | — | 1.0087 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-ccced2e9c3388dc3) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8b43ca1aa7f8a5569d0f/attempt-0001/receipt.json>) |
+| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.10211 | 2.10182 | — | 1.0001 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-ddcbced97b1fa55d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c1c67600adb873689b3/attempt-0001/receipt.json>) |
+| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.56219 | 5.5332 | — | 1.0052 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-362cf35525eaab67) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e2975cdf3d53a2ec8496/attempt-0001/receipt.json>) |
+| T.CV.local.d9f7769600f0 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.6321 | 5.55604 | — | 1.0137 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-d3b609d13ba0d258) / [details](#attempt-23824bb5eaa31c19) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f82556c80ef2b8187cae/attempt-0001/receipt.json>) |
+| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.25434 | 14.7676 | — | 0.3558 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-73d79e13b6f896c2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/726c9a11bd5909685c55/attempt-0001/receipt.26bdc0854b3edd95cf0eb723903fa409e70cf086cd252b21aab6766420b3773a.json>) |
+| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.17205 | 5.6756 | — | 0.9113 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-3ba8fa2e75a263f2) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/78b8cf70d3609f7bf839/attempt-0001/receipt.json>) |
+| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.62994 | 2.11865 | — | 0.7693 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-81b2774033834aa7) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d14da02ee4b4eb881e95/attempt-0001/receipt.json>) |
+| T.CV.local.5b95f394132e | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 1.63297 | 2.10133 | — | 0.7771 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-1454037b56a8be78) / [details](#attempt-3023e5613736e422) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f5d979a0b3b8335c0014/attempt-0001/receipt.json>) |
+| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.12802 | 2.12248 | — | 1.0026 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-87093e17b60a845d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a376febd0f4a57d44e7a/attempt-0001/receipt.json>) |
+| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.12758 | 2.40585 | — | 0.8843 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-1537e2b862151a20) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a42415c247a088965dca/attempt-0001/receipt.json>) |
+| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.84623 | 5.64913 | — | 1.0349 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-4133ff7119c49f43) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ef85386b0a6c0b2ef89b/attempt-0001/receipt.json>) |
+| T.CV.local.cae449b50635 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.92116 | 5.61749 | — | 1.0541 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-8c68e4b21652fccd) / [details](#attempt-c13cf27aee5f7138) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f74f23b5f1bbd73560fd/attempt-0001/receipt.json>) |
+| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.14321 | 2.12639 | — | 1.0079 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-07393df6b0dba573) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/59a4a935cec424ebb419/attempt-0001/receipt.json>) |
+| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.14839 | 2.10329 | — | 1.0214 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-84f3fe30c6d0c873) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99b190e8f08a225c7332/attempt-0001/receipt.json>) |
+| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.96853 | 5.58571 | — | 1.0685 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-3c7c3696a24592de) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b219f4bacd9f4040ba7/attempt-0001/receipt.json>) |
+| T.CV.local.56910b67cfd3 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.8413 | 13.1478 | — | 0.4443 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-16bddd9ca1ed4bae) / [details](#attempt-5ad3b1f8835414d4) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bdda3a6a99a2a96ae6c6/attempt-0001/receipt.1f2957c4e7a37701009449f50edfc6fbae34c4e823b51e9d72bb8a076b21de4a.json>) |
 
 ## Campaign notes
 
@@ -346,7 +429,12 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 - Initial C13/C55 retained-byte audit is retained inside this continuation manifest under retained_scored_byte_audit: all 32 scored vendor/arm executions and their repeated outputs/model states reconstruct to the captured typed hashes; 448 NPY leaves checked, zero issues. This audits saved bytes only and does not rerun models. Complete declared fitted-state and output identity matches for all 16 initial same-arm NVIDIA-native/AMD comparisons; Apple, host and PTX remain absent, so full identity remains incomplete.
 - Initial task-quality failures remain visible on both vendors: C13 LassoCV taxi, C13 ElasticNetCV taxi, C55 GaussianNB taxi, and C55 LDA Istella. Execution completion and matching bits do not override quality failures or authorize default promotion.
 - Saved C13 interaction review is retained inside this continuation manifest under c13_interaction_review, including its content-hashed source snapshot. Recorded task metrics and selected fitted scalars may agree between C13+C18 and C13 in compared scopes; that is not complete-state equivalence or proof C18 is inactive. C18-only coverage and remaining pairs stay pending. Candidate changes and inherited incumbent quality deficits are distinct; no default is promoted.
-- Targeted continuations: 170 additional exact profiles; 5 have receipts. See continuation-coverage.json for members and pending scope, and publication-continuations.json for exact plan/review snapshots and missing inputs. The catalog coverage ledger counts authored catalog IDs only; it does not relabel targeted profile IDs as catalog receipts.
+- Targeted source6fe3 runnable queues drained at100 NVIDIA-native pairs and108 AMD pairs, with zero execution failures. This is not all-experiment completion:171 missing physical build keys remain blocked and all-algorithm exhaustive scope remains incomplete. Current scored task-quality review has36 failed and172 pending pairs; execution success does not override those gates.
+- Saved flag-attribution review is retained in this continuation manifest under flag_attribution_review with exact source hash and dated scope. C18-only recorded metrics and selected fitted scalars match incumbent across its eight NVIDIA/AMD CV cases; independent quality admission remains pending. Other exact-flag counterfactuals must be read within their recorded scopes; scalar/metric equality does not establish complete-state equivalence or broad switch inactivity. No default promotion.
+- Current targeted source6fe3 bytes are retained locally with complete manifest SHA checks and in R2 with readback checks: NVIDIA83765 files/21184414400 logical bytes; AMD87798 files/21091121384 logical bytes. Complete outputs, model arrays, accepted binaries, runtime/source, full inputs and original failures are included. AMD uses six ordered archive parts and a readback-verified reassembly manifest. Exact keys and SHA values are retained under targeted_retention and bench/results/r2-index.tsv. Historical preservation limitations are not erased by this new capture.
+- Both current worker queues are closed and work holds are cleared only after successful local and R2 byte proofs. Existing owners start a fresh3600-second idle retention interval after verified capture; provider deletion is a separate observed event, not claimed here. NVIDIA/AMD measurement failures and quality failures remain separately visible.
+- Final targeted source6fe3 resource release: existing owners verified NVIDIA deletion at2026-10-07T08:06:33Z and AMD deletion at2026-10-07T08:13:41Z, both after fresh3600-second post-preservation idle intervals. All required local and R2 bytes were preserved before holds cleared. Immutable provider receipts and original failure/status history are linked under targeted_retention and targeted_release. This does not close171 missing build keys or172 pending/36 failed quality reviews;100 NVIDIA and108 AMD runnable execution pairs completed with0 execution failures.
+- Targeted continuations: 170 additional exact profiles; 26 have receipts. See continuation-coverage.json for members and pending scope, and publication-continuations.json for exact plan/review snapshots and missing inputs. The catalog coverage ledger counts authored catalog IDs only; it does not relabel targeted profile IDs as catalog receipts.
 
 ## Recorded source decisions
 
@@ -369,17 +457,41 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 | I.X.complete-proposed/expanded:enet-cv@dataset=taxi/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | cf442daed63f8d2c9d99947c3a7a4e50fb442319 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/f3260b9ad432706adba9/attempt-0001/receipt.json |
 | I.X.complete-proposed/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 137caf2704fe0139c6a08a39e63869f74a827a8b | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classification-full-v1/659b9236920edb90c199/attempt-0001/receipt.json |
 | I.X.complete-proposed/expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 137caf2704fe0139c6a08a39e63869f74a827a8b | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classification-full-v1/896a91284fe76be2f130/attempt-0001/receipt.json |
+| T.CV.local.f364954c07b8/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/08a755295bb89091cc70/attempt-0001/receipt.json |
+| T.CV.local.e6430f146f9a/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2329c1c6d0f279761c2d/attempt-0001/receipt.json |
+| T.combined.reproduction/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/334095a3465857ea9434/attempt-0001/receipt.576ded849cd6191d0687299e2a8742fa7035332574576d5d37d41bc0442088b1.json |
+| T.CV.local.a8952d6bcb79/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/34ab40bac913a76aec18/attempt-0001/receipt.json |
 | T.C55.only/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/57442d9d2689ba284f4b/attempt-0001/receipt.json |
+| T.combined.reproduction/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61269f74f29737912923/attempt-0001/receipt.json |
+| T.CV.local.4210e28ea16c/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/626d834d2f6c499c186e/attempt-0001/receipt.json |
+| T.CV.local.f364954c07b8/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6b38ab97adf113aa909a/attempt-0001/receipt.fd7eeac49a6755da07e0b4c2d5c7d31d2a58ad80d6415c1605a508d2bdfbc8bb.json |
 | T.C13.C18/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json |
+| T.combined.reproduction/expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/80f84030e7abdcf8f3e2/attempt-0001/receipt.json |
+| T.CV.local.4210e28ea16c/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/816b328135aec94355fa/attempt-0001/receipt.json |
 | T.C13.only/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9239319b1567d2138ec7/attempt-0001/receipt.json |
 | T.C55.only/expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json |
 | T.C13.only/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99604a295758e4930607/attempt-0001/receipt.6a66d916011673084c575156c8e71ca60735e0f48002ff944d3768bf4c4841b6.json |
+| T.CV.local.e6430f146f9a/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9e05722544b7f8c5cc1f/attempt-0001/receipt.json |
+| T.combined.reproduction/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a4312acc4bd1fddcf09f/attempt-0001/receipt.json |
+| T.CV.local.a8952d6bcb79/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d08053b65437468ca140/attempt-0001/receipt.json |
 | T.C13.C18/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json |
+| T.CV.local.a8952d6bcb79/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/0024cc773f1249ca9e82/attempt-0001/receipt.json |
+| T.CV.local.f364954c07b8/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/07eec041b140d0cfb97a/attempt-0001/receipt.json |
+| T.CV.local.4210e28ea16c/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/08b2e3a7225a30ac3ed5/attempt-0001/receipt.json |
+| T.combined.reproduction/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/0fb164e46c4768cc0980/attempt-0001/receipt.7d866ee4620568399ead22adf4265c11a19f6f9d529ddb5df62c83556c52f385.json |
+| T.combined.reproduction/expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/1905ad1c660021d7eb03/attempt-0001/receipt.json |
+| T.CV.local.e6430f146f9a/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/30a1d6ce8dd6301b52c1/attempt-0001/receipt.json |
 | T.C13.only/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/3d0daa186ea154a23d5e/attempt-0001/receipt.json |
 | T.C13.C18/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/4873658ed79bcdc696a3/attempt-0001/receipt.ccc9ddfa99b4858dd380bd3f4c1d1513eb4bf01f69bf8d61189c083d03fbd1be.json |
+| T.CV.local.e6430f146f9a/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/52a988a04c5de0c41242/attempt-0001/receipt.json |
+| T.CV.local.a8952d6bcb79/expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/57a35d46f80ca477082e/attempt-0001/receipt.fdf4e0c3fda7fedcc3e96b89933b9915fbdde2d0321b275633e00adf3844acfb.json |
+| T.CV.local.4210e28ea16c/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/659827202996890f4ba8/attempt-0001/receipt.db785378342f40c151546ddb15d464089557bec457f704f414c91c3bd8fe846c.json |
+| T.combined.reproduction/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/7ddf09bc3ee22129b87c/attempt-0001/receipt.json |
 | T.C55.only/expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/81aff7ce155ba663b7c0/attempt-0001/receipt.231c36bc8bd7fced2d418dfe9dc2df49d72422e4719bc42f3883410b6ba7f9a2.json |
 | T.C55.only/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/94344cac43938a205dcd/attempt-0001/receipt.json |
+| T.CV.local.f364954c07b8/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/a7ef20c6c31bd4b11ee2/attempt-0001/receipt.d8eda4737e03863b72af084a62c342bca4cb20e070a0c1057ec38b0314d7621a.json |
 | T.C13.C18/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/dfc8d7a22b610e371fd6/attempt-0001/receipt.json |
+| T.combined.reproduction/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/eea22479d86088586b6a/attempt-0001/receipt.json |
 | T.C13.only/expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5 | experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/fe404b0a79ed4d09df0a/attempt-0001/receipt.json |
 
 ## Unrun or blocked scope
@@ -409,6 +521,18 @@ Original attempts remain visible after repairs. A quality failure may have compl
 | T.C55.only | nvidia / expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.2764 (4.7972s / 3.7585s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/927ae028a0e623bcc0d4/attempt-0001/receipt.json |
 | T.C13.C18 | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.1089 (4.4314s / 2.1013s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7541c12687ecdc63a7a7/attempt-0001/receipt.json |
 | T.C13.C18 | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.1510 (4.4397s / 2.0640s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f3f35ea8353c16762e68/attempt-0001/receipt.b0ec3b5330ddc204fd6d99bb0f19a3c2754248210848881b712de623d44ff1b0.json |
+| T.combined.reproduction | nvidia / expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 3.9230 (6.1317s / 1.5630s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/334095a3465857ea9434/attempt-0001/receipt.576ded849cd6191d0687299e2a8742fa7035332574576d5d37d41bc0442088b1.json |
+| T.combined.reproduction | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.6285 (5.4355s / 2.0679s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61269f74f29737912923/attempt-0001/receipt.json |
+| T.combined.reproduction | nvidia / expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.3166 (4.8717s / 3.7001s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/80f84030e7abdcf8f3e2/attempt-0001/receipt.json |
+| T.combined.reproduction | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.0903 (4.4439s / 2.1260s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a4312acc4bd1fddcf09f/attempt-0001/receipt.json |
+| T.CV.local.a8952d6bcb79 | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.4020 (5.3836s / 2.2414s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/34ab40bac913a76aec18/attempt-0001/receipt.json |
+| T.CV.local.a8952d6bcb79 | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.6087 (5.5753s / 3.4658s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d08053b65437468ca140/attempt-0001/receipt.json |
+| T.CV.local.e6430f146f9a | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.5183 (4.9139s / 3.2365s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2329c1c6d0f279761c2d/attempt-0001/receipt.json |
+| T.CV.local.e6430f146f9a | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.9103 (3.9205s / 2.0523s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9e05722544b7f8c5cc1f/attempt-0001/receipt.json |
+| T.CV.local.4210e28ea16c | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.1227 (4.4329s / 2.0883s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/626d834d2f6c499c186e/attempt-0001/receipt.json |
+| T.CV.local.4210e28ea16c | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.5729 (4.4466s / 2.8270s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/816b328135aec94355fa/attempt-0001/receipt.json |
+| T.CV.local.f364954c07b8 | nvidia / expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 1.4119 (4.4565s / 3.1563s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/08a755295bb89091cc70/attempt-0001/receipt.json |
+| T.CV.local.f364954c07b8 | nvidia / expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | QUALITY_FAILED: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules | [0, 0, 0, 0] | A: 1/1; B: 1/1 | 2.0756 (4.4739s / 2.1554s) | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6b38ab97adf113aa909a/attempt-0001/receipt.fd7eeac49a6755da07e0b4c2d5c7d31d2a58ad80d6415c1605a508d2bdfbc8bb.json |
 
 ## Experiments run: toggles, timing and quality
 
@@ -658,11 +782,965 @@ Expand a toggle profile or an attempt below. Metric values come from the saved s
 
 </details>
 
+<a id="toggles-8e5d3efee2c74663"></a>
+<details>
+<summary>Recorded toggle profile 8e5d3efee2c74663</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_C29_STREAM_TOPK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C30_DIRECT_DISTANCE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C31_DEVICE_BUCKETS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C32_COUNT_FUSION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C33_FROZEN_CHUNKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C34_PARALLEL_EDGES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C35_PACKED_LISTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C36_CENTROID_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C37_ROW_PANELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C38_REUSE_NEAREST | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C39_RETAIN_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C40_SEED_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C41_FUSED_MINIMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C42_ACTIVE_TRIANGLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C43_RESIDENT_NORMALIZATION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C44_SAMPLING_DESCRIPTORS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C52_PAIR_128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C53_CENTER4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C54_PREDICT_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C57_CANDIDATE_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C58_SHARED_PREP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C59_TRIAL_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C60_LAG4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C01_LEAF64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C02_STATS_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C04_LOAD_CENTER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C06_ROWS2 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C07_DIGIT4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C08_DICTIONARY | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C09_REG_BUNDLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C10_RANK_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C11_DRAW_GATHER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C14_GROUP_RHS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C16_GLM_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C17_OVR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C19_ORDERED_128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C20_ROW_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C21_EXTREMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C22_TRIANGLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C24_PANEL8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C26_PRODUCTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C27_COMPONENTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C55_CLASS_GROUP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C56_LDA_INPUT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_AF_COL_CHUNK_FOLD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_LM_PARAM_VIEWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_CHAINS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_LEAF | 64 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN02 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN03 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN04 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN05 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN06 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN07 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN11 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN12 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS | 16777216 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_SAMBA_FORWARD_TAPE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_TRAIN_SWIGLU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI06_GEMM_ONE_PAGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI07_GROUPED_PROJECTIONS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI09_TILED_BIAS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI10_BUDGETED_CNN_TAPE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI11_DIRECT_CONV_TAPS64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI14_TILED_COL2IM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI15_BIAS_NO_ONES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI16_CONV_RELU_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI17_BALANCED_NORM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI18_FUSED_EPOCH_GATHER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI57_GRAPH_TREE64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI58_SAGE_FEATURE4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI59_DROPOUT_CHANNEL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN14_BOUNDED_IM2COL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN20_BALANCED_SUMMARY_TREE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN24_NORM_LANES8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN25_RMS_SPLIT_SCALE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN26_TRAIN_SWIGLU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN27_QK_ROPE_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN28_DEAD_TRAINING_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN29_RING_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN31_BOUNDED_CHECKPOINTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN32_RETAIN_FORWARD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN33_CSTATE_P16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN33_YDIAG_ROWS8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN34_AFFINE_PREFIX | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN35_CONV_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN36_SHARED_DECAY | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN37_TRIANGLE_TASKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN39_M2_GRAD_TREE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN40_OWNED_WEIGHTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN40_WS_HEADROOM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN42_INPUT_BIAS_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN43_WGRAD_FIXED128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN44_EXPERT_BISECT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN44_STABLE_GROUP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN45_CONV_RELU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN46_GATHER_BOUNDS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN47_APPLY_RUNNING | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN48_CSR_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN49_EMB_VECTOR4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN50_OWNED_RUNS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN52_CE_WEIGHT_GRAD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN53_HEAD_CHUNK512 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN54_LOSS_PROFILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN55_BLOCK_STATUS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN56_GROUPED_ADAM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN57_NORM_PROFILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN58_ACCUMULATE_STATUS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN59_DROPOUT_RESIDUAL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN60_BLOCK_VIEWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN62_LIFETIME_ARENA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN63_CANONICAL_SHARD_MERGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN64_SESSION_PACK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NUMERIC_IDENTICAL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C45_GBDT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C47_GBDT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C47_IF_LIVE_TASKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C48 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C48_IF_PARTITION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C50_GB_PACKED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C50_IF_PACKED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01_REPLICAS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01_ROWS | 128 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T02 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T03 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T04 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T05 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T06 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T07 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08_BITS | 8 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08_LAYOUT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T09 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T10 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T11 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T11_LEVELS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T12 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T13 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T14 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T15 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T17 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T18 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T19 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T20 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T21 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T22 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T23 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T24 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T25 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T26 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T27 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T28 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T29 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T30 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T31_PACKED_A | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T32_SHARED_ROWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T33_COST_SCHEDULE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T34_CHUNK_FOLD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T35_LEAF_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T36_FINITE_STAGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T37_WORKSPACE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T38_FUSED_LABELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T39_AUXILIARY_WALK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T40_ROWMAJOR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T41_TREE_BATCH | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T42_CORRECTION_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T43_RADIX_SELECT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T44_METADATA_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T45_LINEAR_UNWIND | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_XCNN_NO_DIRECT_CONV | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-c5bae06aee08a1f5"></a>
+<details>
+<summary>Recorded toggle profile c5bae06aee08a1f5</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_C29_STREAM_TOPK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C30_DIRECT_DISTANCE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C31_DEVICE_BUCKETS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C32_COUNT_FUSION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C33_FROZEN_CHUNKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C34_PARALLEL_EDGES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C35_PACKED_LISTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C36_CENTROID_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C37_ROW_PANELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C38_REUSE_NEAREST | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C39_RETAIN_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C40_SEED_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C41_FUSED_MINIMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C42_ACTIVE_TRIANGLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C43_RESIDENT_NORMALIZATION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C44_SAMPLING_DESCRIPTORS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C52_PAIR_128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C53_CENTER4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C54_PREDICT_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C57_CANDIDATE_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C58_SHARED_PREP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C59_TRIAL_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C60_LAG4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C01_LEAF64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C02_STATS_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C04_LOAD_CENTER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C06_ROWS2 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C07_DIGIT4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C08_DICTIONARY | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C09_REG_BUNDLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C10_RANK_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C11_DRAW_GATHER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C14_GROUP_RHS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C16_GLM_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C17_OVR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C19_ORDERED_128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C20_ROW_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C21_EXTREMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C22_TRIANGLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C24_PANEL8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C26_PRODUCTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C27_COMPONENTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C55_CLASS_GROUP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C56_LDA_INPUT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_AF_COL_CHUNK_FOLD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_LM_PARAM_VIEWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_CHAINS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_LEAF | 64 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN02 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN03 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN04 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN05 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN06 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN07 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN11 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN12 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS | 16777216 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_SAMBA_FORWARD_TAPE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_TRAIN_SWIGLU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI06_GEMM_ONE_PAGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI07_GROUPED_PROJECTIONS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI09_TILED_BIAS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI10_BUDGETED_CNN_TAPE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI11_DIRECT_CONV_TAPS64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI14_TILED_COL2IM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI15_BIAS_NO_ONES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI16_CONV_RELU_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI17_BALANCED_NORM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI18_FUSED_EPOCH_GATHER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI57_GRAPH_TREE64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI58_SAGE_FEATURE4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI59_DROPOUT_CHANNEL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN14_BOUNDED_IM2COL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN20_BALANCED_SUMMARY_TREE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN24_NORM_LANES8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN25_RMS_SPLIT_SCALE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN26_TRAIN_SWIGLU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN27_QK_ROPE_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN28_DEAD_TRAINING_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN29_RING_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN31_BOUNDED_CHECKPOINTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN32_RETAIN_FORWARD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN33_CSTATE_P16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN33_YDIAG_ROWS8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN34_AFFINE_PREFIX | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN35_CONV_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN36_SHARED_DECAY | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN37_TRIANGLE_TASKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN39_M2_GRAD_TREE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN40_OWNED_WEIGHTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN40_WS_HEADROOM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN42_INPUT_BIAS_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN43_WGRAD_FIXED128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN44_EXPERT_BISECT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN44_STABLE_GROUP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN45_CONV_RELU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN46_GATHER_BOUNDS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN47_APPLY_RUNNING | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN48_CSR_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN49_EMB_VECTOR4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN50_OWNED_RUNS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN52_CE_WEIGHT_GRAD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN53_HEAD_CHUNK512 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN54_LOSS_PROFILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN55_BLOCK_STATUS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN56_GROUPED_ADAM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN57_NORM_PROFILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN58_ACCUMULATE_STATUS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN59_DROPOUT_RESIDUAL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN60_BLOCK_VIEWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN62_LIFETIME_ARENA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN63_CANONICAL_SHARD_MERGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN64_SESSION_PACK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NUMERIC_IDENTICAL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C45_GBDT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C47_GBDT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C47_IF_LIVE_TASKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C48 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C48_IF_PARTITION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C50_GB_PACKED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C50_IF_PACKED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01_REPLICAS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01_ROWS | 128 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T02 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T03 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T04 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T05 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T06 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T07 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08_BITS | 8 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08_LAYOUT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T09 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T10 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T11 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T11_LEVELS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T12 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T13 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T14 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T15 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T17 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T18 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T19 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T20 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T21 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T22 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T23 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T24 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T25 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T26 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T27 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T28 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T29 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T30 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T31_PACKED_A | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T32_SHARED_ROWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T33_COST_SCHEDULE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T34_CHUNK_FOLD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T35_LEAF_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T36_FINITE_STAGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T37_WORKSPACE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T38_FUSED_LABELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T39_AUXILIARY_WALK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T40_ROWMAJOR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T41_TREE_BATCH | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T42_CORRECTION_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T43_RADIX_SELECT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T44_METADATA_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T45_LINEAR_UNWIND | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_XCNN_NO_DIRECT_CONV | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-3d240367ffc8c870"></a>
+<details>
+<summary>Recorded toggle profile 3d240367ffc8c870</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_C29_STREAM_TOPK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C30_DIRECT_DISTANCE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C31_DEVICE_BUCKETS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C32_COUNT_FUSION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C33_FROZEN_CHUNKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C34_PARALLEL_EDGES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C35_PACKED_LISTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C36_CENTROID_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C37_ROW_PANELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C38_REUSE_NEAREST | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C39_RETAIN_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C40_SEED_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C41_FUSED_MINIMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C42_ACTIVE_TRIANGLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C43_RESIDENT_NORMALIZATION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C44_SAMPLING_DESCRIPTORS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C52_PAIR_128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C53_CENTER4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C54_PREDICT_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C57_CANDIDATE_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C58_SHARED_PREP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C59_TRIAL_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C60_LAG4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C01_LEAF64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C02_STATS_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C04_LOAD_CENTER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C06_ROWS2 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C07_DIGIT4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C08_DICTIONARY | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C09_REG_BUNDLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C10_RANK_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C11_DRAW_GATHER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C13_FOLD_STATS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C14_GROUP_RHS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C16_GLM_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C17_OVR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C19_ORDERED_128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C20_ROW_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C21_EXTREMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C22_TRIANGLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C24_PANEL8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C26_PRODUCTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C27_COMPONENTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C56_LDA_INPUT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_AF_COL_CHUNK_FOLD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_LM_PARAM_VIEWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_CHAINS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_LEAF | 64 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN02 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN03 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN04 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN05 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN06 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN07 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN11 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN12 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS | 16777216 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_SAMBA_FORWARD_TAPE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_TRAIN_SWIGLU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI06_GEMM_ONE_PAGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI07_GROUPED_PROJECTIONS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI09_TILED_BIAS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI10_BUDGETED_CNN_TAPE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI11_DIRECT_CONV_TAPS64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI14_TILED_COL2IM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI15_BIAS_NO_ONES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI16_CONV_RELU_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI17_BALANCED_NORM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI18_FUSED_EPOCH_GATHER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI57_GRAPH_TREE64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI58_SAGE_FEATURE4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI59_DROPOUT_CHANNEL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN14_BOUNDED_IM2COL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN20_BALANCED_SUMMARY_TREE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN24_NORM_LANES8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN25_RMS_SPLIT_SCALE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN26_TRAIN_SWIGLU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN27_QK_ROPE_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN28_DEAD_TRAINING_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN29_RING_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN31_BOUNDED_CHECKPOINTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN32_RETAIN_FORWARD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN33_CSTATE_P16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN33_YDIAG_ROWS8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN34_AFFINE_PREFIX | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN35_CONV_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN36_SHARED_DECAY | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN37_TRIANGLE_TASKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN39_M2_GRAD_TREE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN40_OWNED_WEIGHTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN40_WS_HEADROOM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN42_INPUT_BIAS_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN43_WGRAD_FIXED128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN44_EXPERT_BISECT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN44_STABLE_GROUP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN45_CONV_RELU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN46_GATHER_BOUNDS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN47_APPLY_RUNNING | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN48_CSR_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN49_EMB_VECTOR4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN50_OWNED_RUNS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN52_CE_WEIGHT_GRAD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN53_HEAD_CHUNK512 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN54_LOSS_PROFILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN55_BLOCK_STATUS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN56_GROUPED_ADAM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN57_NORM_PROFILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN58_ACCUMULATE_STATUS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN59_DROPOUT_RESIDUAL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN60_BLOCK_VIEWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN62_LIFETIME_ARENA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN63_CANONICAL_SHARD_MERGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN64_SESSION_PACK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NUMERIC_IDENTICAL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C45_GBDT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C47_GBDT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C47_IF_LIVE_TASKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C48 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C48_IF_PARTITION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C50_GB_PACKED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C50_IF_PACKED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01_REPLICAS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01_ROWS | 128 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T02 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T03 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T04 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T05 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T06 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T07 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08_BITS | 8 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08_LAYOUT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T09 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T10 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T11 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T11_LEVELS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T12 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T13 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T14 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T15 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T17 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T18 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T19 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T20 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T21 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T22 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T23 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T24 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T25 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T26 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T27 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T28 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T29 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T30 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T31_PACKED_A | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T32_SHARED_ROWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T33_COST_SCHEDULE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T34_CHUNK_FOLD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T35_LEAF_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T36_FINITE_STAGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T37_WORKSPACE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T38_FUSED_LABELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T39_AUXILIARY_WALK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T40_ROWMAJOR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T41_TREE_BATCH | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T42_CORRECTION_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T43_RADIX_SELECT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T44_METADATA_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T45_LINEAR_UNWIND | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_XCNN_NO_DIRECT_CONV | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-fc3fe1098e8ed269"></a>
+<details>
+<summary>Recorded toggle profile fc3fe1098e8ed269</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_C29_STREAM_TOPK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C30_DIRECT_DISTANCE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C31_DEVICE_BUCKETS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C32_COUNT_FUSION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C33_FROZEN_CHUNKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C34_PARALLEL_EDGES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C35_PACKED_LISTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C36_CENTROID_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C37_ROW_PANELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C38_REUSE_NEAREST | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C39_RETAIN_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C40_SEED_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C41_FUSED_MINIMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C42_ACTIVE_TRIANGLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C43_RESIDENT_NORMALIZATION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C44_SAMPLING_DESCRIPTORS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C52_PAIR_128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C53_CENTER4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C54_PREDICT_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C57_CANDIDATE_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C58_SHARED_PREP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C59_TRIAL_STATE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_C60_LAG4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C01_LEAF64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C02_STATS_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C04_LOAD_CENTER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C06_ROWS2 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C07_DIGIT4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C08_DICTIONARY | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C09_REG_BUNDLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C10_RANK_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C11_DRAW_GATHER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C13_FOLD_STATS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C14_GROUP_RHS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C16_GLM_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C17_OVR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C19_ORDERED_128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C20_ROW_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C21_EXTREMA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C22_TRIANGLE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C24_PANEL8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C26_PRODUCTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C27_COMPONENTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C55_CLASS_GROUP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_CLASSICAL_C56_LDA_INPUT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_AF_COL_CHUNK_FOLD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_LM_PARAM_VIEWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_CHAINS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_LEAF | 64 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN02 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN03 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN04 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN05 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN06 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN07 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN11 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN12 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_NN16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS | 16777216 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_SAMBA_FORWARD_TAPE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_TRAIN_SWIGLU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI06_GEMM_ONE_PAGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI07_GROUPED_PROJECTIONS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI09_TILED_BIAS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI10_BUDGETED_CNN_TAPE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI11_DIRECT_CONV_TAPS64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI14_TILED_COL2IM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI15_BIAS_NO_ONES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI16_CONV_RELU_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI17_BALANCED_NORM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI18_FUSED_EPOCH_GATHER | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI57_GRAPH_TREE64 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI58_SAGE_FEATURE4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NI59_DROPOUT_CHANNEL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN14_BOUNDED_IM2COL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN20_BALANCED_SUMMARY_TREE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN24_NORM_LANES8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN25_RMS_SPLIT_SCALE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN26_TRAIN_SWIGLU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN27_QK_ROPE_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN28_DEAD_TRAINING_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN29_RING_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN31_BOUNDED_CHECKPOINTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN32_RETAIN_FORWARD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN33_CSTATE_P16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN33_YDIAG_ROWS8 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN34_AFFINE_PREFIX | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN35_CONV_PAIR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN36_SHARED_DECAY | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN37_TRIANGLE_TASKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN39_M2_GRAD_TREE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN40_OWNED_WEIGHTS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN40_WS_HEADROOM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN42_INPUT_BIAS_FUSED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN43_WGRAD_FIXED128 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN44_EXPERT_BISECT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN44_STABLE_GROUP | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN45_CONV_RELU | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN46_GATHER_BOUNDS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN47_APPLY_RUNNING | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN48_CSR_TILES | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN49_EMB_VECTOR4 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN50_OWNED_RUNS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN52_CE_WEIGHT_GRAD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN53_HEAD_CHUNK512 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN54_LOSS_PROFILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN55_BLOCK_STATUS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN56_GROUPED_ADAM | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN57_NORM_PROFILE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN58_ACCUMULATE_STATUS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN59_DROPOUT_RESIDUAL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN60_BLOCK_VIEWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN62_LIFETIME_ARENA | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN63_CANONICAL_SHARD_MERGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NN64_SESSION_PACK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_NUMERIC_IDENTICAL | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C45_GBDT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C47_GBDT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C47_IF_LIVE_TASKS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C48 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C48_IF_PARTITION | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C50_GB_PACKED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_C50_IF_PACKED | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01_REPLICAS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T01_ROWS | 128 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T02 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T03 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T04 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T05 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T06 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T07 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08_BITS | 8 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T08_LAYOUT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T09 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T10 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T11 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T11_LEVELS | 2 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T12 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T13 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T14 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T15 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T16 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T17 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T18 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T19 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T20 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T21 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T22 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T23 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T24 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T25 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T26 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T27 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T28 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T29 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T30 | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T31_PACKED_A | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T32_SHARED_ROWS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T33_COST_SCHEDULE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T34_CHUNK_FOLD | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T35_LEAF_REUSE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T36_FINITE_STAGE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T37_WORKSPACE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T38_FUSED_LABELS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T39_AUXILIARY_WALK | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T40_ROWMAJOR | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T41_TREE_BATCH | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T42_CORRECTION_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T43_RADIX_SELECT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T44_METADATA_CACHE | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_TREES_T45_LINEAR_UNWIND | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_XCNN_NO_DIRECT_CONV | 1 | incumbent default (no explicit override) |
+
+</details>
+
 <a id="toggles-5f8e91eb1179e765"></a>
 <details>
 <summary>Recorded toggle profile 5f8e91eb1179e765</summary>
 
 No explicit overrides recorded; incumbent defaults remain in effect.
+
+</details>
+
+<a id="toggles-378c477026f75f77"></a>
+<details>
+<summary>Recorded toggle profile 378c477026f75f77</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_IDN_HPDEV_FOLDS_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-d78a1ffec4506513"></a>
+<details>
+<summary>Recorded toggle profile d78a1ffec4506513</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_FTZ_HW_OFF | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_FTZ_NO_CLASS | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-a7b9a63d6e07b986"></a>
+<details>
+<summary>Recorded toggle profile a7b9a63d6e07b986</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_IDN_HPDEV_CAST_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-38baba74dc983b41"></a>
+<details>
+<summary>Recorded toggle profile 38baba74dc983b41</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-f034d8aac494c23d"></a>
+<details>
+<summary>Recorded toggle profile f034d8aac494c23d</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_CLASSICAL_C13_FOLD_STATS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-443f779a9f0f386f"></a>
+<details>
+<summary>Recorded toggle profile 443f779a9f0f386f</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_CLASSICAL_C13_FOLD_STATS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_HPDEV_CAST_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-1280909b5c10ec7c"></a>
+<details>
+<summary>Recorded toggle profile 1280909b5c10ec7c</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_CLASSICAL_C13_FOLD_STATS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_HPDEV_FOLDS_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-5b22eb188282181b"></a>
+<details>
+<summary>Recorded toggle profile 5b22eb188282181b</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_CLASSICAL_C13_FOLD_STATS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_FTZ_HW_OFF | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_FTZ_NO_CLASS | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-2ff74ec84b56dae6"></a>
+<details>
+<summary>Recorded toggle profile 2ff74ec84b56dae6</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_HPDEV_CAST_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-b9c4e3406852e7ad"></a>
+<details>
+<summary>Recorded toggle profile b9c4e3406852e7ad</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-d8f3af1f61ff0d7f"></a>
+<details>
+<summary>Recorded toggle profile d8f3af1f61ff0d7f</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_HPDEV_FOLDS_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-d3b609d13ba0d258"></a>
+<details>
+<summary>Recorded toggle profile d3b609d13ba0d258</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_FTZ_HW_OFF | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_FTZ_NO_CLASS | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-1454037b56a8be78"></a>
+<details>
+<summary>Recorded toggle profile 1454037b56a8be78</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_FTZ_HW_OFF | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_FTZ_NO_CLASS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_IDN_HPDEV_CAST_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-8c68e4b21652fccd"></a>
+<details>
+<summary>Recorded toggle profile 8c68e4b21652fccd</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_IDN_HPDEV_CAST_OFF | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF | 1 | incumbent default (no explicit override) |
+
+</details>
+
+<a id="toggles-16bddd9ca1ed4bae"></a>
+<details>
+<summary>Recorded toggle profile 16bddd9ca1ed4bae</summary>
+
+| Recorded control | A: candidate | B: incumbent |
+|---|---|---|
+| define MOJOLEARN_FTZ_HW_OFF | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_FTZ_NO_CLASS | 1 | incumbent default (no explicit override) |
+| define MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF | 1 | incumbent default (no explicit override) |
 
 </details>
 
@@ -824,6 +1902,20 @@ None recorded.
 These are recorded source disclosures, not proof of runtime reach.
 
 Implementation IDs: ["I.C.C18"]
+
+Source coverage pending:
+
+None recorded.
+
+</details>
+
+<a id="coverage-9ed951bef35c9db5"></a>
+<details>
+<summary>Recorded implementation IDs and source coverage 9ed951bef35c9db5</summary>
+
+These are recorded source disclosures, not proof of runtime reach.
+
+Implementation IDs: ["I.N.NN02", "I.C.C01", "I.C.C02", "I.C.C03", "I.C.C04", "I.C.C05", "I.C.C06", "I.C.C07", "I.C.C08", "I.C.C09", "I.C.C10", "I.C.C11", "I.C.C12", "I.C.C13", "I.C.C14", "I.C.C15", "I.C.C16", "I.C.C17", "I.C.C18", "I.C.C19", "I.C.C20", "I.C.C21", "I.C.C22", "I.C.C23", "I.C.C24", "I.C.C25", "I.C.C26", "I.C.C27", "I.C.C28", "I.C.C29", "I.C.C30", "I.C.C31", "I.C.C32", "I.C.C33", "I.C.C34", "I.C.C35", "I.C.C36", "I.C.C37", "I.C.C38", "I.C.C39", "I.C.C40", "I.C.C41", "I.C.C42", "I.C.C43", "I.C.C44", "I.C.C52", "I.C.C53", "I.C.C54", "I.C.C55", "I.C.C56", "I.C.C57", "I.C.C58", "I.C.C59", "I.C.C60", "I.T.T01", "I.T.T02", "I.T.T03", "I.T.T04", "I.T.T05", "I.T.T06", "I.T.T07", "I.T.T08", "I.T.T09", "I.T.T10", "I.T.T11", "I.T.T12", "I.T.T13", "I.T.T14", "I.T.T15", "I.T.T16", "I.T.T17", "I.T.T18", "I.T.T19", "I.T.T20", "I.T.T21", "I.T.T22", "I.T.T23", "I.T.T24", "I.T.T25", "I.T.T26", "I.T.T27", "I.T.T28", "I.T.T29", "I.T.T30", "I.T.T31", "I.T.T32", "I.T.T33", "I.T.T34", "I.T.T35", "I.T.T36", "I.T.T37", "I.T.T38", "I.T.T39", "I.T.T40", "I.T.T41", "I.T.T42", "I.T.T43", "I.T.T44", "I.T.T45", "I.T.C45_GBDT", "I.T.C47_GBDT", "I.T.C47_IF", "I.T.C48", "I.T.C48_IF", "I.T.C50_GB", "I.T.C50_IF", "I.N.NN03", "I.N.NN04", "I.N.NN05", "I.N.NN06", "I.N.NN07", "I.N.NN11", "I.N.NN12", "I.N.NN14", "I.N.NN16", "I.N.NN20", "I.N.NN24", "I.N.NN25", "I.N.NN26", "I.N.NN27", "I.N.NN28", "I.N.NN29", "I.N.NN31", "I.N.NN32", "I.N.NN33", "I.N.NN34", "I.N.NN35", "I.N.NN36", "I.N.NN37", "I.N.NN38", "I.N.NN39", "I.N.NN40", "I.N.NN42", "I.N.NN43", "I.N.NN44", "I.N.NN45", "I.N.NN46", "I.N.NN47", "I.N.NN48", "I.N.NN49", "I.N.NN50", "I.N.NN51", "I.N.NN52", "I.N.NN53", "I.N.NN54", "I.N.NN55", "I.N.NN56", "I.N.NN57", "I.N.NN58", "I.N.NN59", "I.N.NN60", "I.N.NN62", "I.N.NN63", "I.N.NN64", "I.N.NI06", "I.N.NI07", "I.N.NI09", "I.N.NI10", "I.N.NI11", "I.N.NI14", "I.N.NI15", "I.N.NI16", "I.N.NI17", "I.N.NI18", "I.N.NI26", "I.N.NI27", "I.N.NI36", "I.N.NI42", "I.N.NI46", "I.N.NI47", "I.N.NI48", "I.N.NI49", "I.N.NI52", "I.N.NI54", "I.N.NI57", "I.N.NI58", "I.N.NI59"]
 
 Source coverage pending:
 
@@ -5022,22 +6114,1035 @@ Worker exits: [0, 0, 0, 0]
 
 </details>
 
-<a id="attempt-e09c74c54be07353"></a>
+<a id="attempt-c0d88ca12c012d0b"></a>
+<details>
+<summary>T.C18.residual-only — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/47d0e9c0d197d26c80e2/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.101094599813223 s; B: 2.082751961424947 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-0ba9dd2e24ea6bfd)
+
+</details>
+
+<a id="attempt-d4cf713f8bf64c9a"></a>
+<details>
+<summary>T.C18.residual-only — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/51404940ade2d36c81a6/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.658588904887438 s; B: 5.624285841360688 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-0ba9dd2e24ea6bfd)
+
+</details>
+
+<a id="attempt-b32661e921d62ee8"></a>
+<details>
+<summary>T.C18.residual-only — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9a604a138bcd1a3009a9/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.0628926176577806 s; B: 2.127442976459861 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-0ba9dd2e24ea6bfd)
+
+</details>
+
+<a id="attempt-1ca9cbac03165f57"></a>
 <details>
 <summary>T.C18.residual-only — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
 
-[Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.json>)
+[Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.8ef93f089139a761eed26f535b632c4e055dfb5236aed0defcd278abefa68c8c.json>)
 
-Status: IN_PROGRESS. Scope: full_workload. Observed A: — s; B: — s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.634828245267272 s; B: 5.597302773967385 s.
 
-Quality assessment: NOT_ASSESSED. Identity: INCOMPLETE.
+Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Scored quality metrics not recorded for this attempt.
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
 
 Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
-Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 0, "warmup": 1}}
-Worker exits: [0, 0, 0]
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
 [Recorded implementation IDs and 0 source coverage gaps](#coverage-0ba9dd2e24ea6bfd)
+
+</details>
+
+<a id="attempt-52f6a4254c4a89d7"></a>
+<details>
+<summary>T.combined.minus-C13 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-8e5d3efee2c74663) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/38928c02ed2c35af3343/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1391559094190598 s; B: 2.1161527428776026 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-f8fed67958af299f"></a>
+<details>
+<summary>T.combined.minus-C13 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-8e5d3efee2c74663) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5559cba282e3db50f398/attempt-0001/receipt.55f845dbf5d059737162e3570516f948083872dfd1a32935f763270e6118e67b.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.631052102893591 s; B: 5.57634649053216 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-3bf77696122abd9e"></a>
+<details>
+<summary>T.combined.minus-C13 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-8e5d3efee2c74663) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8454febec213ca782283/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.108608704060316 s; B: 2.0969316884875298 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-759d36fe9a5a6604"></a>
+<details>
+<summary>T.combined.minus-C13 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-8e5d3efee2c74663) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/c974dc40aa40f2549155/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.6230306923389435 s; B: 5.6152029149234295 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-1c3e0b87fb1fa1a2"></a>
+<details>
+<summary>T.combined.minus-C13-C18 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-c5bae06aee08a1f5) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1981486684c39cb7f509/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.558865569531918 s; B: 5.602537347003818 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-97e5ada8eeee93aa"></a>
+<details>
+<summary>T.combined.minus-C13-C18 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-c5bae06aee08a1f5) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5e07e40b6ceef1c5e078/attempt-0001/receipt.92e3cd9ab2be92d3a0a8d37085b97add0670ffb894b34fc622541e38d21b1662.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.136168582364917 s; B: 6.310441147536039 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-a4e0cc889f416207"></a>
+<details>
+<summary>T.combined.minus-C13-C18 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-c5bae06aee08a1f5) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7a4b73a821dc6bf90408/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.053800592198968 s; B: 6.100818736478686 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-4dcd2caefccfa172"></a>
+<details>
+<summary>T.combined.minus-C13-C18 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-c5bae06aee08a1f5) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e6261da8cfbb7a6655eb/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.56625559180975 s; B: 5.574685858562589 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-c8d7aac35081af69"></a>
+<details>
+<summary>T.combined.minus-C55 — nvidia/native-sm90 — expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-3d240367ffc8c870) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6295dfb45e4447c64d77/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.414518928155303 s; B: 1.4132333602756262 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| accuracy | 0.720538 | 0.720538 |
+| logloss | 1.1408800529981222 | 1.1408800529981222 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.accuracy | ["SAME", 0.720538, 0.720538, 0.0] |
+| candidate_vs_baseline.metrics.logloss | ["SAME", 1.1408800529981222, 1.1408800529981222, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.accuracy | higher |
+| metric_directions.logloss | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-42b4fe3fbad8b160"></a>
+<details>
+<summary>T.combined.minus-C55 — nvidia/native-sm90 — expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-3d240367ffc8c870) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/81c7729ed6eceb610740/attempt-0001/receipt.b26760d9975a12e2ce1bb6d96a38beeea2a8dab0df8b6386b3339ca4941c1acf.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.749914228916168 s; B: 3.693358490243554 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| accuracy | 0.913584 | 0.913584 |
+| logloss | 0.23366145305870906 | 0.23366145305870906 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.accuracy | ["SAME", 0.913584, 0.913584, 0.0] |
+| candidate_vs_baseline.metrics.logloss | ["SAME", 0.23366145305870906, 0.23366145305870906, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.accuracy | higher |
+| metric_directions.logloss | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-776e2df67b56c4c1"></a>
+<details>
+<summary>T.combined.minus-C55 — nvidia/native-sm90 — expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-3d240367ffc8c870) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf6a12554a864102b2de/attempt-0001/receipt.96849300116b5856f59294fedfefee1cbe149c6c26826a470dc64690e6e1b3dc.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.289439702406526 s; B: 6.795718438923359 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| accuracy | 0.868346 | 0.868346 |
+| logloss | 3.743026222088278 | 3.743026222088278 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.accuracy | ["SAME", 0.868346, 0.868346, 0.0] |
+| candidate_vs_baseline.metrics.logloss | ["SAME", 3.743026222088278, 3.743026222088278, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.accuracy | higher |
+| metric_directions.logloss | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-a6468b4671a7c5c6"></a>
+<details>
+<summary>T.combined.minus-C55 — nvidia/native-sm90 — expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-3d240367ffc8c870) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e9c5a887a10f16f7e492/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.7180448174476624 s; B: 2.2490270994603634 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| accuracy | 0.763624 | 0.763624 |
+| logloss | 0.5382462695354288 | 0.5382462695354288 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.accuracy | ["SAME", 0.763624, 0.763624, 0.0] |
+| candidate_vs_baseline.metrics.logloss | ["SAME", 0.5382462695354288, 0.5382462695354288, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.accuracy | higher |
+| metric_directions.logloss | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-ea7bf436c35909f2"></a>
+<details>
+<summary>T.combined.reproduction — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2e059451964d90968061/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.275295354425907 s; B: 7.782838622108102 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.32928042638183586 | 0.31456879028296647 |
+| rmse | 0.6833854259336551 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["BETTER", 0.32928042638183586, 0.31456879028296647, 0.04467813729629246] |
+| candidate_vs_baseline.metrics.rmse | ["BETTER", 0.6833854259336551, 0.6908394981786193, 0.010789875600073048] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-d46e5d797dc221f0"></a>
+<details>
+<summary>T.combined.reproduction — nvidia/native-sm90 — expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/334095a3465857ea9434/attempt-0001/receipt.576ded849cd6191d0687299e2a8742fa7035332574576d5d37d41bc0442088b1.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 6.131748493760824 s; B: 1.5630433931946754 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| accuracy | 0.71871 | 0.720538 |
+| logloss | 1.176889445295522 | 1.1408800529981222 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.accuracy | ["WORSE", 0.71871, 0.720538, -0.0025369931911988705] |
+| candidate_vs_baseline.metrics.logloss | ["WORSE", 1.176889445295522, 1.1408800529981222, -0.030597090016690344] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.030597090016690344 |
+| metric_directions.accuracy | higher |
+| metric_directions.logloss | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-72d44872b8132886"></a>
+<details>
+<summary>T.combined.reproduction — nvidia/native-sm90 — expanded:gaussian-nb@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/41bf5dab451f761555e4/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.705539749935269 s; B: 3.74196582660079 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| accuracy | 0.86872 | 0.868346 |
+| logloss | 3.7337998882694503 | 3.743026222088278 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.accuracy | ["SAME", 0.86872, 0.868346, 0.00043051846394706746] |
+| candidate_vs_baseline.metrics.logloss | ["BETTER", 3.7337998882694503, 3.743026222088278, 0.0024649396695062874] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.accuracy | higher |
+| metric_directions.logloss | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-698132a51d7f1f3c"></a>
+<details>
+<summary>T.combined.reproduction — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61269f74f29737912923/attempt-0001/receipt.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.43547142483294 s; B: 2.06792507506907 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9088028117512673 | 0.9091215889136197 |
+| rmse | 4.697345852642057 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9088028117512673, 0.9091215889136197, -0.0003506430451545357] |
+| candidate_vs_baseline.metrics.rmse | ["WORSE", 4.697345852642057, 4.689128946848568, -0.0017492656600678967] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0017492656600678967 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-2a3d628ebab76e92"></a>
+<details>
+<summary>T.combined.reproduction — nvidia/native-sm90 — expanded:lda-clf@dataset=istella@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/80f84030e7abdcf8f3e2/attempt-0001/receipt.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.871677244082093 s; B: 3.7001227773725986 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| accuracy | 0.912628 | 0.913584 |
+| logloss | 0.23408621803587862 | 0.23366145305870906 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.accuracy | ["WORSE", 0.912628, 0.913584, -0.0010464281335924852] |
+| candidate_vs_baseline.metrics.logloss | ["WORSE", 0.23408621803587862, 0.23366145305870906, -0.0018145663624863958] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0018145663624863958 |
+| metric_directions.accuracy | higher |
+| metric_directions.logloss | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-6169e0b0391158e5"></a>
+<details>
+<summary>T.combined.reproduction — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a4312acc4bd1fddcf09f/attempt-0001/receipt.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.443856639787555 s; B: 2.125964730978012 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9087603210162847 | 0.9090718560676742 |
+| rmse | 4.698440022529554 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9087603210162847, 0.9090718560676742, -0.0003426957388572879] |
+| candidate_vs_baseline.metrics.rmse | ["WORSE", 4.698440022529554, 4.690411824863933, -0.0017086942957928607] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0017086942957928607 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-d0039350096b1191"></a>
+<details>
+<summary>T.combined.reproduction — nvidia/native-sm90 — expanded:lda-clf@dataset=taxi@input=classification-full-v1/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b641feda5c2241faf598/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.3224724270403385 s; B: 1.4949555229395628 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| accuracy | 0.763616 | 0.763624 |
+| logloss | 0.5382462555073213 | 0.5382462695354288 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.accuracy | ["SAME", 0.763616, 0.763624, -1.047636009345961e-05] |
+| candidate_vs_baseline.metrics.logloss | ["SAME", 0.5382462555073213, 0.5382462695354288, 2.6062619004386682e-08] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.accuracy | higher |
+| metric_directions.logloss | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
+
+</details>
+
+<a id="attempt-bcc85e2296e44f4d"></a>
+<details>
+<summary>T.combined.reproduction — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-fc3fe1098e8ed269) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e1447e0d669bee705f2e/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.302389597520232 s; B: 5.606060050427914 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.33058307378651086 | 0.3216136885206221 |
+| rmse | 0.6827214801205793 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["BETTER", 0.33058307378651086, 0.3216136885206221, 0.0271320160562157] |
+| candidate_vs_baseline.metrics.rmse | ["BETTER", 0.6827214801205793, 0.6872800861438083, 0.006632821341887593] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-9ed951bef35c9db5)
 
 </details>
 
@@ -5198,6 +7303,2646 @@ Saved quality gate and opponent comparisons (no reassessment):
 | candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
 | candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
 | candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-31f2635f79335391"></a>
+<details>
+<summary>T.CV.local.4c17c43f1dcf — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-378c477026f75f77) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7620c327fe49ddcdb796/attempt-0001/receipt.03e5add0ba810686885d2f8072ef072e8ca4e4768d08665ca6423d94f67e305b.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.608358960598707 s; B: 5.62879915907979 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-36bafc897ee53400"></a>
+<details>
+<summary>T.CV.local.4c17c43f1dcf — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-378c477026f75f77) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c51f49f1ef3e073a250/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.631367836147547 s; B: 5.573997162282467 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-64346b896472aa87"></a>
+<details>
+<summary>T.CV.local.4c17c43f1dcf — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-378c477026f75f77) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/da492f76e577be7f77f5/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.0843534637242556 s; B: 2.1513017304241657 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-0755f89937a5f723"></a>
+<details>
+<summary>T.CV.local.4c17c43f1dcf — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-378c477026f75f77) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fac901f2d6d8cdbf874e/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.137663621455431 s; B: 2.1053624525666237 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-b745df58d90dca25"></a>
+<details>
+<summary>T.CV.local.ca4bcc07ecfe — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d78a1ffec4506513) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3f8b82244388722b36b7/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.095511069521308 s; B: 2.0844454746693373 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-d764101c7a39bfa0"></a>
+<details>
+<summary>T.CV.local.ca4bcc07ecfe — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d78a1ffec4506513) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8029c8db5c14e9c672c4/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.132279312238097 s; B: 2.1041485462337732 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-60a14a9f32747197"></a>
+<details>
+<summary>T.CV.local.ca4bcc07ecfe — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d78a1ffec4506513) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f56fadc13b00da2175fd/attempt-0001/receipt.76b5992a1a05122e86a222c00c78fcf6353e50702f4991a52f0c6fbe8e91e8d6.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.6310457829386 s; B: 5.587064705789089 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-e0e4be300d2b742a"></a>
+<details>
+<summary>T.CV.local.ca4bcc07ecfe — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d78a1ffec4506513) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/fa05eda4f5869e429b76/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.596217956393957 s; B: 5.566213626414537 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-0bc02b15ec3b34c5"></a>
+<details>
+<summary>T.CV.local.25fdcd3067b2 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-a7b9a63d6e07b986) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/111a1de0eda200c4207c/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6033457815647125 s; B: 2.1199593879282475 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-46b8e21e61c37523"></a>
+<details>
+<summary>T.CV.local.25fdcd3067b2 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-a7b9a63d6e07b986) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/1cbdc068cfad5441dd00/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.617109078913927 s; B: 2.0977483708411455 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-c989778422bbb55b"></a>
+<details>
+<summary>T.CV.local.25fdcd3067b2 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-a7b9a63d6e07b986) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/7363f44cf9fd07492be0/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.073645282536745 s; B: 10.385245878249407 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-a2844b44b89ddc8f"></a>
+<details>
+<summary>T.CV.local.25fdcd3067b2 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-a7b9a63d6e07b986) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ed61baeb975129a480cf/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 11.108719119802117 s; B: 5.57483578287065 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-0e88252bb670b050"></a>
+<details>
+<summary>T.CV.local.710590f636c2 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-38baba74dc983b41) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5a61b1976ccfb76739c9/attempt-0001/receipt.2375de7e17bf54e9f1d25f86dfa1d3616dcaad4b75fc5000e638d16e5c2d2a0c.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.80519887432456 s; B: 5.576301388442516 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-740234899f242030"></a>
+<details>
+<summary>T.CV.local.710590f636c2 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-38baba74dc983b41) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/66585b08b948599f1ede/attempt-0001/receipt.cd79d8d67b0723938ee288b12893e6b666a6dbf1a833133c49ac9144502ba5ef.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.117650168016553 s; B: 2.120779985561967 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-8197fb0cd63a6331"></a>
+<details>
+<summary>T.CV.local.710590f636c2 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-38baba74dc983b41) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/860b43ae6e51336b141b/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 11.977522386237979 s; B: 5.56301773712039 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-fd3d3c4b2c4be802"></a>
+<details>
+<summary>T.CV.local.710590f636c2 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-38baba74dc983b41) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ab3c437bbfe26fa5b325/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1348502319306135 s; B: 2.1044435687363148 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-edbb495afcb11721"></a>
+<details>
+<summary>T.CV.local.a8952d6bcb79 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-f034d8aac494c23d) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/34ab40bac913a76aec18/attempt-0001/receipt.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.383642733097076 s; B: 2.2413580305874348 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9087603210162847 | 0.9090718560676742 |
+| rmse | 4.698440022529554 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9087603210162847, 0.9090718560676742, -0.0003426957388572879] |
+| candidate_vs_baseline.metrics.rmse | ["WORSE", 4.698440022529554, 4.690411824863933, -0.0017086942957928607] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0017086942957928607 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-a86c9149bb5f5b68"></a>
+<details>
+<summary>T.CV.local.a8952d6bcb79 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-f034d8aac494c23d) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6422fac533289608328b/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 12.984899258241057 s; B: 9.102382943034172 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.33058307378651086 | 0.3216136885206221 |
+| rmse | 0.6827214801205793 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["BETTER", 0.33058307378651086, 0.3216136885206221, 0.0271320160562157] |
+| candidate_vs_baseline.metrics.rmse | ["BETTER", 0.6827214801205793, 0.6872800861438083, 0.006632821341887593] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-c05483975555697f"></a>
+<details>
+<summary>T.CV.local.a8952d6bcb79 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-f034d8aac494c23d) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf3f84f003228706d0be/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 12.874684233218431 s; B: 11.623304177075624 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.32928042638183586 | 0.31456879028296647 |
+| rmse | 0.6833854259336551 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["BETTER", 0.32928042638183586, 0.31456879028296647, 0.04467813729629246] |
+| candidate_vs_baseline.metrics.rmse | ["BETTER", 0.6833854259336551, 0.6908394981786193, 0.010789875600073048] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-51193d383e6c5753"></a>
+<details>
+<summary>T.CV.local.a8952d6bcb79 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-f034d8aac494c23d) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d08053b65437468ca140/attempt-0001/receipt.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.575331082567573 s; B: 3.4658262729644775 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9088028117512673 | 0.9091215889136197 |
+| rmse | 4.697345852642057 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9088028117512673, 0.9091215889136197, -0.0003506430451545357] |
+| candidate_vs_baseline.metrics.rmse | ["WORSE", 4.697345852642057, 4.689128946848568, -0.0017492656600678967] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0017492656600678967 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-12d124bddfcf3124"></a>
+<details>
+<summary>T.CV.local.e6430f146f9a — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-443f779a9f0f386f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2329c1c6d0f279761c2d/attempt-0001/receipt.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.913850078359246 s; B: 3.23649643920362 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9088028117512673 | 0.9091215889136197 |
+| rmse | 4.697345852642057 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9088028117512673, 0.9091215889136197, -0.0003506430451545357] |
+| candidate_vs_baseline.metrics.rmse | ["WORSE", 4.697345852642057, 4.689128946848568, -0.0017492656600678967] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0017492656600678967 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-3f3e971f485ed798"></a>
+<details>
+<summary>T.CV.local.e6430f146f9a — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-443f779a9f0f386f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/394330707fd638afc43a/attempt-0001/receipt.71e420aea4262e7c7de0310b55fffbd5ecb287168e5c9255407fe59678b98415.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 12.907611710950732 s; B: 5.6066384967416525 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.32928042638183586 | 0.31456879028296647 |
+| rmse | 0.6833854259336551 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["BETTER", 0.32928042638183586, 0.31456879028296647, 0.04467813729629246] |
+| candidate_vs_baseline.metrics.rmse | ["BETTER", 0.6833854259336551, 0.6908394981786193, 0.010789875600073048] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-d2d269eab43d852c"></a>
+<details>
+<summary>T.CV.local.e6430f146f9a — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-443f779a9f0f386f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/457a537af5e96a2c24c0/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.765526974573731 s; B: 5.623500373214483 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.33058307378651086 | 0.3216136885206221 |
+| rmse | 0.6827214801205793 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["BETTER", 0.33058307378651086, 0.3216136885206221, 0.0271320160562157] |
+| candidate_vs_baseline.metrics.rmse | ["BETTER", 0.6827214801205793, 0.6872800861438083, 0.006632821341887593] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-5cc72e284b9b9ef8"></a>
+<details>
+<summary>T.CV.local.e6430f146f9a — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-443f779a9f0f386f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9e05722544b7f8c5cc1f/attempt-0001/receipt.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 3.920505741611123 s; B: 2.052259750664234 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9087603210162847 | 0.9090718560676742 |
+| rmse | 4.698440022529554 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9087603210162847, 0.9090718560676742, -0.0003426957388572879] |
+| candidate_vs_baseline.metrics.rmse | ["WORSE", 4.698440022529554, 4.690411824863933, -0.0017086942957928607] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0017086942957928607 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-adbc217b39d7a7ae"></a>
+<details>
+<summary>T.CV.local.4210e28ea16c — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-1280909b5c10ec7c) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/5cb4dedaaed7ef311a8f/attempt-0001/receipt.c55f0227d6eb709f3d30eee37c002b63731b8c80d0fa7c9d604af9084db97eb9.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.225087070837617 s; B: 13.545596826821566 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.33058307378651086 | 0.3216136885206221 |
+| rmse | 0.6827214801205793 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["BETTER", 0.33058307378651086, 0.3216136885206221, 0.0271320160562157] |
+| candidate_vs_baseline.metrics.rmse | ["BETTER", 0.6827214801205793, 0.6872800861438083, 0.006632821341887593] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-f959064f7a86d183"></a>
+<details>
+<summary>T.CV.local.4210e28ea16c — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-1280909b5c10ec7c) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/626d834d2f6c499c186e/attempt-0001/receipt.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.432862974703312 s; B: 2.0882678758352995 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9088028117512673 | 0.9091215889136197 |
+| rmse | 4.697345852642057 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9088028117512673, 0.9091215889136197, -0.0003506430451545357] |
+| candidate_vs_baseline.metrics.rmse | ["WORSE", 4.697345852642057, 4.689128946848568, -0.0017492656600678967] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0017492656600678967 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-dc62d05da75d55ff"></a>
+<details>
+<summary>T.CV.local.4210e28ea16c — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-1280909b5c10ec7c) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/816b328135aec94355fa/attempt-0001/receipt.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.44663036800921 s; B: 2.8269635885953903 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9087603210162847 | 0.9090718560676742 |
+| rmse | 4.698440022529554 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9087603210162847, 0.9090718560676742, -0.0003426957388572879] |
+| candidate_vs_baseline.metrics.rmse | ["WORSE", 4.698440022529554, 4.690411824863933, -0.0017086942957928607] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0017086942957928607 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-a5ef358e658afb29"></a>
+<details>
+<summary>T.CV.local.4210e28ea16c — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-1280909b5c10ec7c) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f593649f7046c4efcd61/attempt-0001/receipt.011127fb272eb5be5ac1106faf6ca9c5a4db02678469c392bcfac53082f42a33.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.602874882519245 s; B: 5.555289905518293 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.32928042638183586 | 0.31456879028296647 |
+| rmse | 0.6833854259336551 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["BETTER", 0.32928042638183586, 0.31456879028296647, 0.04467813729629246] |
+| candidate_vs_baseline.metrics.rmse | ["BETTER", 0.6833854259336551, 0.6908394981786193, 0.010789875600073048] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-4dd74a71aef7051e"></a>
+<details>
+<summary>T.CV.local.f364954c07b8 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-5b22eb188282181b) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/08a755295bb89091cc70/attempt-0001/receipt.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.456534199416637 s; B: 3.1563280504196882 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9087603210162847 | 0.9090718560676742 |
+| rmse | 4.698440022529554 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9087603210162847, 0.9090718560676742, -0.0003426957388572879] |
+| candidate_vs_baseline.metrics.rmse | ["WORSE", 4.698440022529554, 4.690411824863933, -0.0017086942957928607] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0017086942957928607 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-f9804bcbbb2a4d7d"></a>
+<details>
+<summary>T.CV.local.f364954c07b8 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-5b22eb188282181b) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2c79b18ab250a725c636/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 13.488782977685332 s; B: 5.606800625100732 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.32928042638183586 | 0.31456879028296647 |
+| rmse | 0.6833854259336551 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["BETTER", 0.32928042638183586, 0.31456879028296647, 0.04467813729629246] |
+| candidate_vs_baseline.metrics.rmse | ["BETTER", 0.6833854259336551, 0.6908394981786193, 0.010789875600073048] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-21716a13d7e3852c"></a>
+<details>
+<summary>T.CV.local.f364954c07b8 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-5b22eb188282181b) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/685e7cf63b47f7fde2d7/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 6.143135132268071 s; B: 5.77668465487659 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.33058307378651086 | 0.3216136885206221 |
+| rmse | 0.6827214801205793 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["BETTER", 0.33058307378651086, 0.3216136885206221, 0.0271320160562157] |
+| candidate_vs_baseline.metrics.rmse | ["BETTER", 0.6827214801205793, 0.6872800861438083, 0.006632821341887593] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | BETTER |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-71e8f3f18b97cf19"></a>
+<details>
+<summary>T.CV.local.f364954c07b8 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-5b22eb188282181b) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/6b38ab97adf113aa909a/attempt-0001/receipt.fd7eeac49a6755da07e0b4c2d5c7d31d2a58ad80d6415c1605a508d2bdfbc8bb.json>)
+
+Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.473871037364006 s; B: 2.155421270057559 s.
+
+Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
+
+Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9088028117512673 | 0.9091215889136197 |
+| rmse | 4.697345852642057 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9088028117512673, 0.9091215889136197, -0.0003506430451545357] |
+| candidate_vs_baseline.metrics.rmse | ["WORSE", 4.697345852642057, 4.689128946848568, -0.0017492656600678967] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | WORSE |
+| candidate_vs_baseline.worst | -0.0017492656600678967 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-947e1abe740ec967"></a>
+<details>
+<summary>T.CV.local.874a0fa1a14e — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-2ff74ec84b56dae6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/26036ffb056d4cdc7417/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6382554825395346 s; B: 2.049791518598795 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-5326142d98391079"></a>
+<details>
+<summary>T.CV.local.874a0fa1a14e — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-2ff74ec84b56dae6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/3a58cc68659a80ad4b20/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.620118170976639 s; B: 2.0811122432351112 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-11d4df3d62748273"></a>
+<details>
+<summary>T.CV.local.874a0fa1a14e — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-2ff74ec84b56dae6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ba60dbc2213f9edade7a/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.904814409092069 s; B: 12.954760873690248 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-cfcbd685df26b6fb"></a>
+<details>
+<summary>T.CV.local.874a0fa1a14e — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-2ff74ec84b56dae6) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f27ccefc2818cfe8d073/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.158887697383761 s; B: 5.7287757731974125 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-eeeb77d811860adf"></a>
+<details>
+<summary>T.CV.local.47b36b46b020 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-b9c4e3406852e7ad) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/029d63b9273714076f9f/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.1103083696216345 s; B: 2.582681328058243 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-d07a173c5ed4a9c3"></a>
+<details>
+<summary>T.CV.local.47b36b46b020 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-b9c4e3406852e7ad) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/14d9a8191cd42715b536/attempt-0001/receipt.e349db9d58761c00d25e99e901aa86ae14dd19d54365a3668328edba865db113.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.880467921495438 s; B: 7.591034468263388 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-93cc187f089dc2a6"></a>
+<details>
+<summary>T.CV.local.47b36b46b020 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-b9c4e3406852e7ad) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2ce46e60891e60d7af7d/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.973392629995942 s; B: 2.0463814586400986 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-1e5df1a8e315b3f2"></a>
+<details>
+<summary>T.CV.local.47b36b46b020 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-b9c4e3406852e7ad) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/dce7dc54ced12083e966/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.803150760009885 s; B: 5.51137481443584 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-70235d26a1850d4d"></a>
+<details>
+<summary>T.CV.local.1d489e1a5ca4 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d8f3af1f61ff0d7f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/2bf4b3e9c25cb546c71b/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.092629810795188 s; B: 2.070537840947509 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-953828fce8028929"></a>
+<details>
+<summary>T.CV.local.1d489e1a5ca4 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d8f3af1f61ff0d7f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/61c883edeef8df4e4ff6/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.26767448335886 s; B: 5.585552720353007 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-b13a393715af5da4"></a>
+<details>
+<summary>T.CV.local.1d489e1a5ca4 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d8f3af1f61ff0d7f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/b80e71d1b363beafd13a/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.0712474826723337 s; B: 2.083567049354315 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-7227df12decca5a2"></a>
+<details>
+<summary>T.CV.local.1d489e1a5ca4 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d8f3af1f61ff0d7f) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e50bcc37e0142ad233a6/attempt-0001/receipt.8f1373e86f8c948cf7a11f2e7975f244af8a3e1cb214da0ba4fee53bc11ae04e.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.898817248642445 s; B: 5.604971822351217 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-ccced2e9c3388dc3"></a>
+<details>
+<summary>T.CV.local.d9f7769600f0 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d3b609d13ba0d258) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8b43ca1aa7f8a5569d0f/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.063239911571145 s; B: 2.045389784500003 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-ddcbced97b1fa55d"></a>
+<details>
+<summary>T.CV.local.d9f7769600f0 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d3b609d13ba0d258) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/8c1c67600adb873689b3/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.102114163339138 s; B: 2.1018234975636005 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-362cf35525eaab67"></a>
+<details>
+<summary>T.CV.local.d9f7769600f0 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d3b609d13ba0d258) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/e2975cdf3d53a2ec8496/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.562187289819121 s; B: 5.533201355487108 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-23824bb5eaa31c19"></a>
+<details>
+<summary>T.CV.local.d9f7769600f0 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-d3b609d13ba0d258) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f82556c80ef2b8187cae/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.632097685709596 s; B: 5.556035390123725 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-73d79e13b6f896c2"></a>
+<details>
+<summary>T.CV.local.5b95f394132e — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-1454037b56a8be78) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/726c9a11bd5909685c55/attempt-0001/receipt.26bdc0854b3edd95cf0eb723903fa409e70cf086cd252b21aab6766420b3773a.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.254341909661889 s; B: 14.767578084021807 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-3ba8fa2e75a263f2"></a>
+<details>
+<summary>T.CV.local.5b95f394132e — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-1454037b56a8be78) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/78b8cf70d3609f7bf839/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.172052746638656 s; B: 5.675603296607733 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-81b2774033834aa7"></a>
+<details>
+<summary>T.CV.local.5b95f394132e — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-1454037b56a8be78) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d14da02ee4b4eb881e95/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.629943298175931 s; B: 2.118651770055294 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-3023e5613736e422"></a>
+<details>
+<summary>T.CV.local.5b95f394132e — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-1454037b56a8be78) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f5d979a0b3b8335c0014/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6329678520560265 s; B: 2.101334122940898 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-87093e17b60a845d"></a>
+<details>
+<summary>T.CV.local.cae449b50635 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-8c68e4b21652fccd) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a376febd0f4a57d44e7a/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1280223838984966 s; B: 2.1224769577383995 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-1537e2b862151a20"></a>
+<details>
+<summary>T.CV.local.cae449b50635 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-8c68e4b21652fccd) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/a42415c247a088965dca/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.127580814063549 s; B: 2.40585083886981 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-4133ff7119c49f43"></a>
+<details>
+<summary>T.CV.local.cae449b50635 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-8c68e4b21652fccd) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/ef85386b0a6c0b2ef89b/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.846230980008841 s; B: 5.649126563221216 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-c13cf27aee5f7138"></a>
+<details>
+<summary>T.CV.local.cae449b50635 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-8c68e4b21652fccd) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/f74f23b5f1bbd73560fd/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.921157270669937 s; B: 5.617488194257021 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-07393df6b0dba573"></a>
+<details>
+<summary>T.CV.local.56910b67cfd3 — nvidia/native-sm90 — expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-16bddd9ca1ed4bae) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/59a4a935cec424ebb419/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1432124823331833 s; B: 2.1263929791748524 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9090718560676742 | 0.9090718560676742 |
+| rmse | 4.690411824863933 | 4.690411824863933 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9090718560676742, 0.9090718560676742, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.690411824863933, 4.690411824863933, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-84f3fe30c6d0c873"></a>
+<details>
+<summary>T.CV.local.56910b67cfd3 — nvidia/native-sm90 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-16bddd9ca1ed4bae) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/99b190e8f08a225c7332/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1483867410570383 s; B: 2.1032890491187572 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.9091215889136197 | 0.9091215889136197 |
+| rmse | 4.689128946848568 | 4.689128946848568 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.9091215889136197, 0.9091215889136197, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 4.689128946848568, 4.689128946848568, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-3c7c3696a24592de"></a>
+<details>
+<summary>T.CV.local.56910b67cfd3 — nvidia/native-sm90 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-16bddd9ca1ed4bae) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/9b219f4bacd9f4040ba7/attempt-0001/receipt.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.968525011092424 s; B: 5.58570552803576 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.31456879028296647, 0.31456879028296647, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6908394981786193, 0.6908394981786193, 0.0] |
+| candidate_vs_baseline.unknown | [] |
+| candidate_vs_baseline.verdict | SAME |
+| candidate_vs_baseline.worst | 0.0 |
+| metric_directions.finite | higher |
+| metric_directions.r2 | higher |
+| metric_directions.rmse | lower |
+| new_full_opponent_review.expected_arms | [] |
+| new_full_opponent_review.matched_arms | [] |
+| new_full_opponent_review.qualified | [] |
+| new_full_opponent_review.scope | Saved qualified independent quality only; exact task/input/settings/metric-method scope, no old candidate verdict or opponent timing imported |
+| new_full_opponent_review.unqualified | [] |
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-6b41e0d3e19fd7ec)
+
+</details>
+
+<a id="attempt-5ad3b1f8835414d4"></a>
+<details>
+<summary>T.CV.local.56910b67cfd3 — nvidia/native-sm90 — expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001</summary>
+
+[Recorded toggles](#toggles-16bddd9ca1ed4bae) · [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bdda3a6a99a2a96ae6c6/attempt-0001/receipt.1f2957c4e7a37701009449f50edfc6fbae34c4e823b51e9d72bb8a076b21de4a.json>)
+
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 5.841303581371903 s; B: 13.147821197286248 s.
+
+Quality assessment: PENDING. Identity: INCOMPLETE.
+
+Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.3216136885206221 | 0.3216136885206221 |
+| rmse | 0.6872800861438083 | 0.6872800861438083 |
+
+Saved quality gate and opponent comparisons (no reassessment):
+
+| Evidence field | Recorded value |
+|---|---|
+| candidate_vs_baseline.metrics.finite | ["SAME", 1.0, 1.0, 0.0] |
+| candidate_vs_baseline.metrics.r2 | ["SAME", 0.3216136885206221, 0.3216136885206221, 0.0] |
+| candidate_vs_baseline.metrics.rmse | ["SAME", 0.6872800861438083, 0.6872800861438083, 0.0] |
 | candidate_vs_baseline.unknown | [] |
 | candidate_vs_baseline.verdict | SAME |
 | candidate_vs_baseline.worst | 0.0 |
