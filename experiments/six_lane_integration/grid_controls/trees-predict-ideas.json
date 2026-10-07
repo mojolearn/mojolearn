@@ -2,7 +2,7 @@
   "schema": "mojolearn.grid-controls/1",
   "lane": "trees-predict-ideas",
   "branch": "lane/trees-predict-ideas",
-  "head": "HEAD_PLACEHOLDER",
+  "head": "fd48fd1cf",
   "controls": {
     "gbdt_ns_predict_bitvec": {
       "define": "MOJOLEARN_GBDT_NS_PREDICT_BITVEC",
