@@ -154,6 +154,7 @@ from gemm.contract import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add, identical_mul_add_simd
 from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
+from gemm.experiments.neural_switches import NEURAL_GEMM_SCHEDULE, SCHED_STREAM_ALL
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
     COLUMN_AMD,
@@ -288,7 +289,10 @@ comptime GEMM_FOLD_SLOTS = 16
 # identity, quality or timing evidence was collected for this source.
 comptime _NI_GEMM_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime NI01_GEOMETRIC_WORKSPACE = _NI_GEMM_ENABLED and is_defined["MOJOLEARN_NI01_GEMM_GEOMETRIC_WORKSPACE"]()
-comptime NI02_STREAM_PARTIALS = _NI_GEMM_ENABLED and is_defined["MOJOLEARN_NI02_GEMM_STREAM_PARTIALS"]()
+# NI02 is arm 3 (stream_all) of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE: the
+# neural-only stream (arm 2, NN02) and this every-caller stream are one idea
+# with a scope arm, so they can never be enabled together.
+comptime NI02_STREAM_PARTIALS = _NI_GEMM_ENABLED and NEURAL_GEMM_SCHEDULE == SCHED_STREAM_ALL
 comptime NI06_ONE_PAGE = _NI_GEMM_ENABLED and is_defined["MOJOLEARN_NI06_GEMM_ONE_PAGE"]()
 # Sixteen independent leaves provide modest K parallelism while the carry
 # stack retains at most GEMM_FOLD_LEVELS planes. The bound is scratch/work

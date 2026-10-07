@@ -30,6 +30,9 @@ dInput), 4 weight-grad (every dWeight/dBias product). The role is a
 call-site tag (`identical_gemm_into[ROLE=...]`), never a matrix size, so one
 mask covers every model width. Arm 3 is a global GEMM-contract arm and takes
 only the default mask.
+
+The legal-arm asserts live in core/six_lane_experiment_guards.mojo, which
+every binding evaluates through GLOBAL_NUMERIC_MODE.
 """
 from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -59,21 +62,6 @@ comptime ROLE_HEAD = 2
 comptime ROLE_WGRAD = 4
 comptime ROLE_ALL = 7
 comptime NEURAL_GEMM_ROLES = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES", 7]()
-
-
-def neural_schedule_config_ok() -> Bool:
-    comptime s = NEURAL_GEMM_SCHEDULE_RAW
-    comptime assert (
-        s == 0 or s == 1 or s == 2 or s == 3 or s == 4 or s == 8 or s == 9
-        or s == 10 or s == 11 or s == 15 or s == 24
-    ), "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE must be one of 1,2,3,4,8,9,10,11,15,24"
-    comptime assert NEURAL_GEMM_ROLES >= 1 and NEURAL_GEMM_ROLES <= 7, (
-        "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES is a mask of 1 projection, 2 head, 4 weight-grad"
-    )
-    comptime assert s != SCHED_STREAM_ALL or NEURAL_GEMM_ROLES == ROLE_ALL, (
-        "schedule 3 (stream_all) is a global GEMM arm; it takes no role mask"
-    )
-    return True
 
 
 @always_inline
