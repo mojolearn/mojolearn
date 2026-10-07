@@ -1,5 +1,5 @@
 #!/bin/sh
-. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
 # The prep expansion lane's GPU binding: preprocessing additions, naive Bayes,
 # discriminant analysis (x_prep/, naive_bayes/; algorithm expansion lane 5).
 set -eu

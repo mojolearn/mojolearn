@@ -706,5 +706,24 @@ def _run_with_buffer(fn):
 BuildFlowTests._call = _run_with_buffer(BuildFlowTests._call)
 
 
+
+class RealBuildScriptsAreReadable(unittest.TestCase):
+    """Every bindings/build*.sh compile line must stay literally readable (2026-10-07: a trailing
+    comment containing the words 'mojo build' on the define-snippet source line made script_plan
+    refuse every script, which turned the release cross-compile check into a no-op)."""
+
+    def test_every_binding_script_has_a_plan(self):
+        import glob
+        repo = Path(__file__).resolve().parents[1]
+        refused = []
+        for s in sorted(glob.glob(str(repo / 'bindings' / 'build*.sh'))):
+            name = Path(s).name
+            if name in ('build_host_family.sh', 'build_defines.sh'):
+                continue
+            if bc.script_plan(repo, s, []) is None:
+                refused.append(name)
+        self.assertEqual(refused, [])
+
+
 if __name__ == "__main__":
     unittest.main()
