@@ -146,6 +146,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from mamba.impl.ops.identical_scan_window import identical_selective_scan_window
+from mamba.impl.ops.m1_persistent_scan import m1_persistent_scan
 #: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA1_CHUNKSCAN`
 #: runs the scan as a chunked parallel scan (afn_selective_scan.mojo); every
 #: other build takes the kernel below unchanged.
@@ -254,6 +255,16 @@ comptime ANY_SABOTAGE = (
 comptime IDN_M1_STATE_WINDOW = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and not ANY_SABOTAGE
+)
+# lane/neural-fusions (L13): the persistent chunked scan, one launch, bits
+# unchanged (m1_persistent_scan.mojo). Exclusive with the NI38 window arm.
+# The native host keeps the shipped serial kernel (the same graph).
+comptime IDN_M1_PERSISTENT_SCAN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and not ANY_SABOTAGE
@@ -574,7 +585,15 @@ def selective_scan_fn(
 
     var total = batch * dim
     if total > 0:
-        comptime if IDN_M1_STATE_WINDOW:
+        comptime if IDN_M1_PERSISTENT_SCAN:
+            comptime assert not IDN_M1_STATE_WINDOW, (
+                "MOJOLEARN_IDN_M1_PERSISTENT_SCAN and MOJOLEARN_IDN_M1_STATE_WINDOW are two"
+                " plans for one scan; choose one"
+            )
+            m1_persistent_scan[MAX_DSTATE](
+                ctx, output, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
+            )
+        elif IDN_M1_STATE_WINDOW:
             identical_selective_scan_window[MAX_DSTATE](
                 ctx, output, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
             )

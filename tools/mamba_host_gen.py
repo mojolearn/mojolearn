@@ -107,6 +107,8 @@ HOST_OPT_FUNCTIONS = {
     # NI38 S changes device scheduling only. The host keeps the original
     # serial recurrence, so its import must be a disabled host-safe signature.
     "mamba/impl/ops/identical_scan_window.mojo": ("identical_selective_scan_window",),
+    # lane/neural-fusions: the persistent chunked scan is a device plan only.
+    "mamba/impl/ops/m1_persistent_scan.mojo": ("m1_persistent_scan",),
     "mamba/impl/modeling/afn_mamba1_fused.mojo": ("afn_m1_conv_token", "afn_m1_split_a"),
     "mamba/impl/modules/afn_ssd_mma.mojo": (
         "afn_ssd_mma_applies", "afn_m2_cb_g_mma", "afn_m2_ydiag_mma", "afn_m2_cstate_mma"),
