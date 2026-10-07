@@ -23,9 +23,8 @@ comptime T07 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEAR
 comptime T08 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T08"]()
 comptime T08_LAYOUT = get_defined_int["MOJOLEARN_TREES_T08_LAYOUT", 1]()
 comptime T08_BITS = get_defined_int["MOJOLEARN_TREES_T08_BITS", 8]()
-# T09 now names the ExtraTrees bootstrap-locality sort only (split from the
-# RF arms below on 2026-10-07 so RF and ET effects stay separable).
-comptime T09 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T09"]()
+# T09 (the ExtraTrees bootstrap-locality sort) was deleted by lane/grid-prune
+# (2026-10-07): unreachable on the board, host sync inside the fit.
 # RF bootstrap sample route: ONE switch with three arms (trees-cleanup
 # 2026-10-07; replaces RF T09 and T10, which silently disabled each other).
 #   -D MOJOLEARN_TREES_RF_SAMPLE=0  drawn order, two launches (sample, gather)

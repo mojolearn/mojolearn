@@ -178,28 +178,6 @@
    "note": "LAYOUT 1 row-major, 2 column-major, 3 tile32; BITS 16 only pays above 256 bins (doubles bin bytes otherwise)",
    "prune_note": "bits8_layout2 equals the incumbent on NV/AMD (column-major uint8); BITS=16 only doubles bin bytes at 128 bins (defer to a >256-bin lane)"
   },
-  "T09_ET": {
-   "define": "MOJOLEARN_TREES_T09",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T09"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "ensemble/tree_identical_ideas.mojo:28",
-    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2318",
-    "ensemble/bootstrap_sort.mojo"
-   ],
-   "binding": "_mojolearn_trees",
-   "bits_change": false,
-   "status": "split_from:T09",
-   "note": "ET bootstrap locality sort only",
-   "grid": "exclude",
-   "prune_note": "et board bootstrap=False; host sync in fit"
-  },
   "RF_SAMPLE": {
    "define": "MOJOLEARN_TREES_RF_SAMPLE",
    "kind": "arms",
@@ -1114,13 +1092,12 @@
   },
   "trees:et": {
    "binding": "_mojolearn_trees",
-   "route": "fit: extratrees batched_levelalgo builder (T09_ET sort, T05 <=128-row fused, T02 et_loop, C48, ET_LOOP_K T11); predict: core/forest_inference",
+   "route": "fit: extratrees batched_levelalgo builder (T05 <=128-row fused, T02 et_loop, C48, ET_LOOP_K T11); predict: core/forest_inference",
    "controls": [
     "T02",
     "T04",
     "T05",
     "T07",
-    "T09_ET",
     "T11_LEVELS",
     "T12",
     "T13",
@@ -1430,6 +1407,11 @@
   {
    "define": "MOJOLEARN_TREES_T29_YETI",
    "reason": "no-op on NVIDIA and AMD (yeti_block_parallel_for already True under IDENTICAL); deleted by lane trees-small 2026-10-07"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T09",
+   "control": "T09_ET",
+   "reason": "DELETED by lane/grid-prune 2026-10-07: unreachable on the board (et bootstrap=False) and a host sync inside the fit; guards refuse MOJOLEARN_TREES_T09. Recoverable at main ab554bb4a."
   }
  ],
  "stage0_build": {

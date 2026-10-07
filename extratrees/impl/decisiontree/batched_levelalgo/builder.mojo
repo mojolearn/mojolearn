@@ -2,12 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
-from ensemble.bootstrap_sort import sort_selected_rows
-from core.segmented_sort import SORT_BLOCK
 from std.collections import InlineArray
 from core.tree_math import tree_log
 from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
-from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T09, T11, T11_LEVELS, T12, T12_BYTES, T13, T13_BYTES, T14, T14_EXACT, C48
+from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T11, T11_LEVELS, T12, T12_BYTES, T13, T13_BYTES, T14, T14_EXACT, C48
 from std.memory import bitcast, memcpy
 
 from ensemble.instruments import StageTimes
@@ -2284,23 +2282,10 @@ def fill_row_slots(
             UInt64(Int(row_sample_seed(seed, tree_ids[first + s]))),
         )
         _ = slot^
-    comptime if T09:
-        # Draw first, then sort each exact bootstrap multiset with RF's shared
-        # radix schedule. Threshold/feature counters still use logical IDs.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        var keys = ctx.enqueue_create_buffer[DType.uint32](max(1,Int(slot_rows)))
-        var offsets = ctx.enqueue_create_buffer[DType.int32](max(1,Int(slot_rows)))
-        var blocks = ctx.enqueue_create_buffer[DType.int32](max(1,ceildiv(Int(slot_rows),SORT_BLOCK)))
-        for slot_id in range(g):
-            var slot = d_row_ids.create_sub_buffer[DType.int32](slot_id*Int(slot_rows),Int(slot_rows))
-            sort_selected_rows(ctx,slot,Int(slot_rows),Int(n_rows),keys,offsets,blocks)
-            _ = slot^
-        # This helper owns scratch: finish its uses before releasing it.
-        # The whole-operation recipe includes this synchronization.
-        ctx.synchronize()
-        _ = keys^
-        _ = offsets^
-        _ = blocks^
+    # The ExtraTrees bootstrap-locality sort (MOJOLEARN_TREES_T09) was deleted
+    # by lane/grid-prune (2026-10-07): unreachable on the board (et runs
+    # bootstrap=False and returns above) and it put a host synchronize inside
+    # the GPU fit. Recoverable at main ab554bb4a.
     _ = d_row_ids.unsafe_ptr()
 
 
