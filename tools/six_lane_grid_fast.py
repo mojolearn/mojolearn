@@ -215,10 +215,11 @@ class FastGuards:
 
     assert_count = 0
 
-    def __init__(self, pairs=(), env_names=(), binding_of=None):
+    def __init__(self, pairs=(), env_names=(), binding_of=None, prereqs=None):
         self.pairs = list(pairs)
         self.env_names = set(env_names)
         self.binding_of = dict(binding_of or {})
+        self.prereqs = {k: list(v) for k, v in (prereqs or {}).items()}  # own define -> both-arm prerequisite defines
 
     def add_pair(self, a, b, reason):
         if (a, b, reason) not in self.pairs:
@@ -226,11 +227,17 @@ class FastGuards:
 
     def problems(self, defines):
         names = {G.norm_define(d).split('=')[0] for d in defines}
+        own = set(names)
+        for n in own:
+            names |= {G.norm_define(d).split('=')[0] for d in self.prereqs.get(n, [])}
         out = []
+        for n in sorted(names):
+            if n.endswith('_OFF') and n[:-4] in names:
+                out.append('enabled and disabled together (with prerequisites): ' + n[:-4])
         env, build = sorted(names & self.env_names), sorted(names - self.env_names)
         if env and build:
             out.append('env switch ' + ', '.join(env) + ' with build define(s): one A/B line cannot set an env in the candidate arm only (afc_ab_def.sh races both arms under one environment)')
-        bs = sorted({self.binding_of[n] for n in names if n in self.binding_of})
+        bs = sorted({self.binding_of[n] for n in own if n in self.binding_of})
         if len(bs) > 1:
             out.append('spans bindings ' + ', '.join(bs) + ': the Apple A/B scripts build one binding per line')
         for a, b, reason in self.pairs:
@@ -262,9 +269,14 @@ def _rel(path):
 
 
 def _ctrl(key, define, on, both, both_env, bindings, paths, lanes, file, source, kind='switch', **extra):
+    # The arm carries only what the candidate adds; prerequisites kept in both arms live in both_defines
+    # (FastGuards expands them for every check; finish_config adds them to both arms).
+    both = G.unique(sorted(G.norm_define(d) for d in both))
+    on = [d for d in G.unique(sorted(G.norm_define(d) for d in on)) if d not in both]
+    if not on:
+        raise ValueError(key + ': the candidate adds nothing over its both-arm prerequisites')
     return dict(key=key, file=file, define=define, kind=kind, env=(kind == 'env'), default='off',
-                arms={'on': G.unique(sorted(G.norm_define(d) for d in on))},
-                both_defines=G.unique(sorted(G.norm_define(d) for d in both)),
+                arms={'on': on}, both_defines=both,
                 both_env={k: str(v) for k, v in sorted((both_env or {}).items()) if k not in DROP_ENV},
                 bindings=G.unique(binding_name(b) for b in bindings), paths=list(paths), lanes=G.unique(lanes),
                 source=source, conflicts=[], exclusion=None, status='opt-in, unmeasured', binding=None, **extra)
@@ -491,6 +503,7 @@ def finish_config(cfg, algo, controls, env_names):
     env_defs = [d for d in cfg['defines'] if d.split('=')[0] in env_names]
     build = [d for d in cfg['defines'] if d not in env_defs]
     incumbent = sorted({d for k in members for d in controls[k]['both_defines'] if d.split('=')[0] not in own})
+    build = sorted(set(build) | set(incumbent))
     both_env = {}
     for k in members:
         for name, v in controls[k]['both_env'].items():
@@ -517,13 +530,14 @@ def generate_fast(controls_dir=CONTROLS_DIR, cap=G.CAP, branch=QUEUE_BRANCH):
     algos, unmapped, excluded, binding_excluded = build_fast_model(controls, global_groups, untried_groups, board)
     env_names = {c['define'] for c in controls.values() if c['env']}
     pairs = [(c['define'], other, why) for c in controls.values() for other, why in c['conflicts']]
+    prereqs = {c['define']: c['both_defines'] for c in controls.values() if c['both_defines']}
     reach = {}
     for aid, a in algos.items():
         for k in a['controls']:
             reach.setdefault(k, set()).add(aid)
     plans, configs = {}, []
     for aid, a in algos.items():
-        guards = FastGuards(pairs, env_names, {controls[k]['define']: a['binding_of'][k] for k in a['controls']})
+        guards = FastGuards(pairs, env_names, {controls[k]['define']: a['binding_of'][k] for k in a['controls']}, prereqs)
         plan = G.plan_algorithm(a, controls, reach, guards, cap)
         plans[aid] = plan
         for e in plan['excluded']:
@@ -538,7 +552,7 @@ def generate_fast(controls_dir=CONTROLS_DIR, cap=G.CAP, branch=QUEUE_BRANCH):
             configs.append(finish_config(c, a, controls, env_names))
 
     # Packing: define configs with the same tool, binding and incumbent share one candidate build.
-    global_guards = FastGuards(pairs, env_names)
+    global_guards = FastGuards(pairs, env_names, prereqs=prereqs)
     groups = {}
     for c in configs:
         if c['kind'] == 'build':
@@ -547,13 +561,14 @@ def generate_fast(controls_dir=CONTROLS_DIR, cap=G.CAP, branch=QUEUE_BRANCH):
     for gkey in sorted(groups):
         for p in G.pack(groups[gkey], reach, global_guards):
             p['tool'], p['binding'], p['incumbent_defines'], p['incumbent_env'] = gkey[0], gkey[1], list(gkey[2]), dict(gkey[3])
+            p['defines'] = sorted(set(p['defines']) | set(gkey[2]))  # arm B keeps the both-arm prerequisites
             packs.append(p)
     for i, p in enumerate(packs):
         p['id'] = 'F%03d' % (i + 1)
         for m in p['members']:
             m['pack'] = p['id']
             m['B_defines'] = list(p['defines'])
-            m['packed_extra_defines'] = sorted(set(p['defines']) - set(m['defines']))
+            m['packed_extra_defines'] = sorted(set(p['defines']) - set(m['candidate_build_defines']))
     for c in configs:
         if c['kind'] == 'env':
             c['pack'], c['B_defines'], c['packed_extra_defines'] = None, list(c['incumbent_defines']), []
@@ -734,7 +749,7 @@ def fast_matrix(configs, files, queue):
             candidate_arm='B', problems=[], workloads=c['workloads'], kind='candidate', campaign_role='new_candidate',
             experiment_kind='grid_fast_per_lane_cards', priority=c['priority'],
             rationale='FAST grid ' + c['tier'] + ' (' + c['origin'] + ') for ' + c['algorithm'],
-            grid=dict(algorithm=c['algorithm'], tier=c['tier'], assignment=c['assignment'], effective_defines=c['defines'],
+            grid=dict(algorithm=c['algorithm'], tier=c['tier'], assignment=c['assignment'], effective_defines=c['candidate_build_defines'],
                       packed_extra_defines=c['packed_extra_defines'], pack=c['pack'], binding=c['binding'], tool=c['tool'], kind=c['kind'])))
         for w in c['workloads']:
             cells.append(dict(

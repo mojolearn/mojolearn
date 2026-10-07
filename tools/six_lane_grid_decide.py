@@ -31,6 +31,14 @@ Rules (CLAUDE.md "Measurement process" and "Experiments"):
     SLOWER). Interactions are listed per algorithm and never averaged away;
   * per algorithm, the recommended configuration is the measured FASTER configuration (single, cross or
     all-on) with identity MATCH, quality not WORSE and the smallest combined ratio.
+
+--mode fast (Apple FAST grid, tools/six_lane_grid.py --mode fast --vendor apple; CLAUDE.md "FAST mode needs no
+identical anything"): the matrix and outputs default to experiments/six_lane_integration/grid-fast/; identity is
+NOT_REQUIRED on every cell (no --identity input, no identity hold); one vendor votes (apple, the M3): its own
+per-vendor verdict when the verdict file carries one, else the case verdict, and only its ratio enters the combined
+ratio; the quality gate is the board quality metric of the candidate (arm B) vs FAST main (arm A), the af_quality
+verdict in --quality (WORSE holds the arm). Everything else (algorithm, arm, best arm, interactions, recommended
+configuration) is the same rule.
 """
 import argparse
 import gzip
@@ -43,6 +51,9 @@ ROOT = Path(__file__).resolve().parents[1]
 MATRIX = ROOT / 'experiments/six_lane_integration/grid/grid-matrix.json.gz'
 OUT_DIR = ROOT / 'experiments/six_lane_integration/grid'
 SCHEMA = 'mojolearn.six-lane-grid-decisions/1'
+FAST_MATRIX = ROOT / 'experiments/six_lane_integration/grid-fast/grid-matrix.json.gz'
+FAST_OUT_DIR = ROOT / 'experiments/six_lane_integration/grid-fast'
+FAST_VOTERS = ('apple',)
 
 TIMING_RANK = {'SLOWER': 0, 'FASTER': 1, 'NO_VERDICT': 2, 'UNMEASURED': 3}
 QUALITY_BAD = {'WORSE', 'FAIL', 'REGRESSED'}
@@ -63,18 +74,28 @@ def load_many(paths):
 
 # ---------------------------------------------------------------- evidence indexes
 
-def timing_index(verdict_docs):
-    """(configuration, workload_id) -> {verdict, ratios{vendor: scored ratio}}."""
+def timing_index(verdict_docs, voters=None):
+    """(configuration, workload_id) -> {verdict, ratios{vendor: scored ratio}}.
+
+    voters (fast mode): only these vendors count; a voter's own `verdict` wins over the case verdict."""
     out = {}
     for doc in verdict_docs:
         for case in doc.get('cases', []):
             ratios = {}
-            for vendor, row in (case.get('vendors') or {}).items():
+            vendors = {v: row for v, row in (case.get('vendors') or {}).items() if voters is None or v in voters}
+            for vendor, row in vendors.items():
                 r = (row.get('candidate_over_baseline') or {}).get('scored')
                 if r is not None and math.isfinite(r) and r > 0:
                     ratios[vendor] = r
-            out[(case['configuration'], case['workload_id'])] = dict(verdict=case.get('verdict', 'NO_VERDICT'),
-                                                                       ratios=ratios, evidence=[v.get('evidence') for v in (case.get('vendors') or {}).values()])
+            verdict = case.get('verdict', 'NO_VERDICT')
+            if voters is not None:
+                own = [row.get('verdict') for row in vendors.values() if row.get('verdict')]
+                if own:
+                    verdict = own[0]
+                elif not vendors and case.get('vendors'):
+                    verdict = 'UNMEASURED'  # only non-voting vendors measured this cell
+            out[(case['configuration'], case['workload_id'])] = dict(verdict=verdict,
+                                                                       ratios=ratios, evidence=[v.get('evidence') for v in vendors.values()])
     return out
 
 
@@ -132,22 +153,22 @@ def geo_mean(values):
     return math.exp(sum(math.log(v) for v in vals) / len(vals))
 
 
-def cell_rows(config, tidx, iidx, qidx):
+def cell_rows(config, tidx, iidx, qidx, identity_required=True):
     rows = []
     for wid in config.get('workloads', []):
         t = tidx.get((config['id'], wid))
         rows.append(dict(workload_id=wid,
                          timing=t['verdict'] if t else 'UNMEASURED',
                          ratios=t['ratios'] if t else {},
-                         identity=iidx.get((config['id'], wid), 'UNMEASURED'),
+                         identity=iidx.get((config['id'], wid), 'UNMEASURED') if identity_required else 'NOT_REQUIRED',
                          quality=quality_for(qidx, config['id'], wid)))
     return rows
 
 
 def algorithm_verdict(rows):
-    """Collapse a configuration's workload rows for one algorithm."""
+    """Collapse a configuration's workload rows for one algorithm (identity NOT_REQUIRED rows skip identity)."""
     timings = [r['timing'] for r in rows]
-    identities = [r['identity'] for r in rows]
+    identities = [r['identity'] for r in rows if r['identity'] != 'NOT_REQUIRED']
     qualities = [r['quality'] for r in rows]
     if any(i == 'MISMATCH' for i in identities):
         return 'HOLD_IDENTITY'
@@ -191,7 +212,8 @@ def predicted_from_singles(single_verdicts):
     return 'UNKNOWN'
 
 
-def decide(matrix, tidx, iidx, qidx):
+def decide(matrix, tidx, iidx, qidx, mode='identical'):
+    fast = mode == 'fast'
     configs = [c for c in matrix.get('configurations', []) if (c.get('grid') or {}).get('algorithm')]
     by_algo = defaultdict(list)
     for c in configs:
@@ -200,7 +222,7 @@ def decide(matrix, tidx, iidx, qidx):
     # per configuration evidence
     evidence = {}
     for c in configs:
-        rows = cell_rows(c, tidx, iidx, qidx)
+        rows = cell_rows(c, tidx, iidx, qidx, identity_required=not fast)
         ratios = [geo_mean(r['ratios'].values()) for r in rows]
         evidence[c['id']] = dict(configuration=c['id'], algorithm=c['grid']['algorithm'], tier=c['grid'].get('tier'),
                                  assignment=c['grid'].get('assignment', {}), rows=rows,
@@ -288,19 +310,27 @@ def decide(matrix, tidx, iidx, qidx):
     totals = defaultdict(int)
     for cs in control_summary.values():
         totals[cs['recommendation']] += 1
-    return dict(schema=SCHEMA, matrix_schema=matrix.get('schema'), base_main=matrix.get('base_main'),
+    rule = dict(cell='timing verdict + NVIDIA==AMD identity MATCH + quality not WORSE',
+                algorithm='SLOWER if any workload SLOWER; FASTER if any FASTER and none SLOWER; NEUTRAL otherwise',
+                arm='PROMOTE: every reached algorithm FASTER or NEUTRAL, at least one FASTER. SPLIT: FASTER and SLOWER both present '
+                    '(flip per algorithm). DELETE: SLOWER or NEUTRAL everywhere (noise is a loser). HOLD_*: identity MISMATCH or quality WORSE. '
+                    'NOT_MEASURED: any reached algorithm without evidence.',
+                best_arm='PROMOTE/SPLIT arm with the smallest combined candidate/incumbent ratio',
+                interaction='cross or all-on verdict that the member singles do not predict',
+                recommended_configuration='per algorithm: FASTER configuration with the smallest combined ratio')
+    if fast:
+        rule.update(cell='M3 timing verdict (beyond the M3 A/A floor) + quality not WORSE vs FAST main (arm A); identity NOT_REQUIRED',
+                    identity='NOT_REQUIRED: FAST needs no identical anything (no same bits across vendors, vs arm A, or run to run)',
+                    voters='apple (the M3) only',
+                    quality='board quality metric of B vs FAST main (A), tools/af_quality.py rel 1e-3 / abs 1e-6 (the af_board_apply gate); WORSE holds',
+                    arm=rule['arm'].replace('HOLD_*: identity MISMATCH or quality WORSE', 'HOLD_QUALITY: quality WORSE'),
+                    promotion='a PROMOTE arm becomes the FAST default with a *_OFF rollback and an EXPERIMENTS.md row; DELETE arms are removed from the code')
+    return dict(schema=SCHEMA, mode=mode, matrix_schema=matrix.get('schema'), base_main=matrix.get('base_main'),
                 counts=dict(controls=len(control_summary), arms=sum(len(c['arms']) for c in control_summary.values()),
                             configurations=len(configs), by_recommendation=dict(sorted(totals.items()))),
                 controls=dict(sorted(control_summary.items())), algorithms=algorithms,
                 configurations={k: dict(v, rows=v['rows']) for k, v in sorted(evidence.items())},
-                rule=dict(cell='timing verdict + NVIDIA==AMD identity MATCH + quality not WORSE',
-                          algorithm='SLOWER if any workload SLOWER; FASTER if any FASTER and none SLOWER; NEUTRAL otherwise',
-                          arm='PROMOTE: every reached algorithm FASTER or NEUTRAL, at least one FASTER. SPLIT: FASTER and SLOWER both present '
-                              '(flip per algorithm). DELETE: SLOWER or NEUTRAL everywhere (noise is a loser). HOLD_*: identity MISMATCH or quality WORSE. '
-                              'NOT_MEASURED: any reached algorithm without evidence.',
-                          best_arm='PROMOTE/SPLIT arm with the smallest combined candidate/incumbent ratio',
-                          interaction='cross or all-on verdict that the member singles do not predict',
-                          recommended_configuration='per algorithm: FASTER configuration with the smallest combined ratio'))
+                rule=rule)
 
 
 # ---------------------------------------------------------------- rendering
@@ -310,9 +340,16 @@ def fmt_ratio(r):
 
 
 def render_md(dec):
-    L = ['# IDENTICAL switch grid decisions', '',
-         'Generated by `tools/six_lane_grid_decide.py` from the grid matrix plus the timing verdicts, NVIDIA==AMD identity and quality files.',
-         'A switch is **NOT_MEASURED** until every algorithm it reaches has a cell with a timing verdict, identity MATCH and quality not WORSE.',
+    if dec.get('mode') == 'fast':
+        L = ['# FAST switch grid decisions (Apple M3)', '',
+             'Generated by `tools/six_lane_grid_decide.py --mode fast` from the FAST grid matrix plus the M3 timing verdicts and quality files.',
+             'Identity is NOT_REQUIRED (FAST needs no identical anything). A switch is **NOT_MEASURED** until every lane it reaches has a cell',
+             'with an M3 timing verdict and quality not WORSE than FAST main.']
+    else:
+        L = ['# IDENTICAL switch grid decisions', '',
+             'Generated by `tools/six_lane_grid_decide.py` from the grid matrix plus the timing verdicts, NVIDIA==AMD identity and quality files.',
+             'A switch is **NOT_MEASURED** until every algorithm it reaches has a cell with a timing verdict, identity MATCH and quality not WORSE.']
+    L += [
          '', '## Totals', '', '| item | count |', '|---|---|']
     L.append('| controls | %d |' % dec['counts']['controls'])
     L.append('| arms | %d |' % dec['counts']['arms'])
@@ -351,14 +388,21 @@ def write_outputs(dec, out_dir):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('--matrix', type=Path, default=MATRIX)
+    p.add_argument('--mode', choices=('identical', 'fast'), default='identical',
+                   help='fast: Apple FAST grid (identity NOT_REQUIRED, apple the one voter, grid-fast/ defaults)')
+    p.add_argument('--matrix', type=Path)
     p.add_argument('--verdicts', type=Path, action='append', help='six_lane_timing.py verdicts output (repeatable)')
     p.add_argument('--identity', type=Path, action='append', help='six_lane_compare_results.py summary.json (repeatable)')
     p.add_argument('--quality', type=Path, action='append', help='quality review rows (repeatable)')
-    p.add_argument('--out', type=Path, default=OUT_DIR)
+    p.add_argument('--out', type=Path)
     args = p.parse_args(argv)
-    dec = decide(load_json(args.matrix), timing_index(load_many(args.verdicts)),
-                 identity_index(load_many(args.identity)), quality_index(load_many(args.quality)))
+    fast = args.mode == 'fast'
+    if fast and args.identity:
+        p.error('--mode fast takes no --identity: FAST needs no identical anything')
+    matrix = load_json(args.matrix or (FAST_MATRIX if fast else MATRIX))
+    args.out = args.out or (FAST_OUT_DIR if fast else OUT_DIR)
+    dec = decide(matrix, timing_index(load_many(args.verdicts), voters=FAST_VOTERS if fast else None),
+                 identity_index(load_many(args.identity)), quality_index(load_many(args.quality)), mode=args.mode)
     write_outputs(dec, args.out)
     print(json.dumps(dec['counts']))
     return 0

@@ -19,18 +19,18 @@ EXPERIMENTS.md untried candidates (`grid-fast/controls/`) and the M3 FAST board 
 | (control, lane) pairs excluded for an unresolvable binding | 5 |
 | card lane recipes without an M3 board row or script | 8 |
 | algorithms (board lanes) with configs | 99 |
-| **configs** (build 425, env 8) | **433** |
+| **configs** (build 426, env 8) | **434** |
 | board workloads touched | 195 |
-| **A/B cells** (configs x workloads, one box) | **842** |
+| **A/B cells** (configs x workloads, one box) | **844** |
 | A/A lines (one per workload x binding x script) | 201 |
-| queue lines (`grid-fast-queue.txt`) | 1043 |
+| queue lines (`grid-fast-queue.txt`) | 1045 |
 | deferred singles/all-on (cap) | 0 |
 | deferred interaction-group crosses | 31 groups, 97 configs |
-| builds before packing (2 per build config + main) | 900 |
+| builds before packing (2 per build config + main) | 902 |
 | **builds after packing** (153 packs x 2 + 50 main; 66 packs with >1 member) | **356** |
 | distinct (binding, define set) among them | 176 |
 
-Cap: 16 configs per lane. One run per arm (aft_ab.sh pairs 1; afc_ab_def.sh / afc_ab.sh reps 1 rounds 1). Box: m3 only. Run id `gf23620a`.
+Cap: 16 configs per lane. One run per arm (aft_ab.sh pairs 1; afc_ab_def.sh / afc_ab.sh reps 1 rounds 1). Box: m3 only. Run id `gfd05a4f`.
 
 ## Verdict rule
 
@@ -73,7 +73,7 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 | algos:bagging-clf | istella, taxi | 16 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P01<br>s AFT_P02<br>s AFT_P03<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P01, AFT_P03, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P03, AFT_P04<br>x AFT_P02, AFT_P04<br>x AFT_P01, AFT_P04<br>x AFT_P01, AFT_P03<br>x AFT_P01, AFT_P03, AFT_P04 | - | 16 packs, rf |
 | algos:bagging-reg | istella, taxi | 16 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P01<br>s AFT_P02<br>s AFT_P03<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P01, AFT_P03, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P03, AFT_P04<br>x AFT_P02, AFT_P04<br>x AFT_P01, AFT_P04<br>x AFT_P01, AFT_P03<br>x AFT_P01, AFT_P03, AFT_P04 | - | 16 packs, rf |
 | algos:bayesian-ridge | istella, taxi | 3 | s AFCL_L01<br>s AFCL_L02<br>all AFCL_L01, AFCL_L02 | - | 3 packs, x_linear |
-| algos:categorical-nb | istella, taxi | 2 | s AFCL_P03<br>s NB_CAT_ATOMIC | - | 2 packs, x_prep |
+| algos:categorical-nb | istella, taxi | 3 | s AFCL_P03<br>s NB_CAT_ATOMIC<br>all AFCL_P03, NB_CAT_ATOMIC | - | 3 packs, x_prep |
 | algos:cca | istella, taxi | 1 | s AFCL_L08 | - | 1 packs, x_decomp |
 | algos:complement-nb | istella, taxi, text | 1 | s AFCL_P04 | - | 1 packs, x_prep |
 | algos:dart | istella, taxi | 10 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P11<br>s AFT_P12<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05<br>x AFT_F01, AFT_F02<br>x AFT_P11, AFT_P12 | - | 10 packs, rf/x_trees |
