@@ -1,4 +1,5 @@
 #!/bin/sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
 # Build the batched ARIMA CPython extension into
 # python/mojolearn/_mojolearn_arima.so. Run from anywhere; requires pixi.
 #
@@ -177,7 +178,7 @@ out="$tmpdir/_mojolearn_arima.so"
 # the import fails with "dynamic module does not define module export
 # function".
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \

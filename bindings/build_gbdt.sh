@@ -1,4 +1,5 @@
 #!/bin/sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (mojo build line)
 # Build the GBDT CPython extension into python/mojolearn/_mojolearn_gbdt.so.
 # Run from anywhere; requires pixi.
 #
@@ -262,7 +263,7 @@ out="$tmpdir/_mojolearn_gbdt.so"
 # has left a diagnostic binary installed under the shipped name.
 #
 # shellcheck disable=SC2086  # both flag strings are deliberately word-split
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE ${MOJOLEARN_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
