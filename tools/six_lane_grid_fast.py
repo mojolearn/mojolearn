@@ -58,6 +58,9 @@ VENDORS = {
 # (docs/apple-fast, ~/mojolearn-evidence/lq history, 2026-10-07; `calibrated` used two bindings and is left out).
 LANE_BINDING = {
     'rf': 'rf', 'et': 'trees', 'iforest': 'svm',
+    # From the lane's public route (R7 follow-up, 2026-10-07): PCA._BINDING = "_mojolearn_estimators"
+    # (python/mojolearn/decomposition.py:119); LinearRegression binds _mojolearn_estimators (linear_model.py:655).
+    'pca': 'estimators', 'ols': 'estimators',
     'adaboost-clf': 'x_trees', 'adaboost-reg': 'x_trees', 'adafactor': 'x_sequence', 'adagrad': 'x_sequence', 
     'adamax': 'x_sequence', 'additive-chi2': 'x_neighbors', 'affinity-prop': 'x_cluster', 'ard': 'x_linear', 
     'autoarima': 'arima', 'bayesian-gmm': 'x_cluster', 'bayesian-ridge': 'x_linear', 'bisecting-kmeans': 
@@ -94,7 +97,7 @@ LANE_PY_BINDINGS = {
     'nmf': ('x_decomp',), 'factor-analysis': ('x_decomp',), 'pls': ('x_decomp',), 'pls-canonical': ('x_decomp',),
     'cca': ('x_decomp',), 'als': ('x_decomp',), 'randomized-svd': ('x_decomp',),  # _expansion_decomp.py
     'qr': ('linalg',), 'svd': ('linalg',),                             # _linalg_impl.py (bench lane linalg.qr / linalg.svd)
-    'tree-shap': _TREES_PY, 'dart': _TREES_PY, 'dart-reg': _TREES_PY, 'random-trees-embedding': _TREES_PY,
+    'tree-shap': _TREES_PY, 'dart': _TREES_PY, 'dart-reg': _TREES_PY, 'random-trees-embedding': _TREES_PY + ('trees',),  # _expansion_trees.py:1821 fits an ExtraTreesRegressor (extratrees.py)
     'decision-tree-clf': _TREES_PY, 'decision-tree-reg': _TREES_PY, 'bagging-clf': _TREES_PY, 'bagging-reg': _TREES_PY,
     'adaboost-clf': _TREES_PY, 'adaboost-reg': _TREES_PY,
 }
@@ -356,7 +359,7 @@ def load_afcl():
 
 
 def load_untried(directory=CONTROLS_DIR):
-    controls, algos, excluded, files = {}, {}, [], {}
+    controls, algos, excluded, files, owed = {}, {}, [], {}, []
     for path in sorted(Path(directory).glob('*.json')):
         doc = json.loads(path.read_text())
         if doc.get('schema') != 'mojolearn.grid-controls/1' or doc.get('mode') != 'fast':
@@ -376,10 +379,14 @@ def load_untried(directory=CONTROLS_DIR):
                         c.get('paths') or [], lanes_of.get(key, []), name, c.get('source') or [], kind=c.get('kind', 'switch'),
                         title=c.get('note'), quality=c.get('quality'), origin_branch=c.get('branch'))
             ctl['status'] = c.get('status', 'untried')
+            if c.get('exclude'):
+                ctl['exclusion'] = ('not reached on the board', c['exclude'])
             controls[key] = ctl
+        for line in doc.get('owed_lines') or []:
+            owed.append(dict(file=name, line='lq add m3 ' + line))
         for e in doc.get('excluded') or []:
             excluded.append(dict(e, file=name))
-    return controls, algos, excluded, files
+    return controls, algos, excluded, files, owed
 
 
 # ------------------------------------------------------------------ model
@@ -395,6 +402,10 @@ def resolve_binding(c, lane):
         return lb, 'lane binding ' + lb + ' imports ' + src
     reached = [b for b in c['bindings'] if binding_file(b).exists() and reaches(b, c['paths'])]
     py = [b for b in reached if b in LANE_PY_BINDINGS.get(lane, ())]
+    if reached and lane in LANE_PY_BINDINGS and not py:
+        return None, ('unreached on the board route: the lane\'s Python module loads only ' + ', '.join(LANE_PY_BINDINGS[lane])
+                      + ((' (lane binding ' + lb + ')') if lb else '') + ', none of which imports ' + src
+                      + '; the card bindings that do (' + ', '.join(reached) + ') are not loaded by this lane')
     if len(reached) > 1 and len(py) == 1:
         return py[0], ('card binding ' + py[0] + ' imports ' + src + ' and is the one of ' + ', '.join(reached)
                        + ' the lane\'s Python module loads (LANE_PY_BINDINGS)')
@@ -470,7 +481,7 @@ def build_fast_model(controls, global_groups, untried_groups, board):
 def load_all(controls_dir=CONTROLS_DIR):
     aft, aft_groups, f1 = load_aft()
     afcl, afcl_groups, f2 = load_afcl()
-    untried, untried_groups, untried_excluded, f3 = load_untried(controls_dir)
+    untried, untried_groups, untried_excluded, f3, owed = load_untried(controls_dir)
     controls = {}
     for part in (aft, afcl, untried):
         for k, c in part.items():
@@ -479,7 +490,7 @@ def load_all(controls_dir=CONTROLS_DIR):
             controls[k] = c
     files = dict(f1, **f2, **f3)
     files['board'] = dict(path=_rel(BOARD_MD), sha256=G.file_sha(BOARD_MD))
-    return controls, aft_groups + afcl_groups, untried_groups, untried_excluded, files
+    return controls, aft_groups + afcl_groups, untried_groups, untried_excluded, files, owed
 
 
 # ------------------------------------------------------------------ generate
@@ -525,7 +536,7 @@ def finish_config(cfg, algo, controls, env_names):
 
 
 def generate_fast(controls_dir=CONTROLS_DIR, cap=G.CAP, branch=QUEUE_BRANCH):
-    controls, global_groups, untried_groups, untried_excluded, files = load_all(controls_dir)
+    controls, global_groups, untried_groups, untried_excluded, files, owed = load_all(controls_dir)
     board = board_rows()
     algos, unmapped, excluded, binding_excluded = build_fast_model(controls, global_groups, untried_groups, board)
     env_names = {c['define'] for c in controls.values() if c['env']}
@@ -632,6 +643,7 @@ def generate_fast(controls_dir=CONTROLS_DIR, cap=G.CAP, branch=QUEUE_BRANCH):
             for aid, a in algos.items()},
         unmapped=unmapped, binding_exclusions=binding_excluded,
         excluded=sorted(excluded.values(), key=lambda e: (e['file'], e['control'])), excluded_untried=untried_excluded,
+        owed_off_board=owed,
         builds=dict(before_packing=summary['builds_before_packing'], after_packing=summary['builds_after_packing'],
                     packs=[dict(id=p['id'], tool=p['tool'], binding=p['binding'], A_defines=p['incumbent_defines'], A_env=p['incumbent_env'],
                                 B_defines=p['defines'], members=[m['id'] for m in p['members']], algorithms=sorted(p['algorithms'])) for p in packs]),
@@ -788,7 +800,7 @@ def render_md_fast(plan):
          '- **Builds**: FAST builds only (MOJOLEARN_NUMERIC_MODE=fast through the scripts); no `MOJOLEARN_NUMERIC_IDENTICAL` define anywhere.',
          '- **Identity**: none. FAST needs no identical anything (CLAUDE.md); there is no identity column.', '',
          '## Totals', '', '| item | count |', '|---|---|',
-         '| controls (48 AFT + 54 AFCL + %d untried rows and their group partners) | %d |' % (s['controls'] - 102, s['controls']),
+         '| controls (48 AFT + 54 AFCL + %d authored: untried rows, their group partners, lane R8) | %d |' % (s['controls'] - 102, s['controls']),
          '| excluded controls | %d |' % s['excluded_controls'],
          '| (control, lane) pairs excluded for an unresolvable binding | %d |' % s['binding_exclusions'],
          '| card lane recipes without an M3 board row or script | %d |' % s['unmapped_lane_recipes'],
@@ -840,6 +852,10 @@ def render_md_fast(plan):
     L += ['', '## Untried rows not gridded', '', '| define | kind | reason |', '|---|---|---|']
     for e in plan['excluded_untried']:
         L.append('| `%s` | %s | %s |' % (e['define'], e['kind'], e['reason']))
+    L += ['', '## Owed FAST A/Bs outside the board grid', '',
+          'Lines the owning lane wrote for routes the board rows do not reach (or for a non-board shape); not in `grid-fast-queue.txt`.', '']
+    for o in plan['owed_off_board']:
+        L.append('- `' + o['line'] + '` (' + o['file'] + ')')
     L += ['', '## How to queue (not run by this lane)', '',
           '`grid-fast-queue.txt` holds one `lq add m3 CMD %s <tag> \'<command>\'` line per A/A and A/B, in order.' % s['queue_branch'],
           'Only `lane/apple-fast*` branches may target m3 (`~/mojolearn-evidence/lq/lq`); the branch must contain this grid\'s',

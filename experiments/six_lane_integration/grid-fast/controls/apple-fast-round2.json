@@ -1,0 +1,38 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "mode": "fast",
+ "vendor": "apple",
+ "lane": "apple-fast-round2",
+ "branch": "lane/apple-fast-round2",
+ "head": null,
+ "source": "lane R8 toggles: experiments/six_lane_integration/grid_controls/apple-fast-round2.json (notes, reach) and docs/apple-fast/ab/apple-fast-round2.txt (A/B lines)",
+ "controls": {
+  "SGD_FAST_EPOCH_RESIDENT": {"define": "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT", "kind": "switch", "arms": {"off": [], "on": ["MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"]}, "default": "off",
+   "source": ["x_linear/device.mojo:969", "x_linear/device.mojo:975"], "paths": ["x_linear/device.mojo"], "binding": "x_linear", "status": "new (R8), unmeasured",
+   "branch": "lane/apple-fast-round2", "quality": "board sgd-reg / sgd-clf metric",
+   "note": "R8: reaches fast sgd-reg / sgd-clf (batch 4096) on Apple"},
+  "KSHAP_FAST_DEVICE_MODEL": {"define": "MOJOLEARN_KSHAP_FAST_DEVICE_MODEL", "kind": "switch", "arms": {"off": [], "on": ["MOJOLEARN_KSHAP_FAST_DEVICE_MODEL"]}, "default": "off",
+   "source": ["xtrees/agnostic_device.mojo:95", "xtrees/api.mojo:1188", "python/mojolearn/_expansion_trees.py:3135"], "paths": ["xtrees/agnostic_device.mojo", "xtrees/api.mojo"], "binding": "x_trees", "status": "new (R8), unmeasured",
+   "branch": "lane/apple-fast-round2",
+   "exclude": "R8: the board kernel-shap row explains a NumPy ridge closure (no device model), so the switch is not reached on the board; reached by KernelExplainer over a mojolearn forest (owed off-board A/B below)"},
+  "PSHAP_FAST_DEVICE_MODEL": {"define": "MOJOLEARN_PSHAP_FAST_DEVICE_MODEL", "kind": "switch", "arms": {"off": [], "on": ["MOJOLEARN_PSHAP_FAST_DEVICE_MODEL"]}, "default": "off",
+   "source": ["xtrees/agnostic_device.mojo:96", "xtrees/api.mojo:1189", "python/mojolearn/_expansion_trees.py:3135"], "paths": ["xtrees/agnostic_device.mojo", "xtrees/api.mojo"], "binding": "x_trees", "status": "new (R8), unmeasured",
+   "branch": "lane/apple-fast-round2",
+   "exclude": "R8: the board permutation-shap row explains the NumPy ridge closure, so the switch is not reached on the board; reached by PermutationExplainer over a mojolearn forest (owed off-board A/B below)"},
+  "X_PREP_FAST_FIT_TRANSFORM_FUSED": {"define": "MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED", "kind": "switch", "arms": {"off": [], "on": ["MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"]}, "default": "off",
+   "source": ["preprocessing/estimator.mojo:344", "bindings/_mojolearn_preprocessing.mojo:191", "python/mojolearn/preprocessing.py:658"], "paths": ["preprocessing/estimator.mojo"], "binding": "preprocessing", "status": "new (R8), unmeasured",
+   "branch": "lane/apple-fast-round2",
+   "exclude": "R8: the board standard-scaler row times fit(X) then transform(Xq) on different arrays, so the fused path is not reached on the board; reached by StandardScaler.fit_transform (owed off-board A/B below)"}
+ },
+ "algorithms": {
+  "algos:sgd-reg": {"controls": ["SGD_FAST_EPOCH_RESIDENT"], "interaction_groups": []},
+  "algos:sgd-clf": {"controls": ["SGD_FAST_EPOCH_RESIDENT"], "interaction_groups": []}
+ },
+ "owed_lines": [
+  "CMD lane/apple-fast-round2 afr2-sgd-er-reg-synth 'AFC_FAMILY=algos bash tools/afc_ab_def.sh afr2-sgd-er-reg-synth x_linear sgd-reg s-r600000-f48 1 1 \"\" \"-D MOJOLEARN_SGD_FAST_EPOCH_RESIDENT\"'",
+  "CMD lane/apple-fast-round2 afr2-kshap-dm-rf 'bash tools/afr2_ab.sh afr2-kshap-dm-rf x_trees kshap-rf \"-D MOJOLEARN_KSHAP_FAST_DEVICE_MODEL\"'",
+  "CMD lane/apple-fast-round2 afr2-pshap-dm-rf 'bash tools/afr2_ab.sh afr2-pshap-dm-rf x_trees pshap-rf \"-D MOJOLEARN_PSHAP_FAST_DEVICE_MODEL\"'",
+  "CMD lane/apple-fast-round2 afr2-scaler-ft 'bash tools/afr2_ab.sh afr2-scaler-ft preprocessing scaler-ft \"-D MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED\"'"
+ ],
+ "excluded": []
+}

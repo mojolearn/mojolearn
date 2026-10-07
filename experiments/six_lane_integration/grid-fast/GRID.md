@@ -14,23 +14,23 @@ EXPERIMENTS.md untried candidates (`grid-fast/controls/`) and the M3 FAST board 
 
 | item | count |
 |---|---|
-| controls (48 AFT + 54 AFCL + 15 untried rows and their group partners) | 117 |
-| excluded controls | 4 |
-| (control, lane) pairs excluded for an unresolvable binding | 5 |
+| controls (48 AFT + 54 AFCL + 19 authored: untried rows, their group partners, lane R8) | 121 |
+| excluded controls | 6 |
+| (control, lane) pairs excluded for an unresolvable binding | 4 |
 | card lane recipes without an M3 board row or script | 8 |
-| algorithms (board lanes) with configs | 99 |
-| **configs** (build 426, env 8) | **434** |
-| board workloads touched | 195 |
-| **A/B cells** (configs x workloads, one box) | **844** |
-| A/A lines (one per workload x binding x script) | 201 |
-| queue lines (`grid-fast-queue.txt`) | 1045 |
+| algorithms (board lanes) with configs | 100 |
+| **configs** (build 431, env 8) | **439** |
+| board workloads touched | 197 |
+| **A/B cells** (configs x workloads, one box) | **854** |
+| A/A lines (one per workload x binding x script) | 203 |
+| queue lines (`grid-fast-queue.txt`) | 1057 |
 | deferred singles/all-on (cap) | 0 |
 | deferred interaction-group crosses | 31 groups, 97 configs |
-| builds before packing (2 per build config + main) | 902 |
-| **builds after packing** (153 packs x 2 + 50 main; 66 packs with >1 member) | **356** |
-| distinct (binding, define set) among them | 176 |
+| builds before packing (2 per build config + main) | 912 |
+| **builds after packing** (154 packs x 2 + 50 main; 66 packs with >1 member) | **358** |
+| distinct (binding, define set) among them | 178 |
 
-Cap: 16 configs per lane. One run per arm (aft_ab.sh pairs 1; afc_ab_def.sh / afc_ab.sh reps 1 rounds 1). Box: m3 only. Run id `gfd05a4f`.
+Cap: 16 configs per lane. One run per arm (aft_ab.sh pairs 1; afc_ab_def.sh / afc_ab.sh reps 1 rounds 1). Box: m3 only. Run id `gfdce700`.
 
 ## Verdict rule
 
@@ -102,6 +102,7 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 | algos:ocsvm | istella, taxi | 1 | s AFCL_L06 | - | 1 packs, svm |
 | algos:pa-clf | istella, taxi | 1 | s AFCL_L14 | - | 1 packs, x_linear |
 | algos:pa-reg | istella, taxi | 1 | s AFCL_L14 | - | 1 packs, x_linear |
+| algos:pca | istella, taxi | 1 | s AFCL_L07 | - | 1 packs, estimators |
 | algos:perceptron | istella, taxi | 1 | s AFCL_L14 | - | 1 packs, x_linear |
 | algos:pls | istella, taxi | 1 | s AFCL_L08 | - | 1 packs, x_decomp |
 | algos:pls-canonical | istella, taxi | 1 | s AFCL_L08 | - | 1 packs, x_decomp |
@@ -122,9 +123,9 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 | algos:select-mutual-info | istella, taxi | 1 | s MI_WORK (env) | - | 0 packs, x_prep |
 | algos:select-mutual-info-reg | istella, taxi | 4 | s MI_REG_RANKMAJOR<br>s MI_REG_SORTCOUNT<br>s MI_WORK (env)<br>all MI_REG_RANKMAJOR, MI_REG_SORTCOUNT | - | 3 packs, x_prep |
 | algos:select-r-regression | istella, taxi | 1 | s AFCL_P07 | - | 1 packs, x_prep |
-| algos:sgd-clf | istella, taxi | 1 | s AFCL_L14 | - | 1 packs, x_linear |
+| algos:sgd-clf | istella, taxi | 3 | s AFCL_L14<br>s SGD_FAST_EPOCH_RESIDENT<br>all AFCL_L14, SGD_FAST_EPOCH_RESIDENT | - | 3 packs, x_linear |
 | algos:sgd-ocsvm | istella, taxi | 1 | s AFCL_L14 | - | 1 packs, x_linear |
-| algos:sgd-reg | istella, taxi | 1 | s AFCL_L14 | - | 1 packs, x_linear |
+| algos:sgd-reg | istella, taxi | 3 | s AFCL_L14<br>s SGD_FAST_EPOCH_RESIDENT<br>all AFCL_L14, SGD_FAST_EPOCH_RESIDENT | - | 3 packs, x_linear |
 | algos:simple-imputer | istella, taxi | 2 | s AFCL_P01<br>s X_PREP_FAST_QSELECT (env) | - | 1 packs, x_prep |
 | algos:sparse-coder | istella, taxi | 1 | s DECOMP_FAST_OMP_BLOCK | - | 1 packs, x_decomp |
 | algos:standard-scaler | istella, taxi | 1 | s AFCL_P01 | - | 1 packs, x_prep |
@@ -167,20 +168,21 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 
 | control | define | source | reason |
 |---|---|---|---|
-| AFCL_L07 | `MOJOLEARN_AFCL_L07` | afcl | no mapped board lane with a resolvable binding (see unmapped / binding exclusions) |
 | AFCL_P08 | `MOJOLEARN_AFCL_P08` | afcl | no board lane recipe the Apple A/B scripts can race |
 | AFCL_P09 | `MOJOLEARN_AFCL_P09` | afcl | no board lane recipe the Apple A/B scripts can race |
 | AFT_N05 | `MOJOLEARN_AFT_N05` | aft-N | unreached: card: board_default_exercises_candidate=false; Set min_split_gain=None identically in A and B; the current board value0.0 bypasses device selection. Do not silently label the unchanged board route as N05. |
+| KSHAP_FAST_DEVICE_MODEL | `MOJOLEARN_KSHAP_FAST_DEVICE_MODEL` | apple-fast-round2 | not reached on the board: R8: the board kernel-shap row explains a NumPy ridge closure (no device model), so the switch is not reached on the board; reached by KernelExplainer over a mojolearn forest (owed off-board A/B below) |
+| PSHAP_FAST_DEVICE_MODEL | `MOJOLEARN_PSHAP_FAST_DEVICE_MODEL` | apple-fast-round2 | not reached on the board: R8: the board permutation-shap row explains the NumPy ridge closure, so the switch is not reached on the board; reached by PermutationExplainer over a mojolearn forest (owed off-board A/B below) |
+| X_PREP_FAST_FIT_TRANSFORM_FUSED | `MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED` | apple-fast-round2 | not reached on the board: R8: the board standard-scaler row times fit(X) then transform(Xq) on different arrays, so the fused path is not reached on the board; reached by StandardScaler.fit_transform (owed off-board A/B below) |
 
 ## Binding exclusions (control on one lane)
 
 | control | lane | reason |
 |---|---|---|
-| AFCL_L01 | classical2:ridge | ambiguous binding: x_linear, x_prep each import x_linear/fast_gram.mojo; lane binding estimators; the Apple A/B scripts build one binding per line (add the lane to LANE_BINDING with its source to resolve) |
-| AFCL_L02 | classical2:ridge | ambiguous binding: x_linear, x_prep each import x_linear/fast_gram.mojo; lane binding estimators; the Apple A/B scripts build one binding per line (add the lane to LANE_BINDING with its source to resolve) |
-| AFCL_L07 | algos:pca | ambiguous binding: estimators, kernel_methods, x_decomp, linalg, metrics, x_neighbors each import decomposition/impl/linalg/detail/pca.mojo; lane binding unknown; the Apple A/B scripts build one binding per line (add the lane to LANE_BINDING with its source to resolve) |
-| AFCL_L08 | classical:ols | ambiguous binding: x_decomp, linalg, metrics, x_neighbors each import x_decomp/fast_gemm.mojo; lane binding estimators; the Apple A/B scripts build one binding per line (add the lane to LANE_BINDING with its source to resolve) |
-| AFCL_L09 | classical:ols | ambiguous binding: x_decomp, linalg, metrics, x_neighbors each import x_decomp/fast_qr.mojo; lane binding estimators; the Apple A/B scripts build one binding per line (add the lane to LANE_BINDING with its source to resolve) |
+| AFCL_L01 | classical2:ridge | unreached on the board route: the lane's Python module loads only estimators (lane binding estimators), none of which imports x_linear/fast_gram.mojo; the card bindings that do (x_linear, x_prep) are not loaded by this lane |
+| AFCL_L02 | classical2:ridge | unreached on the board route: the lane's Python module loads only estimators (lane binding estimators), none of which imports x_linear/fast_gram.mojo; the card bindings that do (x_linear, x_prep) are not loaded by this lane |
+| AFCL_L08 | classical:ols | unreached on the board route: the lane's Python module loads only estimators (lane binding estimators), none of which imports x_decomp/fast_gemm.mojo; the card bindings that do (x_decomp, linalg, metrics, x_neighbors) are not loaded by this lane |
+| AFCL_L09 | classical:ols | unreached on the board route: the lane's Python module loads only estimators (lane binding estimators), none of which imports x_decomp/fast_qr.mojo; the card bindings that do (x_decomp, linalg, metrics, x_neighbors) are not loaded by this lane |
 
 ## Card lane recipes not queued
 
@@ -209,6 +211,15 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 | `MOJOLEARN_AFN_OPT_FUSE_SCAN, AFN_OPT_VEC4, AFN_OPT_RESIDENT_STATE` | out-of-scope | neural optimizers, not trees/classical |
 | `MOJOLEARN_OPT_FAST_PIPE_CH=524288` | out-of-scope | neural optimizer pipeline, not trees/classical |
 | `MOJOLEARN_SCHED_FAST_INLINE` | out-of-scope | neural schedule, not trees/classical |
+
+## Owed FAST A/Bs outside the board grid
+
+Lines the owning lane wrote for routes the board rows do not reach (or for a non-board shape); not in `grid-fast-queue.txt`.
+
+- `lq add m3 CMD lane/apple-fast-round2 afr2-sgd-er-reg-synth 'AFC_FAMILY=algos bash tools/afc_ab_def.sh afr2-sgd-er-reg-synth x_linear sgd-reg s-r600000-f48 1 1 "" "-D MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"'` (apple-fast-round2)
+- `lq add m3 CMD lane/apple-fast-round2 afr2-kshap-dm-rf 'bash tools/afr2_ab.sh afr2-kshap-dm-rf x_trees kshap-rf "-D MOJOLEARN_KSHAP_FAST_DEVICE_MODEL"'` (apple-fast-round2)
+- `lq add m3 CMD lane/apple-fast-round2 afr2-pshap-dm-rf 'bash tools/afr2_ab.sh afr2-pshap-dm-rf x_trees pshap-rf "-D MOJOLEARN_PSHAP_FAST_DEVICE_MODEL"'` (apple-fast-round2)
+- `lq add m3 CMD lane/apple-fast-round2 afr2-scaler-ft 'bash tools/afr2_ab.sh afr2-scaler-ft preprocessing scaler-ft "-D MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"'` (apple-fast-round2)
 
 ## How to queue (not run by this lane)
 
