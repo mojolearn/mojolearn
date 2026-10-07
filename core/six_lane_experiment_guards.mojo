@@ -159,6 +159,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE"](), "removed: MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE (OVN A05 slower on NVIDIA and AMD)"
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY"](), "removed: MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY (OVN N01 noise on the L40S)"
     comptime assert not is_defined["MOJOLEARN_TREES_T09"](), "removed: MOJOLEARN_TREES_T09 (ExtraTrees bootstrap sort: unreachable at bootstrap=False, host sync in fit)"
+    comptime assert not is_defined["MOJOLEARN_TREES_T27"](), "removed: MOJOLEARN_TREES_T27 (alias of MOJOLEARN_2030_FUSED_EST_MOVE; inert on board walks)"
+    comptime assert not is_defined["MOJOLEARN_TREES_C47_GBDT"](), "removed: MOJOLEARN_TREES_C47_GBDT (width cap subsumed by MOJOLEARN_TREES_T17_BATCH)"
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True

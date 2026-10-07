@@ -576,26 +576,6 @@
    "grid": "exclude",
    "prune_note": "RMSE-only; no RMSE board lane"
   },
-  "T27": {
-   "define": "MOJOLEARN_TREES_T27",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T27"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:43",
-    "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:199"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept",
-   "grid": "exclude",
-   "prune_note": "inert on board: device walk never calls move_to; alias of MOJOLEARN_2030_FUSED_EST_MOVE"
-  },
   "T28": {
    "define": "MOJOLEARN_TREES_T28",
    "kind": "arms",
@@ -694,26 +674,6 @@
    "status": "kept",
    "grid": "exclude",
    "prune_note": "one-block score grid needs <=256 cells; unreachable at 254 borders x >1 feature"
-  },
-  "C47_GBDT": {
-   "define": "MOJOLEARN_TREES_C47_GBDT",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_C47_GBDT"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:65",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:3333"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept",
-   "grid": "exclude",
-   "prune_note": "width cap subsumed by T17_BATCH"
   },
   "FOREST_ROUTE": {
    "define": "MOJOLEARN_TREES_FOREST_ROUTE",
@@ -1137,7 +1097,6 @@
    "controls": [
     "T21_STREAMS",
     "T23",
-    "T27",
     "C45_GBDT",
     "C50_GB"
    ],
@@ -1147,8 +1106,7 @@
      "C45_GBDT"
     ],
     [
-     "T23",
-     "T27"
+     "T23"
     ]
    ]
   },
@@ -1158,7 +1116,6 @@
    "controls": [
     "T21_STREAMS",
     "T23",
-    "T27",
     "C45_GBDT",
     "C50_GB"
    ],
@@ -1168,8 +1125,7 @@
      "C45_GBDT"
     ],
     [
-     "T23",
-     "T27"
+     "T23"
     ]
    ]
   },
@@ -1182,7 +1138,6 @@
     "T21",
     "T26",
     "T23",
-    "T27",
     "C45_GBDT",
     "C50_GB",
     "T21_STREAMS"
@@ -1196,7 +1151,6 @@
     ],
     [
      "T23",
-     "T27",
      "T26"
     ]
    ]
@@ -1206,12 +1160,10 @@
    "route": "fit: greedy_search_helper_depthwise lossguide exact batch (T17_BATCH, C47_GBDT, T19_DEFER, T21); predict: C50_GB",
    "controls": [
     "T17_BATCH",
-    "C47_GBDT",
     "T19_DEFER",
     "T21",
     "T26",
     "T23",
-    "T27",
     "C45_GBDT",
     "C50_GB",
     "T19",
@@ -1244,7 +1196,6 @@
     "T28",
     "T18",
     "T23",
-    "T27",
     "C45_GBDT",
     "C50_GB",
     "T17_BATCH",
@@ -1276,7 +1227,6 @@
     "T24",
     "T25",
     "T23",
-    "T27",
     "C45_GBDT",
     "C50_GB"
    ],
@@ -1296,7 +1246,6 @@
    "controls": [
     "T21_STREAMS",
     "T23",
-    "T27",
     "C45_GBDT",
     "C50_GB"
    ],
@@ -1314,7 +1263,6 @@
     "T29",
     "T21_STREAMS",
     "T23",
-    "T27",
     "C45_GBDT",
     "C50_GB"
    ],
@@ -1412,6 +1360,16 @@
    "define": "MOJOLEARN_TREES_T09",
    "control": "T09_ET",
    "reason": "DELETED by lane/grid-prune 2026-10-07: unreachable on the board (et bootstrap=False) and a host sync inside the fit; guards refuse MOJOLEARN_TREES_T09. Recoverable at main ab554bb4a."
+  },
+  {
+   "define": "MOJOLEARN_TREES_T27",
+   "control": "T27",
+   "reason": "DELETED by lane/grid-prune 2026-10-07: alias of MOJOLEARN_2030_FUSED_EST_MOVE, inert on board walks; guards refuse it."
+  },
+  {
+   "define": "MOJOLEARN_TREES_C47_GBDT",
+   "control": "C47_GBDT",
+   "reason": "DELETED by lane/grid-prune 2026-10-07: width cap subsumed by T17_BATCH; guards refuse it."
   }
  ],
  "stage0_build": {
