@@ -1,6 +1,6 @@
 {
   "schema": "mojolearn.saved-quality-review/1",
-  "observed_at": "2026-10-07T08:13:07.023124+00:00",
+  "observed_at": "2026-10-07T10:22:08.714754+00:00",
   "scope": "Every captured native/Apple terminal new receipt including TSVD and selectors; saved taskmetrics only; original12classicalpairs reviewed separately",
   "discovery_roots": [
     {
@@ -47099,5 +47099,5 @@
     }
   ],
   "default_promotion": false,
-  "new_opponent_review_at": "2026-10-07T08:13:07.319100+00:00"
+  "new_opponent_review_at": "2026-10-07T10:22:09.006977+00:00"
 }

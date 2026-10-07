@@ -16,6 +16,7 @@ import subprocess
 import time
 
 from six_lane_review_history import publish_review_history
+from six_lane_qualification import summarize as qualification_summary
 
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--campaign-root',type=Path,required=True)
@@ -121,6 +122,24 @@ def continuations():
                         if not all(row.get(key) for key in ('receipt_sha256','quality_assessment','reason')):
                             raise ValueError('Incomplete hash-bound quality review: '+str(source))
                         reviews.append(dict(row,review_source=ref))
+        evidence=manifest.get('qualification_evidence')
+        if evidence:
+            documents={};references={}
+            requested={'quality':evidence['quality_review'],'identity':evidence['identity']}
+            requested.update({'preservation:'+v:p for v,p in evidence.get('preservation',{}).items()})
+            for kind,value in requested.items():
+                source=resolve(value)
+                if not source.exists():
+                    record['inputs'].append(dict(source=str(source),kind=kind,status='PENDING_INPUT'))
+                    continue
+                data=source.read_bytes();documents[kind]=json.loads(data)
+                references[kind]=dict(retain_input(source,data),kind=kind,status='RETAINED')
+                record['inputs'].append(references[kind])
+            if 'quality' in documents:
+                record['qualification']=qualification_summary(documents['quality'],documents.get('identity'),
+                    {k.split(':',1)[1]:v for k,v in documents.items() if k.startswith('preservation:')})
+                record['qualification']['evidence']=references
+                record['qualification']['continuation']=ident
         notes.extend(manifest.get('notes',[]))
         records.append(record)
     return sources,reviews,configs,notes,records
@@ -195,6 +214,8 @@ def main():
     retained_summary=load(OUT/'retained-pairs.json',{'pairs':[]})
     retained_inventory=load(OUT/'inventory.json',{'candidates':[]})
     extra_sources,extra_reviews,extra_configs,extra_notes,continuation_records=continuations()
+    qualification=[r['qualification'] for r in continuation_records if r.get('qualification')]
+    qualification_rows={digest:row for q in qualification for digest,row in q['rows'].items()}
     candidates={c['id']:c for c in retained_inventory['candidates']}
     for selection in [dict(id='AF.X.complete-proposed',title='Apple FAST complete proposed configuration',mode='fast',vendors=['apple']),
                       dict(id='I.X.complete-proposed',title='IDENTICAL complete proposed configuration',mode='identical',vendors=['nvidia','amd','apple','host'])]+extra_configs:
@@ -473,11 +494,16 @@ def main():
             if missing:pending_work.append(dict(vendor='all',scope='Continuation '+record['id'],
                 reason='Pending sources/inputs: '+', '.join(missing),evidence='publication-continuations.json'))
         remaining['continuation_selections']=continuation_rows
+    for cell in cells:
+        if cell.get('receipt_sha256') in qualification_rows:
+            cell['qualification']=qualification_rows[cell['receipt_sha256']]
+    write(OUT/'current-qualification.json',dict(continuations=qualification))
     write(OUT/'remaining-work.json',remaining)
     write(OUT/'campaign-coverage.json',dict(coverage=coverage,pending_work=pending_work,evidence_inputs=evidence_inputs,
           remaining_catalog={k:v for k,v in remaining.items() if k!='rows'},
           latest_combined_defaults_promoted=False,all_experiments_complete=False))
-    write(OUT/'inventory.json',inventory);write(OUT/'index.json',dict(cells=cells,notes=notes,decisions=decisions,coverage=coverage,pending_work=pending_work,remaining_catalog=remaining,review_history=review_history))
+    write(OUT/'inventory.json',inventory);write(OUT/'index.json',dict(cells=cells,notes=notes,decisions=decisions,coverage=coverage,pending_work=pending_work,remaining_catalog=remaining,review_history=review_history,
+        qualification=[{k:v for k,v in q.items() if k!='rows'} for q in qualification]))
     write(OUT/'retained-pairs.json',dict(updated_at=time.time(),pairs=summary))
     with (ROOT/'board-publication.log').open('a') as log:
         p=subprocess.run(['python3',str(REPO/'tools/performance_measurement_board.py'),

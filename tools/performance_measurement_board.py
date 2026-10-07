@@ -88,6 +88,7 @@ def build(inventory, index):
             'decisions': index.get('decisions', []),
             'coverage': index.get('coverage', []),
             'pending_work': index.get('pending_work', []),
+            'qualification': index.get('qualification', []),
             'remaining_catalog': index.get('remaining_catalog', {})}
 
 
@@ -251,7 +252,14 @@ def experiment_details(data, out):
                   f"Observed A: {display(a_seconds)} s; B: {display(b_seconds)} s.", '',
                   f"Quality assessment: {escape(cell.get('quality_assessment', cell.get('quality', 'NOT_RECORDED')))}. "
                   f"Identity: {escape(cell.get('identity', 'NOT_RECORDED'))}.", '']
-        if cell.get('quality_reason'):
+        if cell.get('qualification'):
+            facts=cell['qualification']
+            lines += [escape(facts['current_reason']), '',
+                      'Timing: '+escape(facts['timing'])+'; baseline quality: '+escape(facts['baseline_quality'])+
+                      '; independent references: '+escape(facts['independent_reference'])+
+                      '; retained bytes: '+escape(facts['preservation'])+'. No default promotion.', '',
+                      'Original saved quality reason: '+escape(facts.get('raw_reason')), '']
+        elif cell.get('quality_reason'):
             lines += [escape(cell['quality_reason']), '']
         metrics_a, metrics_b = quality_metrics(cell, 'A'), quality_metrics(cell, 'B')
         if metrics_a or metrics_b:
@@ -336,6 +344,20 @@ def write(board, out):
             lines += ['', '## Individual experiment coverage', '',
                       f"[Itemized coverage ledger](REMAINING.md): {remaining['entries']} catalog entries and {remaining['interactions']} interaction plans; only {remaining['direct_selection_count']} exact selections have receipts in this campaign. Combined timings do not qualify individual members.", '',
                       'Unrun, source-rejected and previously decided work remain distinct. This ledger is not a claim that every listed entry has runnable binaries.']
+        for q in data.get('qualification', []):
+            lines += ['', '## Completed timing versus qualification: '+escape(q['continuation']), '',
+                      'This summary covers the named continuation across its recorded vendors. Pending qualification is not an unrun race or an automatic pass. [Saved facts and exact input snapshots](current-qualification.json).', '',
+                      '| Evidence dimension | Current recorded facts |', '|---|---|',
+                      '| Timing | '+str(q['completed_timing_pairs'])+' complete A/B pairs out of '+str(q['reviewed_pairs'])+' reviewed pairs |',
+                      '| Candidate versus incumbent task quality | '+escape(q['baseline_quality'])+' |',
+                      '| Independent full-workload reference coverage | '+escape(q['independent_references'])+' |',
+                      '| NVIDIA/AMD same-arm outputs and complete declared model state | '+escape(q['nvidia_amd_same_arm_output_and_state'])+' comparisons |',
+                      '| Existing full-identity report | '+escape(q['identity_report_status'])+'; qualified: '+escape(q['full_identity_qualified'])+' |',
+                      '| Missing columns in the existing identity report | '+escape(q['missing_identity_columns'])+' cases |',
+                      '| Durable local and R2 retention by vendor | '+escape(q['preservation_by_vendor'])+' (true means complete for this run) |',
+                      '| Original qualification verdicts | '+escape(q['raw_quality_counts'])+'; retained unchanged |',
+                      '| Promotion | Not authorized; defaults unchanged |', '',
+                      'An empty independent-reference roster is missing reference evidence, not unknown candidate metrics. Baseline quality and cross-vendor identity are separate facts. Matching NVIDIA/AMD comparisons do not supply absent columns; historical retention limitations remain scoped to their original runs.']
         lines += ['', '## Captured evidence', '',
                   'Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.', '',
                   '[Exact toggle profiles and per-attempt quality details](#experiments-run-toggles-timing-and-quality) are at the bottom. Times below are seconds; A is candidate and B is incumbent.', '',

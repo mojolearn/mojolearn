@@ -191,6 +191,24 @@ Counts are retained complete A/B pairs, not individually decided experiment swit
 
 Unrun, source-rejected and previously decided work remain distinct. This ledger is not a claim that every listed entry has runnable binaries.
 
+## Completed timing versus qualification: targeted-ab-20261007
+
+This summary covers the named continuation across its recorded vendors. Pending qualification is not an unrun race or an automatic pass. [Saved facts and exact input snapshots](current-qualification.json).
+
+| Evidence dimension | Current recorded facts |
+|---|---|
+| Timing | 208 complete A/B pairs out of 208 reviewed pairs |
+| Candidate versus incumbent task quality | {'SAME': 140, 'WORSE': 36, 'BETTER': 32} |
+| Independent full-workload reference coverage | {'ROSTER_NOT_RECORDED': 208} |
+| NVIDIA/AMD same-arm outputs and complete declared model state | {'MATCH': 200} comparisons |
+| Existing full-identity report | RECORDED; qualified: False |
+| Missing columns in the existing identity report | {'apple': 100, 'host': 100, 'nvidia-ptx': 100} cases |
+| Durable local and R2 retention by vendor | {'nvidia': True, 'amd': True} (true means complete for this run) |
+| Original qualification verdicts | {'PENDING': 172, 'QUALITY_FAILED': 36}; retained unchanged |
+| Promotion | Not authorized; defaults unchanged |
+
+An empty independent-reference roster is missing reference evidence, not unknown candidate metrics. Baseline quality and cross-vendor identity are separate facts. Matching NVIDIA/AMD comparisons do not supply absent columns; historical retention limitations remain scoped to their original runs.
+
 ## Captured evidence
 
 Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.
@@ -5007,7 +5025,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.332404460000021 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5051,7 +5073,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.969973266000013 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5095,7 +5121,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.162284462000004 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5139,7 +5169,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.230227462999948 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5183,7 +5217,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1900399190000144 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5224,7 +5262,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 2.7161373500000536 s; 
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5265,7 +5307,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.2534338570000045 s; 
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5306,7 +5352,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.235066935999953 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5347,7 +5397,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.639329806999967 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5391,7 +5445,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.000636815999997 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5435,7 +5493,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.199771609999971 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5479,7 +5541,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.02353408099998 s;
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5523,7 +5589,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.3736967620000087 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5567,7 +5637,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.226039250999975 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5611,7 +5685,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.133795854000027 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5655,7 +5733,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.9681458029999703 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5699,7 +5781,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.640148312000065 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5743,7 +5829,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.583179785000084 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5787,7 +5877,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.02865993599994 s;
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5831,7 +5925,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.22685570800013 s;
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5875,7 +5973,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.2021840399997927 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5919,7 +6021,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.068113679000135 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -5963,7 +6069,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.006295346999877 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6007,7 +6117,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.5890115049999167 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6051,7 +6165,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.3196537939998052 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6092,7 +6210,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5865407940000296 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6133,7 +6255,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 1.6142719710001074 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6174,7 +6300,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 0.5996992609998415 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6215,7 +6345,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.448459908999666 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6259,7 +6393,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 2.722915579000073 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6300,7 +6438,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.013170535999961 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6344,7 +6486,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.681757529000151 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6388,7 +6534,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 4.2306522559997575 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6429,7 +6579,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.068878115000189 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6473,7 +6627,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 4.2606386309998925 s; 
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6514,7 +6672,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 2.1866764159999548 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6555,7 +6717,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.024275318000036 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6599,7 +6765,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.6705822899999703 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6643,7 +6813,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.111404539000091 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6687,7 +6861,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.714807293999911 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6731,7 +6909,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.5910652800002936 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6775,7 +6957,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.43084916099997 s;
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6819,7 +7005,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.426739606999945 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6863,7 +7053,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.00802436999993 s;
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6907,7 +7101,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.121896874999948 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6951,7 +7149,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.6964131979998456 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -6995,7 +7197,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.3805583880002814 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7039,7 +7245,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.09803848599995 s;
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7083,7 +7293,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.166123804000108 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7127,7 +7341,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.292027527999835 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7171,7 +7389,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.332329673000004 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7215,7 +7437,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.979126185000041 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7259,7 +7485,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.011959416999616 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7303,7 +7533,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.255846329000178 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7347,7 +7581,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.745415387000321 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7391,7 +7629,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.765206914999908 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7435,7 +7677,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.364817218000098 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7479,7 +7725,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.777574011999604 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7523,7 +7773,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.058847058000083 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7567,7 +7821,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.932895282000118 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7611,7 +7869,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.8118328049999946 s; 
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7655,7 +7917,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.415726722000272 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7699,7 +7965,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.952447531999951 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7743,7 +8013,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.147694691999732 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7787,7 +8061,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.295707890999438 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7831,7 +8109,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.410038314999838 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7875,7 +8157,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.895847510999829 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7919,7 +8205,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.932480244000544 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -7963,7 +8253,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.454912811999748 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8007,7 +8301,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.919693165999888 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8051,7 +8349,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 9.099554935000015 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are better versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: BETTER; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8095,7 +8397,11 @@ Status: QUALITY_FAILED. Scope: full_workload. Observed A: 5.459843813000589 s; B
 
 Quality assessment: QUALITY_FAILED. Identity: INCOMPLETE.
 
-Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
+Recorded candidate metrics regress against the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: WORSE; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Saved scored metrics are nonfinite or candidate materially worse than baseline under unchanged af_quality rules
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8139,7 +8445,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.025150887000564 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8183,7 +8493,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.291067241000746 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8227,7 +8541,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.3584236739998232 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8271,7 +8589,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4968106309997893 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8315,7 +8637,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.056726311999228 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8359,7 +8685,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.9263829350002197 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8403,7 +8733,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.037955507000333 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8447,7 +8781,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.506838164000328 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8491,7 +8829,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.149563878999288 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8535,7 +8877,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.192538885999966 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8579,7 +8925,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.7261055199996918 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8623,7 +8973,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.3729621639995457 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8667,7 +9021,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.226643895000052 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8711,7 +9069,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.9363103890000275 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8755,7 +9117,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.096888342999591 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8799,7 +9165,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.6967019749999963 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8843,7 +9213,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.703169335999519 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8887,7 +9261,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.067344539999795 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8931,7 +9309,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.038050401999499 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -8975,7 +9357,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4989949740001975 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9019,7 +9405,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.612946412999918 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9063,7 +9453,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.4444193790004647 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9107,7 +9501,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.081542701999751 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9151,7 +9549,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.9483292289996825 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9195,7 +9597,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.168307836999702 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9239,7 +9645,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.762667794000663 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9283,7 +9693,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.073708486000214 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9327,7 +9741,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.694933535999553 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9371,7 +9789,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.177466772000116 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9415,7 +9837,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.098438934000114 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9459,7 +9885,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.7341511829999945 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9503,7 +9933,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.491222341000139 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9547,7 +9981,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.181256200999997 s
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9591,7 +10029,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 7.97710076399926 s;
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9635,7 +10077,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.6312888290003684 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|
@@ -9679,7 +10125,11 @@ Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 3.3541501930003506 
 
 Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
+Recorded candidate metrics are same versus the incumbent. No accepted independent full-workload reference roster is recorded. Durable local and R2 retention is complete for this run.
+
+Timing: COMPLETE; baseline quality: SAME; independent references: ROSTER_NOT_RECORDED; retained bytes: COMPLETE. No default promotion.
+
+Original saved quality reason: Baseline nonregression observed; matched accepted full-workload opponent roster, metric directions or constructor equivalence remain pending
 
 | Saved quality metric | A: candidate | B: incumbent |
 |---|---:|---:|

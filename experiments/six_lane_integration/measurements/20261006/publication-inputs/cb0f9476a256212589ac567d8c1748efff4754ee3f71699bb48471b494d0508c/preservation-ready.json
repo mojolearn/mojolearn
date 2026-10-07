@@ -1,0 +1,50 @@
+{
+  "provider_id": "2mx4iz2hlgtaqi",
+  "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+  "queue_drained": true,
+  "all_required_bytes_preserved": true,
+  "local_capture_hash_match": true,
+  "r2_readback_hash_match": true,
+  "remote_inventory_stable": true,
+  "files": 83765,
+  "logical_bytes": 21184414400,
+  "local_manifest_sha256": "45f231d08740f6a7efd1b98e139573def2733eb50022aae27cc8abce1093d241",
+  "r2_key": "measurements/2026-10-07/targeted-ab/nvidia/6fe3cfce38fdb3fd25c493071745d0e2dbb402f5/20261007T063714Z/evidence.tar.gz",
+  "r2_archive_sha256": "82401aa23ad8e7d819350de2aa9bc42c571cc0f57d37a3fda6a3ac0ea4e5f55a",
+  "r2_archive_bytes": 5345270708,
+  "drained_at": 1791354910.9740658,
+  "preservation_verified_at": 1791356478.783328,
+  "required_idle_seconds_after_release": 3600,
+  "campaign_status": "BLOCKED_MISSING_BINARIES",
+  "missing_keys": 171,
+  "evidence_files": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/nvidia/preservation-prep/final-capture-receipt.json",
+      "sha256": "f50393d95a153d7dc7d6393bc5d8e3340c6373102edc5c587190c02b5641d0a8"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/nvidia/preservation-prep/post-r2-remote-inventory.json",
+      "sha256": "c430ce5faed8ba8e0692b7148ae32ceea422894679a437f82cd6d734636680bd"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/nvidia/preservation-prep/r2-status.json",
+      "sha256": "75c5e243a4b84e59959a37f317a18c7e62c5196204fa6d3abdec08c7790115cb"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/nvidia/preservation-prep/r2-preservation.log",
+      "sha256": "8e14c1bab896614941c934845b59adebe4fd1f764f5c35e6e55bd18fbc6416d3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/nvidia/preservation-prep/required-reference-audit.json",
+      "sha256": "c38979b5a9ca2dad5da14b5c9076415a6395875579442dd46caca9cc37d6e778"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/nvidia/preservation-prep/materialization.log",
+      "sha256": "8117ac6488e5dec4d6bfb319e31002b89c7b87b27ec606d4dfc911501e2c14dd"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/artifact-gap-audit/nvidia-drain-proof.json",
+      "sha256": "864ce90d8e31863dd7ae133960f45de7728652f3ee04d7a4fccf3c5dfb326280"
+    }
+  ]
+}

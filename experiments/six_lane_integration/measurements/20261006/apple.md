@@ -22,6 +22,24 @@ Counts are retained complete A/B pairs, not individually decided experiment swit
 
 Unrun, source-rejected and previously decided work remain distinct. This ledger is not a claim that every listed entry has runnable binaries.
 
+## Completed timing versus qualification: targeted-ab-20261007
+
+This summary covers the named continuation across its recorded vendors. Pending qualification is not an unrun race or an automatic pass. [Saved facts and exact input snapshots](current-qualification.json).
+
+| Evidence dimension | Current recorded facts |
+|---|---|
+| Timing | 208 complete A/B pairs out of 208 reviewed pairs |
+| Candidate versus incumbent task quality | {'SAME': 140, 'WORSE': 36, 'BETTER': 32} |
+| Independent full-workload reference coverage | {'ROSTER_NOT_RECORDED': 208} |
+| NVIDIA/AMD same-arm outputs and complete declared model state | {'MATCH': 200} comparisons |
+| Existing full-identity report | RECORDED; qualified: False |
+| Missing columns in the existing identity report | {'apple': 100, 'host': 100, 'nvidia-ptx': 100} cases |
+| Durable local and R2 retention by vendor | {'nvidia': True, 'amd': True} (true means complete for this run) |
+| Original qualification verdicts | {'PENDING': 172, 'QUALITY_FAILED': 36}; retained unchanged |
+| Promotion | Not authorized; defaults unchanged |
+
+An empty independent-reference roster is missing reference evidence, not unknown candidate metrics. Baseline quality and cross-vendor identity are separate facts. Matching NVIDIA/AMD comparisons do not supply absent columns; historical retention limitations remain scoped to their original runs.
+
 ## Captured evidence
 
 Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.

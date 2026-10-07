@@ -1,0 +1,57 @@
+{
+  "provider_id": "606841122",
+  "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+  "queue_drained": true,
+  "all_required_bytes_preserved": true,
+  "local_capture_hash_match": true,
+  "r2_readback_hash_match": true,
+  "remote_inventory_stable": true,
+  "files": 87798,
+  "logical_bytes": 21091121384,
+  "local_manifest_sha256": "821b5dfd4aa9545780c15239624e3c28ce4e7ec07553a9b6521d96baed77f27e",
+  "r2_manifest_key": "measurements/2026-10-07/targeted-ab/amd/6fe3cfce38fdb3fd25c493071745d0e2dbb402f5/20261007T065644Z-parts/complete-manifest.json",
+  "r2_manifest_sha256": "0438b531f441a7b7c49ce920211d23fc10fb8bd8d62a51cd8a4521abb12ba3a7",
+  "r2_archive_sha256": "f01e2b152f26d7163d76b68bf095998cfb54b59a9cb88ed466435e46d2289c18",
+  "r2_archive_bytes": 5906844179,
+  "r2_archive_parts": 6,
+  "drained_at": 1791355231.7371027,
+  "preservation_verified_at": 1791356745.3023648,
+  "required_idle_seconds_after_release": 3600,
+  "campaign_status": "BLOCKED_MISSING_BINARIES",
+  "missing_keys": 171,
+  "original_failure_evidence_retained": true,
+  "evidence_files": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/amd/preservation-prep/retry02/local-capture-receipt.json",
+      "sha256": "3fab4e721203381850ba47dc767ff1cc7ddfdd4192fb7abe1afaac7f28960f9a"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/amd/preservation-prep/retry02/inventory-after.json",
+      "sha256": "478f682a921663f072bbfe21ad01529f2348f303d157f6cc50c825ccf2034166"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/amd/preservation-prep/chunked-retry01/r2-readback-proof.json",
+      "sha256": "4851c01c00743890ad29e675113eebf0855bedf62c09bf319929d2637f913697"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/amd/preservation-prep/chunked-retry01/r2-index-rows.tsv",
+      "sha256": "177e1509b3ecbd2ce51207d4f40eb38c335bbb152b52fa8764aa06bc1f3bc839"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/amd/preservation-prep/required-reference-audit.json",
+      "sha256": "35c09ecdd03edd1186d02a2ab66f2fce4c606b93473f648dc43a22cba5d2ca71"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/amd/preservation-prep/materialization.log",
+      "sha256": "22310a15a13b06e2e4b46d5b70004273847f7599424cdf54807429a7c2694307"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/amd/preservation-prep/r2-preservation.log",
+      "sha256": "3c41c22a5c0e64b851eb71c704c3f4923cfbd8e77bf4034de9c3c2ee2b85b7ff"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/artifact-gap-audit/amd-drain-proof.json",
+      "sha256": "971e86afd217d0b8835ca4c68b60b18cf684c8201a047e6015b7d2d153610382"
+    }
+  ]
+}

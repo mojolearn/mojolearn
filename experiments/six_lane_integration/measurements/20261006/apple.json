@@ -54251,6 +54251,73 @@
       "evidence": "campaign-coverage.json: apple_readiness"
     }
   ],
+  "qualification": [
+    {
+      "schema": "mojolearn.qualification-facts/1",
+      "source_sha": "6fe3cfce38fdb3fd25c493071745d0e2dbb402f5",
+      "reviewed_pairs": 208,
+      "completed_timing_pairs": 208,
+      "raw_quality_counts": {
+        "PENDING": 172,
+        "QUALITY_FAILED": 36
+      },
+      "baseline_quality": {
+        "SAME": 140,
+        "WORSE": 36,
+        "BETTER": 32
+      },
+      "independent_references": {
+        "ROSTER_NOT_RECORDED": 208
+      },
+      "nvidia_amd_same_arm_output_and_state": {
+        "MATCH": 200
+      },
+      "missing_identity_columns": {
+        "apple": 100,
+        "host": 100,
+        "nvidia-ptx": 100
+      },
+      "identity_report_status": "RECORDED",
+      "full_identity_qualified": false,
+      "preservation_by_vendor": {
+        "nvidia": true,
+        "amd": true
+      },
+      "promotion_authorized": false,
+      "scope": "Current saved review facts, not additional measurements or new acceptance requirements. PENDING qualification does not mean unrun or passed. Reference coverage and same-arm identity are distinct; matching NVIDIA/AMD evidence does not supply absent columns. Raw verdicts and historical requirements remain retained; defaults are unchanged.",
+      "evidence": {
+        "quality": {
+          "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+          "sha256": "dece165bf798c1778e5be69bf3111f520c12cac336ef3f414f3547452622e9a9",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/dece165bf798c1778e5be69bf3111f520c12cac336ef3f414f3547452622e9a9/targeted-quality.json",
+          "kind": "quality",
+          "status": "RETAINED"
+        },
+        "identity": {
+          "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-identity.json",
+          "sha256": "8bbd91f5d37f868f300c0f084b8162955a96b229b55f420fe55a98788b97671f",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8bbd91f5d37f868f300c0f084b8162955a96b229b55f420fe55a98788b97671f/targeted-identity.json",
+          "kind": "identity",
+          "status": "RETAINED"
+        },
+        "preservation:nvidia": {
+          "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/nvidia/preservation-ready.json",
+          "sha256": "cb0f9476a256212589ac567d8c1748efff4754ee3f71699bb48471b494d0508c",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/cb0f9476a256212589ac567d8c1748efff4754ee3f71699bb48471b494d0508c/preservation-ready.json",
+          "kind": "preservation:nvidia",
+          "status": "RETAINED"
+        },
+        "preservation:amd": {
+          "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/gpu-launch/amd/preservation-ready.json",
+          "sha256": "fa36b0620cf2986d92b73449961f9547b6a32c5274bde1e276a568ff343d0b78",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/fa36b0620cf2986d92b73449961f9547b6a32c5274bde1e276a568ff343d0b78/preservation-ready.json",
+          "kind": "preservation:amd",
+          "status": "RETAINED"
+        }
+      },
+      "continuation": "targeted-ab-20261007"
+    }
+  ],
   "remaining_catalog": {
     "schema": "mojolearn.campaign-remaining-work/1",
     "catalog_source": "experiments/six_lane_integration/catalog.json",
