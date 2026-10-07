@@ -36,6 +36,9 @@ from x_prep.select_fast import (
 from x_prep.fastprep2 import PREP2_FAST, Prep2Switches, prep2_scratch_words, prep2_fast_stage
 #: lane ml-prep-nb: te_global / te_enc / ii_gram in the lane-tree order on a threadgroup (IDENTICAL)
 from x_prep.idn_tree import IDN_TREE_ANY, idn_tree_scratch_words, idn_tree_stage
+#: lane classical-te-gmm (2026-10-07): te_global / te_enc in the blocked order BLT (IDENTICAL A/B,
+#: -D MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD, default off; x_prep/idn_blocked.mojo)
+from x_prep.idn_blocked import IDN_TE_BLOCKED, te_blocked_scratch_words, te_blocked_stage
 
 #: lane af-ptimpute (2026-10-03), FAST + Apple + define only (x_prep/fastpt.mojo): the import
 #: instantiates nothing; every launch below sits inside `comptime if PT_* / SI_*`
@@ -428,6 +431,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         scratch = max(scratch, prep2_scratch_words(host_q, stages, p2))
     comptime if IDN_TREE_ANY:
         scratch = max(scratch, idn_tree_scratch_words(host_q, stages))
+    comptime if IDN_TE_BLOCKED:
+        scratch = max(scratch, te_blocked_scratch_words(host_q, stages))
     var mi_sorted = getenv("MOJOLEARN_XPREP_MI_SORTED", "1") != "0"
     var mi_ties = getenv("MOJOLEARN_XPREP_MI_TIES", "1") != "0"
     var mi_w = 1
@@ -611,6 +616,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     continue
         comptime if PREP2_FAST:
             if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp)), p2):
+                continue
+        comptime if IDN_TE_BLOCKED:
+            if te_blocked_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp))):
                 continue
         comptime if IDN_TREE_ANY:
             if idn_tree_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp))):
