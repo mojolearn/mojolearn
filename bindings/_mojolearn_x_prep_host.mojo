@@ -1,7 +1,7 @@
 """CPU binding for `_mojolearn_x_prep`. HOST ONLY: the same units as the
 device, run in a loop on the caller's arena (x_prep/host/program.mojo), with
 the GPU binding's export names and address contract."""
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C55_CLASS_GROUP, C04_LOAD_CENTER, C56_LDA_INPUT
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C55_CLASS_GROUP, C04_LOAD_CENTER, C56_LDA_INPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -189,6 +189,12 @@ def idn_int_binding() raises -> PythonObject:
     return PythonObject((1 if IDN_LABEL else 0) | (2 if IDN_NB_ONEPASS else 0))
 
 
+def c08_routes_binding() raises -> PythonObject:
+    """C08 routes compiled in (lane classical-encoders): 1 TargetEncoder fit codes,
+    2 OneHotEncoder.fit_transform, 4 OrdinalEncoder.fit_transform."""
+    return PythonObject(Int(C08_TARGET_CODES) | (Int(C08_ONEHOT_FT) << 1) | (Int(C08_ORDINAL_FT) << 2))
+
+
 def classical_shared_binding() raises -> PythonObject:
     # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     return PythonObject(Int(C08_DICTIONARY) | (Int(C55_CLASS_GROUP) << 1) | (Int(C04_LOAD_CENTER) << 2) | (Int(C56_LDA_INPUT) << 3))
@@ -251,6 +257,7 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
             # lane fam-prep-metrics
             m.def_function[idn_fam_binding]("x_prep_idn_fam")
             m.def_function[classical_shared_binding]("x_prep_classical_shared")
+            m.def_function[c08_routes_binding]("x_prep_c08_routes")
         comptime if IDN_WDRAW or IDN_PERM_DRAW or IDN_WPICK or IDN_PARTIAL_CODES or IDN_GRAM_BLOCKED or IDN_LABEL_INV:
             # lane fam2-prep-metrics: the fam2 switches (x_prep/fam2.mojo)
             m.def_function[idn_fam2_binding]("x_prep_idn_fam2")
