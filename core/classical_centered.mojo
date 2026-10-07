@@ -38,3 +38,42 @@ def centered_gram_v1_cell(
         depth -= 1
         result = ftz(ftz(stack[depth])+ftz(result))
     return ftz(result)
+
+
+def centered_cross_v1_cell(
+    x: MutPointer[Float32, MutAnyOrigin], means: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin], y_mean: Float32,
+    rows: Int, cols: Int, j: Int,
+) -> Float32:
+    """`centered_gram_v1_cell` for the cross moment (X^T y)_j = sum over rows
+    of (x_rj - mean_j)(y_r - y_mean): the same leaves of `contract_leaf_size(rows)`
+    rows, the same chain and the same binary-counter fold (the host column
+    of core/blocked_moments.mojo::bm_centered_cross_panels)."""
+    var leaf = contract_leaf_size(rows)
+    var stack = InlineArray[Float32, 32](fill=Float32(0))
+    var depth = 0
+    var leaves = 0
+    var ym = ftz(y_mean)
+    var mj = ftz(means.unsafe_load(j))
+    for start in range(0, rows, leaf):
+        var acc = Float32(0)
+        for row in range(start, min(start+leaf, rows)):
+            var a = ftz(ftz(x.unsafe_load(row*cols+j))-mj)
+            var b = ftz(ftz(y.unsafe_load(row))-ym)
+            acc = ftz(identical_mul_add(a, b, acc))
+        var carry = leaves
+        while (carry & 1) != 0:
+            depth -= 1
+            acc = ftz(ftz(stack[depth])+ftz(acc))
+            carry >>= 1
+        stack[depth] = acc
+        depth += 1
+        leaves += 1
+    if depth == 0:
+        return Float32(0)
+    depth -= 1
+    var result = stack[depth]
+    while depth > 0:
+        depth -= 1
+        result = ftz(ftz(stack[depth])+ftz(result))
+    return ftz(result)

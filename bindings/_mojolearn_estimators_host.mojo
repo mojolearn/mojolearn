@@ -110,6 +110,8 @@ from decomposition.host.pca_full_oracle import (
 )
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_TN, gemm_oracle
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
+from glm.host.gram_solve_host import host_linear_gram_fit
+from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
 from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_predict_task_count
 from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples_into
@@ -606,6 +608,50 @@ def ridge_fit_binding(
         for i in range(nf):
             wp[i] = w[i]
     return PythonObject(0)
+
+
+def linear_gram_solve_default_binding() raises -> PythonObject:
+    """The GPU binding's flag (MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE): the
+    host column takes the same route when it is on."""
+    return PythonObject(LINEAR_GRAM_SOLVE)
+
+
+def linear_gram_fit_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    mu_addr: PythonObject,
+    ymean_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The CPU column of the GPU binding's `linear_gram_fit`
+    (glm/host/gram_solve_host.mojo): params `n_rows, n_features, alpha,
+    center`; returns 0 (coef, and with center mu and ymean, written) or 1
+    (nothing written; the caller's incumbent route)."""
+    comptime if not LINEAR_GRAM_SOLVE:
+        raise Error("linear_gram_fit: only a build with -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE has this route")
+    if len(params) != 4:
+        raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
+    var x_address = _index(x_addr)
+    var y_address = _index(y_addr)
+    var wp = f32_ptr(_index(coef_addr))
+    var mp = f32_ptr(_index(mu_addr))
+    var ymp = f64_ptr(_index(ymean_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var alpha = Float32(Float64(py=params[2]))
+    var center = _index(params[3]) != 0
+    var status = 1
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        if alpha > Float32(0.0) and nf == 1:
+            status = 1
+        else:
+            var x = read_f32(x_address, nr * nf)
+            var y = read_f32(y_address, nr)
+            status = host_linear_gram_fit(x, y, nr, nf, alpha, center, wp, mp, ymp)
+    return PythonObject(status)
 
 
 def qn_fit_binding(
@@ -1497,6 +1543,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[lm_center_binding]("lm_center")
         module.def_function[lm_scale_rows_binding]("lm_scale_rows")
         module.def_function[ridge_fit_binding]("ridge_fit")
+        module.def_function[linear_gram_fit_binding]("linear_gram_fit")
+        module.def_function[linear_gram_solve_default_binding]("linear_gram_solve_default")
         module.def_function[dbscan_fit_binding]("dbscan_fit")
         module.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
         module.def_function[dbscan_core_arrays_host_binding]("dbscan_core_arrays")
