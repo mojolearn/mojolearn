@@ -1,0 +1,103 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "apple-fast-round2",
+ "branch": "lane/apple-fast-round2",
+ "head": "db19e2107",
+ "head_note": "FAST + Apple experiments; listed so the planner records them as excluded, not as IDENTICAL grid arms",
+ "controls": {
+  "kshap_fast_device_model": {
+   "define": "MOJOLEARN_KSHAP_FAST_DEVICE_MODEL",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_KSHAP_FAST_DEVICE_MODEL"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "xtrees/agnostic_device.mojo:95",
+    "xtrees/api.mojo:1188",
+    "python/mojolearn/_expansion_trees.py:3135"
+   ],
+   "binding": "_mojolearn_x_trees",
+   "bits_change": false,
+   "status": "new",
+   "grid": "exclude",
+   "tags": [
+    "off_board"
+   ],
+   "note": "FAST + Apple only (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()); not an IDENTICAL switch, so the NVIDIA + AMD IDENTICAL grid does not apply; A/B on the M3 (docs/apple-fast/ab/apple-fast-round2.txt). not on the board lane list as a reached route: the board kernel-shap explains a NumPy ridge closure (no device model); reached by KernelExplainer over a mojolearn forest."
+  },
+  "pshap_fast_device_model": {
+   "define": "MOJOLEARN_PSHAP_FAST_DEVICE_MODEL",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_PSHAP_FAST_DEVICE_MODEL"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "xtrees/agnostic_device.mojo:96",
+    "xtrees/api.mojo:1189",
+    "python/mojolearn/_expansion_trees.py:3135"
+   ],
+   "binding": "_mojolearn_x_trees",
+   "bits_change": false,
+   "status": "new",
+   "grid": "exclude",
+   "tags": [
+    "off_board"
+   ],
+   "note": "FAST + Apple only (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()); not an IDENTICAL switch, so the NVIDIA + AMD IDENTICAL grid does not apply; A/B on the M3 (docs/apple-fast/ab/apple-fast-round2.txt). not on the board lane list as a reached route: the board permutation-shap explains the ridge closure."
+  },
+  "sgd_fast_epoch_resident": {
+   "define": "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_linear/device.mojo:969",
+    "x_linear/device.mojo:975"
+   ],
+   "binding": "_mojolearn_x_linear",
+   "bits_change": false,
+   "status": "new",
+   "grid": "exclude",
+   "note": "FAST + Apple only (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()); not an IDENTICAL switch, so the NVIDIA + AMD IDENTICAL grid does not apply; A/B on the M3 (docs/apple-fast/ab/apple-fast-round2.txt). Reaches fast sgd-reg / sgd-clf (batch 4096) on Apple."
+  },
+  "x_prep_fast_fit_transform_fused": {
+   "define": "MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "preprocessing/estimator.mojo:344",
+    "bindings/_mojolearn_preprocessing.mojo:191",
+    "python/mojolearn/preprocessing.py:658"
+   ],
+   "binding": "_mojolearn_preprocessing",
+   "bits_change": false,
+   "status": "new",
+   "grid": "exclude",
+   "tags": [
+    "off_board"
+   ],
+   "note": "FAST + Apple only (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()); not an IDENTICAL switch, so the NVIDIA + AMD IDENTICAL grid does not apply; A/B on the M3 (docs/apple-fast/ab/apple-fast-round2.txt). not on the board lane list as a reached route: the board standard-scaler times fit(X) then transform(Xq); reached by StandardScaler.fit_transform."
+  }
+ },
+ "algorithms": {},
+ "removed": []
+}
