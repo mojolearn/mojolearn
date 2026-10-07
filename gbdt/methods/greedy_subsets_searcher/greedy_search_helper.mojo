@@ -16,6 +16,7 @@ from max.gpu.host.device_attribute import DeviceAttribute
 from checks.fixed_point import choose_scale
 from gbdt.trees_identical_switches import T21_STREAMS
 from gbdt.trees_hist_switches import HIST_MULTISTAT, HIST_SYM_FEATURE_PARALLEL
+from gbdt.trees_small_switches import HIST_REP_SM, HIST_REP_SM_ON, HIST_REP_BPSM, HIST_REP_BPSM_ON
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit_wide import (
     hist2_8bit_wide_kernel,
     wide_columns_for,
@@ -2274,7 +2275,7 @@ def launch_hist2_width_group[bits: Int, preq: Bool, col_map: Bool](
         raise Error("the one-byte arms launcher is two-stat by construction")
     var groups = feature_groups_for(POLICY_ONE_BYTE, n_features)
     comptime if bits == 8:
-        var replicas = replication_for(
+        var replicas = replication_int32_for(
             groups, n_live, 1, sm_count, gather=(depth > 0)
         )
         comptime for replica_stream in range(T21_STREAMS):
@@ -2305,7 +2306,7 @@ def launch_hist2_width_group[bits: Int, preq: Bool, col_map: Bool](
                 )
     else:
         comptime BLOCK = hist2_block_size[HIST_SMEM_SHARED2_I32]()
-        var replicas = replication_for(groups, n_live, 1, sm_count)
+        var replicas = replication_int32_for(groups, n_live, 1, sm_count)
         if depth == 0:
             ctx.enqueue_function[
                 hist2_one_byte_kernel[
@@ -2510,7 +2511,7 @@ def launch_hist2_8bit[ridx_stats: Bool = False](
     if stat_count != 2:
         raise Error("the fused 8-bit arm is two-stat by construction")
     var groups = feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
-    var replicas = replication_for(
+    var replicas = replication_int32_for(
         blk.replication_groups, n_live, 1, sm_count, gather=(depth > 0)
     )
     comptime for replica_stream in range(T21_STREAMS):
@@ -2578,7 +2579,7 @@ def launch_hist2_8bit_wide[ns: Int, fg: Int, ridx_stats: Bool = False](
     var columns = (Int(blk.n_features) + 3) // 4
     var col_groups = (columns + fg - 1) // fg
     var gz = (stat_count + ns - 1) // ns
-    var replicas = replication_for(
+    var replicas = replication_int32_for(
         col_groups, n_live, gz, sm_count, gather=(depth > 0)
     )
     if depth == 0:
@@ -2715,7 +2716,7 @@ def launch_one_byte[
             # which block lands first.
             grid_dim=(
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
-                * replication_for(
+                * replication_int32_for[smem_mode](
                     blk.replication_groups,
                     n_live, gz, sm_count,
                 ),
@@ -2757,7 +2758,7 @@ def launch_one_byte[
             # which block lands first.
             grid_dim=(
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
-                * replication_for(
+                * replication_int32_for[smem_mode](
                     blk.replication_groups,
                     n_live, gz, sm_count, gather=True,
                 ),
@@ -2837,7 +2838,7 @@ def launch_hist2_one_byte[
         return
 
     var groups = feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
-    var replicas = replication_for(blk.replication_groups, n_live, pairs, sm_count)
+    var replicas = replication_int32_for[smem_mode](blk.replication_groups, n_live, pairs, sm_count)
 
     if depth == 0:
         if is_odd == 1:
@@ -3081,6 +3082,46 @@ def replication_for(
                 cap = 1
             if rep > cap:
                 rep = cap
+    return rep
+
+
+def replication_int32_for[smem_mode: Int = HIST_SMEM_SHARED2_I32](
+    groups: Int, n_live: Int, stat_count: Int, sm_count: Int,
+    gather: Bool = False,
+) -> Int:
+    """Lane trees-small: `replication_for` for the INT32 histogram families.
+
+    With MOJOLEARN_TREES_HIST_REP_SM / _BPSM absent (or a float smem mode)
+    this IS `replication_for`. With either define, the IDENTICAL target
+    becomes `HIST_REP_BPSM * sm` blocks (x2 on the gather arm), where `sm`
+    is HIST_REP_SM, or the device's `sm_count` when HIST_REP_SM == 0.
+    Only callers whose addends are per-row Int32 (see
+    `gbdt/trees_small_switches.mojo`) may call this; the pin stays in
+    `replication_for` for the float families, where the SM count is a
+    summation order. Bits: unchanged (Int32 associative sums; the
+    accumulator is zero between levels, so the single-block store and the
+    multi-block atomic leave the same cell). Host column unchanged.
+    NOT COMPILED -- NOT TESTED -- NOT MEASURED."""
+    comptime assert (
+        HIST_REP_SM == 0 or HIST_REP_SM == 32 or HIST_REP_SM == 64 or HIST_REP_SM == 128
+    ), "MOJOLEARN_TREES_HIST_REP_SM legal set is {64, 128, 0 = device}"
+    comptime assert (
+        HIST_REP_BPSM == 2 or HIST_REP_BPSM == 4
+    ), "MOJOLEARN_TREES_HIST_REP_BPSM legal set is {2, 4}"
+    comptime if not (HIST_REP_SM_ON or HIST_REP_BPSM_ON) or smem_mode != HIST_SMEM_SHARED2_I32:
+        return replication_for(groups, n_live, stat_count, sm_count, gather)
+    var sm = HIST_REP_SM
+    if HIST_REP_SM == 0:
+        sm = max(1, sm_count)
+    var max_active_blocks = HIST_REP_BPSM * sm
+    if gather:
+        max_active_blocks = 2 * max_active_blocks
+    var base = groups * n_live * stat_count
+    if base < 1:
+        base = 1
+    var rep = (max_active_blocks + base - 1) // base
+    if rep < 1:
+        rep = 1
     return rep
 
 
