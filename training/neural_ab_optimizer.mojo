@@ -6,6 +6,7 @@ canonical optimizer cell, not a new mathematical transcription. This explicit
 component does not commit parameters or advance counters: its owner must run
 the existing admission and finish/rollback policy before publishing outputs.
 """
+from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
@@ -145,14 +146,29 @@ def nn_grouped_adam_kernel[STATUS: Bool](
                 status[out + field] = red[field * NN_ADAM_TPB]
 
 
-def nn_adam_status_fold_kernel(dst: _IP, parts: _IP, blocks_in: Int32, n_in: Int32):
-    # Four independent canonical field results, with integer selection only.
-    var field = Int(thread_idx.x)
-    if field < 4:
-        var first = n_in
-        for block in range(Int(blocks_in)):
-            first = min(first, parts[4 * block + field])
-        dst[field] = first
+def nn_adam_status_fold_kernel(dst: _IP, parts: _IP, blocks_in: Int32):
+    """Every block folds NN_ADAM_TPB status partials per field (the shared
+    min tree of `nn_grouped_adam_kernel`), then thread 0 folds the block's
+    four minima into dst with an atomic min. dst starts at n (filled before
+    the launch). Integer minima are exact and independent of block order,
+    so the result equals the old one-block walk on every vendor."""
+    var tid = Int(thread_idx.x)
+    var part = Int(block_idx.x) * NN_ADAM_TPB + tid
+    var red = stack_allocation[4 * NN_ADAM_TPB, Int32, address_space=AddressSpace.SHARED]()
+    comptime for field in range(4):
+        red[field * NN_ADAM_TPB + tid] = parts[4 * part + field] if part < Int(blocks_in) else Int32(2147483647)
+    barrier()
+    var step = NN_ADAM_TPB // 2
+    while step > 0:
+        if tid < step:
+            comptime for field in range(4):
+                var at = field * NN_ADAM_TPB + tid
+                red[at] = min(red[at], red[at + step])
+        barrier()
+        step //= 2
+    if tid == 0:
+        comptime for field in range(4):
+            _ = Atomic.min(dst.unsafe_offset(field), red[field * NN_ADAM_TPB])
 
 
 def nn_grouped_adam_into[STATUS: Bool](
@@ -183,4 +199,6 @@ def nn_grouped_adam_into[STATUS: Bool](
         raise Error("NN56 status workspace exceeds native bounds")
     ctx.enqueue_function[nn_grouped_adam_kernel[STATUS]](p_out.unsafe_ptr(), m_out.unsafe_ptr(), v_out.unsafe_ptr(), param.unsafe_ptr(), grad.unsafe_ptr(), m_state.unsafe_ptr(), v_state.unsafe_ptr(), offsets.unsafe_ptr(), kinds.unsafe_ptr(), scalars.unsafe_ptr(), parts.unsafe_ptr(), Int32(tiles), Int32(n), grid_dim=(tiles, groups, 1), block_dim=(NN_ADAM_TPB, 1, 1))
     comptime if STATUS:
-        ctx.enqueue_function[nn_adam_status_fold_kernel](status.unsafe_ptr(), parts.unsafe_ptr(), Int32(groups * tiles), Int32(n), grid_dim=(1, 1, 1), block_dim=(32, 1, 1))
+        var fold_blocks = (groups * tiles + NN_ADAM_TPB - 1) // NN_ADAM_TPB
+        status.enqueue_fill(Int32(n))
+        ctx.enqueue_function[nn_adam_status_fold_kernel](status.unsafe_ptr(), parts.unsafe_ptr(), Int32(groups * tiles), grid_dim=(fold_blocks, 1, 1), block_dim=(NN_ADAM_TPB, 1, 1))

@@ -9,7 +9,6 @@ has not been compiled, verified or measured.
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.host_lanes import host_f32_uninit
 from core.step_phase import step_count_device_alloc, step_count_launch, step_count_sync
 from checks.numerics import ftz, identical_exp, identical_div, identical_mul
 from transformer.experiments.attention_summary_tree import (

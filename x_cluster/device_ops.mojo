@@ -7,6 +7,7 @@ from mixture.checks.mstep import center_pair_kernel
 from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS
 from experiments.classical_identical_ideas.graph_controls import C36_CENTROID_TILES, C36_ROWS
 from experiments.classical_identical_ideas.graph_controls import C42_ACTIVE_TRIANGLE
+from core.fast_radix_sort import frs_exclusive_scan, frs_scan_blocks
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -1452,13 +1453,21 @@ def _c42_pack(source: FPtr,dst: FPtr,n: Int32):
             dst[_c42_slot(i,j,Int(n))]=source[i*Int(n)+j]
 
 
-def _c42_active(live: IPtr,active: IPtr,n: Int32):
-    # Stable logical row order is independent of task scheduling.
-    var count=0
-    for row in range(Int(n)):
-        if live[row]!=0:
-            active[count]=Int32(row)
-            count+=1
+def _c42_live_flags(live: IPtr,flag: IPtr,scan: IPtr,n: Int32):
+    # The live rows, ascending, are compacted by an exclusive scan of these
+    # flags (`frs_exclusive_scan`, every block) and `_c42_emit`: the same
+    # stable logical row order the one-thread walk gave, exact integers.
+    var row=Int(block_idx.x)*TPB+Int(thread_idx.x)
+    if row<Int(n):
+        var f=Int32(1) if live[row]!=0 else Int32(0)
+        flag[row]=f
+        scan[row]=f
+
+
+def _c42_emit(flag: IPtr,scan: IPtr,active: IPtr,n: Int32):
+    var row=Int(block_idx.x)*TPB+Int(thread_idx.x)
+    if row<Int(n) and flag[row]!=0:
+        active[Int(scan[row])]=Int32(row)
 
 
 def _c42_argmin(md: FPtr,nn: IPtr,active: IPtr,count: Int32,part: MutPointer[UInt64,MutAnyOrigin]):
@@ -2594,6 +2603,9 @@ struct DeviceOps(ClusterOps):
         var p_dm = self._fp(dm)
         var packed = ctx.enqueue_create_buffer[DType.float32](n*(n+1)//2 if C42_ACTIVE_TRIANGLE else 1)
         var active = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
+        var live_flag = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
+        var live_scan = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
+        var live_bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n) if C42_ACTIVE_TRIANGLE else 1)
         comptime if C42_ACTIVE_TRIANGLE:
             ctx.enqueue_function[_c42_pack](p_dm,packed.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
             ctx.synchronize()
@@ -2613,7 +2625,9 @@ struct DeviceOps(ClusterOps):
             var partial_count=nb
             comptime if C42_ACTIVE_TRIANGLE:
                 partial_count=(n-step+AGG_PER-1)//AGG_PER
-                ctx.enqueue_function[_c42_active](p_live,active.unsafe_ptr(),Int32(n),grid_dim=1,block_dim=1)
+                ctx.enqueue_function[_c42_live_flags](p_live,live_flag.unsafe_ptr(),live_scan.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
+                frs_exclusive_scan(ctx,live_scan,n,live_bsum)
+                ctx.enqueue_function[_c42_emit](live_flag.unsafe_ptr(),live_scan.unsafe_ptr(),active.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
                 ctx.enqueue_function[_c42_argmin](p_md,p_nn,active.unsafe_ptr(),Int32(n-step),p_part,grid_dim=partial_count,block_dim=AGG_TPB)
             else:
                 ctx.enqueue_function[_agg_argmin_part_kernel](
@@ -2639,6 +2653,9 @@ struct DeviceOps(ClusterOps):
         self._sync()
         _ = packed^
         _ = active^
+        _ = live_flag^
+        _ = live_scan^
+        _ = live_bsum^
         _ = live^
         _ = nn^
         _ = node^
