@@ -2,7 +2,7 @@
   "schema": "mojolearn.grid-controls/1",
   "lane": "classical-encoders",
   "branch": "lane/classical-encoders",
-  "head": "SEE_GIT_LOG",
+  "head": "c1ebc6314",
   "controls": {
     "c07_radix_bits": {
       "define": "MOJOLEARN_CLASSICAL_C07_RADIX_BITS", "kind": "int_sweep",
