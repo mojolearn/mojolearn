@@ -1448,3 +1448,14 @@ both NVIDIA and AMD results, no material vendor regression, same-version
 identity on Apple and the host column, and end-to-end quality/performance
 on taxi + Istella or enwik8 + Pile GitHub as appropriate. No default flips
 are authorized by the synthetic screen alone.
+
+## Classical IDENTICAL switch cleanup (lane/classical-misc, 2026-10-07)
+
+| define | algorithm / dataset | branch @ sha | evidence | verdict | reason |
+|---|---|---|---|---|---|
+| `MOJOLEARN_C60_DIFF_REUSE` | AutoARIMA `select_d` (all datasets) | `lane/classical-misc` @ `f7abb25cf` (code at parent `79aa4a19c`..) | source: `tsa/impl/select_d_fast.mojo` loops `d_ in range(d_max)`, `tsa/impl/auto_arima.mojo` refuses `d_max + D > 2` | DROPPED, code deleted | dead code: the gated `d_ == 2` branch can never run, so it cannot be measured |
+| `MOJOLEARN_CLASSICAL_C19_ORDERED_128` / `_ORDERED_32` | SGD per-sample launch chunk | `lane/classical-misc` @ `79aa4a19c` | review_classical.md section 4 (32 silently won when both on) | REPLACED by `MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32\|128\|2048` | one int sweep; unreached by the board (SGD-family defaults are minibatch) |
+| `MOJOLEARN_C52_PAIR_128` / `_512` | KDE pair-combine leaf | `lane/classical-misc` @ `79aa4a19c` | review_classical.md section 4 (512 silently won) | REPLACED by `MOJOLEARN_C52_PAIR_ROWS=128\|512` | one switch with arms |
+| `MOJOLEARN_C29_TILE_128` | kNN stream top-k tile | `lane/classical-misc` @ `79aa4a19c` | loop-shape knob only | REPLACED by `MOJOLEARN_C29_TILE=128\|256` | int sweep |
+| `MOJOLEARN_C58_TEAM64` | sequence team budget (garch, prophet) | `lane/classical-misc` @ `f7abb25cf` | memory budget, no effect below ~300 series | REPLACED by `MOJOLEARN_C58_TEAM_MIB=64\|256` | int sweep |
+| `MOJOLEARN_C61_SAME_COMPONENT_SKIP` | HDBSCAN sparse MR Boruvka search (tiled, NV/AMD) | `lane/classical-misc` @ `f7abb25cf` | unmeasured | OPEN | new default-off switch: skips j tiles whose cells the epilogue already excludes; bit-identical by construction |
