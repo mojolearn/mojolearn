@@ -10,9 +10,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # Every switch below is default OFF and IDENTICAL-only. The shared status above
 # applies individually to every switch and its parameter/sub-arm.
-comptime T01 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T01"]()
-comptime T01_REPLICAS = get_defined_int["MOJOLEARN_TREES_T01_REPLICAS", 4]()
-comptime T01_ROWS = get_defined_int["MOJOLEARN_TREES_T01_ROWS", 256]()
+# T01 (streamed exact histogram replicas, = N07) DELETED 2026-10-07: lost on
+# NVIDIA and AMD. Its T01_ROWS task-size knob is covered by T02's cost rule.
 comptime T02 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T02"]()
 comptime T03 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T03"]()
 comptime T04 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T04"]()
@@ -46,6 +45,4 @@ def histogram_task_rows(histogram_bytes: Int, row_bytes: Int, reference: Int) ->
     comptime if T02:
         var rows = max(128, min(1024, (2 * histogram_bytes) // max(1, row_bytes)))
         return ((rows + 127) // 128) * 128
-    comptime if T01:
-        return max(128, min(1024, ((T01_ROWS + 127) // 128) * 128))
     return reference

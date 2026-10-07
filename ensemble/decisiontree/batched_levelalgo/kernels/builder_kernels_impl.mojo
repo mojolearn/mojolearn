@@ -380,7 +380,7 @@ which already priced the width for the reduction this scratch feeds.
 
 from ensemble.tree_moments import moment_pair, moment_finish
 from checks.soft_f64 import sf64_from_f32
-from ensemble.tree_identical_ideas import T01, T01_REPLICAS, T04, T05, T07, T08, T08_LAYOUT, T08_BITS, T14, T14_EXACT, C48
+from ensemble.tree_identical_ideas import T04, T05, T07, T08, T08_LAYOUT, T08_BITS, T14, T14_EXACT, C48
 from std.gpu import (
     WARP_SIZE,
     block_dim,
@@ -421,7 +421,6 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
     _quantize,
 )
 from std.atomic import Atomic, Ordering
-from std.ffi import _Global
 from std.gpu.primitives.warp import shuffle_idx as _hist_shuffle_idx
 from std.gpu.primitives.warp import sum as _hist_warp_sum
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
@@ -636,33 +635,10 @@ comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 # candidate round"). The candidate arm is P = 4.
 # =========================================================
 # `-D MOJOLEARN_2012_SMEM_COPIES4=1` selects P = 4; 1 is shipped.
-# N07 2026-10-06 representative RF caller LOSS, source cbcc8dcd3303.
-# rows/features=100000/32: AMD 335.854582 -> 347.276258 ms
-# (candidate/baseline 1.034); NVIDIA L40S 124.757991 -> 161.308000 ms
-# (1.293). NVIDIA neighbor 131071/17: 107.523736 -> 131.878435 ms
-# (1.227); matching AMD neighbor pending. Flag changes histogram COPIES=4
-# and TILE=4; the 128-bin fixture admits the bounded shared-memory route.
-# No per-fit launch counter was emitted by this timing driver. One excluded
-# same-context warmup and one scored fit, rc=0; prior identity evidence reused.
-# Default OFF: generated representative fits do not qualify the full datasets.
-# Evidence: measurements/20261006/index.json.
-comptime IDN_RF_STREAM_REPLICAS = T01 or (BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_STREAM_REPLICAS"]())
-comptime STREAM_REPLICAS = T01_REPLICAS if T01 else 4
-
-struct _StreamReplicaAudit(Defaultable, Movable):
-    var launches: Int64
-    def __init__(out self):
-        self.launches = Int64(0)
-
-comptime _STREAM_REPLICA_AUDIT = _Global[StorageType=_StreamReplicaAudit, name="MojolearnForestStreamReplicasV1", init_fn=_StreamReplicaAudit.__init__]
-
-def forest_stream_replica_count() raises -> Int:
-    # Enqueue reach only; no wait, device readback, or quality inference.
-    comptime if IDN_RF_STREAM_REPLICAS:
-        ref audit = _STREAM_REPLICA_AUDIT.get_or_create_ptr()[]
-        return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.launches)))
-    return 0
-
+# N07 / TREES_T01 streamed exact histogram replicas: DELETED 2026-10-07
+# (lane trees-cleanup). Lost on both vendors at source cbcc8dcd3303:
+# 100000x32 AMD 1.034, NVIDIA L40S 1.293; NVIDIA 131071x17 1.227.
+# Row in docs/apple-fast/EXPERIMENTS.md; recoverable at 8be4d20d4.
 comptime HIST_SMEM_COPIES_DEFAULT = 4 if is_defined["MOJOLEARN_2012_SMEM_COPIES4"]() else 1
 
 
@@ -3027,7 +3003,7 @@ def launch_build_histograms_kernel[
             comptime USE4 = (
                 DEFAULT4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]()
             )
-            comptime TILE = 4 if IDN_RF_STREAM_REPLICAS else (10 if is_defined[
+            comptime TILE = (10 if is_defined[
                 "MOJOLEARN_RF_HIST_COLUMNS10"
             ]() else (
                 8 if (
@@ -3044,10 +3020,10 @@ def launch_build_histograms_kernel[
                 )
             ))
             comptime ENABLED = (
-                IDN_RF_STREAM_REPLICAS or USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
+                USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
             )
-            comptime COPIES = STREAM_REPLICAS if IDN_RF_STREAM_REPLICAS else 1
-            comptime if ENABLED and (SMEM_COPIES == 1 or IDN_RF_STREAM_REPLICAS) and sabotage == 0:
+            comptime COPIES = 1
+            comptime if ENABLED and SMEM_COPIES == 1 and sabotage == 0:
                 # Actual bin bytes bound the four-column replicated footprint.
                 # Above16KiB the original single-column replica/fallback path runs.
                 var need = COPIES * TILE * max_n_bins * num_outputs * size_of[O.BinT]()
@@ -3055,9 +3031,6 @@ def launch_build_histograms_kernel[
                     comptime SLOTS = BYTES // size_of[O.BinT]()
                     if num_outputs > 0 and need > 0 and need <= SLOTS * size_of[O.BinT]():
                         comptime tiled = build_histograms_binned_columns_kernel[O, TPB, TILE, SLOTS, sampled_labels, 0, COPIES]
-                        comptime if IDN_RF_STREAM_REPLICAS:
-                            ref audit = _STREAM_REPLICA_AUDIT.get_or_create_ptr()[]
-                            _ = Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.launches), Int64(1))
                         log_launch_ctx(ctx, "histogram_binned_columns" + String(TILE) + "_" + String(BYTES))
                         ctx.enqueue_function[tiled](
                             argsp.unsafe_origin_cast[MutAnyOrigin](),
@@ -3085,7 +3058,7 @@ def launch_build_histograms_kernel[
                 sabotage,
                 True,
                 sampled_labels,
-                STREAM_REPLICAS if IDN_RF_STREAM_REPLICAS else SMEM_COPIES,
+                SMEM_COPIES,
             ]
             log_launch_ctx(ctx, "histogram_binned")
             ctx.enqueue_function[ksb](
