@@ -121,6 +121,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 
 from std.sys import is_defined
+from std.sys.defines import get_defined_int
 from std.sys.info import has_apple_gpu_accelerator
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -178,11 +179,30 @@ as hex by `if_check.mojo` so the constant cannot drift by a decimal."""
 # The shared scratch remains sized by IF_BUILD_TPB_MAX, and all scans use
 # the actual n_threads. experiments/apple_fast_trees/IDEAS.md; opt-in,
 # no quality/speed evidence; uncompiled/unverified/unmeasured.
+# Lane trees-small (2026-10-07): MOJOLEARN_TREES_IF_BUILD_TPB, IDENTICAL int
+# sweep, legal set {128 (absent, the incumbent), 256, 512}. Threads per
+# tree block of `build_isolation_trees_global_kernel`. Cost reasoning: one
+# block builds one tree over at most `max_samples` rows; the sampling radix
+# passes, every node's min/max and its stable partition stride over the
+# block, and the barrier count per node is fixed, so a wider block takes
+# fewer items per thread on the root-heavy levels and hides more of the
+# per-row key/RNG latency. It is driven by the per-tree sample count, never
+# by the dataset's rows or features. No bits: min/max ties go to the lower
+# position and the partition is integer scans (see the block comment above
+# `IF_BUILD_TPB_MAX`), so the answer is width-independent; the host oracle is
+# unchanged. 512 widens `IF_BUILD_TPB_MAX`'s shared scratch to
+# 21 * 512 * 4 B = 43 KB, inside the 48 KB NVIDIA default and AMD's 64 KB.
+# NOT COMPILED -- NOT TESTED -- NOT MEASURED. Default off.
+comptime IF_BUILD_TPB_SWEEP = get_defined_int["MOJOLEARN_TREES_IF_BUILD_TPB", 128]() if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_TREES_IF_BUILD_TPB"]()
+) else 128
+
 comptime IF_BUILD_TPB = 64 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_AFT_F10"]()
-) else 128
+) else IF_BUILD_TPB_SWEEP
 """`build_isolation_trees_global_kernel<T><<<n_trees, 128, 0, stream>>>`
 (`:397`). A scheduling width: the sampling, the gather and every node's
 min/max and partition are split over the block's threads; no bit depends
@@ -446,7 +466,7 @@ def _record_decision(
 # forest's bits move once, on every vendor and the CPU column together.
 # ---------------------------------------------------------------------------
 
-comptime IF_BUILD_TPB_MAX = 256
+comptime IF_BUILD_TPB_MAX = 256 if IF_BUILD_TPB_SWEEP <= 256 else 512
 """The widest build block the shared scratch is sized for (the launch
 invariance gates run 32..256); the launch refuses a wider one."""
 
@@ -1022,6 +1042,9 @@ def build_isolation_trees_global_kernel(
     subsample into `local_data` (`:319-326`, column-major source); then
     `build_tree_iterative_global`. `data` is column-major `n_rows x
     n_cols` exactly as theirs (`isolation_forest.hpp:118`)."""
+    comptime assert (
+        IF_BUILD_TPB_SWEEP == 128 or IF_BUILD_TPB_SWEEP == 256 or IF_BUILD_TPB_SWEEP == 512
+    ), "MOJOLEARN_TREES_IF_BUILD_TPB legal set is {128, 256, 512}"
     comptime if DIAG_ENTRY_RETURN:
         return
     var scratch_id = Int(block_idx.x)
