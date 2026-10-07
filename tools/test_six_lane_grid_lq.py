@@ -109,7 +109,7 @@ class RenderTests(unittest.TestCase):
         p1 = [l for l in lines if '.P001 ' in l][0]
         self.assertIn('lq add nv RACE main lasso-cv@taxi,ridge-cv@istella,ridge-cv@taxi PAIRS', p1)
         self.assertIn('MOJOLEARN_BUILD_DEFINES=MOJOLEARN_A=1,MOJOLEARN_B=2', p1)
-        self.assertIn('BUILDS=build_x_linear', p1)
+        self.assertIn('BUILDS=build,build_x_linear', p1)
         p2 = [l for l in lines if '.P002 ' in l][0]
         self.assertIn('RACE main ridge-cv istella,taxi MOJOLEARN_GRID_TAG=', p2)
         self.assertTrue(p2.split()[7].startswith('MOJOLEARN_GRID_TAG=' + G.run_id_of(self.d)))
