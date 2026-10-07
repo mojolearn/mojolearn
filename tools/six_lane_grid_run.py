@@ -53,6 +53,18 @@ def sha_file(path):
     return h.hexdigest()
 
 
+_SHA_CACHE = {}
+
+
+def sha_cached(path):
+    """sha256 of a file, hashed once per (path, size, mtime) in this process: the 2 GB inputs recur across cells."""
+    st = Path(path).stat()
+    key = (str(Path(path).resolve()), st.st_size, st.st_mtime_ns)
+    if key not in _SHA_CACHE:
+        _SHA_CACHE[key] = sha_file(path)
+    return _SHA_CACHE[key]
+
+
 def sha_value(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
@@ -230,7 +242,8 @@ def install_kit(args):
     print(json.dumps(dict(evidence_placed=placed, evidence_present=present, evidence_conflicts=conflicts,
                           data_files=len(data), data_absent=len(absent), first_absent=absent[:3],
                           dry_run=bool(args.dry_run))))
-    return 1 if conflicts or (absent and not args.dry_run) else 0
+    # Absent inputs are reported, not fatal: their cells stay BLOCKED at stage with the reason.
+    return 1 if conflicts else 0
 
 
 # ------------------------------------------------------------------ grid helpers
@@ -348,13 +361,14 @@ def cell_facts(original, cell, source, kit_files, data_dirs, audit_dir):
             continue
         if variant == 'tsvd-full-v1':
             raise ValueError('tsvd-full-v1 inputs cannot be relocated; place them at ' + item['path'])
+        # Relocate only to a file with the pinned sha256 (a same-named board file with other bytes is not it).
         for directory in data_dirs:
             cand = Path(directory) / Path(item['path']).name
-            if cand.is_file():
+            if cand.is_file() and sha_cached(cand) == item['sha256']:
                 item['path'] = str(cand)
                 break
         else:
-            raise ValueError('Full input missing: ' + item['path'])
+            raise ValueError('Full input missing (no file with the pinned sha256): ' + item['path'])
     parents = {str(Path(x['path']).parent) for x in work['input_files']}
     if len(parents) == 1:
         work['data_directory'] = parents.pop()
@@ -618,6 +632,9 @@ def run_cells(args):
                 % (staged['vendor'], args.phase, phase, len(cells), counts['measured'], counts['failed'], current,
                    time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())))
         status_line.write_text(line + '\n')
+    started = time.monotonic()
+    stop_file = run / 'STOP'
+    stopped = ''
     for n, cell in enumerate(cells):
         key = cell['key']
         prior = cell_result(results, key)
@@ -632,6 +649,14 @@ def run_cells(args):
         if prior or (results / key / key / 'attempts').exists():
             retry = True  # failed (with --retry-failed) or interrupted: a fresh attempt, prior evidence kept
         if args.limit and counts['ran'] >= args.limit:
+            stopped = 'limit'
+            break
+        # Graceful stops between cells only: a cell in flight always finishes (its GPU worker runs in its own session).
+        if stop_file.exists():
+            stopped = 'STOP file'
+            break
+        if args.max_hours and time.monotonic() - started >= args.max_hours * 3600:
+            stopped = 'max-hours'
             break
         note('MEASURING', key)
         argv = [python, runner, '--config', cell['queue'], '--output', str(results / key)] + (['--retry-failed'] if retry else [])
@@ -643,8 +668,10 @@ def run_cells(args):
             counts['measured'] += 1
         else:
             counts['failed'] += 1
-    note('DONE')
-    print(json.dumps(dict(vendor=staged['vendor'], phase=args.phase, cells=len(cells), **counts)))
+    note('STOPPED(' + stopped.replace(' ', '_') + ')' if stopped else 'DONE')
+    print(json.dumps(dict(vendor=staged['vendor'], phase=args.phase, cells=len(cells), stopped=stopped or None, **counts)))
+    if stopped:
+        return 3
     return 0
 
 
@@ -787,6 +814,7 @@ def main(argv=None):
     r.add_argument('--phase', choices=('factorial', 'pairwise', 'all'), default='all')
     r.add_argument('--retry-failed', action='store_true', help='retry failed cells in fresh attempts (prior evidence kept)')
     r.add_argument('--limit', type=int, help='run at most N cells this invocation')
+    r.add_argument('--max-hours', type=float, help='start no new cell after this many hours (budget stop; resume later)')
     r.add_argument('--python', help='interpreter for the controller (default: this one)')
     r.add_argument('--runner', help=argparse.SUPPRESS)
     q = s.add_parser('quality', help='receipts -> candidate vs incumbent quality rows')

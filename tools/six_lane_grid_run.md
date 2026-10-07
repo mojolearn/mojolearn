@@ -7,13 +7,88 @@ decision rules are unchanged. Only the orchestrator types these commands. Lanes 
 
 ## The commands
 
-On the NVIDIA box (RunPod L40S) and the AMD box (DO MI325X), in parallel:
+### Boxes
+
+| box | machine | ssh (orchestrator only) | existing tree, not used by the grid |
+| --- | --- | --- | --- |
+| nv | RunPod L40S | `ssh -p 30401 root@195.26.232.139` | `/root/mojolearn`, lq's detached tree; `box_job.sh` adds worktrees to it |
+| amd | DO MI325X | `ssh root@192.241.244.117` | `/root/mojolearn`, the steward's tree; `tools/do_amd_steward.sh` checks it out at other commits |
+
+The grid needs its own checkout: clean, on `main`, at the freeze. compile, materialize and the worker all refuse a
+dirty tree, a detached HEAD or another branch, and neither existing tree can be pinned for the whole run.
+
+### 1. On the Mac, once per freeze: kit and full inputs to R2
+
+The grid's saved recipes read the Oct 6 six-lane full inputs (`big-*`, `reg-*`, `cls-*`, `cat-*`, `raw-*`, `tsvd-*`,
+npz and json, each sha256-pinned). They do **not** read the board's `rows-small` or `rows-full` slices, so the
+staged rows-small data and `datasets/algos-data-rows-full-amd0833.tar.gz` are not inputs here. A same-named file is
+used only if its sha256 matches the pin.
 
 ```bash
-cd /root/mojolearn && git fetch -q origin && git checkout -q main && git reset -q --hard <freeze-sha>   # clean, on main
-bash tools/six_lane_grid_run.sh nvidia /root/grid-run-<freeze> --kit /root/grid-kit     # on the nv box
-bash tools/six_lane_grid_run.sh amd    /root/grid-run-<freeze> --kit /root/grid-kit     # on the amd box
+python3 tools/six_lane_grid_run.py kit --out ~/mojolearn-evidence/grid-kit-<date> \
+  --search ~/CascadeProjects/mojolearn-six-lane-full-tsvd-20261006 --search ~/mojolearn-evidence/targeted-ab-20261007/planning
+bash tools/six_lane_grid_stage_data.sh push ~/mojolearn-evidence/grid-kit-<date>     # ~9.5 GB the first time
 ```
+
+`push` uploads to `grid-inputs/<sha256>/<name>`. It reuses the credential file `tools/dataset_store.sh` reads
+(`~/.mojolearn_r2`), and keys already in R2 are skipped.
+
+### 2. On the Mac, once per box: stage data and kit
+
+This uses the same presign + curl pattern as `~/mojolearn-evidence/lq/stage_lq_box.sh`; the credential never leaves the Mac.
+
+```bash
+bash tools/six_lane_grid_stage_data.sh box-script nvidia ~/mojolearn-evidence/grid-kit-<date> | ssh -p 30401 root@195.26.232.139 bash -s
+bash tools/six_lane_grid_stage_data.sh box-script amd    ~/mojolearn-evidence/grid-kit-<date> | ssh root@192.241.244.117 bash -s
+```
+
+The piped script does the following:
+
+- fetches each input to its original path under `/root/six-lane-full-ab-20261006/data/`;
+- skips files already present with the right sha256;
+- checks the sha256 of each `.part` download before renaming it;
+- unpacks the kit to `/root/grid-kit`;
+- prints `GRID_DATA_READY placed=.. present=.. missing=..`.
+
+### 3. On each box: checkout and run
+
+Use a dedicated checkout:
+
+```bash
+git clone -q https://github.com/mojolearn/mojolearn.git /root/mojolearn-grid 2>/dev/null || git -C /root/mojolearn-grid fetch -q origin
+cd /root/mojolearn-grid && git checkout -q -B main <freeze-sha>
+bash tools/six_lane_grid_run.sh nvidia /root/grid-run-<freeze> --kit /root/grid-kit --phase factorial --max-hours 18   # nv
+bash tools/six_lane_grid_run.sh amd    /root/grid-run-<freeze> --kit /root/grid-kit                                  # amd
+```
+
+Run it under `nohup` or `tmux` and watch `/root/grid-run-<freeze>/status.txt`. The script sets the environment of
+`box_job.sh`'s CMD branch:
+
+- `PATH=/root/.pixi/bin:/opt/rocm/bin:$PATH`
+- `MOJOLEARN_NUMERIC_MODE=identical`
+- `MOJOLEARN_TARGET_COLUMN=nvidia|amd`
+- `MOJOLEARN_GPU_ARCHS=sm_89|gfx942`
+- `MOJOLEARN_COMPILE_JOBS=<--compile-jobs>`
+- `PYTHONUNBUFFERED=1`
+
+It runs `pixi install` (the default env, which has mojo, and `-e bench`, the worker's python) in the checkout when
+either env is missing. `six_lane_ab compile`, the A/B controller and the worker all strip `MOJOLEARN_*` and then
+apply their own recorded flags (`--nvidia-arch sm_89` or `--accelerator gfx942`; `MOJOLEARN_NUMERIC_MODE` and
+`MOJOLEARN_VENDOR` per arm). The exported values are for parity only and never select a build.
+
+### NVIDIA budget (~20 L40S hours): stop after factorial, resume later
+
+- `--phase factorial` compiles only the factorial A builds plus every B build, stages only factorial cells and runs
+  only those. Every admissible cell today is factorial.
+- `--max-hours H` starts no new cell after H hours. `touch /root/grid-run-<freeze>/STOP` stops after the current
+  cell. Never kill the process: a GPU worker runs in its own session and would be orphaned. A stop exits 0 with
+  `state=STOPPED(...)` in `status.txt`.
+- To resume, run the same command again. Measured cells are skipped and an interrupted cell gets a fresh attempt.
+  Later, `--phase pairwise` (or `all`) on the same run dir adds the pairwise builds and cells and skips everything
+  already done.
+- Compile hours are box hours. On a cheap Linux x86_64 build box, run the same script with the same run-dir path,
+  stopping after step 2. Then copy `<run>/builds` to the same absolute path on the GPU box and `touch <run>/builds/.external`.
+  The receipts record absolute artifact paths, and `--nvidia-arch sm_89` needs no GPU.
 
 Then, with both run directories copied into one place:
 
@@ -31,6 +106,7 @@ Options for `six_lane_grid_run.sh`:
 - `--compile-shards N`: how many per-binding compile processes run at once. The default is 3.
 - `--retry-failed`: runs the failed cells again in fresh attempts. The earlier attempts are kept.
 - `--limit-cells N`: runs at most N cells in this invocation. Use it for a smoke run.
+- `--max-hours H`: starts no new cell after H hours. This is the budget stop; rerun the same command to resume.
 
 Environment overrides:
 
@@ -41,7 +117,7 @@ Environment overrides:
 
 | step | tool | needs | where it is on the box |
 | --- | --- | --- | --- |
-| 0 preflight | the script | a clean checkout on `main` or `integration/*` at the freeze: `six_lane_ab compile`, `materialize` and the worker all refuse a dirty tree or another branch, so `lq`'s detached CMD worktrees do not qualify. The run dir must be outside the checkout. | nv: `/root/mojolearn`; amd: `/root/mojolearn-ab2` (from `~/mojolearn-evidence/lq/box_job.sh`); pixi envs `default` (mojo) and `bench` (worker python) |
+| 0 preflight | the script | a clean checkout on `main` or `integration/*` at the freeze (a dirty tree, a detached HEAD or another branch is refused), and a run dir outside the checkout. The full inputs are checked **before** compiling: the script stops if none is present, and warns and blocks those cells if some are missing. | `/root/mojolearn-grid` (dedicated); pixi envs `default` (mojo) and `bench` (worker python), installed if absent |
 | 1 grid | `six_lane_grid.py --crosses auto --cap 0 --out <run>/grid` | the committed `grid_controls/*.json` and `core/six_lane_experiment_guards.mojo` | generated into `<run>/grid`; `grid/.source` holds the commit. The committed `experiments/six_lane_integration/grid/` is never written. |
 | 2 compile | `six_lane_ab.py compile --plan <run>/grid/grid-build-plan.json --vendor V` with `--nvidia-target native --nvidia-arch sm_89` or `--accelerator gfx942`, plus `--keep-going --binding B --key K...` | the compiler `<repo>/.pixi/envs/default/bin/mojo` | `<run>/builds/<binding>/<key>/receipt.json`. There is one shard per binding. `--phase factorial` compiles only the factorial configurations' A builds plus every B build. |
 | 2b math | `packaging/portable_math/stage.build` | the `default` pixi env | `<run>/math/libMojolearnMath.so`, built outside the tree; it is copied into every package's `mojolearn/.libs/` |
@@ -70,7 +146,6 @@ no floor and is listed as `rejected`.
 ```bash
 python3 tools/six_lane_grid_run.py kit --out ~/mojolearn-evidence/grid-kit-<date> \
   --search ~/CascadeProjects/mojolearn-six-lane-full-tsvd-20261006 --search ~/mojolearn-evidence/targeted-ab-20261007/planning
-rsync -a ~/mojolearn-evidence/grid-kit-<date>/ <box>:/root/grid-kit/
 ```
 
 The kit is 1.8 MB:
@@ -82,7 +157,7 @@ The kit is 1.8 MB:
 
 ### Full inputs
 
-Put the full inputs on each box at their original paths, under `/root/six-lane-full-ab-20261006/data/` (24 files per vendor):
+`six_lane_grid_stage_data.sh` puts the full inputs on each box at their original paths, under `/root/six-lane-full-ab-20261006/data/` (24 files per vendor):
 
 | files | original box path | laptop copy |
 | --- | --- | --- |

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # six_lane_grid_run.sh <nvidia|amd> <run-dir> [--phase factorial|pairwise|all] [--dry-run]
 #                      [--kit DIR] [--data-dir DIR] [--builds DIR] [--compile-jobs N] [--compile-shards N]
-#                      [--retry-failed] [--limit-cells N]
+#                      [--retry-failed] [--limit-cells N] [--max-hours H]
 #
 # Runs the IDENTICAL switch grid end to end on ONE Linux GPU box (the orchestrator types it; lanes never do):
 #   1 grid      python3 tools/six_lane_grid.py --crosses auto --cap 0 --out <run>/grid   (committed grid/ untouched)
@@ -26,7 +26,7 @@ usage() { sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 VENDOR=$1; RUN=$2; shift 2
 case $VENDOR in nvidia|amd) ;; *) usage;; esac
 PHASE=all; DRY=0; KIT=; BUILDS=; COMPILE_JOBS=${GRID_COMPILE_JOBS:-4}; SHARDS=${GRID_COMPILE_SHARDS:-3}
-RETRY=; LIMIT=; DATA_DIRS=()
+RETRY=; LIMIT=; MAXH=; DATA_DIRS=()
 while [ $# -gt 0 ]; do
   case $1 in
     --phase) PHASE=$2; shift 2;;
@@ -38,6 +38,7 @@ while [ $# -gt 0 ]; do
     --compile-shards) SHARDS=$2; shift 2;;
     --retry-failed) RETRY=--retry-failed; shift;;
     --limit-cells) LIMIT=$2; shift 2;;
+    --max-hours) MAXH=$2; shift 2;;
     *) echo "unknown option: $1" >&2; usage;;
   esac
 done
@@ -58,6 +59,11 @@ if [ $VENDOR = nvidia ]; then TARGET=(--nvidia-target native --nvidia-arch sm_89
 AUTH=${GRID_AUTHORIZATION:-"Orchestrator ran tools/six_lane_grid_run.sh $VENDOR on $(hostname) at $(date -u +%FT%TZ): IDENTICAL switch grid A/B, one warmup + one scored run per arm (CLAUDE.md measurement process)"}
 DATA_ARGS=(); for d in "${DATA_DIRS[@]}"; do DATA_ARGS+=(--data-dir "$d"); done
 PROBLEMS=0
+# The same box environment as ~/mojolearn-evidence/lq/box_job.sh's CMD branch. six_lane_ab compile, the A/B controller
+# and the worker strip MOJOLEARN_* before applying their own recorded controls, so these only matter for parity.
+if [ $VENDOR = nvidia ]; then ARCH=sm_89; else ARCH=gfx942; fi
+export PATH=/root/.pixi/bin:/opt/rocm/bin:$PATH MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMPILE_JOBS=$COMPILE_JOBS \
+       MOJOLEARN_TARGET_COLUMN=$VENDOR MOJOLEARN_GPU_ARCHS=$ARCH PYTHONUNBUFFERED=1
 
 say() { echo "grid-run: $*"; }
 problem() { echo "grid-run: PROBLEM: $*" >&2; PROBLEMS=$((PROBLEMS + 1)); }
@@ -83,6 +89,12 @@ DIRTY=$(git -C "$REPO" status --porcelain --untracked-files=all | head -3)
 [ -z "$DIRTY" ] || problem "checkout is not clean (first: $(echo "$DIRTY" | head -1)); the freeze must be committed and clean"
 if [ $DRY = 0 ]; then
   [ "$(uname -s)" = Linux ] || problem "run on the Linux $VENDOR box, not $(uname -s)"
+  # pixi envs in this checkout (default: mojo; bench: the worker's python), as stage_lq_box.sh does for lq's tree.
+  if [ ! -x "$MOJO" ] || [ ! -x "$BENCH_PY" ]; then
+    say "0 setup: pixi install (default + bench) in $REPO"
+    (cd "$REPO" && { pixi install --locked || pixi install; } && { pixi install --locked -e bench || pixi install -e bench; }) \
+      > "$LOGS/pixi.log" 2>&1 || problem "pixi install failed; see $LOGS/pixi.log"
+  fi
   [ -x "$BENCH_PY" ] || problem "missing $BENCH_PY (pixi install -e bench)"
   [ -x "$MOJO" ] || [ -d "$BUILDS" ] || problem "missing compiler $MOJO"
   if [ $VENDOR = nvidia ]; then command -v nvidia-smi >/dev/null || problem "no nvidia-smi"; else [ -e /dev/kfd ] || problem "no /dev/kfd"; fi
@@ -95,6 +107,20 @@ say "vendor=$VENDOR phase=$PHASE run=$RUN repo=$REPO@${HEAD:0:12} branch=$BRANCH
 for t in six_lane_grid.py six_lane_ab.py six_lane_materialize.py performance_full_ab_queue.py six_lane_timing.py; do
   [ -f "$REPO/tools/$t" ] || problem "missing tools/$t"
 done
+
+# Full inputs before any compile hour is spent (staged by tools/six_lane_grid_stage_data.sh from the Mac).
+if [ -f "$KIT/data-manifest.json" ]; then
+  DATA_LINE=$("$PY3" "$TOOL" install-kit --kit "$KIT" --vendor $VENDOR "${DATA_ARGS[@]}" --dry-run 2>/dev/null | tail -1)
+  say "data: $DATA_LINE"
+  DATA_FILES=$(echo "$DATA_LINE" | "$PY3" -c 'import json,sys; print(json.load(sys.stdin)["data_files"])' 2>/dev/null || echo 0)
+  DATA_ABSENT=$(echo "$DATA_LINE" | "$PY3" -c 'import json,sys; print(json.load(sys.stdin)["data_absent"])' 2>/dev/null || echo 0)
+  if [ "$DATA_FILES" -gt 0 ] && [ "$DATA_ABSENT" = "$DATA_FILES" ]; then
+    problem "none of the $DATA_FILES full inputs is on this box; stage them first (tools/six_lane_grid_stage_data.sh)"
+  elif [ "$DATA_ABSENT" != 0 ]; then
+    say "  WARNING: $DATA_ABSENT of $DATA_FILES full inputs absent; their cells will be BLOCKED at stage"
+  fi
+fi
+[ $DRY = 0 ] && [ $PROBLEMS -gt 0 ] && { status preflight FAILED "problems=$PROBLEMS"; say "stopping: $PROBLEMS problem(s)"; exit 1; }
 
 # ---------------------------------------------------------------- 1 grid
 GRID=$RUN/grid
@@ -210,13 +236,15 @@ fi
 
 # ---------------------------------------------------------------- 5 run
 say "5 run: serial cells, one warmup + one scored run per arm"
-RUN_ARGS=(run --run "$RUN" --phase $PHASE --python "$BENCH_PY" $RETRY ${LIMIT:+--limit $LIMIT})
+RUN_ARGS=(run --run "$RUN" --phase $PHASE --python "$BENCH_PY" $RETRY ${LIMIT:+--limit $LIMIT} ${MAXH:+--max-hours $MAXH})
+rm -f "$RUN/STOP" 2>/dev/null   # a new invocation clears an earlier graceful stop request
 if done_mark run-$PHASE && [ -z "$RETRY" ]; then say "  run-$PHASE done"; else
   if [ $DRY = 1 ]; then printf '  $ %q %q' "$BENCH_PY" "$TOOL"; printf ' %q' "${RUN_ARGS[@]}"; printf '  > %s\n' "$LOGS/run-$PHASE.log"
   else
     "$BENCH_PY" "$TOOL" "${RUN_ARGS[@]}" >> "$LOGS/run-$PHASE.log" 2>&1
     rc=$?; say "  $(tail -1 "$LOGS/run-$PHASE.log" | cut -c1-300)"
     [ $rc = 0 ] && [ -z "$LIMIT" ] && mark run-$PHASE
+    [ $rc = 3 ] && { status run STOPPED "resume: rerun the same command"; say "stopped on request (STOP file, --max-hours or --limit-cells); rerun the same command to resume"; exit 0; }
   fi
 fi
 

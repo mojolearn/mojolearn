@@ -112,6 +112,26 @@ class RunTests(unittest.TestCase):
             G.main(argv + ['--retry-failed'])
             self.assertEqual(calls.read_text().split('\n')[:-1], ['bad retry'])
 
+    def test_stop_file_and_budget_stop_between_cells(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            runner = run / 'runner.py'
+            runner.write_text(FAKE_RUNNER)
+            calls = run / 'calls.txt'
+            calls.write_text('')
+            q = run / 'q.json'
+            G.write(q, dict(jobs=[dict(key='k')], log=str(calls)))
+            G.write(run / 'stage' / 'cells-factorial.json', dict(vendor='nvidia', cells=[dict(key='k', state='READY', queue=str(q))]))
+            argv = ['run', '--run', str(run), '--phase', 'factorial', '--runner', str(runner), '--python', sys.executable]
+            (run / 'STOP').write_text('')
+            self.assertEqual(G.main(argv), 3)
+            self.assertEqual(calls.read_text(), '')
+            self.assertIn('STOPPED(STOP_file)', (run / 'status.txt').read_text())
+            (run / 'STOP').unlink()
+            self.assertEqual(G.main(argv + ['--max-hours', '1e-12']), 3)
+            self.assertEqual(G.main(argv), 0)
+            self.assertEqual(calls.read_text(), 'k\n')
+
 
 def receipt(cid, wid, vendor, a_metrics, b_metrics):
     def result(arm, metrics):
