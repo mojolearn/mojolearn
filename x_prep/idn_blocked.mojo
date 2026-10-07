@@ -315,7 +315,7 @@ def te_blocked_stage(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
         var w = FP(unsafe_from_address=Int(dw.unsafe_ptr()))
         if op == OP_TE_GLOBAL and total > 0 and total <= _GRID_Y_MAX:
             var nb = _nblocks(Int(hq[1]))
-            for pass_ in range(2):  # small-loop(2: the sum pass, then the squared-deviation pass)
+            for pass_ in range(2):  # small-loop(2: the two passes): the sum pass, then the squared-deviation pass over the same words
                 ctx.enqueue_function[te_global_blt_part_kernel](
                     f, qp, w, Int32(nb), Int32(total), Int32(pass_), grid_dim=(nb, total), block_dim=TREE_W,
                 )
@@ -329,8 +329,8 @@ def te_blocked_stage(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
             if units <= 0 or planes > _GRID_Y_MAX:
                 return False
             var nb = _nblocks(Int(hq[1]))
-            for fi in range(total // units):  # small-loop(folds: the program's fold count, a plan number, never data)
-                for pass_ in range(2):  # small-loop(2: the sum pass, then the squared-deviation pass)
+            for fi in range(total // units):  # small-loop(folds: the program's fold count): a plan number from the stage's unit count, never data
+                for pass_ in range(2):  # small-loop(2: the two passes): the sum pass, then the squared-deviation pass over the same words
                     ctx.enqueue_function[te_enc_blt_part_kernel](
                         f, qp, w, Int32(fi), Int32(pass_), grid_dim=(nb, planes), block_dim=TREE_W,
                     )
