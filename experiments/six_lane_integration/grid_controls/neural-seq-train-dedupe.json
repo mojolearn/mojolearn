@@ -2,7 +2,7 @@
  "schema": "mojolearn.grid-controls/1",
  "lane": "neural-seq-train-dedupe",
  "branch": "lane/neural-seq-train-dedupe",
- "head": "8b90439d5",
+ "head": "b81169c61",
  "controls": {
   "m3_angle_carry_cache": {
    "define": "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE",
