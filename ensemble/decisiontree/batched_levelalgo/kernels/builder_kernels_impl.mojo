@@ -2472,6 +2472,7 @@ def build_histograms_kernel[
     col_start: Int32,
     column_samples: MutPointer[Int32, MutAnyOrigin],
     workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
+    small_rows: Int32,
 ):
     """`buildHistogramsKernel`, `:285-352`.
 
@@ -2516,6 +2517,11 @@ def build_histograms_kernel[
     ref work_item = work_items[unsafe_offset = Int(nid)]
     var range_start = work_item.instances.begin
     var range_len = work_item.instances.count
+    # T05 per-node ownership: nodes of at most `small_rows` rows were built
+    # by `small_node_split_kernel` this round; uniform per block, no barrier yet.
+    comptime if T05:
+        if Int(small_rows) > 0 and Int(range_len) <= Int(small_rows):
+            return
 
     var offset_blockid = Int(workload_info_cta.offset_blockid)
     var num_blocks = Int(workload_info_cta.num_blocks)
@@ -2752,6 +2758,7 @@ def build_histograms_binned_columns_kernel[
     column_samples: MutPointer[Int32, MutAnyOrigin],
     workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
     columns_in_batch: Int32,
+    small_rows: Int32,
 ):
     """Experimental binned column tile; unchanged integer BinT operations.
 
@@ -2770,6 +2777,10 @@ def build_histograms_binned_columns_kernel[
     ref workload = workload_info[unsafe_offset=Int(block_idx.x)]
     var nid = Int(workload.nodeid)
     ref item = work_items[unsafe_offset=nid]
+    comptime if T05:
+        # T05 per-node ownership (see build_histograms_kernel).
+        if Int(small_rows) > 0 and Int(item.instances.count) <= Int(small_rows):
+            return
     var classes = Int(objective.NumClasses())
     var feature_stride = Int(max_n_bins) * classes
     var first = Int(block_idx.y) * TILE
@@ -2920,8 +2931,12 @@ def launch_build_histograms_kernel[
     smem_config: SharedMemoryConfig,
     argsp: MutPointer[HistogramArgs[O], MutUntrackedOrigin],
     num_outputs: Int = 0,
+    small_rows: Int = 0,
 ) raises:
     """`launchBuildHistogramsKernel`, `:396-421`.
+
+    `small_rows` > 0 (T05 only): nodes of at most that many rows are owned by
+    `small_node_split_kernel` this round and every histogram block skips them.
 
     Their `dim3 histogram_grid` arrives as two Ints and their
     `split_smem_config.histogram_dynamic_smem_size` is not a launch
@@ -2952,6 +2967,7 @@ def launch_build_histograms_kernel[
                 Int32(col_start),
                 column_samples.unsafe_origin_cast[MutAnyOrigin](),
                 workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(small_rows),
                 grid_dim=(histogram_grid_x, histogram_grid_y),
                 block_dim=TPB,
             )
@@ -2968,6 +2984,7 @@ def launch_build_histograms_kernel[
             Int32(col_start),
             column_samples.unsafe_origin_cast[MutAnyOrigin](),
             workload_info.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(small_rows),
             grid_dim=(histogram_grid_x, histogram_grid_y),
             block_dim=TPB,
         )
@@ -3041,6 +3058,7 @@ def launch_build_histograms_kernel[
                             column_samples.unsafe_origin_cast[MutAnyOrigin](),
                             workload_info.unsafe_origin_cast[MutAnyOrigin](),
                             Int32(histogram_grid_y),
+                            Int32(small_rows),
                             grid_dim=(histogram_grid_x, (histogram_grid_y + TILE - 1) // TILE),
                             block_dim=TPB,
                         )
@@ -3069,6 +3087,7 @@ def launch_build_histograms_kernel[
                 Int32(col_start),
                 column_samples.unsafe_origin_cast[MutAnyOrigin](),
                 workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(small_rows),
                 grid_dim=(histogram_grid_x, histogram_grid_y),
                 block_dim=TPB,
             )
@@ -3147,6 +3166,7 @@ def launch_build_histograms_kernel[
                             workload_info.unsafe_origin_cast[
                                 MutAnyOrigin
                             ](),
+                            Int32(small_rows),
                             grid_dim=(histogram_grid_x, histogram_grid_y),
                             block_dim=TPB,
                         )
@@ -3173,6 +3193,7 @@ def launch_build_histograms_kernel[
                             workload_info.unsafe_origin_cast[
                                 MutAnyOrigin
                             ](),
+                            Int32(small_rows),
                             grid_dim=(histogram_grid_x, histogram_grid_y),
                             block_dim=TPB,
                         )
@@ -3193,6 +3214,7 @@ def launch_build_histograms_kernel[
                 Int32(col_start),
                 column_samples.unsafe_origin_cast[MutAnyOrigin](),
                 workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(small_rows),
                 grid_dim=(histogram_grid_x, histogram_grid_y),
                 block_dim=TPB,
             )
@@ -3225,6 +3247,8 @@ def find_best_splits_kernel[
     mutex: MutPointer[Int32, MutAnyOrigin],
     splits: MutPointer[Split[O.DataT], MutAnyOrigin],
     cand: MutPointer[Split[O.DataT], MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    small_rows: Int32,
 ):
     """`findBestSplitsKernel`, `:353-393`.
 
@@ -3279,6 +3303,13 @@ def find_best_splits_kernel[
 
     # `:369`
     var nid = Int32(Int(block_idx.x))
+    # T05 per-node ownership: the fused kernel already published this node's
+    # candidates and purity; its histogram cells were never written.
+    comptime if T05:
+        if Int(small_rows) > 0 and Int(
+            work_items[unsafe_offset = Int(nid)].instances.count
+        ) <= Int(small_rows):
+            return
 
     # `:371-374`
     var col_index = col_start + Int32(Int(block_idx.y))
@@ -3443,6 +3474,7 @@ def small_node_split_kernel[
     SLOTS: Int,
     sampled_labels: Bool = False,
     candidates: Bool = False,
+    pinned_reduce: Bool = False,
 ](
     argsp: MutPointer[FindBestSplitsArgs[O], MutAnyOrigin],
     work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
@@ -3452,6 +3484,7 @@ def small_node_split_kernel[
     splits: MutPointer[Split[O.DataT], MutAnyOrigin],
     max_n_bins: Int32,
     cand: MutPointer[Split[O.DataT], MutAnyOrigin],
+    small_rows: Int32,
 ):
     """FAST (`SMALL_NODE_FUSED_DEFAULT`): `build_histograms_kernel` and
     `find_best_splits_kernel` for ONE (node, column) in ONE block, for a
@@ -3468,6 +3501,12 @@ def small_node_split_kernel[
     var objective = args.objective.copy()
     var nid = Int32(Int(block_idx.x))
     ref work_item = work_items[unsafe_offset = Int(nid)]
+    # T05 per-node dispatch (small_rows > 0): this kernel owns exactly the
+    # nodes of at most `small_rows` rows; larger nodes return here and take
+    # the multi-block histogram + find_best_splits route in the same round.
+    # Uniform per block, before any barrier. 0 keeps the host-batch FAST arm.
+    if Int(small_rows) > 0 and Int(work_item.instances.count) > Int(small_rows):
+        return
     var range_start = Int(work_item.instances.begin)
     var end = range_start + Int(work_item.instances.count)
     var col_index = col_start + Int32(Int(block_idx.y))
@@ -3498,7 +3537,13 @@ def small_node_split_kernel[
     )
     barrier()
 
-    comptime N_SPLIT_SCRATCH = ceildiv(TPB, WARP_SIZE)
+    # Pinned (IDENTICAL): the same width-32 shared-memory reduction as
+    # `find_best_splits_kernel` (DEVIATION 404), so wave64 AMD and warp-32
+    # NVIDIA publish the same winner.
+    comptime assert (not pinned_reduce) or (
+        TPB % PINNED_SPLIT_REDUCE_LANES == 0
+    ), "pinned split reduce needs TPB % 32 == 0 (DEVIATION 404)"
+    comptime N_SPLIT_SCRATCH = TPB if pinned_reduce else ceildiv(TPB, WARP_SIZE)
     var split_scratch = stack_allocation[
         N_SPLIT_SCRATCH,
         Split[O.DataT],
@@ -3534,11 +3579,22 @@ def small_node_split_kernel[
     )
     sp.pure = Int32(1) if node_pure else Int32(0)
     barrier()
-    comptime if candidates:
+    comptime if candidates and pinned_reduce:
+        sp.eval_best_split_pinned_to_candidate(
+            split_scratch,
+            cand.unsafe_offset(Int(nid)*Int(grid_dim.y)+Int(block_idx.y)),
+            quantiles_for_split, n_bins,
+        )
+    elif candidates:
         sp.eval_best_split_to_candidate(
             split_scratch,
             cand.unsafe_offset(Int(nid)*Int(grid_dim.y)+Int(block_idx.y)),
             quantiles_for_split, n_bins,
+        )
+    elif pinned_reduce:
+        sp.eval_best_split_pinned(
+            split_scratch, splits.unsafe_offset(Int(nid)),
+            mutex.unsafe_offset(Int(nid)), quantiles_for_split, n_bins,
         )
     else:
         sp.eval_best_split(
@@ -3727,8 +3783,13 @@ def launch_find_best_splits_kernel[
     argsp: MutPointer[FindBestSplitsArgs[O], MutUntrackedOrigin],
     cand: MutPointer[Split[O.DataT], MutUntrackedOrigin],
     num_outputs: Int = 0,
+    small_rows: Int = 0,
+    work_items: Optional[MutPointer[NodeWorkItem, MutUntrackedOrigin]] = None,
 ) raises:
     """`launchFindBestSplitsKernel`, `:423-445`.
+
+    `small_rows` > 0 (T05 only) needs `work_items`: blocks of nodes with at
+    most that many rows return at once (the fused kernel owns them).
 
     DEVIATION 1893: `argsp` is the caller's already-uploaded
     `FindBestSplitsArgs` blob (dataset + quantiles + objective), staged
@@ -3766,6 +3827,13 @@ def launch_find_best_splits_kernel[
     comptime k = find_best_splits_kernel[
         O, TPB, sabotage, pinned_reduce, zero_after, candidates
     ]
+    if small_rows > 0 and not work_items:
+        raise Error("launch_find_best_splits_kernel: small_rows needs work_items")
+    # With small_rows == 0 the kernel never reads `work_items`; any valid
+    # pointer is passed so the signature stays one kernel.
+    var wi = (
+        work_items.value() if work_items else splits.unsafe_bitcast[NodeWorkItem]()
+    )
     log_launch_ctx(ctx, "find_best_splits")
     ctx.enqueue_function[k](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
@@ -3776,6 +3844,8 @@ def launch_find_best_splits_kernel[
         mutex.unsafe_origin_cast[MutAnyOrigin](),
         splits.unsafe_origin_cast[MutAnyOrigin](),
         (cand if candidates else splits).unsafe_origin_cast[MutAnyOrigin](),
+        wi.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(small_rows),
         grid_dim=(split_grid_x, split_grid_y),
         block_dim=TPB,
     )
