@@ -104,7 +104,8 @@
    "interaction_groups": [
     [
      "hist_packed_gh",
-     "hist_warp_agg"
+     "hist_warp_agg",
+     "hist_sym_feature_parallel"
     ]
    ]
   },
@@ -119,7 +120,8 @@
    "interaction_groups": [
     [
      "hist_packed_gh",
-     "hist_warp_agg"
+     "hist_warp_agg",
+     "hist_sym_feature_parallel"
     ]
    ]
   },
@@ -170,7 +172,8 @@
    "interaction_groups": [
     [
      "hist_packed_gh",
-     "hist_warp_agg"
+     "hist_warp_agg",
+     "hist_sym_feature_parallel"
     ]
    ]
   },
@@ -185,7 +188,8 @@
    "interaction_groups": [
     [
      "hist_packed_gh",
-     "hist_warp_agg"
+     "hist_warp_agg",
+     "hist_sym_feature_parallel"
     ]
    ]
   }
