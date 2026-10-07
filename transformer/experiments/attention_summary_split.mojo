@@ -242,11 +242,10 @@ def enqueue_nn20_split_forward(
     # The block summaries sit at the head of `block_scratch`, the per-split
     # counter stacks after them.
     var summaries = rows * blocks * (hd + 2)
-    var stacks = block_scratch.unsafe_ptr() + summaries
     var cells = rows * blocks
     ctx.enqueue_function[nn20_split_block_kernel](
         q.unsafe_ptr(), k.unsafe_ptr(), v.unsafe_ptr(), lo.unsafe_ptr(), hi.unsafe_ptr(),
-        block_scratch.unsafe_ptr(), stacks,
+        block_scratch.unsafe_ptr(), block_scratch.unsafe_ptr() + summaries,
         Int32(rows), Int32(keys), Int32(hd), Int32(hd), Int32(qpg), Int32(key_origin), scale,
         grid_dim=((cells + _SPLIT_TPB - 1) // _SPLIT_TPB, 1, 1), block_dim=(_SPLIT_TPB, 1, 1),
     )
