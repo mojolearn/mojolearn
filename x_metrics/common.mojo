@@ -38,11 +38,12 @@ comptime STAGE_INTS = 16
 comptime PARAMS = 14
 #: DEVIATION 6100: the leaf width of the pairwise fold. A constant of the
 #: source, never of a launch, a core count or a vendor.
-# C01: classical metrics only. Fixed leaves, adjacent binary carries and FTZ
-# use the same PairSum/parallel planner on host and all GPU vendors.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-from experiments.classical_identical_ideas.shared_controls import C01_LEAF64, C01_LEAF128
-comptime LEAF = 128 if C01_LEAF128 else (64 if C01_LEAF64 else 32)
+# C01_LEAF (lane classical-decomp split, 2026-10-07): classical metrics only,
+# an integer sweep -D MOJOLEARN_CLASSICAL_C01_LEAF=32|64|128 (absent = 32).
+# Fixed leaves, adjacent binary carries and FTZ use the same PairSum/parallel
+# planner on host and all GPU vendors. NOT MEASURED.
+from experiments.classical_identical_ideas.shared_controls import C01_LEAF, C01_LEAF_LEGAL
+comptime LEAF = C01_LEAF
 comptime STACK = 48
 
 
@@ -132,6 +133,7 @@ struct PairSum(Movable):
     var nleaf: Int
 
     def __init__(out self):
+        comptime assert C01_LEAF_LEGAL, "MOJOLEARN_CLASSICAL_C01_LEAF must be 32, 64 or 128"
         self.stack = InlineArray[Float32, STACK](fill=Float32(0))
         self.depth = 0
         self.count = 0
