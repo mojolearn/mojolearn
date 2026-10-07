@@ -139,22 +139,12 @@ comptime LABELS_SAMPLED_ORDER = True
 # `row_ids` order and its diagnostic trace intentionally differ from the reference.
 # `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
 #
-# fam2-forests (2026-10-04) CANDIDATE ARM, default OFF: sorted bootstrap rows
-# on NVIDIA and AMD under IDENTICAL, wide data only (the same
-# `ROWS_SORTED_MIN_COLS` gate Apple ships). `-D MOJOLEARN_IDN_RF_ROWS_SORTED`
-# turns it on. Where NVIDIA's fused bootstrap gather would have staged the
-# labels in drawn order, a tree whose rows are sorted takes the two-launch
-# route instead (sample, sort, then gather labels by the sorted `row_ids`):
-# see `fused_gather_ok` in `fit_forest`. Same drawn multiset, same integer /
-# fixed-point histograms, counts and leaves, so the forest is the one the
-# drawn order builds and the host column is untouched.
-comptime IDN_RF_ROWS_SORTED = RF_SAMPLE_SORTED or (
-    not RF_SAMPLE_SET
-    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_IDN_RF_ROWS_SORTED"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# fam2-forests' `MOJOLEARN_IDN_RF_ROWS_SORTED` (sorted bootstrap rows on
+# NVIDIA/AMD, wide data only) was DELETED by lane trees-small (2026-10-07):
+# a second define on the same knob as `MOJOLEARN_TREES_RF_SAMPLE=1`, which
+# the grid already sweeps (docs/apple-fast/EXPERIMENTS.md row). On the
+# board's shapes the column gate made it either the drawn order (narrow
+# tables) or RF_SAMPLE=1 (wide tables), so the grid loses no cell.
 # cpu3-trees (2026-10-04), every mode and vendor: the weighted
 # non-bootstrap row set (AdaBoost members, any `sample_weight` fit with
 # `bootstrap=False`) is compacted ON THE DEVICE once per forest
@@ -165,7 +155,6 @@ comptime IDN_RF_ROWS_SORTED = RF_SAMPLE_SORTED or (
 # host-compacted upload are gone.)
 comptime ROWS_SORTED_SAMPLE = RF_SAMPLE_SORTED if RF_SAMPLE_SET else (
     is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
-    or IDN_RF_ROWS_SORTED
     or (
         has_apple_gpu_accelerator()
         and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()

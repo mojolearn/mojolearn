@@ -5,7 +5,7 @@ histogram task's work bound. No host or Apple IDENTICAL timing.
 """
 from std.math import ceildiv
 from max.gpu.host import DeviceContext
-from ensemble.decisiontree.batched_levelalgo.builder import IDN_RF_TASK_ROWS256, HIST_WORKLOAD_GRANULARITY, update_workload_info_host
+from ensemble.decisiontree.batched_levelalgo.builder import HIST_WORKLOAD_GRANULARITY, update_workload_info_host
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import NodeWorkItem, InstanceRange, WorkloadInfo
 from ensemble.checks.sample_weight_check import arm_a_zero_weight_drop, arm_b_validation, arm_c_double_counting, arm_d_weighted_bins_train
 
@@ -41,8 +41,8 @@ def check_descriptors() raises:
     for pos in range(begin):
         if visits[pos] != 1:
             raise Error("A07 task lost/duplicated row")
-    comptime if IDN_RF_TASK_ROWS256:
-        comptime assert HIST_WORKLOAD_GRANULARITY == 256
+    # The 256-row arm (`MOJOLEARN_IDN_RF_TASK_ROWS256`) was deleted by lane
+    # trees-small 2026-10-07 (measured neutral); the task map holds at any bound.
     print("A07_TASK_MAP_PASS tasks", n, "bound", HIST_WORKLOAD_GRANULARITY)
 
 
