@@ -1492,6 +1492,34 @@ block-index map and not both maps. The bit is a comptime parameter of
 kernels a shipped build already compiles, so it needs no branch of its own
 the way `ATTN_SHIPPED_BWD_ESTASH` did."""
 
+comptime ATTN_TILE_ORDER = get_defined_int["MOJOLEARN_IDN_ATTN_TILE_ORDER", 0]()
+"""lane/neural-small (2026-10-07), IDENTICAL grid control `attn_tile_order`.
+Absent (0) = main: every kernel that takes `SWZ` runs the map the column
+default names (DEVIATION 2900 `_bswz`, heaviest causal tile first, shipped
+on NVIDIA and AMD). Arms:
+  1 `asc`      : `_blk_map` ignores `SWZ`, so every kernel runs the shipped
+                 ascending decode (the pre-2900 map). The rollback arm, so
+                 the grid can cross the map with the other attention
+                 controls on today's kernels.
+  2 `zdot_asc` : only the estash zdot kernel takes the ascending decode;
+                 forward, dq and dk/dv keep the heaviest-first map. Cost
+                 reasoning: the H100 leg of DEVIATION 2900 read the map's
+                 index arithmetic at +6 registers in zdot, which moved it
+                 from 4 to 3 resident blocks per SM (14.79 -> 15.61 ms) while
+                 the other three kernels kept their occupancy and won. zdot
+                 work per block is near uniform once the exp stash is kept
+                 (each row reads its own stash row once), so the tail the
+                 map removes is small there and the occupancy step is not;
+                 the arm keeps the map where tiles carry unequal work.
+No bits in any arm: `_blk_map` is a bijection over `block_idx.x`; which
+block owns a (tile, head, batch) triple is not in any chain, term or order.
+The PATH `ran` word still names `_bswz` (it names the column word); the
+define is the record of the arm. A heaviest-first `desc` arm is not an arm
+here because it IS main; a `paired` arm (one block owns tiles i and T-1-i)
+needs a two-tile loop inside every kernel body and is not built."""
+comptime ATTN_TILE_ORDER_ASC = ATTN_TILE_ORDER == 1
+comptime ATTN_TILE_ORDER_ZDOT_ASC = ATTN_TILE_ORDER == 2
+
 
 def fused_attention_arm_bswz(arm: Int) -> Bool:
     """Whether `arm` carries DEVIATION 2900's `_bswz` token."""
@@ -1512,8 +1540,15 @@ def _blk_map[SWZ: Bool, REV: Bool](
     work each one owns are identical either way; only which `block_idx.x`
     owns which tile changes, so the hardware, which dispatches blocks in
     increasing `block_idx.x`, is handed the heaviest blocks first instead of
-    last. No chain, term, order or operand is touched."""
-    comptime if SWZ:
+    last. No chain, term, order or operand is touched.
+
+    `MOJOLEARN_IDN_ATTN_TILE_ORDER=1` (`asc`) drops the map at build time,
+    so the kernels compile the shipped decode (see `ATTN_TILE_ORDER`)."""
+    comptime assert ATTN_TILE_ORDER >= 0 and ATTN_TILE_ORDER <= 2, (
+        "MOJOLEARN_IDN_ATTN_TILE_ORDER: legal values 1 (asc) and 2"
+        " (zdot_asc); absent = main"
+    )
+    comptime if SWZ and not ATTN_TILE_ORDER_ASC:
         var nbh = b * nh
         var ti = raw // nbh
         var rest = raw - ti * nbh
@@ -10158,9 +10193,12 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     var zdot_tq = attention_estash_zdot_tq(l, window)
+    # MOJOLEARN_IDN_ATTN_TILE_ORDER=2 (`zdot_asc`): zdot alone takes the
+    # ascending decode (occupancy, see `ATTN_TILE_ORDER`); no bits.
+    comptime ZSWZ = SWZ and not ATTN_TILE_ORDER_ZDOT_ASC
     step_count_launch()
     comptime if ATTN_BWD_APPLE_MMA and HD == 64 and not SABN:
-        comptime za = fused_bwd_zdot_estash_amma_kernel[HD, SWZ]
+        comptime za = fused_bwd_zdot_estash_amma_kernel[HD, ZSWZ]
         ctx.enqueue_function[za](
             zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
             dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -10171,7 +10209,7 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         )
     else:
         comptime if ATTN_GAPLM_ZDOT_KREG and DRES and not SABN:
-            comptime zkr = fused_bwd_zdot_kreg_kernel[HD, ZK_TQ, SWZ]
+            comptime zkr = fused_bwd_zdot_kreg_kernel[HD, ZK_TQ, ZSWZ]
             ctx.enqueue_function[zkr](
                 zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                 dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -10182,7 +10220,7 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
             )
         else:
             if zdot_tq == 16:
-                comptime zk16 = fused_bwd_zdot_estash_kernel[HD, 16, DRES, SABN, SWZ]
+                comptime zk16 = fused_bwd_zdot_estash_kernel[HD, 16, DRES, SABN, ZSWZ]
                 ctx.enqueue_function[zk16](
                     zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                     dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
@@ -10192,7 +10230,7 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
                     block_dim=(FUSED_THREADS, 1, 1),
                 )
             else:
-                comptime zk8 = fused_bwd_zdot_estash_kernel[HD, 8, DRES, SABN, SWZ]
+                comptime zk8 = fused_bwd_zdot_estash_kernel[HD, 8, DRES, SABN, ZSWZ]
                 ctx.enqueue_function[zk8](
                     zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                     dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
