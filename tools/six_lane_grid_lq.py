@@ -121,7 +121,7 @@ def binding_builds(bindings):
     return out
 
 
-CMD_PY = '$PWD/.pixi/envs/default/bin/python'  # the branch tree's pixi interpreter (box_job.sh CMD cwd = the tree)
+CMD_PY = '.pixi/envs/default/bin/python'  # the branch tree's pixi interpreter (box_job.sh CMD cwd = the tree)
 CMD_SCRIPT = 'tools/six_lane_grid_bb.py'
 FAMILY_OF_PREFIX = {'classical': 'classical', 'more': 'classical2', 'neural': 'neural'}
 
@@ -224,8 +224,11 @@ def spec_text(pairs):
 def lq_line(box, branch, pairs, envs, builds):
     lanes, dss = spec_text(pairs)
     toks = ['lq', 'add', box, 'RACE', branch, lanes, dss] + ['%s=%s' % kv for kv in envs]
-    if builds:
-        toks.append('BUILDS=' + ','.join(builds))
+    # The base binding (_mojolearn, script `build`) is rebuilt on every line: the Python layer refuses a
+    # stale base .so ("the base binding has no all_finite_f32", first smoke 2026-10-07), and lq's build
+    # step only rebuilds what BUILDS= names.
+    builds = ['build'] + [b for b in (builds or []) if b != 'build']
+    toks.append('BUILDS=' + ','.join(builds))
     line = ' '.join(toks)
     bad = [t for t in toks if not re.fullmatch(r'[A-Za-z0-9_.,=@:+/-]+', t)]
     if bad:  # lq refuses shell metacharacters in RACE lines; box_job.sh word-splits the line

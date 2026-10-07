@@ -103,7 +103,7 @@ class RenderTests(unittest.TestCase):
         rid = G.run_id_of(self.d)
         k = [l for l in lines if '.P005.bb ' in l][0]
         self.assertEqual(k, 'lq add nv CMD main %s.P005.bb MOJOLEARN_GRID_TAG=%s.P005.bb MOJOLEARN_BUILD_DEFINES=MOJOLEARN_F=1 '
-                            '$PWD/.pixi/envs/default/bin/python tools/six_lane_grid_bb.py --tag %s.P005.bb --vendor nvidia '
+                            '.pixi/envs/default/bin/python tools/six_lane_grid_bb.py --tag %s.P005.bb --vendor nvidia '
                             '--race classical:kmeans:taxi BUILDS=build,build_x_linear' % (rid, rid, rid))
         self.assertIn('--race trees:rf:taxi BUILDS=', [l for l in lines if '.P007.bb ' in l][0])
         p1 = [l for l in lines if '.P001 ' in l][0]
