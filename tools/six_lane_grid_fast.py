@@ -436,6 +436,15 @@ def build_fast_model(controls, global_groups, untried_groups, board):
             excluded[key] = dict(control=key, define=c['define'], file=c['file'], algorithms=[],
                                  reasons=['no mapped board lane with a resolvable binding (see unmapped / binding exclusions)'])
     for aid, a in algos.items():
+        # The planner's all-on is greedy in control order, and a configuration builds one binding: put the
+        # controls of the lane's main binding (most controls; ties: the lane binding, then name) first.
+        counts = {}
+        for k in a['controls']:
+            counts[a['binding_of'][k]] = counts.get(a['binding_of'][k], 0) + 1
+        lb = binding_name(LANE_BINDING[a['lane']]) if a['lane'] in LANE_BINDING else None
+        main = sorted(counts, key=lambda b: (-counts[b], b != lb, b))[0]
+        a['main_binding'] = main
+        a['controls'] = [k for k in a['controls'] if a['binding_of'][k] == main] + [k for k in a['controls'] if a['binding_of'][k] != main]
         for g in global_groups + untried_groups.get(aid, []):
             members = [k for k in g if k in a['controls']]
             if len(members) >= 2 and members not in a['groups']:
@@ -459,3 +468,402 @@ def load_all(controls_dir=CONTROLS_DIR):
     files = dict(f1, **f2, **f3)
     files['board'] = dict(path=_rel(BOARD_MD), sha256=G.file_sha(BOARD_MD))
     return controls, aft_groups + afcl_groups, untried_groups, untried_excluded, files
+
+
+# ------------------------------------------------------------------ generate
+def dflags(defines):
+    return ' '.join('-D ' + (d[:-2] if d.endswith('=1') else d) for d in defines)
+
+
+def envstr(env):
+    return ' '.join(k + '=' + v for k, v in sorted(env.items()))
+
+
+def tool_of(cfg):
+    if cfg['kind'] == 'env':
+        return 'afc_env'
+    return 'aft' if cfg['family'] == 'trees' and cfg['binding'] in AFT_BINDINGS else 'afc_def'
+
+
+def finish_config(cfg, algo, controls, env_names):
+    members = cfg['controls']
+    own = {controls[k]['define'] for k in members}
+    env_defs = [d for d in cfg['defines'] if d.split('=')[0] in env_names]
+    build = [d for d in cfg['defines'] if d not in env_defs]
+    incumbent = sorted({d for k in members for d in controls[k]['both_defines'] if d.split('=')[0] not in own})
+    both_env = {}
+    for k in members:
+        for name, v in controls[k]['both_env'].items():
+            if both_env.get(name, v) != v:
+                raise ValueError(cfg['id'] + ': conflicting both-arm env ' + name)
+            both_env[name] = v
+    cand_env = dict(both_env)
+    for d in env_defs:
+        name, _, v = d.partition('=')
+        cand_env[name] = v or '1'
+    bindings = sorted({algo['binding_of'][k] for k in members})
+    if len(bindings) != 1:
+        raise ValueError(cfg['id'] + ': configuration spans bindings ' + ', '.join(bindings))
+    cfg.update(kind='env' if env_defs else 'build', family=algo['family'], lane=algo['lane'], binding=bindings[0],
+               bindings=bindings, candidate_build_defines=build,
+               incumbent_defines=incumbent, incumbent_env=both_env, candidate_env=cand_env, workloads=algo['workloads'])
+    cfg['tool'] = tool_of(cfg)
+    return cfg
+
+
+def generate_fast(controls_dir=CONTROLS_DIR, cap=G.CAP, branch=QUEUE_BRANCH):
+    controls, global_groups, untried_groups, untried_excluded, files = load_all(controls_dir)
+    board = board_rows()
+    algos, unmapped, excluded, binding_excluded = build_fast_model(controls, global_groups, untried_groups, board)
+    env_names = {c['define'] for c in controls.values() if c['env']}
+    pairs = [(c['define'], other, why) for c in controls.values() for other, why in c['conflicts']]
+    reach = {}
+    for aid, a in algos.items():
+        for k in a['controls']:
+            reach.setdefault(k, set()).add(aid)
+    plans, configs = {}, []
+    for aid, a in algos.items():
+        guards = FastGuards(pairs, env_names, {controls[k]['define']: a['binding_of'][k] for k in a['controls']})
+        plan = G.plan_algorithm(a, controls, reach, guards, cap)
+        plans[aid] = plan
+        for e in plan['excluded']:
+            excluded.setdefault(e['control'], dict(control=e['control'], define=e['define'], file=controls[e['control']]['file'],
+                                                   reasons=e['reasons'], algorithms=[]))
+            excluded[e['control']]['algorithms'].append(aid)
+        if not a['workloads']:
+            for c in plan['configs']:
+                c['unmapped'] = True
+            continue
+        for c in plan['configs']:
+            configs.append(finish_config(c, a, controls, env_names))
+
+    # Packing: define configs with the same tool, binding and incumbent share one candidate build.
+    global_guards = FastGuards(pairs, env_names)
+    groups = {}
+    for c in configs:
+        if c['kind'] == 'build':
+            groups.setdefault((c['tool'], c['binding'], tuple(c['incumbent_defines']), tuple(sorted(c['incumbent_env'].items()))), []).append(c)
+    packs = []
+    for gkey in sorted(groups):
+        for p in G.pack(groups[gkey], reach, global_guards):
+            p['tool'], p['binding'], p['incumbent_defines'], p['incumbent_env'] = gkey[0], gkey[1], list(gkey[2]), dict(gkey[3])
+            packs.append(p)
+    for i, p in enumerate(packs):
+        p['id'] = 'F%03d' % (i + 1)
+        for m in p['members']:
+            m['pack'] = p['id']
+            m['B_defines'] = list(p['defines'])
+            m['packed_extra_defines'] = sorted(set(p['defines']) - set(m['defines']))
+    for c in configs:
+        if c['kind'] == 'env':
+            c['pack'], c['B_defines'], c['packed_extra_defines'] = None, list(c['incumbent_defines']), []
+        c['A_defines'] = list(c['incumbent_defines'])
+
+    run = 'gf' + G.sha_value(sorted([c['id'], c['A_defines'], c['B_defines'], c['candidate_env'], c['workloads']] for c in configs))[:6]
+    queue, build_jobs = render_queue(configs, packs, run, branch)
+    matrix = fast_matrix(configs, files, queue)
+    build_plan = dict(schema='mojolearn.six-lane-build-plan/1', jobs=build_jobs, blocked=[], unsupported=[],
+                      policy='FAST grid builds, as the Apple A/B scripts perform them on the M3: tools/aft_ab.sh and tools/afc_ab_def.sh build '
+                             'arm A (FAST main + both-arm prerequisites) and arm B (the packed candidate) of one binding per build directory, '
+                             'MOJOLEARN_NUMERIC_MODE=fast, no MOJOLEARN_NUMERIC_IDENTICAL. Lanes never compile; nothing here was built.')
+    n_build = sum(1 for c in configs if c['kind'] == 'build')
+    mains = {(j['tool'], j['binding']) for j in build_jobs if j['role'] == 'main'}
+    distinct = {(j['binding'], tuple(j['defines'])) for j in build_jobs}
+    summary = dict(
+        mode=MODE, vendor='apple', box='m3', algorithms=len(algos), algorithms_with_configs=len({c['algorithm'] for c in configs}),
+        unmapped_algorithms=sum(1 for a in algos.values() if not a['workloads']),
+        controls=len(controls), excluded_controls=len(excluded), binding_exclusions=len(binding_excluded), unmapped_lane_recipes=len(unmapped),
+        configs=len(configs), build_configs=n_build, env_configs=len(configs) - n_build,
+        cells=len(matrix['cells']), workloads=len({w for c in configs for w in c['workloads']}),
+        aa_pairs=sum(1 for q in queue if q['kind'] == 'aa'), queue_lines=len(queue),
+        deferred_configs=sum(len(p['deferred']) for p in plans.values()),
+        deferred_cross_groups=sum(len(p['deferred_groups']) for p in plans.values()),
+        deferred_cross_configs=sum(g['configs'] for p in plans.values() for g in p['deferred_groups']),
+        packs=len(packs), packed_multi_member=sum(1 for p in packs if len(p['members']) > 1),
+        builds_before_packing=2 * n_build + 2 * len(mains), builds_after_packing=len(build_jobs),
+        main_builds=2 * len(mains), distinct_define_sets=len(distinct),
+        bindings=sorted({c['binding'] for c in configs}), cap=cap, run=run, queue_branch=branch)
+    plan = dict(
+        schema='mojolearn.six-lane-grid-plan/1', mode=MODE, vendor='apple', status='PLANNED_NOT_RUN',
+        all_switches='NOT MEASURED until each config has an M3 A/A floor and a scored A/B with the board quality metric',
+        arm_convention='A = FAST main (shipped FAST defaults plus any prerequisite the card keeps in both arms); B = the candidate (as tools/aft_ab.sh and tools/afc_ab_def.sh use them)',
+        promoted_off_arms='NOT gridded: every promoted FAST default (a *_OFF rollback exists) was A/B\'d on top of the defaults current at its promotion, so the shipped FAST default is the all-on point and the M3 board measures it on every row; promoted arms enter only as arm A',
+        inputs=dict(sources=files), vendors=VENDORS,
+        measurement=dict(excluded_warmups=0, scored_samples=1, rule='owner: one run per arm (tools/aft_ab.sh pairs 1; tools/afc_ab_def.sh reps 1 rounds 1; AB_MULTI_RUN unset)'),
+        generation_rules=dict(
+            cap_per_algorithm=cap, algorithm='one M3 FAST board lane (family:lane); its workloads are that lane\'s board datasets',
+            priority=['(a) every eligible control alone', '(b) all-on: one arm per control, guard-compatible', '(c) declared interaction-group crosses, admitted group-atomically within the cap'],
+            deferred='anything cut by the cap is DEFERRED (generate after one-at-a-time results), never dropped',
+            controls='opt-in FAST cards (AFT, AFCL) and the EXPERIMENTS.md untried rows; promoted _OFF arms excluded',
+            groups='tools/apple_fast_tree_ideas.py X01-X10; AFCL lanes/trees.json pending_combinations + P11/P12; untried MI pair, iterative-imputer env pair, ARIMA quality trio and STEPWISE/CSS_SEARCH',
+            guards='FastGuards: card conflicting_defines / defines_absent_in_both_arms, no candidate-only env with a build define, one binding per line, plus six_lane_ab.combine()',
+            binding='per (control, lane): the lane binding when it imports the card source; else the one card binding that imports it (ties broken by the bindings the lane\'s Python module loads); otherwise excluded with the reason',
+            packing='define configs of different lanes share one candidate build when tool, binding and arm A are equal, no assigned control reaches another member lane, and the union passes the guards',
+            workloads='M3 FAST board rows (docs/apple-fast/BOARD_M3_FAST.md first table); lanes without a row are UNMAPPED',
+            env='MOJOLEARN_NUMERIC_MODE from AFCL baseline_env is implied by the FAST builds and the ours-fast arm and is not repeated'),
+        verdict_rule=VERDICT_RULE, summary=summary,
+        algorithms={aid: dict(
+            family=a['family'], lane=a['lane'], workloads=a['workloads'], excluded_workloads=a['excluded_workloads'],
+            declared_controls=a['controls'], bindings={k: a['binding_of'][k] for k in a['controls']},
+            binding_reasons={k: a['binding_why'][k] for k in a['controls']}, notes=a['notes'],
+            eligible_controls=plans[aid]['eligible'], interaction_groups=a['groups'], cross_groups=plans[aid]['cross_groups'],
+            all_on=plans[aid]['all_on'], dropped_from_all_on=plans[aid]['dropped_from_all_on'],
+            configs=[dict(id=c['id'], priority=c['priority'], tier=c['tier'], assignment=c['assignment'], kind=c.get('kind'),
+                          binding=c.get('binding'), tool=c.get('tool'), pack=c.get('pack'), A_defines=c.get('A_defines'),
+                          B_defines=c.get('B_defines'), packed_extra_defines=c.get('packed_extra_defines', []),
+                          A_env=c.get('incumbent_env'), B_env=c.get('candidate_env'), queued=not c.get('unmapped'))
+                     for c in plans[aid]['configs']],
+            deferred=plans[aid]['deferred'], deferred_groups=plans[aid]['deferred_groups'], invalid=G.summarize_invalid(plans[aid]['invalid']))
+            for aid, a in algos.items()},
+        unmapped=unmapped, binding_exclusions=binding_excluded,
+        excluded=sorted(excluded.values(), key=lambda e: (e['file'], e['control'])), excluded_untried=untried_excluded,
+        builds=dict(before_packing=summary['builds_before_packing'], after_packing=summary['builds_after_packing'],
+                    packs=[dict(id=p['id'], tool=p['tool'], binding=p['binding'], A_defines=p['incumbent_defines'], A_env=p['incumbent_env'],
+                                B_defines=p['defines'], members=[m['id'] for m in p['members']], algorithms=sorted(p['algorithms'])) for p in packs]),
+        queue=[{k: q[k] for k in ('tag', 'kind', 'configuration', 'algorithm', 'workload_id', 'tool', 'binding', 'pack')} for q in queue])
+    return plan, matrix, build_plan, queue
+
+
+VERDICT_RULE = dict(
+    timing='per workload on the M3: FASTER / SLOWER only when |log(B/A)| of the scored clock (AFC-DEF-SUMMARY / AFT-MEDIAN median_ms) '
+           'exceeds the M3 A/A floor for the same workload (its grid A/A line: both arms the FAST main build); otherwise NO_VERDICT. '
+           'One box votes (apple); there is no second vendor',
+    identity='NOT_REQUIRED: FAST needs no identical anything (CLAUDE.md): no same bits across vendors, none vs arm A, none run to run',
+    quality='the board quality metric of B must not drop vs arm A (FAST main) on any workload: tools/af_quality.py, rel 1e-3 / abs 1e-6, '
+            'the gate tools/af_board_apply.py enforces (which also refuses a row worse than the best opponent); a noise-level change, '
+            'a different fold order or different bits never hold a candidate',
+    promotion='FASTER on at least one workload, SLOWER on none, quality held: the switch becomes the FAST default with a *_OFF '
+              'rollback and a code comment citing the A/B numbers, plus one docs/apple-fast/EXPERIMENTS.md row; a loser (slower, '
+              'noise, quality drop) is deleted from the code and gets its row',
+    default_state='every switch is NOT MEASURED until then')
+
+
+# ------------------------------------------------------------------ M3 queue
+def _dirs(tool, run, name):
+    return ('$HOME/aft-ab/' if tool == 'aft' else '$HOME/afc-def/') + run + '-' + name
+
+
+def render_queue(configs, packs, run, branch):
+    """grid-fast-queue.txt lines: A/A first (they also leave the FAST main build of each binding in place),
+    then the define A/Bs pack by pack (one build pair per pack), then the env A/Bs on the main build.
+    Every define line restores its binding's FAST main .so afterwards: both scripts leave arm B installed."""
+    queue, jobs = [], []
+    seen_dirs = set()
+
+    def tag():
+        return '%s-%03d' % (run, len(queue) + 1)
+
+    def add(kind, cmd, **info):
+        t = tag()
+        cmd = cmd.replace('<TAG>', t)
+        queue.append(dict(tag=t, kind=kind, command=cmd, line="lq add m3 CMD %s %s '%s'" % (branch, t, cmd), **info))
+
+    aa = {}
+    for c in configs:
+        tm = 'aft' if c['tool'] == 'aft' else 'afc'
+        for w in c['workloads']:
+            aa.setdefault((tm, c['binding'], w), c)
+    mains = []
+    for (tm, b, w) in sorted(aa):
+        c = aa[(tm, b, w)]
+        ds = w.split('@dataset=', 1)[1]
+        d = _dirs(tm, run, 'main-' + b)
+        if tm == 'aft':
+            skip = ' AFT_SKIP_BUILD=1' if d in seen_dirs else ''
+            cmd = 'AFT_OUT=%s%s bash tools/aft_ab.sh %s %s %s 1 "" ""' % (d, skip, b, c['lane'], ds)
+        else:
+            cmd = 'AFC_FAMILY=%s AFC_DEF_BUILD_TAG=%s bash tools/afc_ab_def.sh <TAG> %s %s %s 1 1 "" ""' % (
+                AFC_FAMILY[c['family']], run + '-main-' + b, b, c['lane'], ds)
+        if d not in seen_dirs:
+            seen_dirs.add(d)
+            mains.append((tm, b, d))
+        add('aa', cmd, configuration=None, algorithm=c['algorithm'], workload_id=w, tool=tm, binding=b, pack=None)
+    for tm, b, d in mains:
+        for arm in 'AB':
+            jobs.append(dict(key=G.sha_value([run, tm, b, 'main', arm])[:20], role='main', arm=arm, tool=tm, binding=G.binding_path(b) if b != 'base' else 'bindings/_mojolearn.mojo',
+                             script=build_script(b), build_dir=d, vendor='apple', mode=MODE, defines=[], environment={},
+                             status='NOT_COMPILED', configurations=[], target='metal (M3 Ultra), FAST'))
+    by_pack = {p['id']: p for p in packs}
+    for p in packs:
+        d = _dirs(p['tool'], run, p['id'])
+        for arm, defs in (('A', p['incumbent_defines']), ('B', p['defines'])):
+            jobs.append(dict(key=G.sha_value([run, p['id'], arm])[:20], role='pack', arm=arm, tool=p['tool'], binding=G.binding_path(p['binding']) if p['binding'] != 'base' else 'bindings/_mojolearn.mojo',
+                             script=build_script(p['binding']), build_dir=d, vendor='apple', mode=MODE, defines=list(defs),
+                             environment=dict(p['incumbent_env']), status='NOT_COMPILED', pack=p['id'],
+                             configurations=[m['id'] for m in p['members']], target='metal (M3 Ultra), FAST'))
+    builds = sorted((c for c in configs if c['kind'] == 'build'), key=lambda c: (c['pack'], c['algorithm'], c['priority']))
+    started = set()
+    for c in builds:
+        p = by_pack[c['pack']]
+        pre = (envstr(c['incumbent_env']) + ' ') if c['incumbent_env'] else ''
+        so = so_path(c['binding'])
+        for w in c['workloads']:
+            ds = w.split('@dataset=', 1)[1]
+            if c['tool'] == 'aft':
+                d = _dirs('aft', run, p['id'])
+                skip = ' AFT_SKIP_BUILD=1' if p['id'] in started else ''
+                cmd = '%sAFT_OUT=%s%s bash tools/aft_ab.sh %s %s %s 1 "%s" "%s"; rc=$?; cp %s/A.so %s; exit $rc' % (
+                    pre, d, skip, c['binding'], c['lane'], ds, dflags(c['A_defines']), dflags(c['B_defines']),
+                    _dirs('aft', run, 'main-' + c['binding']), so)
+            else:
+                cmd = '%sAFC_FAMILY=%s AFC_DEF_BUILD_TAG=%s bash tools/afc_ab_def.sh <TAG> %s %s %s 1 1 "%s" "%s"; rc=$?; cp %s/A.so %s; exit $rc' % (
+                    pre, AFC_FAMILY[c['family']], run + '-' + p['id'], c['binding'], c['lane'], ds, dflags(c['A_defines']),
+                    dflags(c['B_defines']), _dirs('afc', run, 'main-' + c['binding']), so)
+            started.add(p['id'])
+            add('ab', cmd, configuration=c['id'], algorithm=c['algorithm'], workload_id=w, tool=c['tool'], binding=c['binding'], pack=p['id'])
+    for c in sorted((c for c in configs if c['kind'] == 'env'), key=lambda c: (c['algorithm'], c['priority'])):
+        for w in c['workloads']:
+            ds = w.split('@dataset=', 1)[1]
+            cmd = 'AFC_FAMILY=%s bash tools/afc_ab.sh <TAG> %s %s 1 1 "%s" "%s"' % (
+                AFC_FAMILY[c['family']], c['lane'], ds, envstr(c['incumbent_env']) or '-', envstr(c['candidate_env']))
+            add('ab', cmd, configuration=c['id'], algorithm=c['algorithm'], workload_id=w, tool='afc_env', binding=c['binding'], pack=None)
+    return queue, jobs
+
+
+def fast_matrix(configs, files, queue):
+    tags = {}
+    for q in queue:
+        if q['configuration']:
+            tags[(q['configuration'], q['workload_id'])] = q['tag']
+    configurations, cells = [], []
+    for c in sorted(configs, key=lambda c: (c['algorithm'], c['priority'])):
+        configurations.append(dict(
+            id=c['id'], name=c['id'], members=[c['algorithm'] + '/' + k for k in c['controls']], mode=MODE, vendors=['apple'],
+            A=dict(defines=c['A_defines'], environment=c['incumbent_env'], runtime={}),
+            B=dict(defines=c['B_defines'], environment=c['candidate_env'], runtime={}),
+            candidate_arm='B', problems=[], workloads=c['workloads'], kind='candidate', campaign_role='new_candidate',
+            experiment_kind='grid_fast_per_lane_cards', priority=c['priority'],
+            rationale='FAST grid ' + c['tier'] + ' (' + c['origin'] + ') for ' + c['algorithm'],
+            grid=dict(algorithm=c['algorithm'], tier=c['tier'], assignment=c['assignment'], effective_defines=c['defines'],
+                      packed_extra_defines=c['packed_extra_defines'], pack=c['pack'], binding=c['binding'], tool=c['tool'], kind=c['kind'])))
+        for w in c['workloads']:
+            cells.append(dict(
+                key=G.sha_value([c['id'], 'apple', w])[:20], configuration=c['id'], vendor='apple', mode=MODE,
+                implementation_ids=[c['algorithm'] + '/' + k for k in c['controls']],
+                workload=dict(id=w, lane=c['lane'], family=c['family'], dataset=w.split('@dataset=', 1)[1], grid_algorithm=c['algorithm']),
+                workload_id=w, status='PENDING', identity='NOT_REQUIRED', identity_group=None, promotion_vote=True,
+                planned_excluded_warmups=0, planned_scored_samples=1, actual_samples=0, priority=c['priority'],
+                queue_tag=tags.get((c['id'], w))))
+    return dict(schema='mojolearn.six-lane-matrix/1', base_main=None, mode=MODE, configurations=configurations, cells=cells,
+                execution='NOT EXECUTED', arm_convention='A = FAST main, B = candidate',
+                qualification=dict(status='GRID_PLANNED_NOT_MEASURED', identity='NOT_REQUIRED',
+                                   source_inputs={k: v['sha256'] for k, v in sorted(files.items())}))
+
+
+# ------------------------------------------------------------------ GRID.md
+FAMILY_TITLES = [('trees', 'trees (forest_speed_arm.py lanes: tools/aft_ab.sh)'),
+                 ('algos', 'classical and tree-wrapper lanes of tools/bench_board_algos.py (AFC_FAMILY=algos)'),
+                 ('classical2', 'classical: tools/bench_board_more.py (AFC_FAMILY=classical2)'),
+                 ('classical', 'classical: tools/classical_two_datasets.py (AFC_FAMILY=classical)')]
+
+
+def _assign(c):
+    return ', '.join(k + ('' if v == 'on' else '=' + v) for k, v in c['assignment'].items())
+
+
+def render_md_fast(plan):
+    s = plan['summary']
+    L = ['# FAST switch grid, Apple M3 (planned, not run)', '',
+         'Generated by `tools/six_lane_grid.py --mode fast --vendor apple` (`tools/six_lane_grid_fast.py`) from the opt-in Apple FAST',
+         'cards (`experiments/apple_fast_trees/{F,G,N,P}.json`, `experiments/apple_fast_classical_20261006/`), the',
+         'EXPERIMENTS.md untried candidates (`grid-fast/controls/`) and the M3 FAST board rows (`docs/apple-fast/BOARD_M3_FAST.md`).',
+         '**Every switch is NOT MEASURED** until it has an M3 A/A floor and a scored A/B with the board quality metric.', '',
+         '- **Arms**: ' + plan['arm_convention'] + '.',
+         '- **Promoted `_OFF` arms are not gridded**: ' + plan['promoted_off_arms'].split(': ', 1)[1] + '.',
+         '- **Builds**: FAST builds only (MOJOLEARN_NUMERIC_MODE=fast through the scripts); no `MOJOLEARN_NUMERIC_IDENTICAL` define anywhere.',
+         '- **Identity**: none. FAST needs no identical anything (CLAUDE.md); there is no identity column.', '',
+         '## Totals', '', '| item | count |', '|---|---|',
+         '| controls (48 AFT + 54 AFCL + %d untried rows and their group partners) | %d |' % (s['controls'] - 102, s['controls']),
+         '| excluded controls | %d |' % s['excluded_controls'],
+         '| (control, lane) pairs excluded for an unresolvable binding | %d |' % s['binding_exclusions'],
+         '| card lane recipes without an M3 board row or script | %d |' % s['unmapped_lane_recipes'],
+         '| algorithms (board lanes) with configs | %d |' % s['algorithms_with_configs'],
+         '| **configs** (build %d, env %d) | **%d** |' % (s['build_configs'], s['env_configs'], s['configs']),
+         '| board workloads touched | %d |' % s['workloads'],
+         '| **A/B cells** (configs x workloads, one box) | **%d** |' % s['cells'],
+         '| A/A lines (one per workload x binding x script) | %d |' % s['aa_pairs'],
+         '| queue lines (`grid-fast-queue.txt`) | %d |' % s['queue_lines'],
+         '| deferred singles/all-on (cap) | %d |' % s['deferred_configs'],
+         '| deferred interaction-group crosses | %d groups, %d configs |' % (s['deferred_cross_groups'], s['deferred_cross_configs']),
+         '| builds before packing (2 per build config + main) | %d |' % s['builds_before_packing'],
+         '| **builds after packing** (%d packs x 2 + %d main; %d packs with >1 member) | **%d** |' % (s['packs'], s['main_builds'], s['packed_multi_member'], s['builds_after_packing']),
+         '| distinct (binding, define set) among them | %d |' % s['distinct_define_sets'],
+         '', 'Cap: %d configs per lane. One run per arm (aft_ab.sh pairs 1; afc_ab_def.sh / afc_ab.sh reps 1 rounds 1). Box: m3 only. Run id `%s`.' % (s['cap'], s['run']), '',
+         '## Verdict rule', '']
+    for k in ('timing', 'identity', 'quality', 'promotion', 'default_state'):
+        L.append('- **' + k + '**: ' + plan['verdict_rule'][k])
+    L += ['', '## Per-family tables', '',
+          'configs in priority order (`s` single, `all` all-on, `x` cross); env configs are marked `(env)`; deferred = crosses cut by the cap.', '']
+    fams = {}
+    for aid, a in plan['algorithms'].items():
+        fams.setdefault(a['family'], []).append((aid, a))
+    for fam, title in FAMILY_TITLES:
+        if fam not in fams:
+            continue
+        L += ['### ' + title, '', '| lane | workloads | #configs | configs | deferred | builds |', '|---|---|---|---|---|---|']
+        for aid, a in sorted(fams[fam]):
+            short = {'single': 's', 'all_on': 'all', 'cross': 'x'}
+            cfgs = '<br>'.join(short[c['tier']] + ' ' + _assign(c) + (' (env)' if c['kind'] == 'env' else '') for c in a['configs']) or '-'
+            dparts = ['cross ' + '/'.join(g['members']) + ': %d' % g['configs'] for g in a['deferred_groups']]
+            if a['deferred']:
+                dparts.insert(0, '+%d capped' % len(a['deferred']))
+            packs = sorted({c['pack'] for c in a['configs'] if c['pack']})
+            binds = sorted({c['binding'] for c in a['configs']})
+            L.append('| %s | %s | %d | %s | %s | %s |' % (
+                aid, ', '.join(w.split('@dataset=')[1] for w in a['workloads']) + (' (excl. ' + ', '.join(e['workload_id'].split('@dataset=')[1] for e in a['excluded_workloads']) + ')' if a['excluded_workloads'] else ''),
+                len(a['configs']), cfgs, '<br>'.join(dparts) or '-', '%d packs, %s' % (len(packs), '/'.join(binds))))
+        L.append('')
+    L += ['## Excluded controls', '', '| control | define | source | reason |', '|---|---|---|---|']
+    for e in plan['excluded']:
+        L.append('| %s | `%s` | %s | %s |' % (e['control'], e['define'], e['file'], '; '.join(e['reasons']).replace('|', '/')))
+    L += ['', '## Binding exclusions (control on one lane)', '', '| control | lane | reason |', '|---|---|---|']
+    for e in plan['binding_exclusions']:
+        L.append('| %s | %s | %s |' % (e['control'], e['algorithm'], e['reason'].replace('|', '/')))
+    L += ['', '## Card lane recipes not queued', '', '| control | recipe | reason |', '|---|---|---|']
+    for u in plan['unmapped']:
+        L.append('| %s | %s | %s |' % (u['control'], u['lane'], u['reason']))
+    L += ['', '## Untried rows not gridded', '', '| define | kind | reason |', '|---|---|---|']
+    for e in plan['excluded_untried']:
+        L.append('| `%s` | %s | %s |' % (e['define'], e['kind'], e['reason']))
+    L += ['', '## How to queue (not run by this lane)', '',
+          '`grid-fast-queue.txt` holds one `lq add m3 CMD %s <tag> \'<command>\'` line per A/A and A/B, in order.' % s['queue_branch'],
+          'Only `lane/apple-fast*` branches may target m3 (`~/mojolearn-evidence/lq/lq`); the branch must contain this grid\'s',
+          'source (AFT/AFCL cards and the untried defines are on the integration base). Queue the lines in file order:', '',
+          '1. A/A lines first: both arms the FAST main build of the binding (they build `<run>-main-<binding>` once per script and',
+          '   leave FAST main installed). Their |log(B/A)| is the M3 floor for that workload.',
+          '2. Define A/Bs pack by pack: `AFC_DEF_BUILD_TAG=<run>-<pack>` (afc_ab_def.sh stamp reuse) or `AFT_OUT=$HOME/aft-ab/<run>-<pack>`',
+          '   with `AFT_SKIP_BUILD=1` after the pack\'s first line, so each pack builds one A/B pair. Each line then copies the',
+          '   binding\'s FAST main .so back (both scripts leave arm B installed) and exits with the script\'s status.',
+          '3. Env A/Bs (`tools/afc_ab.sh`, no build) run last, on the FAST main build.', '',
+          'Then one decision per switch arm (PROMOTE / SPLIT / DELETE / HOLD_QUALITY / NOT_MEASURED), no identity requirement:', '', '```bash',
+          'python3 tools/six_lane_grid_decide.py --mode fast --verdicts <evidence>/grid-fast-verdicts.json --quality <evidence>/grid-fast-quality.json',
+          '```', '',
+          'Regenerate: `python3 tools/six_lane_grid.py --mode fast --vendor apple` (deterministic; `--check` fails if these outputs are stale).', '']
+    return '\n'.join(L)
+
+
+def write_fast_outputs(plan, matrix, build_plan, queue, out_dir=OUT_DIR):
+    from six_lane_matrix_io import write_matrix
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / 'grid-plan.json').write_text(json.dumps(plan, indent=1, sort_keys=True) + '\n')
+    (out_dir / 'grid-build-plan.json').write_text(json.dumps(build_plan, indent=1, sort_keys=True) + '\n')
+    write_matrix(out_dir / 'grid-matrix.json.gz', matrix)
+    (out_dir / 'GRID.md').write_text(render_md_fast(plan))
+    head = ['# FAST grid queue (planned, NOT queued): run %s, %d lines, box m3 only, branch %s.' % (plan['summary']['run'], len(queue), plan['summary']['queue_branch']),
+            '# Generated by tools/six_lane_grid.py --mode fast --vendor apple; queue in file order (A/A, define A/Bs by pack, env A/Bs).']
+    (out_dir / 'grid-fast-queue.txt').write_text('\n'.join(head + [q['line'] for q in queue]) + '\n')
+
+
+def main_fast(out=OUT_DIR, cap=G.CAP, check=False, branch=QUEUE_BRANCH):
+    plan, matrix, build_plan, queue = generate_fast(cap=cap, branch=branch)
+    if check:
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            write_fast_outputs(plan, matrix, build_plan, queue, tmp)
+            stale = [n for n in OUTPUTS if not (Path(out) / n).exists() or (Path(tmp) / n).read_bytes() != (Path(out) / n).read_bytes()]
+        print(json.dumps(dict(mode=MODE, stale=stale)))
+        return 1 if stale else 0
+    write_fast_outputs(plan, matrix, build_plan, queue, out)
+    print(json.dumps(plan['summary']))
+    return 0
