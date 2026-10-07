@@ -43,11 +43,12 @@ comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 )
 #: FAST on Apple, IDENTICAL everywhere unless IDN_XPREP_RADIX is off
 comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()) or IDN_XPREP_RADIX
-# C07: histogram storage scales with 2**digit bits; smaller digits trade
-# extra passes for smaller clear/scan work. Keys/task is independent.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-from experiments.classical_identical_ideas.shared_controls import C07_DIGIT4, C07_DIGIT6
-comptime RBITS = 4 if C07_DIGIT4 else (6 if C07_DIGIT6 else 8)
+# C07 (IDENTICAL int sweep MOJOLEARN_CLASSICAL_C07_RADIX_BITS = 4|6|8, default 8):
+# histogram storage scales with 2**digit bits; smaller digits trade extra
+# passes for smaller clear/scan work. The sorted words are the same for every
+# arm. The pass count must be even (the keys end in the first block).
+from experiments.classical_identical_ideas.shared_controls import C07_RADIX_BITS
+comptime RBITS = C07_RADIX_BITS
 comptime RBINS = 1 << RBITS
 comptime RPASSES = (32 + RBITS - 1) // RBITS
 #: threads per block of every launch here
@@ -222,6 +223,8 @@ def radix_sort_cols_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float3
     """Enqueue the sort of columns 0 .. cols-1 of X[n, d] into S[c*n : c*n+n]
     (`sort_cols_device`'s contract) through the scratch `w` of at least
     radix_scratch_words(n, cols, chunk_rows) words."""
+    comptime assert RBITS == 4 or RBITS == 6 or RBITS == 8, "MOJOLEARN_CLASSICAL_C07_RADIX_BITS must be 4, 6 or 8"
+    comptime assert RPASSES % 2 == 0, "the radix pass count must be even"
     if n <= 0 or cols <= 0:
         return
     var f = df.unsafe_ptr()

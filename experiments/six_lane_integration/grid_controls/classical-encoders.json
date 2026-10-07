@@ -1,0 +1,107 @@
+{
+  "schema": "mojolearn.grid-controls/1",
+  "lane": "classical-encoders",
+  "branch": "lane/classical-encoders",
+  "head": "c1ebc6314",
+  "controls": {
+    "c07_radix_bits": {
+      "define": "MOJOLEARN_CLASSICAL_C07_RADIX_BITS", "kind": "int_sweep",
+      "arms": {"8": [], "6": ["MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6"], "4": ["MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4"]},
+      "default": "8",
+      "source": ["experiments/classical_identical_ideas/shared_controls.mojo:27", "x_prep/dradix.mojo:51"],
+      "binding": "_mojolearn_x_prep", "bits_change": false,
+      "status": "split_from:MOJOLEARN_CLASSICAL_C07_DIGIT4+MOJOLEARN_CLASSICAL_C07_DIGIT6",
+      "notes": "digit bits per pass of every IDENTICAL device radix sort (sort_cols >= RADIX_MIN_ROWS and the C08 index sort); 8|6|4 bits = 4|6|8 passes; the sort has one answer"
+    },
+    "c07_radix_rows": {
+      "define": "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS", "kind": "int_sweep",
+      "arms": {"2048": [], "1024": ["MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"], "4096": ["MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"]},
+      "default": "2048",
+      "source": ["experiments/classical_identical_ideas/shared_controls.mojo:28", "x_prep/device.mojo:382"],
+      "binding": "_mojolearn_x_prep", "bits_change": false,
+      "status": "split_from:MOJOLEARN_CLASSICAL_C07_KEYS1024+MOJOLEARN_CLASSICAL_C07_KEYS4096",
+      "notes": "keys one (column, chunk) radix task counts and scatters; same words for every arm"
+    },
+    "c08_unique_scan": {
+      "define": "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN", "kind": "switch",
+      "arms": {"off": [], "on": ["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN"]}, "default": "off",
+      "source": ["experiments/classical_identical_ideas/shared_controls.mojo:46", "x_prep/device.mojo:564", "x_prep/ddict.mojo:209"],
+      "binding": "_mojolearn_x_prep", "bits_change": false, "status": "new",
+      "notes": "device unique_cols op as a chunked run scan (count / per-column offsets / write) over all columns in 3 launches, replacing one thread per column walking n sorted rows; same words and counts as unique_cols_unit"
+    },
+    "c08_target_codes": {
+      "define": "MOJOLEARN_CLASSICAL_C08_TARGET_CODES", "kind": "switch",
+      "arms": {"off": [], "on": ["MOJOLEARN_CLASSICAL_C08_TARGET_CODES"]}, "default": "off",
+      "source": ["experiments/classical_identical_ideas/shared_controls.mojo:37", "python/mojolearn/_expansion_prep.py:1773", "x_prep/device.mojo:555", "x_prep/ddict.mojo:220"],
+      "binding": "_mojolearn_x_prep", "bits_change": false, "status": "split_from:MOJOLEARN_CLASSICAL_C08_DICTIONARY",
+      "notes": "TargetEncoder fit builds categories + fit codes in one program; the device unique_inverse is rewritten as index radix sort + run boundaries + chunk offsets + inverse scatter (no binary search); the redundant sort_cols feeding it is skipped on device"
+    },
+    "c08_onehot_ft": {
+      "define": "MOJOLEARN_CLASSICAL_C08_ONEHOT_FT", "kind": "switch",
+      "arms": {"off": [], "on": ["MOJOLEARN_CLASSICAL_C08_ONEHOT_FT"]}, "default": "off",
+      "source": ["experiments/classical_identical_ideas/shared_controls.mojo:38", "python/mojolearn/_expansion_prep.py:1496"],
+      "binding": "_mojolearn_x_prep", "bits_change": false, "status": "split_from:MOJOLEARN_CLASSICAL_C08_DICTIONARY",
+      "notes": "OneHotEncoder.fit_transform only; NOT reached by the board (it times fit then transform)"
+    },
+    "c08_ordinal_ft": {
+      "define": "MOJOLEARN_CLASSICAL_C08_ORDINAL_FT", "kind": "switch",
+      "arms": {"off": [], "on": ["MOJOLEARN_CLASSICAL_C08_ORDINAL_FT"]}, "default": "off",
+      "source": ["experiments/classical_identical_ideas/shared_controls.mojo:39", "python/mojolearn/_expansion_prep.py:1312"],
+      "binding": "_mojolearn_x_prep", "bits_change": false, "status": "split_from:MOJOLEARN_CLASSICAL_C08_DICTIONARY",
+      "notes": "OrdinalEncoder.fit_transform only; NOT reached by the board (it times fit then transform)"
+    },
+    "c08_grouped_output": {
+      "define": "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT", "kind": "switch",
+      "arms": {"off": [], "on": ["MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT"]}, "default": "off",
+      "source": ["x_prep/units.mojo:105", "x_prep/device.mojo:732"],
+      "binding": "_mojolearn_x_prep", "bits_change": false, "status": "kept",
+      "notes": "4 one-hot cells per task in op 9 (onehot emission); independent of the dictionary"
+    }
+  },
+  "algorithms": {
+    "expanded:target-encoder": {
+      "binding": "_mojolearn_x_prep",
+      "route": "fit: TargetEncoder._run -> (C08_TARGET_CODES) _fit_categories_with_codes: sort_cols[skipped on device] + unique_inverse[ddict] | (off) _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN] then _codes lookup; then fold target stats; transform: _codes + encode",
+      "controls": ["c07_radix_bits", "c07_radix_rows", "c08_unique_scan", "c08_target_codes"],
+      "interaction_groups": [["c07_radix_bits", "c07_radix_rows", "c08_target_codes"], ["c08_target_codes", "c08_unique_scan"]]
+    },
+    "expanded:onehot": {
+      "binding": "_mojolearn_x_prep",
+      "route": "fit: _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN]; transform: codes + onehot op 9[C08_GROUPED_OUTPUT]",
+      "controls": ["c07_radix_bits", "c07_radix_rows", "c08_unique_scan", "c08_grouped_output"],
+      "interaction_groups": [["c07_radix_bits", "c07_radix_rows"]]
+    },
+    "expanded:ordinal": {
+      "binding": "_mojolearn_x_prep",
+      "route": "fit: _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN]; transform: codes lookup",
+      "controls": ["c07_radix_bits", "c07_radix_rows", "c08_unique_scan"],
+      "interaction_groups": [["c07_radix_bits", "c07_radix_rows"]]
+    },
+    "expanded:quantile-transformer": {
+      "binding": "_mojolearn_x_prep",
+      "route": "fit: sort_cols[radix] (python/mojolearn/_expansion_prep.py:3706) + quantiles; transform: interpolation",
+      "controls": ["c07_radix_bits", "c07_radix_rows"],
+      "interaction_groups": [["c07_radix_bits", "c07_radix_rows"]]
+    },
+    "expanded:kbins": {
+      "binding": "_mojolearn_x_prep",
+      "route": "fit (strategy=quantile): sort_cols[radix] (python/mojolearn/_expansion_prep.py:2214) + edges; transform: bin lookup",
+      "controls": ["c07_radix_bits", "c07_radix_rows"],
+      "interaction_groups": [["c07_radix_bits", "c07_radix_rows"]]
+    },
+    "expanded:categorical-nb": {
+      "binding": "_mojolearn_x_prep",
+      "route": "fit: cat_hpart/cat_hfold or cat_counts on the given codes (no sort, no dictionary); predict: cat_jll",
+      "controls": [],
+      "interaction_groups": [],
+      "notes": "no C07/C08 control reaches CategoricalNB's public route; the review's C08 attribution for categorical-nb does not hold in code"
+    }
+  },
+  "removed": [
+    {"define": "MOJOLEARN_CLASSICAL_C07_DIGIT4", "reason": "merged into int sweep MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4 (silently overrode DIGIT6)"},
+    {"define": "MOJOLEARN_CLASSICAL_C07_DIGIT6", "reason": "merged into int sweep MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6"},
+    {"define": "MOJOLEARN_CLASSICAL_C07_KEYS1024", "reason": "merged into int sweep MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"},
+    {"define": "MOJOLEARN_CLASSICAL_C07_KEYS4096", "reason": "merged into int sweep MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096 (silently overrode KEYS1024)"},
+    {"define": "MOJOLEARN_CLASSICAL_C08_DICTIONARY", "reason": "spanned three routes; split into C08_TARGET_CODES / C08_ONEHOT_FT / C08_ORDINAL_FT; its one-thread-per-column binary-search device form is replaced by the parallel x_prep/ddict.mojo (C08_DICTIONARY survives only as a derived comptime, not a define)"}
+  ]
+}

@@ -1,7 +1,7 @@
 """The prep lane's device runner: the arena goes up once, every stage of the
 program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
-from experiments.classical_identical_ideas.shared_controls import C07_KEYS1024, C07_KEYS4096, C08_GROUPED_OUTPUT
+from experiments.classical_identical_ideas.shared_controls import C07_RADIX_ROWS, C08_GROUPED_OUTPUT, C08_DICTIONARY, C08_UNIQUE_SCAN
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -20,6 +20,7 @@ from x_prep.py2mojo import P2M_BASE, P2M_N, is_p2m_op, run_p2m_unit
 #: lane fam2-prep-metrics: ops F2_BASE .. (x_prep/fam2.mojo), IDENTICAL only
 from x_prep.fam2 import F2_BASE, F2_N, is_f2_op, run_f2_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
+from x_prep.ddict import dict_inverse_device, dict_inverse_scratch_words, unique_runs_device, unique_runs_scratch_words
 from x_prep.dradix import RADIX_SORT, IDN_XPREP_RADIX, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
 from x_prep.fastred import (
     TGR, col_stats_fast_kernel, pt_fold_fast_kernel, class_stats_fast_kernel, ii_mean_fast_kernel,
@@ -300,6 +301,24 @@ def _env_int(name: String, default: Int) -> Int:
         return default
 
 
+#: x_prep ops with a device form in x_prep/ddict.mojo
+comptime OP_UNIQUE_COLS = 5
+comptime OP_UNIQUE_INVERSE = 177
+
+
+def _sort_feeds_dict(hq: IP, s: Int) -> Bool:
+    """Stage s is sort_cols q = [X, n, d, S, cn] and stage s+1 is the
+    unique_inverse q = [S, n, d, U, CNT, X, CODES] reading that S, over the
+    same X, n, d and columns, canonical: the device form never reads S."""
+    if Int(hq.unsafe_load((s + 1) * STAGE_INTS)) != OP_UNIQUE_INVERSE:
+        return False
+    var a = hq + (s * STAGE_INTS + 2)
+    var b = hq + ((s + 1) * STAGE_INTS + 2)
+    return (Int(hq.unsafe_load(s * STAGE_INTS + 1)) == Int(hq.unsafe_load((s + 1) * STAGE_INTS + 1))
+            and Int(a[3]) == Int(b[0]) and Int(a[0]) == Int(b[5]) and Int(a[1]) == Int(b[1])
+            and Int(a[2]) == Int(b[2]) and Int(a[4]) != 0)
+
+
 def _matmul_is_gram(hq: IP, total: Int) -> Bool:
     """`matmul` q = [A, sa0, sa1, B, sb0, sb1, C, ncols, K, BIAS, ALPHA] as
     the d x d Gram A'A of a K x d row-major A (LDA's Z'Z): both operands the
@@ -358,9 +377,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # 0.070 s, every digest equal); MOJOLEARN_XPREP_SORT_RADIX=0 is the bitonic sort.
     # MOJOLEARN_XPREP_SORT_CHUNK = positions per chunk (512 to 4096 measured within 0.006 s).
     var radix = False
-    # C07 task sizes bound per-task key traffic independently of digit width.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var radix_rows = 4096 if C07_KEYS4096 else (1024 if C07_KEYS1024 else 2048)
+    # C07 (IDENTICAL int sweep MOJOLEARN_CLASSICAL_C07_RADIX_ROWS = 1024|2048|4096, default
+    # 2048): keys one (column, chunk) task walks, independent of the digit width; same words.
+    var radix_rows = C07_RADIX_ROWS
     comptime if IDN_XPREP_RADIX:
         # K1: IDENTICAL takes the radix sort by define, not by env (the same words either way)
         radix = True
@@ -378,6 +397,18 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             scratch = max(scratch, sort_scratch_words(Int(sq[1]), units))
             if radix and Int(sq[1]) >= RADIX_MIN_ROWS:
                 scratch = max(scratch, radix_scratch_words(Int(sq[1]), units, radix_rows))
+    comptime if C08_DICTIONARY or C08_UNIQUE_SCAN:
+        # x_prep/ddict.mojo: the device unique_inverse / unique_cols scratch
+        for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
+            var dop = Int(host_q.unsafe_load(s * STAGE_INTS))
+            var dq0 = host_q + (s * STAGE_INTS + 2)
+            var dunits = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
+            comptime if C08_DICTIONARY:
+                if dop == OP_UNIQUE_INVERSE:
+                    scratch = max(scratch, dict_inverse_scratch_words(Int(dq0[1]), dunits, radix_rows))
+            comptime if C08_UNIQUE_SCAN:
+                if dop == OP_UNIQUE_COLS:
+                    scratch = max(scratch, unique_runs_scratch_words(Int(dq0[1]), dunits))
     comptime if SELECT_FREG or SELECT_FCLS:
         # FAST on Apple (lane/apple-fast-select, -D MOJOLEARN_SELECT_FREG / _FCLS): the
         # f_regression / f_classif tiles' partials live in the sort scratch (x_prep/select_fast.mojo)
@@ -517,6 +548,23 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             mi_cd_device(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]), Int(hq[0]),
                          Int(hq[7]), mi_ties)
             continue
+        comptime if C08_DICTIONARY:
+            # C08 routes: unique_inverse as the index radix sort + run scan (x_prep/ddict.mojo),
+            # q = [S, n, d, U, CNT, X, CODES]. It reads X, not S, so a sort_cols whose only
+            # job is to fill this stage's S (the next stage, same X, canonical) is skipped.
+            if op == OP_UNIQUE_INVERSE:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                dict_inverse_device(ctx, df, dw, total, Int(hq[5]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
+                                    Int(hq[6]), radix_rows)
+                continue
+            if op == OP_SORT_COLS and s + 1 < stages and _sort_feeds_dict(host_q, s):
+                continue
+        comptime if C08_UNIQUE_SCAN:
+            # C08_UNIQUE_SCAN: unique_cols (q = [S, n, d, U, CNT]) as one chunked run scan of every column
+            if op == OP_UNIQUE_COLS:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                unique_runs_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[3]), Int(hq[4]))
+                continue
         if op == OP_SORT_COLS:
             var hq = host_q + (s * STAGE_INTS + 2)
             var by_radix = False

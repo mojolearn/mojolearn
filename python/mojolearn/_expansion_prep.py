@@ -1309,7 +1309,7 @@ class OrdinalEncoder(_PrepBase):
         # C08 explicitly owned fit-local inverse; never reused for a later
         # transform, mutated input, another fit or a TargetEncoder fold.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        if not (_classical_shared(_mode()) & 1) or not _is_auto(self.categories):
+        if not _c08_route(_mode(), 4) or not _is_auto(self.categories):
             return super().fit_transform(X, y, **fit_params)
         self._classical_capture_codes = True
         try:
@@ -1493,7 +1493,7 @@ class OneHotEncoder(_PrepBase):
         # C08 keeps only invocation-owned inverse data, shared by category
         # counts and output emission. Future transforms always recode X.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        if not (_classical_shared(_mode()) & 1) or not _is_auto(self.categories):
+        if not _c08_route(_mode(), 2) or not _is_auto(self.categories):
             return super().fit_transform(X, y, **fit_params)
         self._classical_capture_codes = True
         try:
@@ -1770,7 +1770,7 @@ class TargetEncoder(_PrepBase):
         if rows != n * T:
             raise ValueError("mojolearn: X and y have different numbers of rows")
         inverse = None
-        if (_classical_shared(mode) & 1) and _is_auto(self.categories):
+        if _c08_route(mode, 1) and _is_auto(self.categories):
             # C08 reuses only unsupervised category IDs. Fold membership,
             # target statistics, and held-out target isolation are unchanged.
             # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
@@ -6138,6 +6138,15 @@ def _classical_shared(mode):
     entry = _optional_prep_entry(_prep_binding(mode), "x_prep_classical_shared")
     return int(entry()) if entry is not None else 0
 
+
+
+def _c08_route(mode, bit):
+    """Compile-time admission of one C08 route (1 TargetEncoder, 2 OneHot
+    fit_transform, 4 Ordinal fit_transform); no data processing."""
+    if mode != "identical":
+        return False
+    entry = _optional_prep_entry(_prep_binding(mode), "x_prep_c08_routes")
+    return bool(int(entry()) & bit) if entry is not None else False
 
 
 def _fit_categories_with_codes(mode, arr):
