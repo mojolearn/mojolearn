@@ -78,3 +78,11 @@ comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and get_defined_int["MOJOLEARN_IDN_AC
 # of the ONE softmax switch MOJOLEARN_IDN_ATTN_SOFTMAX (arm 1 is NN20,
 # transformer/experiments/attention_summary_contract.mojo).
 comptime IDN_ATTENTION_V2 = _ENABLED and get_defined_int["MOJOLEARN_IDN_ATTN_SOFTMAX", 0]() == 2
+# S1 (lane/samba-resident, 2026-10-07): the Samba stack's forward and train
+# step as ONE device-resident binding call each (training/samba_resident.mojo):
+# the registry, the gradient, every block's activations and the backward
+# stages stay on the device; the per-op route (python/mojolearn/_samba_impl.py
+# driving training/samba_ops.mojo and the block bindings layer by layer, a
+# PCIe round trip and a device drain at every op) is arm B. Same kernels on
+# the same operands in the same order: no bit change on any column.
+comptime IDN_SAMBA_RESIDENT_STEP = _ENABLED and is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP"]()
