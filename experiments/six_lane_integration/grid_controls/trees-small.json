@@ -6,17 +6,17 @@
  "controls": {
   "HIST_REP_SM": {
    "define": "MOJOLEARN_TREES_HIST_REP_SM",
-   "kind": "int_sweep",
+   "kind": "arms",
    "arms": {
     "pinned32": [],
     "64": [
      "MOJOLEARN_TREES_HIST_REP_SM=64"
     ],
-    "128": [
-     "MOJOLEARN_TREES_HIST_REP_SM=128"
-    ],
     "device": [
      "MOJOLEARN_TREES_HIST_REP_SM=0"
+    ],
+    "device_bpsm4": [
+     "MOJOLEARN_TREES_HIST_REP_SM=1"
     ]
    },
    "default": "pinned32",
@@ -33,27 +33,19 @@
    ],
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
-   "status": "new",
-   "note": "SM count of the IDENTICAL histogram replication target, Int32 families only (fused two-stat 8-bit, shared-Int32 one-byte ladder, wide 8-bit, launch_one_byte/launch_hist2_one_byte in HIST_SMEM_SHARED2_I32). Float binary/half-byte families, level quantize and multi-GPU shards keep the pinned 32. Per-row Int32 quantize + associative atomics: no bit moves; host unchanged."
-  },
-  "HIST_REP_BPSM": {
-   "define": "MOJOLEARN_TREES_HIST_REP_BPSM",
-   "kind": "int_sweep",
-   "arms": {
-    "2": [],
-    "4": [
-     "MOJOLEARN_TREES_HIST_REP_BPSM=4"
-    ]
-   },
-   "default": "2",
-   "source": [
-    "gbdt/trees_small_switches.mojo:42",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:3088"
+   "status": "merged",
+   "note": "SM count of the IDENTICAL histogram replication target, Int32 families only (fused two-stat 8-bit, shared-Int32 one-byte ladder, wide 8-bit, launch_one_byte/launch_hist2_one_byte in HIST_SMEM_SHARED2_I32). Float binary/half-byte families, level quantize and multi-GPU shards keep the pinned 32. Per-row Int32 quantize + associative atomics: no bit moves; host unchanged.",
+   "merged_from": [
+    "HIST_REP_BPSM",
+    "MOJOLEARN_TREES_HIST_REP_BPSM"
    ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "new",
-   "note": "blocks per SM in the same Int32-family replication formula (CatBoost blocksPerSm); cross with HIST_REP_SM"
+   "legal_set": [
+    64,
+    128,
+    0,
+    1
+   ],
+   "prune_note": "target = blocks-per-SM x SMs: BPSM=4 alone == SM=64 and SM64+BPSM4 == SM128 (merged, lane/grid-prune 2026-10-07). Arms: 64 (2x pinned), device (2 per SM, the CatBoost formula), device_bpsm4 (4 per SM, define value 1). 128 dropped: within 10% of device on NV (142 SMs). Not on gbdt-ordered (no replication_int32_for caller on the ordered route)."
   },
   "PREDICT_ROW_OUTPUTS": {
    "define": "MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS",
@@ -131,13 +123,11 @@
    "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM); predict: resident_model._apply -> oblivious apply (GBDT_APPLY_WIDE | four-tree grouping, C50_GB)",
    "controls": [
     "HIST_REP_SM",
-    "HIST_REP_BPSM",
     "GBDT_APPLY_WIDE"
    ],
    "interaction_groups": [
     [
      "HIST_REP_SM",
-     "HIST_REP_BPSM",
      "hist_packed_gh",
      "hist_warp_agg",
      "T21_STREAMS",
@@ -154,13 +144,11 @@
    "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM); predict: resident_model._apply -> oblivious apply (GBDT_APPLY_WIDE | four-tree grouping, C50_GB)",
    "controls": [
     "HIST_REP_SM",
-    "HIST_REP_BPSM",
     "GBDT_APPLY_WIDE"
    ],
    "interaction_groups": [
     [
      "HIST_REP_SM",
-     "HIST_REP_BPSM",
      "hist_packed_gh",
      "hist_warp_agg",
      "T21_STREAMS",
@@ -177,13 +165,11 @@
    "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM); predict: resident_model._apply -> oblivious apply (GBDT_APPLY_WIDE | four-tree grouping, C50_GB)",
    "controls": [
     "HIST_REP_SM",
-    "HIST_REP_BPSM",
     "GBDT_APPLY_WIDE"
    ],
    "interaction_groups": [
     [
      "HIST_REP_SM",
-     "HIST_REP_BPSM",
      "hist_packed_gh",
      "hist_warp_agg",
      "hist_multistat"
@@ -198,8 +184,7 @@
    "binding": "_mojolearn_gbdt",
    "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM); predict: resident_model._apply -> oblivious apply (GBDT_APPLY_WIDE | four-tree grouping, C50_GB)",
    "controls": [
-    "HIST_REP_SM",
-    "HIST_REP_BPSM"
+    "HIST_REP_SM"
    ],
    "interaction_groups": [
     [
@@ -228,13 +213,11 @@
    "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM); predict: resident_model._apply -> oblivious apply (GBDT_APPLY_WIDE | four-tree grouping, C50_GB)",
    "controls": [
     "HIST_REP_SM",
-    "HIST_REP_BPSM",
     "GBDT_APPLY_WIDE"
    ],
    "interaction_groups": [
     [
      "HIST_REP_SM",
-     "HIST_REP_BPSM",
      "hist_packed_gh",
      "hist_warp_agg",
      "T21_STREAMS",
@@ -251,13 +234,11 @@
    "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM); predict: resident_model._apply -> oblivious apply (GBDT_APPLY_WIDE | four-tree grouping, C50_GB)",
    "controls": [
     "HIST_REP_SM",
-    "HIST_REP_BPSM",
     "GBDT_APPLY_WIDE"
    ],
    "interaction_groups": [
     [
      "HIST_REP_SM",
-     "HIST_REP_BPSM",
      "hist_packed_gh",
      "hist_warp_agg",
      "T21_STREAMS",
@@ -273,13 +254,11 @@
    "binding": "_mojolearn_gbdt",
    "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM) (depthwise/lossguide level body; gather arm doubles the target); predict unchanged by this lane",
    "controls": [
-    "HIST_REP_SM",
-    "HIST_REP_BPSM"
+    "HIST_REP_SM"
    ],
    "interaction_groups": [
     [
      "HIST_REP_SM",
-     "HIST_REP_BPSM",
      "hist_packed_gh",
      "hist_warp_agg",
      "T21_STREAMS"
@@ -290,13 +269,11 @@
    "binding": "_mojolearn_gbdt",
    "route": "fit: _gbdt_fit_impl -> gbdt.train -> doc_parallel_boosting.fit_with_test -> launch_histograms_for_blocks -> Int32 hist launchers (replication_int32_for: HIST_REP_SM, HIST_REP_BPSM) (depthwise/lossguide level body; gather arm doubles the target); predict unchanged by this lane",
    "controls": [
-    "HIST_REP_SM",
-    "HIST_REP_BPSM"
+    "HIST_REP_SM"
    ],
    "interaction_groups": [
     [
      "HIST_REP_SM",
-     "HIST_REP_BPSM",
      "hist_packed_gh",
      "hist_warp_agg",
      "T21_STREAMS"
@@ -374,6 +351,11 @@
   {
    "define": "MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF",
    "reason": "sub-arm of deleted IDN_ET_BINNED_U16"
+  },
+  {
+   "define": "MOJOLEARN_TREES_HIST_REP_BPSM",
+   "control": "HIST_REP_BPSM",
+   "reason": "MERGED into HIST_REP_SM by lane/grid-prune 2026-10-07 (arm device_bpsm4 = MOJOLEARN_TREES_HIST_REP_SM=1); the define is refused in core/six_lane_experiment_guards.mojo."
   }
  ]
 }

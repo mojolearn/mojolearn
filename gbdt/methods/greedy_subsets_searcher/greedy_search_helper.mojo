@@ -16,7 +16,7 @@ from max.gpu.host.device_attribute import DeviceAttribute
 from checks.fixed_point import choose_scale
 from gbdt.trees_identical_switches import T21_STREAMS
 from gbdt.trees_hist_switches import HIST_MULTISTAT, HIST_SYM_FEATURE_PARALLEL
-from gbdt.trees_small_switches import HIST_REP_SM, HIST_REP_SM_ON, HIST_REP_BPSM, HIST_REP_BPSM_ON
+from gbdt.trees_small_switches import HIST_REP_SM, HIST_REP_SM_ON, HIST_REP_BPSM, HIST_REP_DEVICE, HIST_REP_DEVICE_X4
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit_wide import (
     hist2_8bit_wide_kernel,
     wide_columns_for,
@@ -3091,10 +3091,11 @@ def replication_int32_for[smem_mode: Int = HIST_SMEM_SHARED2_I32](
 ) -> Int:
     """Lane trees-small: `replication_for` for the INT32 histogram families.
 
-    With MOJOLEARN_TREES_HIST_REP_SM / _BPSM absent (or a float smem mode)
-    this IS `replication_for`. With either define, the IDENTICAL target
-    becomes `HIST_REP_BPSM * sm` blocks (x2 on the gather arm), where `sm`
-    is HIST_REP_SM, or the device's `sm_count` when HIST_REP_SM == 0.
+    With MOJOLEARN_TREES_HIST_REP_SM absent (or a float smem mode) this IS
+    `replication_for`. With the define, the IDENTICAL target becomes
+    `HIST_REP_BPSM * sm` blocks (x2 on the gather arm), where `sm` is
+    HIST_REP_SM, or the device's `sm_count` for the device arms (0: 2 blocks
+    per SM, 1: 4 blocks per SM).
     Only callers whose addends are per-row Int32 (see
     `gbdt/trees_small_switches.mojo`) may call this; the pin stays in
     `replication_for` for the float families, where the SM count is a
@@ -3103,15 +3104,13 @@ def replication_int32_for[smem_mode: Int = HIST_SMEM_SHARED2_I32](
     multi-block atomic leave the same cell). Host column unchanged.
     NOT COMPILED -- NOT TESTED -- NOT MEASURED."""
     comptime assert (
-        HIST_REP_SM == 0 or HIST_REP_SM == 32 or HIST_REP_SM == 64 or HIST_REP_SM == 128
-    ), "MOJOLEARN_TREES_HIST_REP_SM legal set is {64, 128, 0 = device}"
-    comptime assert (
-        HIST_REP_BPSM == 2 or HIST_REP_BPSM == 4
-    ), "MOJOLEARN_TREES_HIST_REP_BPSM legal set is {2, 4}"
-    comptime if not (HIST_REP_SM_ON or HIST_REP_BPSM_ON) or smem_mode != HIST_SMEM_SHARED2_I32:
+        HIST_REP_SM == HIST_REP_DEVICE or HIST_REP_SM == HIST_REP_DEVICE_X4
+        or HIST_REP_SM == 32 or HIST_REP_SM == 64 or HIST_REP_SM == 128
+    ), "MOJOLEARN_TREES_HIST_REP_SM legal set is {64, 128, 0 = device x2, 1 = device x4}"
+    comptime if not HIST_REP_SM_ON or smem_mode != HIST_SMEM_SHARED2_I32:
         return replication_for(groups, n_live, stat_count, sm_count, gather)
     var sm = HIST_REP_SM
-    if HIST_REP_SM == 0:
+    if HIST_REP_SM == HIST_REP_DEVICE or HIST_REP_SM == HIST_REP_DEVICE_X4:
         sm = max(1, sm_count)
     var max_active_blocks = HIST_REP_BPSM * sm
     if gather:
