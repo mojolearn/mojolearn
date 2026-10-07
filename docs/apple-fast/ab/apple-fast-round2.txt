@@ -1,0 +1,8 @@
+CMD lane/apple-fast-round2 afr2-sgd-er-reg-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh afr2-sgd-er-reg-taxi x_linear sgd-reg taxi 1 1 "" "-D MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"
+CMD lane/apple-fast-round2 afr2-sgd-er-clf-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh afr2-sgd-er-clf-taxi x_linear sgd-clf taxi 1 1 "" "-D MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"
+CMD lane/apple-fast-round2 afr2-sgd-er-reg-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh afr2-sgd-er-reg-istella x_linear sgd-reg istella 1 1 "" "-D MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"
+CMD lane/apple-fast-round2 afr2-sgd-er-clf-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh afr2-sgd-er-clf-istella x_linear sgd-clf istella 1 1 "" "-D MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"
+CMD lane/apple-fast-round2 afr2-sgd-er-reg-synth AFC_FAMILY=algos bash tools/afc_ab_def.sh afr2-sgd-er-reg-synth x_linear sgd-reg s-r600000-f48 1 1 "" "-D MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"
+CMD lane/apple-fast-round2 afr2-kshap-dm-rf bash tools/afr2_ab.sh afr2-kshap-dm-rf x_trees kshap-rf "-D MOJOLEARN_KSHAP_FAST_DEVICE_MODEL"
+CMD lane/apple-fast-round2 afr2-pshap-dm-rf bash tools/afr2_ab.sh afr2-pshap-dm-rf x_trees pshap-rf "-D MOJOLEARN_PSHAP_FAST_DEVICE_MODEL"
+CMD lane/apple-fast-round2 afr2-scaler-ft bash tools/afr2_ab.sh afr2-scaler-ft preprocessing scaler-ft "-D MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"
