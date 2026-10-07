@@ -31,7 +31,7 @@ from gemm.experiments.neural_streaming import (
     NN02,NN11,NN16,neural_streaming_ab,neural_streaming_floats,neural_fold_capacity_ab,
 )
 from gemm.experiments.neural_tiled import NN09,NN15,neural_tiled_ab
-from gemm.experiments.neural_plans import NN01,NN08,NN10,NN12,neural_schedule_ab,neural_async_ab,neural_cost_plan
+from gemm.experiments.neural_plans import NN01,NN10,NN12,neural_schedule_ab,neural_cost_plan
 from gemm.experiments.neural_grouped import NN05,NN07,_neural_operand_pack_kernel
 from gemm.experiments.neural_switches import (
     ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD,ROLE_ALL,NEURAL_GEMM_ROLES,
@@ -42,7 +42,7 @@ from gemm.experiments.neural_ozaki import (
 
 comptime NEURAL_PAIR_ENABLED = NN05 or NN07
 comptime NEURAL_GEMM_EXPERIMENT_ENABLED = (
-    NEURAL_PROFILE_CHANGED or NN01 or NN02 or NN08 or NN09 or NN10 or NN11 or NN12 or NN15 or NN16
+    NEURAL_PROFILE_CHANGED or NN01 or NN02 or NN09 or NN10 or NN11 or NN12 or NN15 or NN16
     or NEURAL_OZAKI
 )
 comptime _STREAM_GROUP = get_defined_int["MOJOLEARN_IDN_NEURAL_STREAM_GROUP",8]()
@@ -62,7 +62,7 @@ comptime _STAGING = NN09 or NN15
 # NN11 has two real placements: global fold slots inside NN02, or a
 # standalone register/shared fold kernel. Other schedule families do not
 # implement its storage arm; reject those combinations instead of masking it.
-comptime _ROUTES = Int(NN01)+Int(NN08)+Int(NN10)+Int(_STREAM)+Int(_STAGING)+Int(NN11 and not _STREAM)
+comptime _ROUTES = Int(NN01)+Int(NN10)+Int(_STREAM)+Int(_STAGING)+Int(NN11 and not _STREAM)
 # One arm of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE is selected. Products whose
 # caller role is outside MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES keep the
 # unscheduled route (selected profile, else the incumbent) in the same build.
@@ -100,7 +100,7 @@ def _scheduled_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
         comptime if NN02 and not _CONTROL:
             return neural_streaming_floats[_STREAM_GROUP,True](k,m*n)
         return max(1,m*n*leaves)
-    comptime if NEURAL_PROFILE_CHANGED or _STAGING or NN08 or NN11:
+    comptime if NEURAL_PROFILE_CHANGED or _STAGING or NN11:
         return 1
     comptime if NEURAL_OZAKI:
         # The planes, row scales and Int32 diagonals; the incumbent's own
@@ -191,16 +191,6 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
         neural_streaming_ab[not _CONTROL,_STREAM_GROUP,not _CONTROL,not _CONTROL](ctx,c,a,b,ws,m,n,k,op)
     elif _STAGING:
         neural_tiled_ab[not _CONTROL,_DEPTH,_PAD,_SWIZZLE,NN15](ctx,c,a,b,m,n,k,op)
-    elif NN08:
-        if k==0:
-            neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
-        else:
-            # Async is a physical NVIDIA schedule. Other columns use the
-            # synchronous exact graph; their timing is still whole-model.
-            comptime if TARGET_COLUMN == COLUMN_NVIDIA:
-                neural_async_ab[not _CONTROL](ctx,c,a,b,m,n,k,op)
-            else:
-                neural_async_ab[False](ctx,c,a,b,m,n,k,op)
     elif NN10:
         var plan = _selected_cost_plan(m,n,k)
         comptime if _CONTROL:

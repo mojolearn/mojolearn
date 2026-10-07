@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""2026-10-07 lane trees-small: IDENTICAL GBDT histogram replication sweeps.
+"""2026-10-07 lane trees-small: IDENTICAL GBDT histogram replication sweep.
 
-Both default OFF (define absent = the incumbent pinned grid). They change
+One define, default OFF (define absent = the incumbent pinned grid). They change
 how many blocks the Int32 histogram families launch, never which integer
 lands in a cell: those families quantize PER ROW (`hist2_quantize` keyed by
 the storage position) and add in Int32 with relaxed atomics, and the level
@@ -26,8 +26,13 @@ NOT COMPILED -- NOT TESTED -- NOT MEASURED. Host column unchanged.
 
 | define | kind | legal values | gates |
 |---|---|---|---|
-| MOJOLEARN_TREES_HIST_REP_SM   | int sweep | absent (pinned 32), 64, 128, 0 (device count) | `replication_int32_for` SM count |
-| MOJOLEARN_TREES_HIST_REP_BPSM | int sweep | absent (2), 4 | `replication_int32_for` blocks per SM |
+| MOJOLEARN_TREES_HIST_REP_SM | arms | absent (pinned 32 SMs x 2), 64 / 128 (pinned SMs x 2), 0 (device SMs x 2), 1 (device SMs x 4) | `replication_int32_for` block target |
+
+Lane grid-prune (2026-10-07) merged MOJOLEARN_TREES_HIST_REP_BPSM into this
+define: the target is blocks-per-SM x SMs, so BPSM=4 alone equalled SM=64 and
+SM=64 + BPSM=4 equalled SM=128. The one distinct BPSM point, 4 blocks per
+device SM, is arm 1 (HIST_REP_DEVICE_X4; 1 is never a real SM pin). The old
+define is refused in core/six_lane_experiment_guards.mojo.
 """
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
@@ -36,8 +41,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 comptime HIST_REP_SM_ON = _IDN and is_defined["MOJOLEARN_TREES_HIST_REP_SM"]()
-#: 0 = the device's own SM/CU count (the `sm_count` the launcher was given).
+#: Arm values: the device's own SM/CU count (the `sm_count` the launcher was
+#: given) at 2 or at 4 blocks per SM.
+comptime HIST_REP_DEVICE = 0
+comptime HIST_REP_DEVICE_X4 = 1
 comptime HIST_REP_SM = get_defined_int["MOJOLEARN_TREES_HIST_REP_SM", 32]() if HIST_REP_SM_ON else 32
-
-comptime HIST_REP_BPSM_ON = _IDN and is_defined["MOJOLEARN_TREES_HIST_REP_BPSM"]()
-comptime HIST_REP_BPSM = get_defined_int["MOJOLEARN_TREES_HIST_REP_BPSM", 2]() if HIST_REP_BPSM_ON else 2
+comptime HIST_REP_BPSM = 4 if HIST_REP_SM == HIST_REP_DEVICE_X4 else 2

@@ -93,7 +93,7 @@
   }
  },
  "algorithms": {
-  "trees/gbdt-symmetric": {
+  "trees:gbdt-symmetric": {
    "binding": "_mojolearn_gbdt",
    "route": "fit: doc_parallel_boosting -> run_tree_layout_traced -> launch_histograms_for_blocks -> launch_hist2_8bit (254 borders, I32 mode) -> hist2_8bit_kernel/gather_kernel; switch on: launch_hist2_8bit_wide[2,FG]",
    "controls": [
@@ -109,7 +109,7 @@
     ]
    ]
   },
-  "trees/gbdt-symmetric-1000": {
+  "trees:gbdt-symmetric-1000": {
    "binding": "_mojolearn_gbdt",
    "route": "as trees/gbdt-symmetric",
    "controls": [
@@ -125,7 +125,7 @@
     ]
    ]
   },
-  "trees/gbdt-depthwise": {
+  "trees:gbdt-depthwise": {
    "binding": "_mojolearn_gbdt",
    "route": "fit: greedy_search_helper_depthwise -> launch_histograms_for_blocks -> launch_hist2_8bit or launch_hist2_width_group[8] (2581) -> hist2_8bit_kernel",
    "controls": [
@@ -139,7 +139,7 @@
     ]
    ]
   },
-  "trees/gbdt-lossguide": {
+  "trees:gbdt-lossguide": {
    "binding": "_mojolearn_gbdt",
    "route": "as trees/gbdt-depthwise",
    "controls": [
@@ -153,7 +153,7 @@
     ]
    ]
   },
-  "trees/gbdt-multiclass": {
+  "trees:gbdt-multiclass": {
    "binding": "_mojolearn_gbdt",
    "route": "fit: symmetric greedy -> launch_histograms_for_blocks -> (stat_count>2) launch_one_byte[8] PASS; switch on: launch_hist2_8bit_wide[MULTISTAT,1]",
    "controls": [
@@ -161,7 +161,7 @@
    ],
    "interaction_groups": []
   },
-  "trees/gbdt-rank-yetirank": {
+  "trees:gbdt-rank-yetirank": {
    "binding": "_mojolearn_gbdt",
    "route": "SymmetricTree greedy (run_tree_layout_traced); two-stat 8-bit path assumed, stat_count not re-verified",
    "controls": [
@@ -177,7 +177,7 @@
     ]
    ]
   },
-  "trees/gbdt-rank-pairlogit": {
+  "trees:gbdt-rank-pairlogit": {
    "binding": "_mojolearn_gbdt",
    "route": "as trees/gbdt-rank-yetirank",
    "controls": [
@@ -192,11 +192,24 @@
      "hist_sym_feature_parallel"
     ]
    ]
+  },
+  "trees:gbdt-categorical": {
+   "binding": "_mojolearn_gbdt",
+   "route": "Plain Lossguide (as trees/gbdt-lossguide): greedy_search_helper_depthwise -> launch_histograms_for_blocks -> launch_hist2_8bit; float features take the fused 2-stat 8-bit kernel",
+   "controls": [
+    "hist_packed_gh",
+    "hist_warp_agg"
+   ],
+   "interaction_groups": [
+    [
+     "hist_packed_gh",
+     "hist_warp_agg"
+    ]
+   ]
   }
  },
  "not_reached": {
   "trees/gbdt-ordered": "pointwise PointHist8 (pointwise_hist2_one_byte_8bit.mojo), not the greedy fused kernel",
-  "trees/gbdt-categorical": "same greedy kernels for float features (reach as depthwise/symmetric by policy); CTR/ordered parts not touched",
   "use_pointwise_searcher": "PointHist8 already defers runs; not touched"
  },
  "removed": []

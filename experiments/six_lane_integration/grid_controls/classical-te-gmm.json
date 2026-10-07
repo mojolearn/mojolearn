@@ -75,14 +75,7 @@
    "controls": [
     "gmm_cov_sym"
    ],
-   "interaction_groups": [
-    [
-     "gmm_cov_sym",
-     "kmeans_assign",
-     "c37_fused_accumulate",
-     "c37_fused_rows"
-    ]
-   ],
+   "interaction_groups": [],
    "notes": "kmeans_assign / c37 reach only the kmeans init of this fit; the brief asks for the cross and it is declared; the M-step cover itself shares no kernel with them"
   }
  },

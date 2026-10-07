@@ -12,15 +12,6 @@
     "1": [
      "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1"
     ],
-    "2": [
-     "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=2"
-    ],
-    "4": [
-     "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=4"
-    ],
-    "16": [
-     "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=16"
-    ],
     "32": [
      "MOJOLEARN_IDN_KMEANS_CONV_CHUNK=32"
     ]
@@ -102,32 +93,6 @@
   "classical:kmeans": {
    "binding": "_mojolearn (host twin _mojolearn_core_host)",
    "route": "fit: cluster.estimator kmeans_fit -> Lloyd loop (kmeans.mojo:1692 chunked device convergence)",
-   "controls": [
-    "kmeans_conv_chunk"
-   ],
-   "interaction_groups": [
-    [
-     "kmeans_conv_chunk",
-     "c37_fused_accumulate"
-    ]
-   ]
-  },
-  "more:gmm": {
-   "binding": "_mojolearn_mixture",
-   "route": "fit: mixture/estimator.mojo:80 kmeans init -> cluster.estimator.kmeans_fit -> Lloyd loop (kmeans.mojo:1692)",
-   "controls": [
-    "kmeans_conv_chunk"
-   ],
-   "interaction_groups": [
-    [
-     "kmeans_conv_chunk",
-     "c37_fused_accumulate"
-    ]
-   ]
-  },
-  "more:ivf": {
-   "binding": "_mojolearn_ivf",
-   "route": "build: coarse kmeans (cluster kmeans_fit) -> Lloyd loop (kmeans.mojo:1692)",
    "controls": [
     "kmeans_conv_chunk"
    ],

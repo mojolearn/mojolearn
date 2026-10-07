@@ -4034,7 +4034,8 @@ def gemm_split_cells_cap() -> Int:
 #: 0.24 ms a layer, o_proj 0.40 -> 0.09, the MLP 1.22 -> 0.70 at 1024;
 #: every digest and loss equal. So the AMD column's default is 1024 (the
 #: 4096^3 gemm cell, 1,024 tiles of 128 x 128, is at the boundary and
-#: keeps its tile). NVIDIA and Apple keep 0 (off).
+#: keeps its tile). NVIDIA uses 192 (lane/neural-pass62, below); Apple keeps
+#: 0 (off).
 comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = (
     1024 if TARGET_COLUMN == COLUMN_AMD else
     192 if TARGET_COLUMN == COLUMN_NVIDIA else 0
@@ -4058,28 +4059,33 @@ comptime GEMM_TILE_SHORT_K_DEFAULT = 512 if TARGET_COLUMN == COLUMN_NVIDIA else 
 #: the smaller tile; AMD keeps every k. MOJOLEARN_GEMM_TILE_MIN_K overrides.
 comptime GEMM_TILE_MIN_K_DEFAULT = 4096 if TARGET_COLUMN == COLUMN_NVIDIA else 0
 
-#: lane/neural-small (2026-10-07), IDENTICAL grid int sweeps
-#: `gemm_tile_min_blocks` and `gemm_tile_short_k`. The two runtime env knobs
-#: above cannot be varied by the define-only grid, so each also reads a
-#: build define. Absent = main (the env var when set, else the column
-#: default). Defined, the define wins over the env var.
-#:   -D MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=<n>, legal set {0, 128, 192, 256,
-#:      384, 512, 1024} (0 = no block floor). Cost reasoning: the floor
-#:      trades tile width (operand reuse per block) for SM/CU fill; it was
-#:      measured once per vendor (AMD 1024, NVIDIA 192), and the right
-#:      value scales with the SM/CU count and the output's tile count, so
-#:      the sweep covers 1x to 7x the 142/304 unit counts.
-#:   -D MOJOLEARN_IDN_GEMM_TILE_SHORT_K=<k>, legal set {0, 512, 1024} (0 =
-#:      no short-chain rule). Cost reasoning: a narrower tile pays its lost
-#:      reuse once per k step, so the step-down only pays below some k; the
-#:      sweep moves that bound by a factor of two either side.
+#: lane/neural-small (2026-10-07), IDENTICAL grid int sweep
+#: `gemm_tile_min_blocks`. The runtime env knob above cannot be varied by
+#: the define-only grid, so it also reads a build define. Absent = main (the
+#: env var when set, else the column default). Defined, the define wins over
+#: the env var.
+#:   -D MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=<n>, legal set {192, 512, 1024}.
+#:      Cost reasoning: the floor trades tile width (operand reuse per block)
+#:      for SM/CU fill; it was measured once per vendor (AMD 1024, NVIDIA
+#:      192), and the right value scales with the SM/CU count and the
+#:      output's tile count. lane/grid-prune (2026-10-07) narrowed the set:
+#:      0 is the measured AMD loser above (lm-train-step 101.1 vs 75.0 ms);
+#:      128 keeps 128-wide tiles that pass62 measured slower; 256 and 384
+#:      select no plan that 192 or 512 does not (the step-down is
+#:      128 -> 64 -> 32 below the floor).
+#: The define-ized short-chain bound (MOJOLEARN_IDN_GEMM_TILE_SHORT_K) was
+#: deleted by lane/grid-prune (2026-10-07): arm 512 is the NVIDIA column
+#: default, arm 0 is the pre-pass62 state and arm 1024 the long-k step-down
+#: pass62 measured slower, and every arm is inert on AMD (min k 0). The env
+#: knob MOJOLEARN_GEMM_TILE_SHORT_K and the column default stay.
+#: Recoverable at ab554bb4a. The define is refused in
+#: core/six_lane_experiment_guards.mojo.
 #: No bits: every tuned plan computes the same leaves and folds
 #: (`check_device_is_launch_invariant`); execution plan only. These knobs
 #: are read by every `choose_gemm_plan_tiles` caller in a build (classical
 #: GEMM users included), so a grid build carrying them must not be shared
 #: with classical workloads.
 comptime IDN_GEMM_TILE_MIN_BLOCKS = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS", -1]()
-comptime IDN_GEMM_TILE_SHORT_K = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_SHORT_K", -1]()
 
 
 struct _TileMinK(Defaultable, Movable):
@@ -4136,14 +4142,7 @@ comptime GEMM_TILE_SHORT_K = _Global[StorageType=_TileShortK, name=_TILE_SHORT_K
 def gemm_tile_short_k() -> Int:
     """The largest k the SHORT-chain step-down applies to (0 = none):
     MOJOLEARN_GEMM_TILE_SHORT_K when set (read once per process), else
-    GEMM_TILE_SHORT_K_DEFAULT. `-D MOJOLEARN_IDN_GEMM_TILE_SHORT_K` wins
-    over both when defined."""
-    comptime if IDN_GEMM_TILE_SHORT_K >= 0:
-        comptime assert (
-            IDN_GEMM_TILE_SHORT_K == 0 or IDN_GEMM_TILE_SHORT_K == 512
-            or IDN_GEMM_TILE_SHORT_K == 1024
-        ), "MOJOLEARN_IDN_GEMM_TILE_SHORT_K legal set is 0, 512, 1024"
-        return IDN_GEMM_TILE_SHORT_K
+    GEMM_TILE_SHORT_K_DEFAULT."""
     try:
         var p = GEMM_TILE_SHORT_K.get_or_create_ptr()
         if p[].k < 0:
@@ -4165,11 +4164,9 @@ def gemm_tile_min_blocks() -> Int:
     `-D MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS` wins over both when defined."""
     comptime if IDN_GEMM_TILE_MIN_BLOCKS >= 0:
         comptime assert (
-            IDN_GEMM_TILE_MIN_BLOCKS == 0 or IDN_GEMM_TILE_MIN_BLOCKS == 128
-            or IDN_GEMM_TILE_MIN_BLOCKS == 192 or IDN_GEMM_TILE_MIN_BLOCKS == 256
-            or IDN_GEMM_TILE_MIN_BLOCKS == 384 or IDN_GEMM_TILE_MIN_BLOCKS == 512
+            IDN_GEMM_TILE_MIN_BLOCKS == 192 or IDN_GEMM_TILE_MIN_BLOCKS == 512
             or IDN_GEMM_TILE_MIN_BLOCKS == 1024
-        ), "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set is 0, 128, 192, 256, 384, 512, 1024"
+        ), "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set is 192, 512, 1024"
         return IDN_GEMM_TILE_MIN_BLOCKS
     try:
         var p = GEMM_TILE_MIN_BLOCKS.get_or_create_ptr()
@@ -6526,9 +6523,9 @@ comptime GEMM_KSPLIT_KS = 16
 #:   -D MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 / _8   the slack below (4 shipped)
 #:   -D MOJOLEARN_IDN_GEMM_GROUP_S_HALF / _X2   the SHIPPED row S halved /
 #:        doubled (`GEMM_KSPLIT_DEFAULT_S`; the trial row is untouched)
-#:   -D MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY     the group rule counts tiles
-#:        of the body that runs (`GEMM_KPACK_RPT x GEMM_KPACK_CPT`, 128x64
-#:        on NVIDIA) instead of 128x128 tiles, where the kernel body row is 1
+#: (The body-tiles arm, MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY, was deleted by
+#: lane/grid-prune 2026-10-07: OVN N01 on the L40S read it as noise, median
+#: 1.005 over 72 cells with 46% faster; recoverable at ab554bb4a.)
 #: The rule's hand-count checks (`check_kpack_rule_hand_counts` and the
 #: section 4 counts) hold the shipped numbers, so they are expected to
 #: refuse under an arm: the arms are for timing against each other.
@@ -6540,6 +6537,9 @@ comptime GEMM_KSPLIT_KS = 16
 # All 180 NVIDIA and 108 AMD pairs matched bits. These are separate arms:
 # body-tiles + slack2 together was NOT tested; their speedups do not add.
 # slack8 did not win: NVIDIA 1.048267 (4.83% slower), AMD 0.999053.
+# body-tiles: that 0.78 is an RTX 4090 synthetic single-sample screen (18 cases,
+# 0.42..1.10); the later L40S N01 screen (72 cells) read 1.005, so lane/grid-prune
+# deleted the arm (2026-10-07).
 # Keep unsuccessful arms available explicitly so the experiment is reproducible.
 # Initial public-harness attempt was incomplete: AMD baseline GEMM and
 # transformer succeeded; MLP timing succeeded but its driver emitted hash=null,
@@ -6574,7 +6574,7 @@ comptime GEMM_KSPLIT_KS = 16
 # Exact shapes/old retained baseline origins are recorded alongside results:
 # experiments/identical_speed/results/20261005/nvidia-integrated-resume/.
 # Final capture bdd685793e39f274a99bbf7319fbd1263cb9169908645eeb39d40a73403af41b.
-# EXPERIMENTS: SLACK_2, SLACK_8 and TILES_BODY remain default OFF. A normal
+# EXPERIMENTS: SLACK_2 and SLACK_8 remain default OFF (TILES_BODY deleted, above). A normal
 # build keeps slack 4 and disables the body-tile override. NEVER TESTED by
 # this campaign: combined defines, including ONE_PAGE/KPACK_RPT4 combinations.
 # NOT PERFORMANCE-QUALIFIED: identity checks alone never enable these flags.
@@ -6597,8 +6597,6 @@ comptime GEMM_KSPLIT_SLACK = (
         8 if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"]()) else 4
     )
 )
-# I01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-comptime IDN_GEMM_GROUP_TILES_BODY = _IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY"]()
 #: `S` the `ksplit` TRIAL arm reads (kernel matrix SCHEDULING row, 2591;
 #: 2595 moved it to `lib_gemm_block_parallelism_trial_for`, which is the
 #: shipped row where that row is above 0 and the column's reading elsewhere,
@@ -7320,15 +7318,10 @@ def _shipped_body_kpack_hg[
             else:
                 # `-D MOJOLEARN_GEMM_NV_FS4_OFF` keeps the profile-wide stack.
                 comptime if not is_defined["MOJOLEARN_GEMM_NV_FS4_OFF"]():
-                    # N02 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-                    # N02 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
-                    # FS2 requires explicit define and <=2 logical fold leaves on NVIDIA; incumbent FS4 retained.
-                    comptime if is_defined["MOJOLEARN_IDN_GEMM_FS2"]():
-                        if gemm_kpack_fold_slots_for(
-                            contract_partition(k)[1], gemm_default_ksplit_leaves(m,n,k)
-                        ) == 2:
-                            _kpack_hg_run_with_ws[2,SAB](ctx,c,a,b,ws,m,n,k,op)
-                            return
+                    # N02 (MOJOLEARN_IDN_GEMM_FS2, a 2-level stack for <= 2
+                    # leaves) was deleted by lane/grid-prune (2026-10-07):
+                    # OVN N02 on NVIDIA read FS2 vs FS4 as noise (medians
+                    # 0.996 / 0.995). Recoverable at ab554bb4a.
                     if gemm_kpack_fold_slots_for(
                         contract_partition(k)[1], gemm_default_ksplit_leaves(m, n, k)
                     ) == 4:
@@ -7423,18 +7416,11 @@ def identical_gemm_shipped_into(
             if len(ws) >= m * n * stream_planes:
                 _ni02_stream_into(ctx, c, a, b, ws, m, n, k, op)
                 return
-    # A05 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
-    # A05 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
-    # Compact tile requires MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE; shipped tile retained.
-    # A05: halve per-thread row accumulators to shorten register live ranges.
-    # Forced opt-in isolates resource changes; no measured default or size rule.
-    comptime if _NI_GEMM_ENABLED and is_defined["MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE"]():
-        _kpack_run[
-            TUNED_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS,
-            GEMM_KPACK_FS, False, GEMM_KPACK_PAD, GEMM_KPACK_ALIGN,
-            0, True, True,
-        ](ctx,c,a,b,m,n,k,op,0)
-        return
+    # A05 (MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE, halved per-thread row
+    # accumulators) was deleted by lane/grid-prune (2026-10-07): OVN A05 was
+    # slower on both vendors (AMD 4096x1024x1024 0.392 -> 0.639 ms, AMD
+    # 127x130x4097 0.064 -> 1.83 ms; NVIDIA slower in nearly every fixture).
+    # Recoverable at ab554bb4a.
     comptime if GEMM_BODY_KPACK_HG:
         _shipped_body_kpack_hg[False](ctx, c, a, b, ws, m, n, k, op)
         return
@@ -7742,11 +7728,6 @@ def gemm_step_ksplit_rule(m: Int, n: Int, k: Int, s: Int, read_s: Bool) -> Int:
         return gl
     var tt = _ksplit_tiles(m, n)
     var tiles = tt[0] * tt[1]
-    comptime if IDN_GEMM_GROUP_TILES_BODY and GEMM_BODY_KPACK_HG:
-        # lane/fam2-lm candidate arm: the blocks the packed body issues.
-        comptime BODY_BM = GEMM_KPACK_RPT * (TUNED_TPB // TUNED_TC)
-        comptime BODY_BN = GEMM_KPACK_CPT * TUNED_TC
-        tiles = ((m + BODY_BM - 1) // BODY_BM) * ((n + BODY_BN - 1) // BODY_BN)
     if tiles >= s:
         return 0
     while tiles * ((p_count + 2 * gl - 1) // (2 * gl)) >= GEMM_KSPLIT_SLACK * s:
@@ -8190,12 +8171,6 @@ def gemm_kpack_fold_slots_for(p_count: Int, group_leaves: Int) -> Int:
     var bound = p_count
     if group_leaves > 0 and group_leaves < bound:
         bound = group_leaves
-    # N02: two levels are sufficient for at most two logical leaves:
-    # the second push carries into level1. This proof depends on logical
-    # contraction/group bounds only and holds across neighboring outputs.
-    comptime if is_defined["MOJOLEARN_IDN_GEMM_FS2"]():
-        if bound <= 2:
-            return 2
     if bound <= 8:
         return 4
     if bound <= 128:
@@ -8441,7 +8416,7 @@ def identical_gemm_kpack_kernel[
     comptime assert (
         FS >= GEMM_FOLD_LEVELS
         or is_defined["MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL"]()
-        or (TARGET_COLUMN == COLUMN_NVIDIA and (FS == 4 or FS == 8 or (FS == 2 and is_defined["MOJOLEARN_IDN_GEMM_FS2"]())))
+        or (TARGET_COLUMN == COLUMN_NVIDIA and (FS == 4 or FS == 8))
     ), (
         "identical_gemm_kpack_kernel: the local fold stack must cover the"
         " profile cap CONTRACT_MAX_LEAVES (smaller stacks are trial-only and"

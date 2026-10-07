@@ -33,7 +33,7 @@ from gemm.checks.gemm_identical import (
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_AMD, COLUMN_NVIDIA
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.experiments.neural_tiled_v2 import NI09_TILED_BIAS, neural_bias_gemm
-from x_cnn.neural_col2im import NI14_TILED_COL2IM, neural_col2im_tiled
+from x_cnn.neural_col2im import NI14_TILED_COL2IM, NI14_COL2IM, NI14_COL2IM_BOUNDED, neural_col2im_tiled
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
@@ -81,7 +81,7 @@ comptime TPB = 256
 comptime _NI_CNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime NI11_DIRECT_TAPS64 = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI11_DIRECT_CONV_TAPS64"]()
 comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI12_IMPLICIT_CONV"]()
-comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI14_BOUNDED_COL2IM"]()
+comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and NI14_COL2IM == NI14_COL2IM_BOUNDED  # arm 1 of MOJOLEARN_NI14_COL2IM (x_cnn/neural_col2im.mojo)
 comptime NI15_BIAS_NO_ONES = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"]()
 comptime NI16_CONV_RELU_FUSED = _NI_CNN_ENABLED and IDN_CNN_CONV_RELU_ARM == 2  # arm 2 of MOJOLEARN_IDN_CNN_CONV_RELU (x_cnn/ops.mojo)
 comptime NI18_FUSED_EPOCH_GATHER = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"]()

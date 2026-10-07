@@ -15,7 +15,9 @@ absent define is the incumbent IDENTICAL GEMM. Arms:
    3  stream_all     NI02: bounded partial planes in gemm_identical, EVERY
                       GEMM caller (gemm lane, classical, neural)
    4  stream_exact   NN02 + NN11: stream with exact fold-state slots
-   8  async          NN08: NVIDIA async operand pipeline (sync elsewhere)
+   (8 async, NN08, was deleted by lane/grid-prune 2026-10-07: OVN N03 measured
+      the NVIDIA async pipeline 2.2x and 4.2x slower than its synchronous
+      control; recoverable at main ab554bb4a. The guards refuse 8.)
    9  pages          NN09: staging depth/pad/swizzle (STAGE_* parameters)
   10  cost           NN10: cost-based plan (needs IDN_NEURAL_FILL_BLOCKS)
   11  fold_exact     NN11: standalone exact-capacity fold storage
@@ -47,7 +49,6 @@ comptime SCHED_GEOMETRY = 1
 comptime SCHED_STREAM = 2
 comptime SCHED_STREAM_ALL = 3
 comptime SCHED_STREAM_EXACT = 4
-comptime SCHED_ASYNC = 8
 comptime SCHED_PAGES = 9
 comptime SCHED_COST = 10
 comptime SCHED_FOLD_EXACT = 11

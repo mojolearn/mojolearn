@@ -21,12 +21,6 @@
     "stream_all": [
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3"
     ],
-    "stream_exact": [
-     "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=4"
-    ],
-    "async": [
-     "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8"
-    ],
     "pages": [
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=9"
     ],
@@ -38,9 +32,6 @@
     ],
     "threadmap": [
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=15"
-    ],
-    "pages_threadmap": [
-     "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=24"
     ]
    },
    "default": "off",
@@ -86,7 +77,16 @@
      "as pages"
     ]
    },
-   "note": "Arms are mutually exclusive by construction. stream_all (NI02) moves every GEMM caller (gemm lane, classical, neural); the other arms only the neural dispatch. bits_change: stream/stream_all/stream_exact/fold_exact/pages/threadmap/cost/async run the selected neural profile (v1 contract leaf unless the leaf control is set); geometry reuses incumbent geometries. ID check required per arm."
+   "note": "Arms are mutually exclusive by construction. stream_all (NI02) moves every GEMM caller (gemm lane, classical, neural); the other arms only the neural dispatch. bits_change: stream/stream_all/stream_exact/fold_exact/pages/threadmap/cost/async run the selected neural profile (v1 contract leaf unless the leaf control is set); geometry reuses incumbent geometries. ID check required per arm.",
+   "phase2_combinations": {
+    "stream_exact": [
+     "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=4"
+    ],
+    "pages_threadmap": [
+     "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=24"
+    ],
+    "reason": "pre-built combinations of other arms of the same define (NN02+NN11, NN09+NN15); phase 2 only if both parents win on NVIDIA and AMD"
+   }
   },
   "neural_gemm_schedule_roles": {
    "define": "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES",
@@ -128,7 +128,9 @@
    ],
    "bits_change": false,
    "status": "split_from:I.N.NN01",
-   "note": "Caller-class scope of neural_gemm_schedule (call-site role tags, never a matrix size): projection = forward and dInput of non-head layers; head = LM head forward and dInput (byte_lm, model pool, offload, samba head loss, transformer LM generation); wgrad = every dWeight/dBias. Only meaningful with a schedule arm other than stream_all; guard refuses a mask with stream_all."
+   "note": "Caller-class scope of neural_gemm_schedule (call-site role tags, never a matrix size): projection = forward and dInput of non-head layers; head = LM head forward and dInput (byte_lm, model pool, offload, samba head loss, transformer LM generation); wgrad = every dWeight/dBias. Only meaningful with a schedule arm other than stream_all; guard refuses a mask with stream_all.",
+   "grid": "exclude",
+   "prune_note": "DEFER phase 2: scope refinement of a schedule arm that has not won yet. When re-enabled use per-lane arms: lm-forward {projection, head}, mlp {projection, wgrad}, train lanes {projection, head, wgrad}"
   },
   "gemm_leaf": {
    "define": "MOJOLEARN_IDN_GEMM_LEAF",
@@ -201,9 +203,6 @@
     ],
     "cnn": [
      "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=2"
-    ],
-    "all": [
-     "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=3"
     ]
    },
    "default": "off",
@@ -294,7 +293,8 @@
     "_mojolearn_mamba"
    ],
    "bits_change": false,
-   "status": "kept"
+   "status": "kept",
+   "note": "NN16 is only read with neural_gemm_schedule on (stream arms, neural_streaming.mojo:33,216); standalone it reaches the lm-forward head workspace clear (byte_lm_logits.mojo:169)."
   },
   "attn_head_share": {
    "define": "MOJOLEARN_IDN_ATTN_HEAD_SHARE",
@@ -424,9 +424,6 @@
     ],
     "row_block": [
      "MOJOLEARN_IDN_NORM=3"
-    ],
-    "lanes8_split_scale": [
-     "MOJOLEARN_IDN_NORM=4"
     ]
    },
    "default": "off",
@@ -448,7 +445,13 @@
     "I.N.NN25",
     "I.N.NI25"
    ],
-   "note": "lanes8 arms change bits (host oracle and every device column); split_scale and row_block are schedules over the v1 fold (no bit change). row_block does not implement lanes8, hence no lanes8_row_block arm."
+   "note": "lanes8 arms change bits (host oracle and every device column); split_scale and row_block are schedules over the v1 fold (no bit change). row_block does not implement lanes8, hence no lanes8_row_block arm.",
+   "phase2_combinations": {
+    "lanes8_split_scale": [
+     "MOJOLEARN_IDN_NORM=4"
+    ],
+    "reason": "pre-built combination of lanes8 and split_scale; phase 2 only if both win"
+   }
   },
   "rope": {
    "define": "MOJOLEARN_IDN_ROPE",
@@ -553,7 +556,9 @@
    ],
    "bits_change": false,
    "status": "kept",
-   "note": "In scope, not in this lane's merge list; unchanged."
+   "note": "In scope, not in this lane's merge list; unchanged.",
+   "grid": "exclude",
+   "prune_note": "DROP_REDUNDANT: only gemm_identical.GemmWorkspace.run reads it (gemm_identical.mojo:10107); the gemm lane takes a session lease (gemm/host_entry.mojo:162-167), so it is unreachable on gemm:gemm"
   },
   "gemm_training_workspace": {
    "define": "MOJOLEARN_NI01_TRAINING_WORKSPACE",
@@ -602,30 +607,6 @@
    "status": "kept",
    "note": "In scope, not in this lane's merge list; unchanged."
   },
-  "gemm_compact_live_tile": {
-   "define": "MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gemm/checks/gemm_identical.mojo:7375"
-   ],
-   "binding": [
-    "_mojolearn_byte_lm",
-    "_mojolearn_transformer",
-    "_mojolearn_training",
-    "_mojolearn_mamba",
-    "_mojolearn_linalg"
-   ],
-   "bits_change": false,
-   "status": "kept",
-   "note": "In scope, not in this lane's merge list; unchanged."
-  },
   "grouped_projections_v2": {
    "define": "MOJOLEARN_NI07_GROUPED_PROJECTIONS",
    "kind": "switch",
@@ -651,7 +632,7 @@
    "note": "Read in llama_attention_forward (modeling_llama.mojo:4836), the route of lm-forward, lm-train-step, transformer-forward and samba-*: replaces the q/k/v llama_proj calls (they skip gemm/neural_dispatch). Declared for those lanes in neural-small.json, crossed with neural_gemm_pair/neural_gemm_schedule."
   },
   "gemm_group_slack": {
-   "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 / _8 / MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY",
+   "define": "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 / _8",
    "kind": "switch",
    "arms": {
     "off": [],
@@ -660,9 +641,6 @@
     ],
     "slack8": [
      "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8=1"
-    ],
-    "tiles_body": [
-     "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY=1"
     ]
    },
    "default": "off",
@@ -678,7 +656,7 @@
    ],
    "bits_change": false,
    "status": "kept",
-   "note": "NI03; still separate defines (owed: one int sweep). Not in this lane's merge list."
+   "note": "NI03; still separate defines (owed: one int sweep). The tiles_body arm (MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY) was deleted by lane/grid-prune 2026-10-07 (OVN N01 noise)."
   },
   "legacy_apple_plan64": {
    "define": "MOJOLEARN_LEGACY_SHAPE_APPLE_PLAN64",
@@ -821,13 +799,11 @@
      "attn_stash"
     ],
     [
-     "norm"
-    ],
-    [
      "rope",
      "train_no_decode_cache"
     ]
-   ]
+   ],
+   "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=stream_all neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=2 gemm_split_min_leaves=3 reach this lane."
   },
   "neural:lm-forward": {
    "binding": "_mojolearn_byte_lm",
@@ -841,7 +817,8 @@
     "attn_softmax",
     "attn_scale_mask",
     "norm",
-    "rope"
+    "rope",
+    "neural_gemm_zero_tail"
    ],
    "interaction_groups": [
     [
@@ -853,14 +830,9 @@
     [
      "attn_softmax",
      "attn_scale_mask"
-    ],
-    [
-     "norm"
-    ],
-    [
-     "rope"
     ]
-   ]
+   ],
+   "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap attn_tile_order=asc gemm_split_min_leaves=3 reach this lane."
   },
   "neural:transformer-forward": {
    "binding": "_mojolearn_transformer",
@@ -885,14 +857,9 @@
     [
      "attn_softmax",
      "attn_scale_mask"
-    ],
-    [
-     "norm"
-    ],
-    [
-     "rope"
     ]
-   ]
+   ],
+   "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap attn_tile_order=asc gemm_split_min_leaves=3 reach this lane."
   },
   "neural:samba-train-step": {
    "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
@@ -918,14 +885,9 @@
     [
      "attn_softmax",
      "attn_stash"
-    ],
-    [
-     "norm"
-    ],
-    [
-     "rope"
     ]
-   ]
+   ],
+   "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=1 gemm_split_min_leaves=3 gemm_split_min_leaves=2 reach this lane."
   },
   "neural:mlp-train-step": {
    "binding": "_mojolearn_training",
@@ -945,7 +907,8 @@
      "neural_gemm_chains",
      "neural_gemm_epilogue"
     ]
-   ]
+   ],
+   "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=1 reach this lane."
   },
   "gemm:gemm": {
    "binding": "_mojolearn_linalg",
@@ -954,7 +917,6 @@
     "gemm_contract_leaf",
     "neural_gemm_schedule",
     "gemm_one_page",
-    "gemm_compact_live_tile",
     "gemm_group_slack",
     "gemm_global_workspace",
     "legacy_apple_plan64",
@@ -966,7 +928,6 @@
      "gemm_contract_leaf",
      "neural_gemm_schedule",
      "gemm_one_page",
-     "gemm_compact_live_tile",
      "gemm_group_slack",
      "gemm_global_workspace"
     ]
@@ -1102,6 +1063,17 @@
   {
    "define": "MOJOLEARN_NN28_DEAD_TRAINING_CACHE",
    "reason": "merged into train_no_decode_cache; the old define is refused by core/six_lane_experiment_guards.mojo"
+  },
+  {
+   "define": "MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE",
+   "control": "gemm_compact_live_tile",
+   "reason": "DELETED by lane/grid-prune 2026-10-07: OVN A05 slower on NVIDIA and AMD. Recoverable at main ab554bb4a."
+  },
+  {
+   "define": "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8",
+   "control": "neural_gemm_schedule",
+   "arm": "async",
+   "reason": "DELETED by lane/grid-prune 2026-10-07: OVN N03 NVIDIA async pipeline 2.2x/4.2x slower than its sync control; guards refuse arm 8. Recoverable at main ab554bb4a."
   }
  ],
  "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."

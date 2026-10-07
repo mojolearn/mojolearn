@@ -12,7 +12,6 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_IDN_NEURAL_NN12"]() and is_defined["MOJOLEARN_NI01_TRAINING_WORKSPACE"]()), "incompatible integrated strategies: MOJOLEARN_IDN_NEURAL_NN12 / MOJOLEARN_NI01_TRAINING_WORKSPACE"
     comptime assert not (is_defined["MOJOLEARN_NN48_CSR_TILES"]() and is_defined["MOJOLEARN_NI55_GRAPH_FEATURE4"]()), "incompatible integrated strategies: MOJOLEARN_NN48_CSR_TILES / MOJOLEARN_NI55_GRAPH_FEATURE4"
     comptime assert not (is_defined["MOJOLEARN_NI59_DROPOUT_CHANNEL"]() and is_defined["MOJOLEARN_NI60_DROPOUT_APPLY4"]()), "incompatible integrated strategies: MOJOLEARN_NI59_DROPOUT_CHANNEL / MOJOLEARN_NI60_DROPOUT_APPLY4"
-    comptime assert not (is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]() and is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]()), "incompatible integrated strategies: MOJOLEARN_NN34_AFFINE_PREFIX / MOJOLEARN_IDN_M1_STATE_WINDOW"
     comptime assert not (is_defined["MOJOLEARN_NN53_HEAD_CHUNK512"]() and is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()), "incompatible integrated strategies: MOJOLEARN_NN53_HEAD_CHUNK512 / MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"
     comptime assert not (is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"]() and is_defined["MOJOLEARN_AFT_P02"]()), "incompatible integrated strategies: MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF / MOJOLEARN_AFT_P02"
     comptime assert not (is_defined["MOJOLEARN_AFT_P07"]() and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()), "incompatible integrated strategies: MOJOLEARN_AFT_P07 / MOJOLEARN_SHAP_FAST_ROW_PAIR"
@@ -31,6 +30,9 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1"]() or is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2"]() or is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_4"]() or is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_16"]() or is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_32"]()), "retired: use -D MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1|2|4|8|16|32"
     comptime KCC = get_defined_int["MOJOLEARN_IDN_KMEANS_CONV_CHUNK",8]()
     comptime assert KCC == 1 or KCC == 2 or KCC == 4 or KCC == 8 or KCC == 16 or KCC == 32, "invalid MOJOLEARN_IDN_KMEANS_CONV_CHUNK (1|2|4|8|16|32)"
+    # Lane grid-prune (2026-10-07): c06_norms is ONE control with arms {rows2, rows4, small_d}; small_d returns before
+    # norm_rows when d <= 32 (core/row_norms.mojo:220-232), so the pair is never a distinct configuration.
+    comptime assert not (is_defined["MOJOLEARN_CLASSICAL_C06_NORM_ROWS"]() and is_defined["MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"]()), "c06_norms takes one arm: MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2|4 or MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD, not both"
     comptime assert get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 0 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 1024 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 4096, "invalid MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS (1024|4096)"
     comptime assert not is_defined["MOJOLEARN_C58_TEAM64"](), "retired: use -D MOJOLEARN_C58_TEAM_MIB=64|256"
     comptime assert get_defined_int["MOJOLEARN_C58_TEAM_MIB",256]() == 64 or get_defined_int["MOJOLEARN_C58_TEAM_MIB",256]() == 256, "invalid MOJOLEARN_C58_TEAM_MIB (64|256)"
@@ -49,7 +51,7 @@ def _check_configuration() -> Bool:
     # Retired defines are refused so a stale catalog arm cannot build as a
     # silent incumbent.
     comptime S = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE",0]()
-    comptime assert S == 0 or S == 1 or S == 2 or S == 3 or S == 4 or S == 8 or S == 9 or S == 10 or S == 11 or S == 15 or S == 24, "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE arms: 1 geometry, 2 stream, 3 stream_all, 4 stream_exact, 8 async, 9 pages, 10 cost, 11 fold_exact, 15 threadmap, 24 pages_threadmap"
+    comptime assert S == 0 or S == 1 or S == 2 or S == 3 or S == 4 or S == 9 or S == 10 or S == 11 or S == 15 or S == 24, "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE arms: 1 geometry, 2 stream, 3 stream_all, 4 stream_exact, 9 pages, 10 cost, 11 fold_exact, 15 threadmap, 24 pages_threadmap (8 async deleted by lane/grid-prune)"
     comptime R = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES",7]()
     comptime assert R >= 1 and R <= 7, "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES is a mask: 1 projection, 2 head, 4 weight-grad"
     comptime assert S != 3 or R == 7, "schedule 3 (stream_all) is a global GEMM arm; it takes no role mask"
@@ -149,6 +151,26 @@ def _check_configuration() -> Bool:
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM",0]() == 2, "invalid MOJOLEARN_IDN_LM_GROUPED_ADAM arm (legal: 0|1|2)"
     comptime assert get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",0]() == 0 or get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",0]() == 1 or get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",0]() == 2 or get_defined_int["MOJOLEARN_IDN_ACT_RETAIN",0]() == 3, "invalid MOJOLEARN_IDN_ACT_RETAIN arm (legal: 0|1|2|3)"
     comptime assert get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 0 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 1 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 2 or get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH",0]() == 3, "invalid MOJOLEARN_IDN_TRAIN_SCRATCH arm (legal: 0|1|2|3)"
+    # Lane grid-prune (2026-10-07): deleted losers and dead arms (rows in docs/apple-fast/EXPERIMENTS.md
+    # "IDENTICAL grid prune"); recoverable at main ab554bb4a. A stale build line must not run the incumbent silently.
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_TILE_SHORT_K"](), "removed: MOJOLEARN_IDN_GEMM_TILE_SHORT_K (arms equal measured pass62 losers / the NVIDIA default; inert on AMD)"
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_FS2"](), "removed: MOJOLEARN_IDN_GEMM_FS2 (OVN N02 noise vs FS4)"
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE"](), "removed: MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE (OVN A05 slower on NVIDIA and AMD)"
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY"](), "removed: MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY (OVN N01 noise on the L40S)"
+    comptime assert not is_defined["MOJOLEARN_TREES_T09"](), "removed: MOJOLEARN_TREES_T09 (ExtraTrees bootstrap sort: unreachable at bootstrap=False, host sync in fit)"
+    comptime assert not is_defined["MOJOLEARN_TREES_T27"](), "removed: MOJOLEARN_TREES_T27 (alias of MOJOLEARN_2030_FUSED_EST_MOVE; inert on board walks)"
+    comptime assert not is_defined["MOJOLEARN_TREES_C47_GBDT"](), "removed: MOJOLEARN_TREES_C47_GBDT (width cap subsumed by MOJOLEARN_TREES_T17_BATCH)"
+    comptime assert not is_defined["MOJOLEARN_TREES_HIST_REP_BPSM"](), "merged: use -D MOJOLEARN_TREES_HIST_REP_SM=1 (device SMs x 4 blocks); BPSM=4 alone equalled SM=64"
+    comptime assert not (is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]() or is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN"]()), "merged: use -D MOJOLEARN_IDN_M1_SCAN=1 (affine_prefix, NN34) | 2 (state_window, NI38) | 3 (persistent)"
+    comptime M1S = get_defined_int["MOJOLEARN_IDN_M1_SCAN",0]()
+    comptime assert M1S >= 0 and M1S <= 3, "MOJOLEARN_IDN_M1_SCAN arms: 1 affine_prefix, 2 state_window, 3 persistent"
+    comptime assert M1S == 3 or not (is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH"]() or is_defined["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS"]()), "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH/_TOKENS are read only by MOJOLEARN_IDN_M1_SCAN=3 (persistent)"
+    comptime assert not (is_defined["MOJOLEARN_NI14_BOUNDED_COL2IM"]() or is_defined["MOJOLEARN_NI14_TILED_COL2IM"]()), "merged: use -D MOJOLEARN_NI14_COL2IM=1 (bounded) | 2 (tiled)"
+    comptime assert get_defined_int["MOJOLEARN_NI14_COL2IM",0]() >= 0 and get_defined_int["MOJOLEARN_NI14_COL2IM",0]() <= 2, "MOJOLEARN_NI14_COL2IM arms: 1 bounded, 2 tiled"
+    comptime assert not (is_defined["MOJOLEARN_TREES_T19"]() and is_defined["MOJOLEARN_TREES_T21"]()), "MOJOLEARN_TREES_T19 forces use_ridx, which makes MOJOLEARN_TREES_T21 inert (T19+T21 == T19)"
+    comptime assert not (is_defined["MOJOLEARN_TREES_C50_GB_PACKED"]() and is_defined["MOJOLEARN_IDN_GBDT_APPLY_WIDE"]()), "MOJOLEARN_TREES_C50_GB_PACKED returns before MOJOLEARN_IDN_GBDT_APPLY_WIDE (gbdt/resident_model.mojo): the pair == C50"
+    comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
+    comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

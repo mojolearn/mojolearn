@@ -63,7 +63,7 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import T17_BATCH, T18, T19, T19_DEFER, T21, C47_GBDT, C45_GBDT
+from gbdt.trees_identical_switches import T17_BATCH, T18, T19, T19_DEFER, T21, C45_GBDT
 
 from std.sys.info import has_apple_gpu_accelerator
 from std.builtin.sort import sort
@@ -3330,12 +3330,6 @@ def fit_non_symmetric_tree[
                         # slots, and (capacity below the depth bound) the slots the
                         # certain splits still to come may need
                         var lg_limit = LG_EXACT_BATCH_WIDTH
-                        comptime if C47_GBDT:
-                            # A pending leaf retains stat_count*hist_cells floats.
-                            # Bound this queue by 8 MiB of live histograms; this is
-                            # a memory budget, independent of dataset dimensions.
-                            var bytes_per_leaf = max(stat_count * hist_cells_per_leaf * 4, 1)
-                            lg_limit = min(lg_limit, max(1, (8 * 1024 * 1024) // bytes_per_leaf))
                         if max_leaves - len(leaves) < lg_limit:
                             lg_limit = max_leaves - len(leaves)
                         var lg_plan = _lg_exact_plan(

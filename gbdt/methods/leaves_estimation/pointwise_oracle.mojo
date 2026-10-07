@@ -193,10 +193,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 # Logloss estimation path, and A GATE MUST EXERCISE THE CHANGED ARM --
 # DEVIATION 2009's lesson).
 # ====================================================
-# T27: reuse the exact objective body; movement and its consumer share a launch.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-from gbdt.trees_identical_switches import T27
-comptime FUSED_EST_MOVE_2030 = T27 or (
+# The T27 alias (MOJOLEARN_TREES_T27) was deleted by lane/grid-prune
+# (2026-10-07): it only aliased MOJOLEARN_2030_FUSED_EST_MOVE, and the board
+# walks call _launch_shift_abmv directly, never move_to.
+comptime FUSED_EST_MOVE_2030 = (
     is_defined["MOJOLEARN_2030_FUSED_EST_MOVE"]()
     or (
         # APPLE FAST default: M4 taxi 1M symmetric 0.962 alone (hash
