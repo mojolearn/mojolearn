@@ -83,6 +83,9 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 - Keep experiment code, the selectable runner, decisions and retained result summaries in `main`.
   Experimental code may merge after existing compile evidence on one device, with untested targets and measurements
   explicitly marked pending and unproven defaults disabled. Do not rebuild merely to merge already compiled code.
+  Lane agents never compile (owner, 2026-10-07): they write, commit and push code only. The orchestrator merges finished
+  lanes into one integration branch, compiles it once (all switches on and off, NVIDIA and AMD targets, on cheap build
+  boxes), fixes what breaks, and only then merges to main.
   A compile pass on one target is not a claim that every target works.
 - Run selected A/B candidates through the actual full-size measurement harness in IDENTICAL mode on NVIDIA and AMD,
   using one excluded warmup and one scored sample. Reuse verified frozen binaries when numerical source, flags,
