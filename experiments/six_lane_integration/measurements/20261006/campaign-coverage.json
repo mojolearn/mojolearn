@@ -17,7 +17,7 @@
       "routes": [
         "amd-native-gfx942"
       ],
-      "complete_pairs": 102,
+      "complete_pairs": 103,
       "failed_attempts": 1,
       "quality_failed": 10,
       "remaining_scope": "Selected retained-artifact pairs measured; GMM and other missing paired-artifact/recipe scopes remain pending."
@@ -1593,15 +1593,16 @@
         "members": [
           "I.C.C18"
         ],
-        "attempts": 4,
-        "complete_pairs": 2,
+        "attempts": 5,
+        "complete_pairs": 3,
         "quality_failed": 0,
         "status": "RECEIPTS_RETAINED_PENDING_ADMISSION",
         "receipts": [
           "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.json",
           "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/24e8e0542e4f54ab5ad8/attempt-0001/receipt.json",
-          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/55f5904de0bbd6d47f43/attempt-0001/receipt.json",
-          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e6b98819c437ea37d9ee/attempt-0001/receipt.304bb8832cf9a90081f13f44cce223cb6554dcbc3d126d9727f09fd28531e665.json"
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/55f5904de0bbd6d47f43/attempt-0001/receipt.3aabfcf5ad7c7de76eb76c3cd205963f423cbf56b164b114582d9972f27617b0.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e6b98819c437ea37d9ee/attempt-0001/receipt.304bb8832cf9a90081f13f44cce223cb6554dcbc3d126d9727f09fd28531e665.json",
+          "experiments/six_lane_integration/measurements/20261006/receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f62864b0630b9ce03071/attempt-0001/receipt.json"
         ]
       },
       {

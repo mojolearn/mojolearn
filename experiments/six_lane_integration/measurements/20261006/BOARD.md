@@ -10,7 +10,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | T.C13.only | identical | PENDING_ADMISSION, QUALITY_FAILED | 8 |
 | T.C55.only | identical | PENDING_ADMISSION, QUALITY_FAILED | 8 |
 | T.C13.C18 | identical | PENDING_ADMISSION, QUALITY_FAILED | 8 |
-| T.C18.residual-only | identical | IN_PROGRESS, PENDING_ADMISSION | 2 |
+| T.C18.residual-only | identical | IN_PROGRESS, PENDING_ADMISSION | 3 |
 | T.combined.minus-C13 | identical | PENDING_MEASUREMENT | 0 |
 | T.combined.minus-C13-C18 | identical | PENDING_MEASUREMENT | 0 |
 | T.combined.minus-C55 | identical | PENDING_MEASUREMENT | 0 |
@@ -185,7 +185,7 @@ Counts are retained complete A/B pairs, not individually decided experiment swit
 | Vendor / mode | Complete pairs | Original failed attempts | Quality-rejected pairs | Remaining scope |
 |---|---:|---:|---:|---|
 | NVIDIA / IDENTICAL | 115 | 2 | 10 | See exact selection and route receipts. PTX and unrecorded individual/full-workload scopes remain pending. |
-| AMD GPU / IDENTICAL | 102 | 1 | 10 | Selected retained-artifact pairs measured; GMM and other missing paired-artifact/recipe scopes remain pending. |
+| AMD GPU / IDENTICAL | 103 | 1 | 10 | Selected retained-artifact pairs measured; GMM and other missing paired-artifact/recipe scopes remain pending. |
 | Apple / FAST | 86 | 3 | 5 | See unrun scope for additional FAST pairs; earlier array-preservation and quality limitations remain. |
 
 ## Individual experiment coverage
@@ -503,8 +503,9 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 | T.C13.C18 | amd/amd-native-gfx942 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | full_workload | PENDING_ADMISSION | 9.02353 | 8.17719 | — | 1.1035 | PENDING; finite A/B=true/true; r2 A/B=0.32928/0.314569; rmse A/B=0.683385/0.690839 | [toggles](#toggles-0ebe34719111a46e) / [details](#attempt-bdfe971c155a96c7) | [retained receipt](<receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e53fca1a998380458fdf/attempt-0001/receipt.35258611dae4666b3a33b4848adfd23ee8b38269443ea8fd7d5b055e39ce3951.json>) |
 | T.C18.residual-only | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | IN_PROGRESS | — | — | — | — | NOT_ASSESSED; metrics not recorded | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-e09c74c54be07353) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/d3fbad05c2611ab543a7/attempt-0001/receipt.json>) |
 | T.C18.residual-only | amd/amd-native-gfx942 | expanded:enet-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | full_workload | PENDING_ADMISSION | 3.3737 | 3.56479 | — | 0.9464 | PENDING; finite A/B=true/true; r2 A/B=0.909072/0.909072; rmse A/B=4.69041/4.69041 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-33ebc27a72b1ecb3) | [retained receipt](<receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/24e8e0542e4f54ab5ad8/attempt-0001/receipt.json>) |
-| T.C18.residual-only | amd/amd-native-gfx942 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | full_workload | IN_PROGRESS | — | — | — | — | NOT_ASSESSED; metrics not recorded | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-866f91a00730ef66) | [retained receipt](<receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/55f5904de0bbd6d47f43/attempt-0001/receipt.json>) |
+| T.C18.residual-only | amd/amd-native-gfx942 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | full_workload | PENDING_ADMISSION | 8.22604 | 7.95881 | — | 1.0336 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-ad3ae1ebf96476e8) | [retained receipt](<receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/55f5904de0bbd6d47f43/attempt-0001/receipt.3aabfcf5ad7c7de76eb76c3cd205963f423cbf56b164b114582d9972f27617b0.json>) |
 | T.C18.residual-only | amd/amd-native-gfx942 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | full_workload | PENDING_ADMISSION | 8.1338 | 8.35125 | — | 0.9740 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-c0bfddc43ec077d5) | [retained receipt](<receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/e6b98819c437ea37d9ee/attempt-0001/receipt.304bb8832cf9a90081f13f44cce223cb6554dcbc3d126d9727f09fd28531e665.json>) |
+| T.C18.residual-only | amd/amd-native-gfx942 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001 | full_workload | IN_PROGRESS | — | — | — | — | NOT_ASSESSED; metrics not recorded | [toggles](#toggles-f7716cdb7a6248e3) / [details](#attempt-f4756923e8b19451) | [retained receipt](<receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f62864b0630b9ce03071/attempt-0001/receipt.json>) |
 | T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:enet-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.53694 | 7.30433 | — | 0.7580 | PENDING; finite A/B=true/true; r2 A/B=0.321614/0.321614; rmse A/B=0.68728/0.68728 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-cf6699a20196b824) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/047dc5950c1d73fd8b3c/attempt-0001/receipt.e27d9aabd183dac0c416da12891ac3103989a6f654d3dbd40652232a7d1c7a63.json>) |
 | T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 5.55214 | 5.56559 | — | 0.9976 | PENDING; finite A/B=true/true; r2 A/B=0.314569/0.314569; rmse A/B=0.690839/0.690839 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-584a6a32814434a0) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/060dd5184930208ceb52/attempt-0001/receipt.json>) |
 | T.CV.local.de099bccad76 | nvidia/native-sm90 | expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-fb21b80dab493065/attempt-0001 | full_workload | PENDING_ADMISSION | 2.04858 | 8.52406 | — | 0.2403 | PENDING; finite A/B=true/true; r2 A/B=0.909122/0.909122; rmse A/B=4.68913/4.68913 | [toggles](#toggles-5f8e91eb1179e765) / [details](#attempt-363833106ef4062d) | [retained receipt](<receipts/nvidia/continuation-ba71655c1afe31fb-fb21b80dab493065/bf523bdc7b56fd295b5c/attempt-0001/receipt.json>) |
@@ -541,6 +542,7 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 - Per-algorithm scope snapshot is retained inside this continuation manifest under algorithm_scope: 55 audited family entries, 72 current profiles, all_algorithms_exhaustively_queued=false. Missing recipes, unsupported or unqueued controls remain explicit in its rows. Classifier source enumeration counts (480 GaussianNB and 21312 LDA) are audit-only; 384 GaussianNB profiles still await proof review, not completed or admitted measurements.
 - Initial C13/C55 retained-byte audit is retained inside this continuation manifest under retained_scored_byte_audit: all 32 scored vendor/arm executions and their repeated outputs/model states reconstruct to the captured typed hashes; 448 NPY leaves checked, zero issues. This audits saved bytes only and does not rerun models. Complete declared fitted-state and output identity matches for all 16 initial same-arm NVIDIA-native/AMD comparisons; Apple, host and PTX remain absent, so full identity remains incomplete.
 - Initial task-quality failures remain visible on both vendors: C13 LassoCV taxi, C13 ElasticNetCV taxi, C55 GaussianNB taxi, and C55 LDA Istella. Execution completion and matching bits do not override quality failures or authorize default promotion.
+- Saved C13 interaction review is retained inside this continuation manifest under c13_interaction_review, including its content-hashed source snapshot. Recorded task metrics and selected fitted scalars may agree between C13+C18 and C13 in compared scopes; that is not complete-state equivalence or proof C18 is inactive. C18-only coverage and remaining pairs stay pending. Candidate changes and inherited incumbent quality deficits are distinct; no default is promoted.
 - Targeted continuations: 170 additional exact profiles; 5 have receipts. See continuation-coverage.json for members and pending scope, and publication-continuations.json for exact plan/review snapshots and missing inputs. The catalog coverage ledger counts authored catalog IDs only; it does not relabel targeted profile IDs as catalog receipts.
 
 ## Recorded source decisions
@@ -12264,21 +12266,25 @@ Worker exits: [0, 0, 0, 0]
 
 </details>
 
-<a id="attempt-866f91a00730ef66"></a>
+<a id="attempt-ad3ae1ebf96476e8"></a>
 <details>
 <summary>T.C18.residual-only — amd/amd-native-gfx942 — expanded:lasso-cv@dataset=istella/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001</summary>
 
-[Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/55f5904de0bbd6d47f43/attempt-0001/receipt.json>)
+[Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/55f5904de0bbd6d47f43/attempt-0001/receipt.3aabfcf5ad7c7de76eb76c3cd205963f423cbf56b164b114582d9972f27617b0.json>)
 
-Status: IN_PROGRESS. Scope: full_workload. Observed A: — s; B: — s.
+Status: PENDING_ADMISSION. Scope: full_workload. Observed A: 8.226039250999975 s; B: 7.958809482999868 s.
 
-Quality assessment: NOT_ASSESSED. Identity: INCOMPLETE.
+Quality assessment: PENDING. Identity: INCOMPLETE.
 
-Scored quality metrics not recorded for this attempt.
+| Saved quality metric | A: candidate | B: incumbent |
+|---|---:|---:|
+| finite | true | true |
+| r2 | 0.31456879028296647 | 0.31456879028296647 |
+| rmse | 0.6908394981786193 | 0.6908394981786193 |
 
 Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
-Samples (warmup/scored): {"A": {"scored": 0, "warmup": 1}, "B": {"scored": 0, "warmup": 0}}
-Worker exits: [0]
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
+Worker exits: [0, 0, 0, 0]
 [Recorded implementation IDs and 0 source coverage gaps](#coverage-0ba9dd2e24ea6bfd)
 
 </details>
@@ -12323,6 +12329,25 @@ Saved quality gate and opponent comparisons (no reassessment):
 Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
 Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 1, "warmup": 1}}
 Worker exits: [0, 0, 0, 0]
+[Recorded implementation IDs and 0 source coverage gaps](#coverage-0ba9dd2e24ea6bfd)
+
+</details>
+
+<a id="attempt-f4756923e8b19451"></a>
+<details>
+<summary>T.C18.residual-only — amd/amd-native-gfx942 — expanded:lasso-cv@dataset=taxi/continuation-ba71655c1afe31fb-12982f73742e697c/attempt-0001</summary>
+
+[Recorded toggles](#toggles-f7716cdb7a6248e3) · [retained receipt](<receipts/amd/continuation-ba71655c1afe31fb-12982f73742e697c/f62864b0630b9ce03071/attempt-0001/receipt.json>)
+
+Status: IN_PROGRESS. Scope: full_workload. Observed A: — s; B: — s.
+
+Quality assessment: NOT_ASSESSED. Identity: INCOMPLETE.
+
+Scored quality metrics not recorded for this attempt.
+
+Source: 6fe3cfce38fdb3fd25c493071745d0e2dbb402f5
+Samples (warmup/scored): {"A": {"scored": 1, "warmup": 1}, "B": {"scored": 0, "warmup": 1}}
+Worker exits: [0, 0, 0]
 [Recorded implementation IDs and 0 source coverage gaps](#coverage-0ba9dd2e24ea6bfd)
 
 </details>
