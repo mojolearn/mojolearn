@@ -134,10 +134,11 @@ def gs_trust_kernel(l: F32Ptr, adiag: F32Ptr, info: F32Ptr, flag: F32Ptr, d_in: 
     flag.unsafe_store(0, Float32(1) if ok else Float32(0))
 
 
-def gs_forward_step_kernel(l: F32Ptr, b: F32Ptr, j: Int32, n: Int32):
+def gs_forward_step_kernel(l: F32Ptr, b: F32Ptr, z: F32Ptr, j: Int32, n: Int32):
     """Forward solve L z = b, column step j: z_j = b_j / L[j, j] (every
-    thread forms it), rows i > j take b_i -= L[i, j] z_j; thread j stores
-    z_j over b_j."""
+    thread forms the same quotient), rows i > j take b_i -= L[i, j] z_j;
+    thread j stores z_j into `z` (a separate vector, so no thread of the
+    step writes a word another thread of the step reads)."""
     var jj = Int(j)
     var nn = Int(n)
     var i = jj + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -145,14 +146,15 @@ def gs_forward_step_kernel(l: F32Ptr, b: F32Ptr, j: Int32, n: Int32):
         return
     var zj = div0(ftz(b.unsafe_load(jj)), l.unsafe_load(jj * nn + jj))
     if i == jj:
-        b.unsafe_store(jj, zj)
+        z.unsafe_store(jj, zj)
     else:
         b.unsafe_store(i, ftz(identical_mul_add(-ftz(l.unsafe_load(i * nn + jj)), zj, ftz(b.unsafe_load(i)))))
 
 
-def gs_backward_step_kernel(l: F32Ptr, z: F32Ptr, j: Int32, n: Int32):
+def gs_backward_step_kernel(l: F32Ptr, z: F32Ptr, w: F32Ptr, j: Int32, n: Int32):
     """Backward solve L^T w = z, column step j (descending): w_j = z_j /
-    L[j, j], rows i < j take z_i -= L[j, i] w_j; thread j stores w_j."""
+    L[j, j], rows i < j take z_i -= L[j, i] w_j; thread j stores w_j into
+    `w` (reads and writes of the step are disjoint, as above)."""
     var jj = Int(j)
     var nn = Int(n)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -160,7 +162,7 @@ def gs_backward_step_kernel(l: F32Ptr, z: F32Ptr, j: Int32, n: Int32):
         return
     var wj = div0(ftz(z.unsafe_load(jj)), l.unsafe_load(jj * nn + jj))
     if i == jj:
-        z.unsafe_store(jj, wj)
+        w.unsafe_store(jj, wj)
     else:
         z.unsafe_store(i, ftz(identical_mul_add(-ftz(l.unsafe_load(jj * nn + i)), wj, ftz(z.unsafe_load(i)))))
 
@@ -230,6 +232,8 @@ def linear_gram_fit_host(
     var d_a = ctx.enqueue_create_buffer[DType.float32](d * d)
     var d_adiag = ctx.enqueue_create_buffer[DType.float32](d)
     var d_b = ctx.enqueue_create_buffer[DType.float32](d)
+    var d_z = ctx.enqueue_create_buffer[DType.float32](d)
+    var d_w = ctx.enqueue_create_buffer[DType.float32](d)
     var d_s = ctx.enqueue_create_buffer[DType.float32](d)
     var d_info = ctx.enqueue_create_buffer[DType.float32](1)
     var d_flag = ctx.enqueue_create_buffer[DType.float32](1)
@@ -253,15 +257,15 @@ def linear_gram_fit_host(
     if trusted:
         for j in range(d):
             ctx.enqueue_function[gs_forward_step_kernel](
-                _p(d_a), _p(d_b), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
+                _p(d_a), _p(d_b), _p(d_z), Int32(j), Int32(d), grid_dim=_gs_blocks(d - j), block_dim=GS_TPB
             )
         for jj in range(d):
             var j = d - 1 - jj
             ctx.enqueue_function[gs_backward_step_kernel](
-                _p(d_a), _p(d_b), Int32(j), Int32(d), grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB
+                _p(d_a), _p(d_z), _p(d_w), Int32(j), Int32(d), grid_dim=_gs_blocks(j + 1), block_dim=GS_TPB
             )
-        ctx.enqueue_function[gs_unscale_kernel](_p(d_b), _p(d_s), Int32(d), grid_dim=_gs_blocks(d), block_dim=GS_TPB)
-        ctx.enqueue_copy(dst_ptr=coef_ptr, src_buf=d_b)
+        ctx.enqueue_function[gs_unscale_kernel](_p(d_w), _p(d_s), Int32(d), grid_dim=_gs_blocks(d), block_dim=GS_TPB)
+        ctx.enqueue_copy(dst_ptr=coef_ptr, src_buf=d_w)
         ctx.synchronize()
         status = 0
     _ = h_flag^
@@ -274,6 +278,8 @@ def linear_gram_fit_host(
     _ = d_a^
     _ = d_adiag^
     _ = d_b^
+    _ = d_z^
+    _ = d_w^
     _ = d_s^
     _ = d_info^
     _ = d_flag^

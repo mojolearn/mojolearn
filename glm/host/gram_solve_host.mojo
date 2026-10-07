@@ -97,18 +97,21 @@ def host_linear_gram_fit(
             ok = False
     if not ok:
         return 1
-    # forward L z = b (column steps, rows below in order), then L^T w = z
+    # forward L z = b (column steps, rows below in order), then L^T w = z:
+    # the device kernels' statements, z and w in their own vectors
+    var z = List[Float32](length=d, fill=Float32(0.0))
+    var w = List[Float32](length=d, fill=Float32(0.0))
     for j in range(d):
         var zj = div0(ftz(b[j]), a[j * d + j])
         for i in range(j + 1, d):
             b[i] = ftz(identical_mul_add(-ftz(a[i * d + j]), zj, ftz(b[i])))
-        b[j] = zj
+        z[j] = zj
     for jj in range(d):
         var j = d - 1 - jj
-        var wj = div0(ftz(b[j]), a[j * d + j])
+        var wj = div0(ftz(z[j]), a[j * d + j])
         for i in range(j):
-            b[i] = ftz(identical_mul_add(-ftz(a[j * d + i]), wj, ftz(b[i])))
-        b[j] = wj
+            z[i] = ftz(identical_mul_add(-ftz(a[j * d + i]), wj, ftz(z[i])))
+        w[j] = wj
     for i in range(d):
-        coef_ptr.unsafe_store(i, ftz(identical_mul(ftz(sv[i]), ftz(b[i]))))
+        coef_ptr.unsafe_store(i, ftz(identical_mul(ftz(sv[i]), ftz(w[i]))))
     return 0
