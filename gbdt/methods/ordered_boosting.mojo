@@ -312,6 +312,27 @@ def _ord_std_scale_kernel(
     row_count: Int32,
     dst: MutPointer[Float32, MutAnyOrigin],
 ):
+    """Kernel entry; the statements are `_ord_std_scale_body` (shared with
+    the T24 combined kernel: a kernel entry must not be called from another
+    kernel, the offload compile drops its id)."""
+    _ord_std_scale_body(s2, s2_at, has_std, mags, mag_at, count, tiny_bits,
+        mult_bits, random_strength, row_count, dst)
+
+
+@always_inline
+def _ord_std_scale_body(
+    s2: MutPointer[Float32, MutAnyOrigin],
+    s2_at: Int32,
+    has_std: Int32,
+    mags: MutPointer[Float32, MutAnyOrigin],
+    mag_at: Int32,
+    count: Int32,
+    tiny_bits: UInt64,
+    mult_bits: UInt64,
+    random_strength: Float32,
+    row_count: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
     """IDN_ORD_STD_SCALE_DEVICE: `dst[0]` = the score std dev, `dst[1]` =
     the fixed-point scale. One thread; control plane, not compute.
 
@@ -642,6 +663,15 @@ def _ord_std_combine_kernel(
     part: MutPointer[Float32, MutAnyOrigin],
     dst: MutPointer[Float32, MutAnyOrigin],
 ):
+    """Kernel entry; the statements are `_ord_std_combine_body`."""
+    _ord_std_combine_body(part, dst)
+
+
+@always_inline
+def _ord_std_combine_body(
+    part: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
     """ONE block of `REDUCE_LANES_BLOCK`: `_ord_std_and_mags_kernel`'s
     shared tree over the lanes' sums from `_ord_std_lanes_kernel`."""
     var tid = Int(thread_idx.x)
@@ -677,13 +707,13 @@ def _ord_std_combine_scale_kernel(
 ):
     """T24: retain the exact lane combine and portable scalar statements.
 
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    COMPILED (2026-10-07, sm_89 and gfx942) — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     Both stages publish/read the sums on thread zero. No host round trip,
     changed reduction graph, vendor libm or additional pointer alias.
     """
-    _ord_std_combine_kernel(part, sums)
+    _ord_std_combine_body(part, sums)
     barrier()
-    _ord_std_scale_kernel(
+    _ord_std_scale_body(
         sums, Int32(0), Int32(1), sums, Int32(1), count, tiny_bits,
         mult_bits, random_strength, row_count, dst,
     )
