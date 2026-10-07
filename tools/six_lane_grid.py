@@ -1247,7 +1247,7 @@ def render_md(plan):
          '| builds before packing (A + B) | %d |' % s['builds_before_packing'],
          '| builds after packing (A + B) | %d (%d A packs, %d with >1 member; %d B) |' % (s['builds_after_packing'], s['packs'], s['packed_multi_member'], s['b_builds']),
          ] + (extended_totals(s) if ext else []) + [
-         '', 'Cap: %d configs per algorithm per vendor. One excluded warmup + one scored sample per arm. Vendors: NVIDIA (native sm_89, nv box) and AMD (gfx942, amd box); Apple does not vote on IDENTICAL.' % s['cap'], '',
+         '', ('Cap: none (--cap 0).' if s['cap'] == 0 else 'Cap: %d configs per algorithm per vendor.' % s['cap']) + ' One excluded warmup + one scored sample per arm. Vendors: NVIDIA (native sm_89, nv box) and AMD (gfx942, amd box); Apple does not vote on IDENTICAL.', '',
          '## Verdict rule', '']
     for k in ('timing', 'identity', 'quality', 'promotion', 'default_state'):
         L.append('- **' + k + '**: ' + plan['verdict_rule'][k])
