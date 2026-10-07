@@ -4643,7 +4643,7 @@
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
       "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "priority": 1,
      "queued": true,
@@ -4702,7 +4702,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:auto-theta.c58_forecast4=on",
-     "pack": "P243",
+     "pack": "P251",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -5183,7 +5183,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:damped-ets.c58_forecast4=on",
-     "pack": "P243",
+     "pack": "P251",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -5242,7 +5242,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:dynamic-optimized-theta.c58_forecast4=on",
-     "pack": "P243",
+     "pack": "P251",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -5301,7 +5301,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:dynamic-theta.c58_forecast4=on",
-     "pack": "P243",
+     "pack": "P251",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -5423,6 +5423,51 @@
    "configs": [
     {
      "assignment": {
+      "enetcv_score_blocks": "1024"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:enet-cv.enetcv_score_blocks=1024",
+     "pack": "P222",
+     "packed_extra_defines": [
+      "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
+      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+      "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
+      "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1"
+     ],
+     "priority": 1,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_score_blocks": "4096"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:enet-cv.enetcv_score_blocks=4096",
+     "pack": "P223",
+     "packed_extra_defines": [
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
+     ],
+     "priority": 2,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "enetcv_fold_blocks": "16"
      },
      "bindings": [
@@ -5433,14 +5478,11 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_fold_blocks=16",
-     "pack": "P222",
+     "pack": "P224",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
-      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
-      "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1"
+      "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1"
      ],
-     "priority": 1,
+     "priority": 3,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -5457,11 +5499,13 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_fold_blocks=32",
-     "pack": "P223",
+     "pack": "P225",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1"
+      "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
+      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
      ],
-     "priority": 2,
+     "priority": 4,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -5478,12 +5522,12 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.enetcv_fold_blocks=64",
-     "pack": "P224",
+     "pack": "P226",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
-      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1"
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
      ],
-     "priority": 3,
+     "priority": 5,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -5500,9 +5544,12 @@
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.c18_residual_next=on",
-     "pack": "P225",
-     "packed_extra_defines": [],
-     "priority": 4,
+     "pack": "P227",
+     "packed_extra_defines": [
+      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
+     ],
+     "priority": 6,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -5510,41 +5557,148 @@
     {
      "assignment": {
       "c18_residual_next": "on",
-      "enetcv_fold_blocks": "16"
+      "enetcv_fold_blocks": "16",
+      "enetcv_score_blocks": "1024"
      },
      "bindings": [
       "_mojolearn_x_linear"
      ],
      "defines": [
       "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "global_reach": [],
      "id": "G.expanded:enet-cv.all_on",
-     "pack": "P226",
+     "pack": "P228",
      "packed_extra_defines": [],
-     "priority": 5,
+     "priority": 7,
      "queued": true,
      "tier": "all_on",
      "vendor_default_equivalent": []
     },
     {
      "assignment": {
-      "c18_residual_next": "on",
-      "enetcv_fold_blocks": "32"
+      "enetcv_fold_blocks": "16",
+      "enetcv_score_blocks": "1024"
      },
      "bindings": [
       "_mojolearn_x_linear"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32"
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "global_reach": [],
-     "id": "G.expanded:enet-cv.enetcv_fold_blocks=32+c18_residual_next=on",
-     "pack": "P227",
+     "id": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16",
+     "pack": "P229",
      "packed_extra_defines": [],
-     "priority": 6,
+     "priority": 8,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_fold_blocks": "32",
+      "enetcv_score_blocks": "1024"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32",
+     "pack": "P230",
+     "packed_extra_defines": [],
+     "priority": 9,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_fold_blocks": "64",
+      "enetcv_score_blocks": "1024"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64",
+     "pack": "P231",
+     "packed_extra_defines": [],
+     "priority": 10,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_fold_blocks": "16",
+      "enetcv_score_blocks": "4096"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16",
+     "pack": "P232",
+     "packed_extra_defines": [],
+     "priority": 11,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_fold_blocks": "32",
+      "enetcv_score_blocks": "4096"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32",
+     "pack": "P233",
+     "packed_extra_defines": [],
+     "priority": 12,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_fold_blocks": "64",
+      "enetcv_score_blocks": "4096"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64",
+     "pack": "P234",
+     "packed_extra_defines": [],
+     "priority": 13,
      "queued": true,
      "tier": "cross",
      "vendor_default_equivalent": []
@@ -5552,20 +5706,41 @@
     {
      "assignment": {
       "c18_residual_next": "on",
-      "enetcv_fold_blocks": "64"
+      "enetcv_score_blocks": "1024"
      },
      "bindings": [
       "_mojolearn_x_linear"
      ],
      "defines": [
       "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64"
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "global_reach": [],
-     "id": "G.expanded:enet-cv.enetcv_fold_blocks=64+c18_residual_next=on",
-     "pack": "P228",
+     "id": "G.expanded:enet-cv.enetcv_score_blocks=1024+c18_residual_next=on",
+     "pack": "P235",
      "packed_extra_defines": [],
-     "priority": 7,
+     "priority": 14,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "c18_residual_next": "on",
+      "enetcv_score_blocks": "4096"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:enet-cv.enetcv_score_blocks=4096+c18_residual_next=on",
+     "pack": "P236",
+     "packed_extra_defines": [],
+     "priority": 15,
      "queued": true,
      "tier": "cross",
      "vendor_default_equivalent": []
@@ -5573,33 +5748,98 @@
    ],
    "cross_groups": [
     {
-     "duplicates": 1,
+     "duplicates": 0,
+     "members": [
+      "enetcv_score_blocks",
+      "enetcv_fold_blocks"
+     ],
+     "new_configs": 6,
+     "note": null,
+     "product": 12
+    },
+    {
+     "duplicates": 0,
+     "members": [
+      "enetcv_score_blocks",
+      "c18_residual_next"
+     ],
+     "new_configs": 2,
+     "note": null,
+     "product": 6
+    },
+    {
+     "duplicates": 0,
      "members": [
       "enetcv_fold_blocks",
       "c18_residual_next"
      ],
-     "new_configs": 2,
+     "new_configs": 3,
      "note": null,
      "product": 8
     }
    ],
    "declared_controls": [
+    "enetcv_score_blocks",
     "enetcv_fold_blocks",
     "c18_residual_next"
    ],
    "deferred": [],
-   "deferred_groups": [],
+   "deferred_groups": [
+    {
+     "configs": 3,
+     "listed": [
+      {
+       "assignment": {
+        "c18_residual_next": "on",
+        "enetcv_fold_blocks": "16"
+       },
+       "id": "G.expanded:enet-cv.enetcv_fold_blocks=16+c18_residual_next=on"
+      },
+      {
+       "assignment": {
+        "c18_residual_next": "on",
+        "enetcv_fold_blocks": "32"
+       },
+       "id": "G.expanded:enet-cv.enetcv_fold_blocks=32+c18_residual_next=on"
+      },
+      {
+       "assignment": {
+        "c18_residual_next": "on",
+        "enetcv_fold_blocks": "64"
+       },
+       "id": "G.expanded:enet-cv.enetcv_fold_blocks=64+c18_residual_next=on"
+      }
+     ],
+     "listed_truncated": false,
+     "members": [
+      "enetcv_fold_blocks",
+      "c18_residual_next"
+     ],
+     "product": 8,
+     "reason": "group cross (3 configs) does not fit the remaining cap (1); generate after one-at-a-time results"
+    }
+   ],
    "dropped_arms": {},
    "dropped_from_all_on": [],
    "eligible_controls": [
+    "enetcv_score_blocks",
     "enetcv_fold_blocks",
     "c18_residual_next"
    ],
    "excluded": [],
    "files": [
+    "classical-cv-folds",
     "classical-cv"
    ],
    "interaction_groups": [
+    [
+     "enetcv_score_blocks",
+     "enetcv_fold_blocks"
+    ],
+    [
+     "enetcv_score_blocks",
+     "c18_residual_next"
+    ],
     [
      "enetcv_fold_blocks",
      "c18_residual_next"
@@ -5614,7 +5854,8 @@
    ],
    "representative_arms": {
     "c18_residual_next": "on",
-    "enetcv_fold_blocks": "16"
+    "enetcv_fold_blocks": "16",
+    "enetcv_score_blocks": "1024"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [],
@@ -5646,7 +5887,7 @@
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "priority": 1,
      "queued": true,
@@ -5748,7 +5989,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:gaussian-nb.c61_nb=1",
-     "pack": "P231",
+     "pack": "P239",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
@@ -5771,7 +6012,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:gaussian-nb.c61_nb=2",
-     "pack": "P232",
+     "pack": "P240",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4"
@@ -5874,7 +6115,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=6",
-     "pack": "P231",
+     "pack": "P239",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -5897,7 +6138,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=4",
-     "pack": "P232",
+     "pack": "P240",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -5919,7 +6160,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_rows=1024",
-     "pack": "P233",
+     "pack": "P241",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
@@ -5940,7 +6181,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_rows=4096",
-     "pack": "P234",
+     "pack": "P242",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -5961,7 +6202,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.all_on",
-     "pack": "P235",
+     "pack": "P243",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
@@ -5986,7 +6227,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096",
-     "pack": "P236",
+     "pack": "P244",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -6007,7 +6248,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=1024",
-     "pack": "P237",
+     "pack": "P245",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -6028,7 +6269,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096",
-     "pack": "P238",
+     "pack": "P246",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -6096,6 +6337,51 @@
    "configs": [
     {
      "assignment": {
+      "enetcv_score_blocks": "1024"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:lasso-cv.enetcv_score_blocks=1024",
+     "pack": "P222",
+     "packed_extra_defines": [
+      "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
+      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+      "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
+      "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1"
+     ],
+     "priority": 1,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_score_blocks": "4096"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:lasso-cv.enetcv_score_blocks=4096",
+     "pack": "P223",
+     "packed_extra_defines": [
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
+     ],
+     "priority": 2,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "enetcv_fold_blocks": "16"
      },
      "bindings": [
@@ -6106,14 +6392,11 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_fold_blocks=16",
-     "pack": "P222",
+     "pack": "P224",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
-      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
-      "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1"
+      "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1"
      ],
-     "priority": 1,
+     "priority": 3,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -6130,11 +6413,13 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_fold_blocks=32",
-     "pack": "P223",
+     "pack": "P225",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1"
+      "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
+      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
      ],
-     "priority": 2,
+     "priority": 4,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -6151,12 +6436,12 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.enetcv_fold_blocks=64",
-     "pack": "P224",
+     "pack": "P226",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
-      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1"
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
      ],
-     "priority": 3,
+     "priority": 5,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -6173,9 +6458,12 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.c18_residual_next=on",
-     "pack": "P225",
-     "packed_extra_defines": [],
-     "priority": 4,
+     "pack": "P227",
+     "packed_extra_defines": [
+      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
+     ],
+     "priority": 6,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -6183,41 +6471,148 @@
     {
      "assignment": {
       "c18_residual_next": "on",
-      "enetcv_fold_blocks": "16"
+      "enetcv_fold_blocks": "16",
+      "enetcv_score_blocks": "1024"
      },
      "bindings": [
       "_mojolearn_x_linear"
      ],
      "defines": [
       "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "global_reach": [],
      "id": "G.expanded:lasso-cv.all_on",
-     "pack": "P226",
+     "pack": "P228",
      "packed_extra_defines": [],
-     "priority": 5,
+     "priority": 7,
      "queued": true,
      "tier": "all_on",
      "vendor_default_equivalent": []
     },
     {
      "assignment": {
-      "c18_residual_next": "on",
-      "enetcv_fold_blocks": "32"
+      "enetcv_fold_blocks": "16",
+      "enetcv_score_blocks": "1024"
      },
      "bindings": [
       "_mojolearn_x_linear"
      ],
      "defines": [
-      "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32"
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "global_reach": [],
-     "id": "G.expanded:lasso-cv.enetcv_fold_blocks=32+c18_residual_next=on",
-     "pack": "P227",
+     "id": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16",
+     "pack": "P229",
      "packed_extra_defines": [],
-     "priority": 6,
+     "priority": 8,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_fold_blocks": "32",
+      "enetcv_score_blocks": "1024"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32",
+     "pack": "P230",
+     "packed_extra_defines": [],
+     "priority": 9,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_fold_blocks": "64",
+      "enetcv_score_blocks": "1024"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64",
+     "pack": "P231",
+     "packed_extra_defines": [],
+     "priority": 10,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_fold_blocks": "16",
+      "enetcv_score_blocks": "4096"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16",
+     "pack": "P232",
+     "packed_extra_defines": [],
+     "priority": 11,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_fold_blocks": "32",
+      "enetcv_score_blocks": "4096"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32",
+     "pack": "P233",
+     "packed_extra_defines": [],
+     "priority": 12,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "enetcv_fold_blocks": "64",
+      "enetcv_score_blocks": "4096"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64",
+     "pack": "P234",
+     "packed_extra_defines": [],
+     "priority": 13,
      "queued": true,
      "tier": "cross",
      "vendor_default_equivalent": []
@@ -6225,20 +6620,41 @@
     {
      "assignment": {
       "c18_residual_next": "on",
-      "enetcv_fold_blocks": "64"
+      "enetcv_score_blocks": "1024"
      },
      "bindings": [
       "_mojolearn_x_linear"
      ],
      "defines": [
       "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64"
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "global_reach": [],
-     "id": "G.expanded:lasso-cv.enetcv_fold_blocks=64+c18_residual_next=on",
-     "pack": "P228",
+     "id": "G.expanded:lasso-cv.enetcv_score_blocks=1024+c18_residual_next=on",
+     "pack": "P235",
      "packed_extra_defines": [],
-     "priority": 7,
+     "priority": 14,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "c18_residual_next": "on",
+      "enetcv_score_blocks": "4096"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:lasso-cv.enetcv_score_blocks=4096+c18_residual_next=on",
+     "pack": "P236",
+     "packed_extra_defines": [],
+     "priority": 15,
      "queued": true,
      "tier": "cross",
      "vendor_default_equivalent": []
@@ -6246,33 +6662,98 @@
    ],
    "cross_groups": [
     {
-     "duplicates": 1,
+     "duplicates": 0,
+     "members": [
+      "enetcv_score_blocks",
+      "enetcv_fold_blocks"
+     ],
+     "new_configs": 6,
+     "note": null,
+     "product": 12
+    },
+    {
+     "duplicates": 0,
+     "members": [
+      "enetcv_score_blocks",
+      "c18_residual_next"
+     ],
+     "new_configs": 2,
+     "note": null,
+     "product": 6
+    },
+    {
+     "duplicates": 0,
      "members": [
       "enetcv_fold_blocks",
       "c18_residual_next"
      ],
-     "new_configs": 2,
+     "new_configs": 3,
      "note": null,
      "product": 8
     }
    ],
    "declared_controls": [
+    "enetcv_score_blocks",
     "enetcv_fold_blocks",
     "c18_residual_next"
    ],
    "deferred": [],
-   "deferred_groups": [],
+   "deferred_groups": [
+    {
+     "configs": 3,
+     "listed": [
+      {
+       "assignment": {
+        "c18_residual_next": "on",
+        "enetcv_fold_blocks": "16"
+       },
+       "id": "G.expanded:lasso-cv.enetcv_fold_blocks=16+c18_residual_next=on"
+      },
+      {
+       "assignment": {
+        "c18_residual_next": "on",
+        "enetcv_fold_blocks": "32"
+       },
+       "id": "G.expanded:lasso-cv.enetcv_fold_blocks=32+c18_residual_next=on"
+      },
+      {
+       "assignment": {
+        "c18_residual_next": "on",
+        "enetcv_fold_blocks": "64"
+       },
+       "id": "G.expanded:lasso-cv.enetcv_fold_blocks=64+c18_residual_next=on"
+      }
+     ],
+     "listed_truncated": false,
+     "members": [
+      "enetcv_fold_blocks",
+      "c18_residual_next"
+     ],
+     "product": 8,
+     "reason": "group cross (3 configs) does not fit the remaining cap (1); generate after one-at-a-time results"
+    }
+   ],
    "dropped_arms": {},
    "dropped_from_all_on": [],
    "eligible_controls": [
+    "enetcv_score_blocks",
     "enetcv_fold_blocks",
     "c18_residual_next"
    ],
    "excluded": [],
    "files": [
+    "classical-cv-folds",
     "classical-cv"
    ],
    "interaction_groups": [
+    [
+     "enetcv_score_blocks",
+     "enetcv_fold_blocks"
+    ],
+    [
+     "enetcv_score_blocks",
+     "c18_residual_next"
+    ],
     [
      "enetcv_fold_blocks",
      "c18_residual_next"
@@ -6287,7 +6768,8 @@
    ],
    "representative_arms": {
     "c18_residual_next": "on",
-    "enetcv_fold_blocks": "16"
+    "enetcv_fold_blocks": "16",
+    "enetcv_score_blocks": "1024"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [],
@@ -6314,7 +6796,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:lda-clf.c61_da=on",
-     "pack": "P231",
+     "pack": "P239",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
@@ -6443,7 +6925,7 @@
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
       "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "priority": 1,
      "queued": true,
@@ -6824,7 +7306,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=6",
-     "pack": "P231",
+     "pack": "P239",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -6847,7 +7329,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=4",
-     "pack": "P232",
+     "pack": "P240",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -6869,7 +7351,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_rows=1024",
-     "pack": "P233",
+     "pack": "P241",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
@@ -6890,7 +7372,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_rows=4096",
-     "pack": "P234",
+     "pack": "P242",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -6909,7 +7391,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c08_unique_scan=on",
-     "pack": "P239",
+     "pack": "P247",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -6928,7 +7410,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c08_grouped_output=on",
-     "pack": "P240",
+     "pack": "P248",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1"
      ],
@@ -6955,7 +7437,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.all_on",
-     "pack": "P235",
+     "pack": "P243",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1"
      ],
@@ -6978,7 +7460,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=1024",
-     "pack": "P241",
+     "pack": "P249",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -6999,7 +7481,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=4096",
-     "pack": "P236",
+     "pack": "P244",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -7020,7 +7502,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=1024",
-     "pack": "P237",
+     "pack": "P245",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -7041,7 +7523,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=4096",
-     "pack": "P238",
+     "pack": "P246",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -7125,7 +7607,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:optimized-theta.c58_forecast4=on",
-     "pack": "P243",
+     "pack": "P251",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -7184,7 +7666,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=6",
-     "pack": "P231",
+     "pack": "P239",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -7207,7 +7689,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=4",
-     "pack": "P232",
+     "pack": "P240",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -7229,7 +7711,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_rows=1024",
-     "pack": "P233",
+     "pack": "P241",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
@@ -7250,7 +7732,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_rows=4096",
-     "pack": "P234",
+     "pack": "P242",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -7269,7 +7751,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c08_unique_scan=on",
-     "pack": "P239",
+     "pack": "P247",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -7292,7 +7774,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.all_on",
-     "pack": "P235",
+     "pack": "P243",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1"
@@ -7316,7 +7798,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=1024",
-     "pack": "P241",
+     "pack": "P249",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -7337,7 +7819,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=4096",
-     "pack": "P236",
+     "pack": "P244",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -7358,7 +7840,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=1024",
-     "pack": "P237",
+     "pack": "P245",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -7379,7 +7861,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ordinal.c07_radix_bits=4+c07_radix_rows=4096",
-     "pack": "P238",
+     "pack": "P246",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -7465,7 +7947,7 @@
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "priority": 1,
      "queued": true,
@@ -7567,7 +8049,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:qda.c56_qda_project=2",
-     "pack": "P231",
+     "pack": "P239",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=6",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -7590,7 +8072,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:qda.c56_qda_project=4",
-     "pack": "P232",
+     "pack": "P240",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_BITS=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -7612,7 +8094,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:qda.c56_qda_project=8",
-     "pack": "P233",
+     "pack": "P241",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"
      ],
@@ -7676,7 +8158,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=6",
-     "pack": "P231",
+     "pack": "P239",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -7699,7 +8181,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=4",
-     "pack": "P232",
+     "pack": "P240",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -7721,7 +8203,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_rows=1024",
-     "pack": "P233",
+     "pack": "P241",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
@@ -7742,7 +8224,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_rows=4096",
-     "pack": "P234",
+     "pack": "P242",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -7763,7 +8245,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.all_on",
-     "pack": "P235",
+     "pack": "P243",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1",
       "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1",
@@ -7788,7 +8270,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=6+c07_radix_rows=4096",
-     "pack": "P236",
+     "pack": "P244",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -7809,7 +8291,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=1024",
-     "pack": "P237",
+     "pack": "P245",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -7830,7 +8312,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:quantile-transformer.c07_radix_bits=4+c07_radix_rows=4096",
-     "pack": "P238",
+     "pack": "P246",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -8018,7 +8500,7 @@
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
       "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "priority": 1,
      "queued": true,
@@ -8070,6 +8552,27 @@
    "configs": [
     {
      "assignment": {
+      "ridgecv_ff_blocked": "on"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:ridge-cv.ridgecv_ff_blocked=on",
+     "pack": "P223",
+     "packed_extra_defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+     ],
+     "priority": 1,
+     "queued": true,
+     "tier": "single",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
       "c13_fold_stats_ridgecv": "off"
      },
      "bindings": [
@@ -8080,11 +8583,11 @@
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-cv.c13_fold_stats_ridgecv=off",
-     "pack": "P223",
+     "pack": "P224",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32"
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
      ],
-     "priority": 1,
+     "priority": 2,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -8106,9 +8609,9 @@
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
       "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
-     "priority": 2,
+     "priority": 3,
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
@@ -8116,29 +8619,99 @@
     {
      "assignment": {
       "c13_fold_stats_ridgecv": "off",
-      "c14_group_rhs": "on"
+      "c14_group_rhs": "on",
+      "ridgecv_ff_blocked": "on"
      },
      "bindings": [
       "_mojolearn_x_linear"
      ],
      "defines": [
       "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
-      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1"
+      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
      ],
      "global_reach": [],
      "id": "G.expanded:ridge-cv.all_on",
-     "pack": "P224",
+     "pack": "P225",
      "packed_extra_defines": [
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64"
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32"
      ],
-     "priority": 3,
+     "priority": 4,
      "queued": true,
      "tier": "all_on",
      "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "c13_fold_stats_ridgecv": "off",
+      "ridgecv_ff_blocked": "on"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c13_fold_stats_ridgecv=off",
+     "pack": "P226",
+     "packed_extra_defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64"
+     ],
+     "priority": 5,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
+    },
+    {
+     "assignment": {
+      "c14_group_rhs": "on",
+      "ridgecv_ff_blocked": "on"
+     },
+     "bindings": [
+      "_mojolearn_x_linear"
+     ],
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+      "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
+     ],
+     "global_reach": [],
+     "id": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c14_group_rhs=on",
+     "pack": "P227",
+     "packed_extra_defines": [
+      "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+     ],
+     "priority": 6,
+     "queued": true,
+     "tier": "cross",
+     "vendor_default_equivalent": []
     }
    ],
-   "cross_groups": [],
+   "cross_groups": [
+    {
+     "duplicates": 0,
+     "members": [
+      "ridgecv_ff_blocked",
+      "c13_fold_stats_ridgecv"
+     ],
+     "new_configs": 1,
+     "note": null,
+     "product": 4
+    },
+    {
+     "duplicates": 0,
+     "members": [
+      "ridgecv_ff_blocked",
+      "c14_group_rhs"
+     ],
+     "new_configs": 1,
+     "note": null,
+     "product": 4
+    }
+   ],
    "declared_controls": [
+    "ridgecv_ff_blocked",
     "c13_fold_stats_ridgecv",
     "c14_group_rhs"
    ],
@@ -8147,15 +8720,26 @@
    "dropped_arms": {},
    "dropped_from_all_on": [],
    "eligible_controls": [
+    "ridgecv_ff_blocked",
     "c13_fold_stats_ridgecv",
     "c14_group_rhs"
    ],
    "excluded": [],
    "files": [
+    "classical-cv-folds",
     "classical-cv",
     "classical-misc"
    ],
-   "interaction_groups": [],
+   "interaction_groups": [
+    [
+     "ridgecv_ff_blocked",
+     "c13_fold_stats_ridgecv"
+    ],
+    [
+     "ridgecv_ff_blocked",
+     "c14_group_rhs"
+    ]
+   ],
    "invalid": [],
    "mapping_notes": [],
    "notes": [],
@@ -8165,7 +8749,8 @@
    ],
    "representative_arms": {
     "c13_fold_stats_ridgecv": "off",
-    "c14_group_rhs": "on"
+    "c14_group_rhs": "on",
+    "ridgecv_ff_blocked": "on"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [],
@@ -8192,7 +8777,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:sgd-reg@regression_report.C01_LEAF=64",
-     "pack": "P229",
+     "pack": "P237",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -8211,7 +8796,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:sgd-reg@regression_report.C01_LEAF=128",
-     "pack": "P230",
+     "pack": "P238",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -8332,7 +8917,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c07_radix_bits=6",
-     "pack": "P231",
+     "pack": "P239",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2",
       "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS=1",
@@ -8355,7 +8940,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c07_radix_bits=4",
-     "pack": "P232",
+     "pack": "P240",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4",
       "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
@@ -8377,7 +8962,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c07_radix_rows=1024",
-     "pack": "P233",
+     "pack": "P241",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
      ],
@@ -8398,7 +8983,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c07_radix_rows=4096",
-     "pack": "P234",
+     "pack": "P242",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -8417,7 +9002,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c08_unique_scan=on",
-     "pack": "P239",
+     "pack": "P247",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -8436,7 +9021,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c08_target_codes=on",
-     "pack": "P240",
+     "pack": "P248",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1"
      ],
@@ -8463,7 +9048,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.all_on",
-     "pack": "P235",
+     "pack": "P243",
      "packed_extra_defines": [
       "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT=1"
      ],
@@ -8486,7 +9071,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c08_unique_scan=on+c08_target_codes=on",
-     "pack": "P242",
+     "pack": "P250",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -8691,7 +9276,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:theta.c58_forecast4=on",
-     "pack": "P243",
+     "pack": "P251",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -8755,7 +9340,7 @@
       "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS=1",
       "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
       "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
-      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
      ],
      "priority": 1,
      "queued": true,
@@ -25094,8 +25679,8 @@
  },
  "all_switches": "NOT MEASURED until each config has an A/A floor, scored A/B on NVIDIA and AMD, identity and quality evidence",
  "builds": {
-  "after_packing": 614,
-  "before_packing": 744,
+  "after_packing": 630,
+  "before_packing": 766,
   "packs": [
    {
     "algorithms": [
@@ -29313,15 +29898,15 @@
      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
      "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
      "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
-     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
     ],
     "global_reach": false,
     "id": "P222",
     "members": [
      "G.expanded:ard.c15_factor_solve=on",
-     "G.expanded:enet-cv.enetcv_fold_blocks=16",
+     "G.expanded:enet-cv.enetcv_score_blocks=1024",
      "G.expanded:gamma.c16_glm_fused=on",
-     "G.expanded:lasso-cv.enetcv_fold_blocks=16",
+     "G.expanded:lasso-cv.enetcv_score_blocks=1024",
      "G.expanded:logreg-cv.c13_logcv_weights=on",
      "G.expanded:poisson.c16_glm_fused=on",
      "G.expanded:ridge-clf.c14_group_rhs=on",
@@ -29339,14 +29924,35 @@
      "_mojolearn_x_linear"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
-     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32"
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+     "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
     ],
     "global_reach": false,
     "id": "P223",
     "members": [
-     "G.expanded:enet-cv.enetcv_fold_blocks=32",
-     "G.expanded:lasso-cv.enetcv_fold_blocks=32",
+     "G.expanded:enet-cv.enetcv_score_blocks=4096",
+     "G.expanded:lasso-cv.enetcv_score_blocks=4096",
+     "G.expanded:ridge-cv.ridgecv_ff_blocked=on"
+    ]
+   },
+   {
+    "algorithms": [
+     "expanded:enet-cv",
+     "expanded:lasso-cv",
+     "expanded:ridge-cv"
+    ],
+    "bindings": [
+     "_mojolearn_x_linear"
+    ],
+    "defines": [
+     "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+    ],
+    "global_reach": false,
+    "id": "P224",
+    "members": [
+     "G.expanded:enet-cv.enetcv_fold_blocks=16",
+     "G.expanded:lasso-cv.enetcv_fold_blocks=16",
      "G.expanded:ridge-cv.c13_fold_stats_ridgecv=off"
     ]
    },
@@ -29362,32 +29968,59 @@
     "defines": [
      "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
      "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
-     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64"
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+     "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
     ],
     "global_reach": false,
-    "id": "P224",
+    "id": "P225",
     "members": [
-     "G.expanded:enet-cv.enetcv_fold_blocks=64",
-     "G.expanded:lasso-cv.enetcv_fold_blocks=64",
+     "G.expanded:enet-cv.enetcv_fold_blocks=32",
+     "G.expanded:lasso-cv.enetcv_fold_blocks=32",
      "G.expanded:ridge-cv.all_on"
     ]
    },
    {
     "algorithms": [
      "expanded:enet-cv",
-     "expanded:lasso-cv"
+     "expanded:lasso-cv",
+     "expanded:ridge-cv"
     ],
     "bindings": [
      "_mojolearn_x_linear"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1"
+     "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+     "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
     ],
     "global_reach": false,
-    "id": "P225",
+    "id": "P226",
+    "members": [
+     "G.expanded:enet-cv.enetcv_fold_blocks=64",
+     "G.expanded:lasso-cv.enetcv_fold_blocks=64",
+     "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c13_fold_stats_ridgecv=off"
+    ]
+   },
+   {
+    "algorithms": [
+     "expanded:enet-cv",
+     "expanded:lasso-cv",
+     "expanded:ridge-cv"
+    ],
+    "bindings": [
+     "_mojolearn_x_linear"
+    ],
+    "defines": [
+     "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+     "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+     "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1"
+    ],
+    "global_reach": false,
+    "id": "P227",
     "members": [
      "G.expanded:enet-cv.c18_residual_next=on",
-     "G.expanded:lasso-cv.c18_residual_next=on"
+     "G.expanded:lasso-cv.c18_residual_next=on",
+     "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c14_group_rhs=on"
     ]
    },
    {
@@ -29400,10 +30033,11 @@
     ],
     "defines": [
      "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16"
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
     ],
     "global_reach": false,
-    "id": "P226",
+    "id": "P228",
     "members": [
      "G.expanded:enet-cv.all_on",
      "G.expanded:lasso-cv.all_on"
@@ -29418,14 +30052,109 @@
      "_mojolearn_x_linear"
     ],
     "defines": [
-     "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32"
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
     ],
     "global_reach": false,
-    "id": "P227",
+    "id": "P229",
     "members": [
-     "G.expanded:enet-cv.enetcv_fold_blocks=32+c18_residual_next=on",
-     "G.expanded:lasso-cv.enetcv_fold_blocks=32+c18_residual_next=on"
+     "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16",
+     "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16"
+    ]
+   },
+   {
+    "algorithms": [
+     "expanded:enet-cv",
+     "expanded:lasso-cv"
+    ],
+    "bindings": [
+     "_mojolearn_x_linear"
+    ],
+    "defines": [
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
+    ],
+    "global_reach": false,
+    "id": "P230",
+    "members": [
+     "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32",
+     "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32"
+    ]
+   },
+   {
+    "algorithms": [
+     "expanded:enet-cv",
+     "expanded:lasso-cv"
+    ],
+    "bindings": [
+     "_mojolearn_x_linear"
+    ],
+    "defines": [
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
+    ],
+    "global_reach": false,
+    "id": "P231",
+    "members": [
+     "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64",
+     "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64"
+    ]
+   },
+   {
+    "algorithms": [
+     "expanded:enet-cv",
+     "expanded:lasso-cv"
+    ],
+    "bindings": [
+     "_mojolearn_x_linear"
+    ],
+    "defines": [
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+    ],
+    "global_reach": false,
+    "id": "P232",
+    "members": [
+     "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16",
+     "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16"
+    ]
+   },
+   {
+    "algorithms": [
+     "expanded:enet-cv",
+     "expanded:lasso-cv"
+    ],
+    "bindings": [
+     "_mojolearn_x_linear"
+    ],
+    "defines": [
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+    ],
+    "global_reach": false,
+    "id": "P233",
+    "members": [
+     "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32",
+     "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32"
+    ]
+   },
+   {
+    "algorithms": [
+     "expanded:enet-cv",
+     "expanded:lasso-cv"
+    ],
+    "bindings": [
+     "_mojolearn_x_linear"
+    ],
+    "defines": [
+     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+    ],
+    "global_reach": false,
+    "id": "P234",
+    "members": [
+     "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64",
+     "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64"
     ]
    },
    {
@@ -29438,13 +30167,32 @@
     ],
     "defines": [
      "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64"
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
     ],
     "global_reach": false,
-    "id": "P228",
+    "id": "P235",
     "members": [
-     "G.expanded:enet-cv.enetcv_fold_blocks=64+c18_residual_next=on",
-     "G.expanded:lasso-cv.enetcv_fold_blocks=64+c18_residual_next=on"
+     "G.expanded:enet-cv.enetcv_score_blocks=1024+c18_residual_next=on",
+     "G.expanded:lasso-cv.enetcv_score_blocks=1024+c18_residual_next=on"
+    ]
+   },
+   {
+    "algorithms": [
+     "expanded:enet-cv",
+     "expanded:lasso-cv"
+    ],
+    "bindings": [
+     "_mojolearn_x_linear"
+    ],
+    "defines": [
+     "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+    ],
+    "global_reach": false,
+    "id": "P236",
+    "members": [
+     "G.expanded:enet-cv.enetcv_score_blocks=4096+c18_residual_next=on",
+     "G.expanded:lasso-cv.enetcv_score_blocks=4096+c18_residual_next=on"
     ]
    },
    {
@@ -29458,7 +30206,7 @@
      "MOJOLEARN_CLASSICAL_C01_LEAF=64"
     ],
     "global_reach": false,
-    "id": "P229",
+    "id": "P237",
     "members": [
      "G.expanded:sgd-reg@regression_report.C01_LEAF=64"
     ]
@@ -29474,7 +30222,7 @@
      "MOJOLEARN_CLASSICAL_C01_LEAF=128"
     ],
     "global_reach": false,
-    "id": "P230",
+    "id": "P238",
     "members": [
      "G.expanded:sgd-reg@regression_report.C01_LEAF=128"
     ]
@@ -29500,7 +30248,7 @@
      "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1"
     ],
     "global_reach": false,
-    "id": "P231",
+    "id": "P239",
     "members": [
      "G.expanded:gaussian-nb.c61_nb=1",
      "G.expanded:kbins.c07_radix_bits=6",
@@ -29531,7 +30279,7 @@
      "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
     ],
     "global_reach": false,
-    "id": "P232",
+    "id": "P240",
     "members": [
      "G.expanded:gaussian-nb.c61_nb=2",
      "G.expanded:kbins.c07_radix_bits=4",
@@ -29559,7 +30307,7 @@
      "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
     ],
     "global_reach": false,
-    "id": "P233",
+    "id": "P241",
     "members": [
      "G.expanded:kbins.c07_radix_rows=1024",
      "G.expanded:onehot.c07_radix_rows=1024",
@@ -29584,7 +30332,7 @@
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
     ],
     "global_reach": false,
-    "id": "P234",
+    "id": "P242",
     "members": [
      "G.expanded:kbins.c07_radix_rows=4096",
      "G.expanded:onehot.c07_radix_rows=4096",
@@ -29612,7 +30360,7 @@
      "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN=1"
     ],
     "global_reach": false,
-    "id": "P235",
+    "id": "P243",
     "members": [
      "G.expanded:kbins.all_on",
      "G.expanded:onehot.all_on",
@@ -29636,7 +30384,7 @@
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
     ],
     "global_reach": false,
-    "id": "P236",
+    "id": "P244",
     "members": [
      "G.expanded:kbins.c07_radix_bits=6+c07_radix_rows=4096",
      "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=4096",
@@ -29659,7 +30407,7 @@
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"
     ],
     "global_reach": false,
-    "id": "P237",
+    "id": "P245",
     "members": [
      "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=1024",
      "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=1024",
@@ -29682,7 +30430,7 @@
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
     ],
     "global_reach": false,
-    "id": "P238",
+    "id": "P246",
     "members": [
      "G.expanded:kbins.c07_radix_bits=4+c07_radix_rows=4096",
      "G.expanded:onehot.c07_radix_bits=4+c07_radix_rows=4096",
@@ -29703,7 +30451,7 @@
      "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN=1"
     ],
     "global_reach": false,
-    "id": "P239",
+    "id": "P247",
     "members": [
      "G.expanded:onehot.c08_unique_scan=on",
      "G.expanded:ordinal.c08_unique_scan=on",
@@ -29723,7 +30471,7 @@
      "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1"
     ],
     "global_reach": false,
-    "id": "P240",
+    "id": "P248",
     "members": [
      "G.expanded:onehot.c08_grouped_output=on",
      "G.expanded:target-encoder.c08_target_codes=on"
@@ -29742,7 +30490,7 @@
      "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"
     ],
     "global_reach": false,
-    "id": "P241",
+    "id": "P249",
     "members": [
      "G.expanded:onehot.c07_radix_bits=6+c07_radix_rows=1024",
      "G.expanded:ordinal.c07_radix_bits=6+c07_radix_rows=1024"
@@ -29760,7 +30508,7 @@
      "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN=1"
     ],
     "global_reach": false,
-    "id": "P242",
+    "id": "P250",
     "members": [
      "G.expanded:target-encoder.c08_unique_scan=on+c08_target_codes=on"
     ]
@@ -29781,7 +30529,7 @@
      "MOJOLEARN_C58_FORECAST4=1"
     ],
     "global_reach": false,
-    "id": "P243",
+    "id": "P251",
     "members": [
      "G.expanded:auto-theta.c58_forecast4=on",
      "G.expanded:damped-ets.c58_forecast4=on",
@@ -30489,6 +31237,13 @@
     "path": "experiments/six_lane_integration/grid_controls/classical-cv.json",
     "sha256": "731b13aa6d86d01f2cbcfe30a77fcbd3ef15b4c0ea9080601dcf28d82f089beb"
    },
+   "classical-cv-folds": {
+    "branch": "lane/classical-cv-folds",
+    "head": "beb8afb810fc",
+    "lane": "classical-cv-folds",
+    "path": "experiments/six_lane_integration/grid_controls/classical-cv-folds.json",
+    "sha256": "13e8a9bb40c90f38bde2c9e2b4c81a0bc4be5bb01d0c08a000ebe926c53df332"
+   },
    "classical-decomp": {
     "branch": "lane/classical-decomp",
     "head": "f0bbeef91",
@@ -30575,9 +31330,9 @@
    }
   },
   "guards": {
-   "asserts": 115,
+   "asserts": 116,
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "947a07ef57ef297b35562d3a477cbb284b0e0eae26172bc06a87ad1edcb91c4e"
+   "sha256": "843959bd0f2ba9a0eb41808de6fe92aa586bbd2ddb1a2a70d76fc65061fba446"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -30663,6 +31418,7 @@
  ],
  "removed_per_file": {
   "classical-cv": 3,
+  "classical-cv-folds": 0,
   "classical-decomp": 4,
   "classical-encoders": 5,
   "classical-kmeans": 10,
@@ -30679,8 +31435,8 @@
  "schema": "mojolearn.six-lane-grid-plan/1",
  "status": "PLANNED_NOT_RUN",
  "summary": {
-  "a_builds_after_packing": 564,
-  "a_builds_before_packing": 694,
+  "a_builds_after_packing": 580,
+  "a_builds_before_packing": 716,
   "aa_pairs": 322,
   "algorithms": 87,
   "algorithms_with_configs": 75,
@@ -30712,21 +31468,21 @@
    "_mojolearn_x_prep",
    "_mojolearn_x_sequence"
   ],
-  "builds_after_packing": 614,
-  "builds_before_packing": 744,
+  "builds_after_packing": 630,
+  "builds_before_packing": 766,
   "cap": 16,
-  "cells": 2320,
-  "configs": 485,
-  "configs_per_vendor": 485,
-  "controls": 203,
+  "cells": 2396,
+  "configs": 504,
+  "configs_per_vendor": 504,
+  "controls": 205,
   "deferred_configs": 128,
-  "deferred_cross_configs": 6356,
-  "deferred_cross_groups": 43,
+  "deferred_cross_configs": 6362,
+  "deferred_cross_groups": 45,
   "excluded_controls": 59,
-  "guard_asserts": 115,
+  "guard_asserts": 116,
   "mapped_algorithms": 84,
-  "packed_multi_member": 96,
-  "packs": 243,
+  "packed_multi_member": 104,
+  "packs": 251,
   "unmapped_algorithms": 3,
   "workloads": 161
  },

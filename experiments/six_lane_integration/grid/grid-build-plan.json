@@ -8626,95 +8626,96 @@
     {
      "arm": "A",
      "configuration": "G.expanded:lasso-cv.c18_residual_next=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "1c6f698b2cc4161d6b5e",
-   "mode": "identical",
-   "pack": "P225",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_linear.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=64"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=64"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ridge-cv.all_on"
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c14_group_rhs=on"
     }
    ],
    "defines": [
-    "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
     "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
-    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "2b4a50f7b2a909738b3d",
-   "mode": "identical",
-   "pack": "P224",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_linear.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=64+c18_residual_next=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=64+c18_residual_next=on"
-    }
-   ],
-   "defines": [
     "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+    "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "4afe8f6cb21b248a770b",
-   "mode": "identical",
-   "pack": "P228",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_linear.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=32+c18_residual_next=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=32+c18_residual_next=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "55713ae17f53f1c45631",
+   "key": "1e5cf162f16aef866b23",
    "mode": "identical",
    "pack": "P227",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "1fd28fdf65f7f23401f4",
+   "mode": "identical",
+   "pack": "P231",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "407d300000950ae9338c",
+   "mode": "identical",
+   "pack": "P234",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "46314fd7736132aa320c",
+   "mode": "identical",
+   "pack": "P233",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8729,7 +8730,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=16"
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024"
     },
     {
      "arm": "B",
@@ -8737,7 +8738,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=16"
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024"
     },
     {
      "arm": "B",
@@ -8761,6 +8762,30 @@
     },
     {
      "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:ridge-cv.c13_fold_stats_ridgecv=off"
+    },
+    {
+     "arm": "B",
      "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=32"
     },
     {
@@ -8769,7 +8794,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:ridge-cv.c13_fold_stats_ridgecv=off"
+     "configuration": "G.expanded:ridge-cv.all_on"
     },
     {
      "arm": "B",
@@ -8781,7 +8806,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:ridge-cv.all_on"
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c13_fold_stats_ridgecv=off"
     },
     {
      "arm": "B",
@@ -8793,6 +8818,10 @@
     },
     {
      "arm": "B",
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c14_group_rhs=on"
+    },
+    {
+     "arm": "B",
      "configuration": "G.expanded:enet-cv.all_on"
     },
     {
@@ -8801,19 +8830,67 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=32+c18_residual_next=on"
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16"
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=32+c18_residual_next=on"
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16"
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=64+c18_residual_next=on"
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32"
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=64+c18_residual_next=on"
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+c18_residual_next=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+c18_residual_next=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+c18_residual_next=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+c18_residual_next=on"
     }
    ],
    "defines": [
@@ -8842,11 +8919,43 @@
    "defines": [
     "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "634c4d230b9794e10bee",
+   "key": "6aa2c218d06dbea154f7",
    "mode": "identical",
-   "pack": "P226",
+   "pack": "P228",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ridge-cv.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
+    "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+    "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "738c36121baac81a14ad",
+   "mode": "identical",
+   "pack": "P225",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8861,7 +8970,7 @@
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=16"
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024"
     },
     {
      "arm": "A",
@@ -8869,7 +8978,7 @@
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=16"
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024"
     },
     {
      "arm": "A",
@@ -8897,10 +9006,10 @@
     "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
     "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
     "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
-    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "c006ffba660581d1e2c0",
+   "key": "9576c006b9509033c601",
    "mode": "identical",
    "pack": "P222",
    "runtime_reach": "NOT_VERIFIED",
@@ -8913,11 +9022,40 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=32"
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=32"
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+    "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "a4892612b66f75a87854",
+   "mode": "identical",
+   "pack": "P223",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=16"
     },
     {
      "arm": "A",
@@ -8926,12 +9064,167 @@
    ],
    "defines": [
     "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
-    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "cecef065181e8f3e3ccc",
+   "key": "a5216a197b782be79bfc",
    "mode": "identical",
-   "pack": "P223",
+   "pack": "P224",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+c18_residual_next=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+c18_residual_next=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "a5e7e018a51cb3b4dc0f",
+   "mode": "identical",
+   "pack": "P235",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "a873ccf56ded27eef7ed",
+   "mode": "identical",
+   "pack": "P229",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "ae094c07329e3f0df3c4",
+   "mode": "identical",
+   "pack": "P230",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c13_fold_stats_ridgecv=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+    "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "c5c95c31bf3ee6e3002f",
+   "mode": "identical",
+   "pack": "P226",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "c7bc6665f6a0a2516504",
+   "mode": "identical",
+   "pack": "P232",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+c18_residual_next=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+c18_residual_next=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "ec1c9ab333b3edb5bcb4",
+   "mode": "identical",
+   "pack": "P236",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8974,7 +9267,7 @@
    ],
    "key": "c102d46fb51d0eb5c29d",
    "mode": "identical",
-   "pack": "P229",
+   "pack": "P237",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8994,7 +9287,7 @@
    ],
    "key": "faead5083053569200b3",
    "mode": "identical",
-   "pack": "P230",
+   "pack": "P238",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9027,7 +9320,7 @@
    ],
    "key": "07596c82da19d677fc8e",
    "mode": "identical",
-   "pack": "P237",
+   "pack": "P245",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9055,7 +9348,7 @@
    ],
    "key": "2ab240b9438984b0749f",
    "mode": "identical",
-   "pack": "P239",
+   "pack": "P247",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9101,7 +9394,7 @@
    ],
    "key": "3820d1dab39475f15bf9",
    "mode": "identical",
-   "pack": "P232",
+   "pack": "P240",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9141,7 +9434,7 @@
    ],
    "key": "3bc34d711117d8917b60",
    "mode": "identical",
-   "pack": "P235",
+   "pack": "P243",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9177,7 +9470,7 @@
    ],
    "key": "44f2d1703670056c5b83",
    "mode": "identical",
-   "pack": "P234",
+   "pack": "P242",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9228,7 +9521,7 @@
    ],
    "key": "532782f0e858f4ba1ee0",
    "mode": "identical",
-   "pack": "P231",
+   "pack": "P239",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9249,7 +9542,7 @@
    ],
    "key": "55988ae9435e37aa2e9d",
    "mode": "identical",
-   "pack": "P242",
+   "pack": "P250",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9274,7 +9567,7 @@
    ],
    "key": "5acdb2a73e43f573d3e6",
    "mode": "identical",
-   "pack": "P241",
+   "pack": "P249",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9307,7 +9600,7 @@
    ],
    "key": "5c7c27b79060aa0cf70f",
    "mode": "identical",
-   "pack": "P238",
+   "pack": "P246",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9348,7 +9641,7 @@
    ],
    "key": "62c597ba292af0cc9caf",
    "mode": "identical",
-   "pack": "P233",
+   "pack": "P241",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9600,7 +9893,7 @@
    ],
    "key": "d45dd883dac2f3513e22",
    "mode": "identical",
-   "pack": "P236",
+   "pack": "P244",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9625,7 +9918,7 @@
    ],
    "key": "d78f98c2034a15bc848c",
    "mode": "identical",
-   "pack": "P240",
+   "pack": "P248",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9665,7 +9958,7 @@
    ],
    "key": "0713b6ea2921e830a823",
    "mode": "identical",
-   "pack": "P243",
+   "pack": "P251",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -18330,114 +18623,11 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:enet-cv.c18_residual_next=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:lasso-cv.c18_residual_next=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "169af3baa4d324b590d7",
-   "mode": "identical",
-   "pack": "P225",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_linear.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=64+c18_residual_next=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=64+c18_residual_next=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "596d6d69962ce9baa775",
-   "mode": "identical",
-   "pack": "P228",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_linear.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:enet-cv.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:lasso-cv.all_on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "777778207dca62193379",
-   "mode": "identical",
-   "pack": "P226",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_linear.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=32"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=32"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.expanded:ridge-cv.c13_fold_stats_ridgecv=off"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
-    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "7dcd03e950ca8aca3bc2",
-   "mode": "identical",
-   "pack": "P223",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_linear.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.expanded:ard.c15_factor_solve=on"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=16"
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024"
     },
     {
      "arm": "A",
@@ -18445,7 +18635,7 @@
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=16"
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024"
     },
     {
      "arm": "A",
@@ -18473,12 +18663,146 @@
     "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
     "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE=1",
     "MOJOLEARN_CLASSICAL_C16_GLM_FUSED=1",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "0e894750eaaf0dddcac3",
+   "mode": "identical",
+   "pack": "P222",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ridge-cv.c13_fold_stats_ridgecv=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
     "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "8c23b54bf4d76d1eda29",
+   "key": "3c91e4facb4157adf1a2",
    "mode": "identical",
-   "pack": "P222",
+   "pack": "P224",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "3e5a30a4dfe355cb89e8",
+   "mode": "identical",
+   "pack": "P233",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.all_on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.all_on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "6e6fb52b205d24ba92c7",
+   "mode": "identical",
+   "pack": "P228",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "6f043ce6ac42ccfad83b",
+   "mode": "identical",
+   "pack": "P232",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+    "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "7320433c4b2abbf41ff3",
+   "mode": "identical",
+   "pack": "P223",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18497,18 +18821,124 @@
     },
     {
      "arm": "A",
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c13_fold_stats_ridgecv=off"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+    "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "864fe47c5598686a5ba7",
+   "mode": "identical",
+   "pack": "P226",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "884f4d342125a509c46a",
+   "mode": "identical",
+   "pack": "P231",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "A",
      "configuration": "G.expanded:ridge-cv.all_on"
     }
    ],
    "defines": [
     "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF=1",
     "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
-    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+    "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "97236134ea5fc4a5a68f",
+   "key": "921387afc0a801f54421",
    "mode": "identical",
-   "pack": "P224",
+   "pack": "P225",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+c18_residual_next=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+c18_residual_next=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "afcaa3bc84778316ee3f",
+   "mode": "identical",
+   "pack": "P236",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=64",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "c2c8a0b92ad0478efdc1",
+   "mode": "identical",
+   "pack": "P234",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18523,7 +18953,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=16"
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024"
     },
     {
      "arm": "B",
@@ -18531,7 +18961,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=16"
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024"
     },
     {
      "arm": "B",
@@ -18555,6 +18985,30 @@
     },
     {
      "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:ridge-cv.c13_fold_stats_ridgecv=off"
+    },
+    {
+     "arm": "B",
      "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=32"
     },
     {
@@ -18563,7 +19017,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:ridge-cv.c13_fold_stats_ridgecv=off"
+     "configuration": "G.expanded:ridge-cv.all_on"
     },
     {
      "arm": "B",
@@ -18575,7 +19029,7 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:ridge-cv.all_on"
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c13_fold_stats_ridgecv=off"
     },
     {
      "arm": "B",
@@ -18587,6 +19041,10 @@
     },
     {
      "arm": "B",
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c14_group_rhs=on"
+    },
+    {
+     "arm": "B",
      "configuration": "G.expanded:enet-cv.all_on"
     },
     {
@@ -18595,19 +19053,67 @@
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=32+c18_residual_next=on"
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16"
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=32+c18_residual_next=on"
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16"
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=64+c18_residual_next=on"
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32"
     },
     {
      "arm": "B",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=64+c18_residual_next=on"
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+enetcv_fold_blocks=64"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+c18_residual_next=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+c18_residual_next=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=4096+c18_residual_next=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=4096+c18_residual_next=on"
     }
    ],
    "defines": [
@@ -18626,21 +19132,101 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.expanded:enet-cv.enetcv_fold_blocks=32+c18_residual_next=on"
+     "configuration": "G.expanded:enet-cv.c18_residual_next=on"
     },
     {
      "arm": "A",
-     "configuration": "G.expanded:lasso-cv.enetcv_fold_blocks=32+c18_residual_next=on"
+     "configuration": "G.expanded:lasso-cv.c18_residual_next=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:ridge-cv.ridgecv_ff_blocked=on+c14_group_rhs=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C14_GROUP_RHS=1",
+    "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
+    "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "ca57d49d219a780c760e",
+   "mode": "identical",
+   "pack": "P227",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=16"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=16",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "d57a4dbe42522c2870f9",
+   "mode": "identical",
+   "pack": "P229",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+enetcv_fold_blocks=32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "dff9adac760c827ebf13",
+   "mode": "identical",
+   "pack": "P230",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_x_linear.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.expanded:enet-cv.enetcv_score_blocks=1024+c18_residual_next=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.expanded:lasso-cv.enetcv_score_blocks=1024+c18_residual_next=on"
     }
    ],
    "defines": [
     "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1",
-    "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=32",
+    "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024",
     "MOJOLEARN_NUMERIC_IDENTICAL=1"
    ],
-   "key": "daf5f0c13b3558fe371b",
+   "key": "e3afae12afedc1bc8479",
    "mode": "identical",
-   "pack": "P227",
+   "pack": "P235",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18660,7 +19246,7 @@
    ],
    "key": "06dbecd5623719ba744e",
    "mode": "identical",
-   "pack": "P229",
+   "pack": "P237",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18680,7 +19266,7 @@
    ],
    "key": "d2d4cecee11b2d162160",
    "mode": "identical",
-   "pack": "P230",
+   "pack": "P238",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18728,7 +19314,7 @@
    ],
    "key": "52a2846b630b57f2e97d",
    "mode": "identical",
-   "pack": "P241",
+   "pack": "P249",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18774,7 +19360,7 @@
    ],
    "key": "5f86034da8e3139056be",
    "mode": "identical",
-   "pack": "P232",
+   "pack": "P240",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18795,7 +19381,7 @@
    ],
    "key": "718b1212c751363aec26",
    "mode": "identical",
-   "pack": "P242",
+   "pack": "P250",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18828,7 +19414,7 @@
    ],
    "key": "83311806e891d60d846d",
    "mode": "identical",
-   "pack": "P237",
+   "pack": "P245",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18856,7 +19442,7 @@
    ],
    "key": "92944849bc7c64d69d91",
    "mode": "identical",
-   "pack": "P239",
+   "pack": "P247",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18896,7 +19482,7 @@
    ],
    "key": "952e5ef606f9113cc73f",
    "mode": "identical",
-   "pack": "P235",
+   "pack": "P243",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -18929,7 +19515,7 @@
    ],
    "key": "993a86a8114bddb53377",
    "mode": "identical",
-   "pack": "P238",
+   "pack": "P246",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19199,7 +19785,7 @@
    ],
    "key": "b1e7d10369dfd30f5c8b",
    "mode": "identical",
-   "pack": "P231",
+   "pack": "P239",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19240,7 +19826,7 @@
    ],
    "key": "bc3f6df75831fbf8b14f",
    "mode": "identical",
-   "pack": "P233",
+   "pack": "P241",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19273,7 +19859,7 @@
    ],
    "key": "caf6229fb6708aa56621",
    "mode": "identical",
-   "pack": "P236",
+   "pack": "P244",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19298,7 +19884,7 @@
    ],
    "key": "d44682e415b5358fb8a5",
    "mode": "identical",
-   "pack": "P240",
+   "pack": "P248",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19334,7 +19920,7 @@
    ],
    "key": "db5126566298a7a718c0",
    "mode": "identical",
-   "pack": "P234",
+   "pack": "P242",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19374,7 +19960,7 @@
    ],
    "key": "2bc881984bc260e3ed48",
    "mode": "identical",
-   "pack": "P243",
+   "pack": "P251",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
