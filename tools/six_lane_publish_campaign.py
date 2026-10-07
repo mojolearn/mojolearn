@@ -1,4 +1,12 @@
-"""Publish retained full pairs as pending evidence through the existing board tool."""
+"""Publish retained full pairs as pending evidence through the existing board tool.
+
+Use --continuation MANIFEST to extend the same board. A manifest has schema
+mojolearn.campaign-continuation/1, an id, optional matrix, sources (vendor, path,
+optional route), quality_reviews (paths), and notes. Paths are relative to the
+manifest. Sources use the queue's */attempts/*/receipt.json layout. Missing
+sources/reviews remain explicitly pending. Registered manifests are remembered
+by this board; historical receipts and reviews are retained across refreshes.
+"""
 import argparse
 import hashlib
 import json
@@ -10,6 +18,8 @@ import time
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--campaign-root',type=Path,required=True)
 parser.add_argument('--out',type=Path,required=True)
+parser.add_argument('--continuation',type=Path,action='append',default=[],
+                    help='Register a targeted campaign manifest on the same board; repeatable')
 args=parser.parse_args()
 ROOT=args.campaign_root.resolve()
 REPO=Path(__file__).resolve().parents[1]
@@ -50,6 +60,82 @@ def write(path,value):
     temp=path.with_suffix(path.suffix+'.tmp')
     temp.write_text(json.dumps(value,indent=2)+'\n')
     temp.replace(path)
+
+
+def load(path,default):
+    return json.loads(path.read_text()) if path.exists() else default
+
+
+def retain_input(path,raw):
+    """Keep exact input bytes, including superseded review/plan versions."""
+    digest=hashlib.sha256(raw).hexdigest()
+    target=OUT/'publication-inputs'/digest/path.name
+    target.parent.mkdir(parents=True,exist_ok=True)
+    if not target.exists():target.write_bytes(raw)
+    return dict(source=str(path),sha256=digest,snapshot=str(target.relative_to(REPO)))
+
+
+def continuations():
+    previous=load(OUT/'publication-continuations.json',{'manifests':[]})
+    registered={r['source']:r for r in previous['manifests']}
+    for path in args.continuation:registered.setdefault(str(path.resolve()),{})
+    sources=[];reviews=[];configs=[];notes=[];records=[];ids=set()
+    for name,old in registered.items():
+        path=Path(name)
+        raw=path.read_bytes() if path.exists() else (REPO/old['snapshot']).read_bytes()
+        manifest=json.loads(raw)
+        if manifest.get('schema')!='mojolearn.campaign-continuation/1':
+            raise ValueError('Unsupported continuation schema: '+name)
+        ident=manifest['id']
+        if not ident or ident in ids:raise ValueError('Duplicate/empty continuation id: '+ident)
+        ids.add(ident)
+        record=retain_input(path,raw)
+        record.update(id=ident,source_available=path.exists(),inputs=[],sources=[])
+        resolve=lambda value:(path.parent/value).resolve()
+        namespace='continuation-'+hashlib.sha256(name.encode()).hexdigest()[:16]
+        for item in manifest.get('sources',[]):
+            vendor=item['vendor'];source=resolve(item['path'])
+            if vendor not in ('nvidia','amd','apple','host'):
+                raise ValueError('Unsupported continuation vendor: '+vendor)
+            controller=namespace+'-'+hashlib.sha256(str(source).encode()).hexdigest()[:16]
+            sources.append(dict(vendor=vendor,path=source,controller=controller,
+                route=item.get('route',vendor+' / route not recorded'),continuation=ident))
+            record['sources'].append(dict(vendor=vendor,path=str(source),route=sources[-1]['route'],
+                status='AVAILABLE' if source.is_dir() else 'PENDING_SOURCE',
+                receipt_files=sum(1 for _ in source.glob('*/attempts/*/receipt.json'))))
+        for kind,names in [('matrix',[manifest['matrix']] if manifest.get('matrix') else []),
+                           ('quality_review',manifest.get('quality_reviews',[]))]:
+            for value in names:
+                source=resolve(value)
+                if not source.exists():
+                    record['inputs'].append(dict(source=str(source),kind=kind,status='PENDING_INPUT'))
+                    continue
+                data=source.read_bytes();document=json.loads(data)
+                ref=dict(retain_input(source,data),kind=kind,status='RETAINED')
+                record['inputs'].append(ref)
+                if kind=='matrix':configs.extend(document['configurations'])
+                else:
+                    for row in document['rows']:
+                        if not all(row.get(key) for key in ('receipt_sha256','quality_assessment','reason')):
+                            raise ValueError('Incomplete hash-bound quality review: '+str(source))
+                        reviews.append(dict(row,review_source=ref))
+        notes.extend(manifest.get('notes',[]))
+        records.append(record)
+    return sources,reviews,configs,notes,records
+
+
+def add_candidate(candidates,selection,mode=None,vendor=None):
+    ident=selection['id'];mode=mode or selection['mode']
+    if selection.get('mode',mode)!=mode:raise ValueError('Selection mode differs: '+ident)
+    vendors=set(selection.get('vendors',[]))
+    if vendor:
+        if vendors and vendor not in vendors:raise ValueError('Selection vendor differs: '+ident)
+        vendors.add(vendor)
+    if ident in candidates:
+        if candidates[ident]['mode']!=mode:raise ValueError('Reused id has different mode: '+ident)
+        vendors.update(candidates[ident]['vendors'])
+    candidates[ident]=dict(id=ident,title=selection.get('title',selection.get('name',candidates.get(ident,{}).get('title',ident))),
+        mode=mode,vendors=sorted(vendors))
 
 
 def remaining_catalog(cells):
@@ -102,31 +188,53 @@ def remaining_catalog(cells):
 
 def main():
     cells=[];summary=[];seen=set()
+    retained=load(OUT/'index.json',{'cells':[],'notes':[]})
+    retained_cells={c['receipt_sha256']:c for c in retained['cells']}
+    retained_summary=load(OUT/'retained-pairs.json',{'pairs':[]})
+    retained_inventory=load(OUT/'inventory.json',{'candidates':[]})
+    extra_sources,extra_reviews,extra_configs,extra_notes,continuation_records=continuations()
+    candidates={c['id']:c for c in retained_inventory['candidates']}
+    for selection in [dict(id='AF.X.complete-proposed',title='Apple FAST complete proposed configuration',mode='fast',vendors=['apple']),
+                      dict(id='I.X.complete-proposed',title='IDENTICAL complete proposed configuration',mode='identical',vendors=['nvidia','amd','apple','host'])]+extra_configs:
+        add_candidate(candidates,selection)
     review_path=ROOT/'quality-review/classical-12-pair-quality-review.json'
-    review=json.loads(review_path.read_text()) if review_path.exists() else {'rows':[]}
+    review=load(review_path,load(OUT/'quality-review.json',{'rows':[]}))
     next_review_path=ROOT/'quality-review/next-reg-resample-quality-review.json'
-    next_review=json.loads(next_review_path.read_text()) if next_review_path.exists() else {'rows':[]}
-    reviewed={r['receipt_sha256']:r for r in review['rows']+next_review['rows']}
+    next_review=load(next_review_path,load(OUT/'next-quality-review.json',{'rows':[]}))
+    # A missing external review must not erase an already retained assessment.
+    reviewed={digest:dict(receipt_sha256=digest,quality_assessment=c['quality_assessment'],
+        reason=c.get('quality_reason','Retained assessment'),**c.get('quality_comparisons',{}))
+        for digest,c in retained_cells.items() if c.get('quality_assessment')}
+    reviewed.update({r['receipt_sha256']:r for r in review['rows']+next_review['rows']+extra_reviews})
     receipt_paths={}
-    for vendor,source in SOURCES:
+    sources=[dict(vendor=vendor,path=source,controller=source.relative_to(ROOT).as_posix().replace('/','--'),
+                  route={'nvidia':'native-sm90','amd':'amd-native-gfx942','apple':'apple-fast'}[vendor])
+             for vendor,source in SOURCES]+extra_sources
+    current_origins={}
+    for input_source in sources:
+        vendor=input_source['vendor'];source=input_source['path']
         if not source.exists():continue
         for path in sorted(source.glob('*/attempts/*/receipt.json')):
             raw=path.read_bytes();digest=hashlib.sha256(raw).hexdigest()
             if digest in seen:continue
             seen.add(digest);receipt=json.loads(raw);job=receipt['workload']
             config=job['master_selection']['id']
+            add_candidate(candidates,job['master_selection'],receipt['mode'],vendor)
             selected={r['arm']:r for r in receipt['runs'] if r['phase']=='scored' and r.get('returncode')==0 and r.get('result')}
             execution_status=receipt.get('status','IN_PROGRESS')
             complete=execution_status=='MEASURED_FULL' and set(selected)=={'A','B'}
             samples={arm:{phase:sum(run.get('arm')==arm and run.get('phase')==phase and run.get('returncode')==0 and bool(run.get('result')) for run in receipt['runs']) for phase in ('warmup','scored')} for arm in ('A','B')}
-            controller=source.relative_to(ROOT).as_posix().replace('/','--')
+            controller=input_source['controller']
             target=OUT/'receipts'/vendor/controller/receipt['key']/path.parent.name/'receipt.json'
+            if target.exists() and target.read_bytes()!=raw:
+                target=target.with_name('receipt.'+digest+'.json')
             target.parent.mkdir(parents=True,exist_ok=True)
             # Publish the exact bytes we hashed even if the capture process
             # replaces its live receipt while this snapshot is being built.
             temp=target.with_suffix('.tmp');temp.write_bytes(raw);temp.replace(target)
             receipt_paths[digest]=str(target.relative_to(REPO))
-            row=dict(id=config,vendor=vendor,case=job['workload_id']+'/'+path.parent.name,
+            row=dict(id=config,vendor=vendor,mode=receipt['mode'],case=job['workload_id']+'/'+
+                     (controller+'/' if input_source.get('continuation') else '')+path.parent.name,
                      scope='full_workload',status='PENDING_ADMISSION' if complete else 'IN_PROGRESS' if execution_status=='IN_PROGRESS' else 'FAILED_OR_INCOMPLETE',
                      source_sha=receipt['source_sha'],evidence=str(target.relative_to(REPO)),
                      dimensions=job['dimensions'],dataset_sha256=job['dataset_sha256'],
@@ -138,8 +246,12 @@ def main():
                      scored_samples=min(samples[arm]['scored'] for arm in samples),
                      quality='PENDING' if complete else 'NOT_ASSESSED',
                      identity='NOT_REQUIRED' if receipt['mode']=='fast' else 'INCOMPLETE',
-                     route={'nvidia':'native-sm90','amd':'amd-native-gfx942','apple':'apple-fast'}[vendor],
+                     route=input_source['route'],receipt_origin=str(path.resolve()),
                      receipt_sha256=digest,source_coverage_pending=job.get('source_coverage_pending',[]))
+            for field in ('prior_receipt_snapshots','quality_review_source'):
+                if field in retained_cells.get(digest,{}):row[field]=retained_cells[digest][field]
+            current_origins[row['receipt_origin']]=row
+            if input_source.get('continuation'):row['continuation']=input_source['continuation']
             # Display the arm configuration actually recorded with this workload,
             # separately from the broader requested selection. These controls are
             # not an attestation that every enabled code path executed.
@@ -164,6 +276,7 @@ def main():
                               admission='Pending independent quality, required identity and affected-workload coverage')
             if complete and digest in reviewed:
                 assessment=reviewed[digest]
+                if assessment.get('review_source'):row['quality_review_source']=assessment['review_source']
                 row['quality_assessment']=assessment['quality_assessment']
                 row['quality_reason']=assessment['reason']
                 row['quality_comparisons']={key:assessment[key] for key in (
@@ -175,20 +288,41 @@ def main():
                 detail['quality_reason']=row['quality_reason']
             if row.get('resource_limitations'):detail['resource_limitations']=row['resource_limitations']
             cells.append(row);summary.append(detail)
-    inventory=dict(campaign='six-lane-full-ab-20261006',identity_policy='NVIDIA/AMD same-arm IDENTICAL admission requires matching source/runtime provenance and complete typed fitted-state evidence. See the coverage table for completed and pending work; NVIDIA PTX artifacts remain pending. Apple FAST is evaluated by task quality; bits may differ.',evidence_policy='Complete full-workload executions are retained separately from quality and identity admission. Failed attempts preserved at controller-qualified paths; no default promotion. Hash receipts alone do not establish retained array/model bytes; see artifact-retention.json.',candidates=[
-        dict(id='AF.X.complete-proposed',title='Apple FAST complete proposed configuration',mode='fast',vendors=['apple']),
-        dict(id='I.X.complete-proposed',title='IDENTICAL complete proposed configuration',mode='identical',vendors=['nvidia','amd','apple','host'])])
+    retained_details={row['evidence']:row for row in retained_summary['pairs']}
+    for digest,row in retained_cells.items():
+        if digest in seen:continue
+        current=current_origins.get(row.get('receipt_origin'))
+        if current and row['execution_status']=='IN_PROGRESS':
+            current.setdefault('prior_receipt_snapshots',[]).append(row['evidence'])
+            continue
+        cells.append(row)
+        if row['evidence'] in retained_details:summary.append(retained_details[row['evidence']])
+        receipt_paths[digest]=row['evidence']
+        # A newly supplied review can qualify task metrics on an older receipt
+        # without rescanning or running the workload. Admission remains pending.
+        if digest in reviewed and row['execution_status']=='MEASURED_FULL':
+            assessment=reviewed[digest]
+            if assessment.get('review_source'):row['quality_review_source']=assessment['review_source']
+            row['quality_assessment']=assessment['quality_assessment'];row['quality_reason']=assessment['reason']
+            row['quality_comparisons']={key:assessment[key] for key in (
+                'candidate_vs_baseline','candidate_vs_opponents','baseline_vs_opponents',
+                'opponent_metrics','metric_directions','new_full_opponent_review') if key in assessment}
+            row['quality']='FAIL' if row['quality_assessment'] in ('FAILED_FAST_OPPONENT_GATE','QUALITY_FAILED') else 'PASS_TASK_METRICS' if row['quality_assessment']=='TASK_METRIC_GATE_PASSED' else 'PENDING'
+            row['status']='QUALITY_FAILED' if row['quality']=='FAIL' else 'PENDING_ADMISSION'
+            if row['evidence'] in retained_details:
+                retained_details[row['evidence']].update(quality_assessment=row['quality_assessment'],quality_reason=row['quality_reason'])
+    inventory=dict(campaign='six-lane-full-ab-20261006',identity_policy='NVIDIA/AMD same-arm IDENTICAL admission requires matching source/runtime provenance and complete typed fitted-state evidence. See the coverage table for completed and pending work; NVIDIA PTX artifacts remain pending. Apple FAST is evaluated by task quality; bits may differ.',evidence_policy='Complete full-workload executions are retained separately from quality and identity admission. Failed attempts preserved at controller-qualified paths; no default promotion. Hash receipts alone do not establish retained array/model bytes; see artifact-retention.json.',candidates=list(candidates.values()))
     notes=['A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.',
-           'These are combined-configuration full workloads, not completed individual constituent experiments.',
+           'Complete-proposed receipts measure combined configurations. Additional exact selection IDs identify isolated or interaction/dropout profiles; no result automatically credits its members.',
            'Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.',
            'One excluded warmup and one scored sample per arm. Original failed attempts are retained.',
-           'AMD GPU measurements use accepted retained artifacts. Latest owner instruction forbids further compilation; unavailable paired artifacts remain blocked. NVIDIA PTX still awaits compatible artifacts.',
+           'The original AMD campaign used accepted retained artifacts and then stopped compilation. That dated stop is historical; later targeted build authorization and readiness belong to their own source freeze. No publisher action compiles, launches jobs or promotes defaults.',
            'IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.',
            'Scored output and partial/public-save model hashes are retained separately; partial hashes do not prove complete state identity.',
            'Apple first four PCA/OLS pairs overlapped shared workspace storage data transfer; KMeans overlap unestablished. No quiet-storage or promotion claim.',
            'Apple teardown preservation failed: the workspace was on the internal SSD, not retained EBS. Logs, timings, metrics and hash receipts survive; some raw array bytes remain unrecovered. See artifact-retention.json for exact recovery coverage and provenance. Original receipts are unchanged.',
            'Races reuse accepted binaries without separate numerical verification reruns. Earlier separately authorized AMD builds are historical artifact evidence, not measurements. Full provider and worker logs remain under '+str(ROOT)]
-    retention={}
+    retention=load(OUT/'artifact-retention.json',{})
     storage=ROOT/'quality-review/r2-reconciliation/reconciliation.json'
     if storage.exists():
         shutil.copyfile(storage,OUT/'storage-reconciliation.json')
@@ -205,7 +339,7 @@ def main():
     stop=ROOT/'amd-missing-build/owner-stop-compilation/final-status.json'
     if stop.exists():
         shutil.copyfile(stop,OUT/'compilation-stopped.json')
-        notes.append('The AMD missing-artifact compiler was stopped under the latest owner instruction; see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready.')
+        notes.append('Historical AMD missing-artifact compiler stop: see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready. Later targeted compilation has its own authorization and freeze.')
     hashes=ROOT/'quality-review/scored-hash-coverage.json'
     if hashes.exists():
         shutil.copyfile(hashes,OUT/'scored-hash-coverage.json')
@@ -245,17 +379,22 @@ def main():
                      ', repeated counts '+json.dumps(comparison_summary['observed_repeated_counts'],sort_keys=True)+
                      '. Full identity counts '+json.dumps(comparison_summary['full_identity_counts'],sort_keys=True)+
                      '. These are saved-signature comparisons, not new model runs or default admission; unmatched and failed arms are retained in same-arm-output-comparison.json and its snapshot.')
-    for assessment in review['rows']+next_review['rows']:
-        assessment['original_review_receipt_path']=assessment['receipt']
-        assessment['receipt']=receipt_paths.get(assessment['receipt_sha256'],assessment['receipt'])
+    for assessment in review['rows']+next_review['rows']+extra_reviews:
+        assessment.setdefault('original_review_receipt_path',assessment.get('receipt'))
+        assessment['receipt']=receipt_paths.get(assessment['receipt_sha256'],assessment.get('receipt'))
     review['publication_repair']='Original review retained externally; links relocated by exact receipt SHA256 into controller-qualified paths. Distinct failed and repaired attempts no longer collide.'
     write(OUT/'quality-review.json',review)
     if next_review['rows']:write(OUT/'next-quality-review.json',next_review)
+    previous_reviews=load(OUT/'continuation-quality-reviews.json',{'rows':[]})['rows']
+    review_versions={hashlib.sha256(json.dumps(row,sort_keys=True).encode()).hexdigest():row
+                     for row in previous_reviews+extra_reviews}
+    write(OUT/'continuation-quality-reviews.json',dict(rows=list(review_versions.values()),
+        policy='Saved review versions bound to exact receipt SHA256; no quality recomputation or default admission.'))
     if (ROOT/'quality-review/historical-istella-opponents.json').exists():shutil.copyfile(ROOT/'quality-review/historical-istella-opponents.json',OUT/'historical-istella-opponents.json')
     decisions=[dict(candidate=c['id']+'/'+c['case'],
                     decision='NOT PROMOTED: '+c['quality_reason'],
                     commit=c['source_sha'],evidence=c['evidence'],
-                    default_changed=False,individual_constituents='Not decided by this combined-configuration result')
+                    default_changed=False,individual_constituents='Only the recorded exact selection has this result; members receive no automatic decision')
                for c in cells if c['status']=='QUALITY_FAILED']
     defaults_audit=ROOT/'quality-review/defaults-inline-audit/audit-and-comment-handoff.json'
     if defaults_audit.exists():
@@ -270,13 +409,17 @@ def main():
             default_changed=False,historical_decision=True)
             for p in audit.get('existing_promotions',[])]
     remaining={
-        'nvidia': 'Native combined configurations measured; PTX, individual controls and other full-workload recipe gaps remain pending.',
+        'nvidia': 'See exact selection and route receipts. PTX and unrecorded individual/full-workload scopes remain pending.',
         'amd': 'Selected retained-artifact pairs measured; GMM and other missing paired-artifact/recipe scopes remain pending.',
-        'apple': 'See unrun scope for additional FAST pairs; earlier array-preservation and quality limitations remain.'}
+        'apple': 'See unrun scope for additional FAST pairs; earlier array-preservation and quality limitations remain.',
+        'host': 'Same-arm identity and full-workload admission remain pending unless separately established.'}
     coverage=[]
-    for vendor, label in [('nvidia','NVIDIA native / IDENTICAL'),('amd','AMD GPU / IDENTICAL'),('apple','Apple / FAST')]:
+    for vendor, label in [('nvidia','NVIDIA'),('amd','AMD GPU'),('apple','Apple'),('host','Host')]:
         rows=[c for c in cells if c['vendor']==vendor]
-        coverage.append(dict(vendor=vendor,label=label,
+        if vendor=='host' and not rows:continue
+        modes=sorted({c.get('mode',candidates[c['id']]['mode']).upper() for c in rows})
+        coverage.append(dict(vendor=vendor,label=label+' / '+', '.join(modes),
+            routes=sorted({c.get('route','NOT_RECORDED') for c in rows}),
             complete_pairs=sum(c.get('execution_status')=='MEASURED_FULL' for c in rows),
             failed_attempts=sum(c['status']=='FAILED_OR_INCOMPLETE' for c in rows),
             quality_failed=sum(c['status']=='QUALITY_FAILED' for c in rows),remaining_scope=remaining[vendor]))
@@ -294,7 +437,7 @@ def main():
     pending_work=[
         dict(vendor='nvidia',scope='NVIDIA PTX/default full A/B',reason='Compatible retained full-workload artifacts unavailable; no timing worker or compilation substituted.',evidence=str(ROOT/'nvidia-ptx/status.json')),
         dict(vendor='amd',scope='AMD GMM full-workload pair',reason='Paired retained mixture binaries unavailable; excluded from the completed queue.',evidence=str(ROOT/'amd/next-reg/continuation-status.json')),
-        dict(vendor='all',scope='Individual candidates, alternative arms and other affected workloads',reason='This campaign measured complete-proposed combinations, not every individual catalog entry. Missing recipes, incompatible artifacts and untested interactions remain pending; do not infer constituent winners.',evidence='experiments/six_lane_integration/catalog.json')]
+        dict(vendor='all',scope='Individual candidates, alternative arms and other affected workloads',reason='Only exact recorded selections have receipts. Missing recipes, incompatible artifacts and untested interactions remain pending; combined results do not decide constituents.',evidence='experiments/six_lane_integration/catalog.json')]
     if apple_pending.get('completed',0)<apple_pending.get('expected_pairs',4):
         pending_work.insert(1,dict(vendor='apple',scope='Apple FAST LogReg/LinearSVC × Taxi/Istella',
             reason=str(apple_pending.get('completed',0))+'/'+str(apple_pending.get('expected_pairs',4))+
@@ -307,6 +450,31 @@ def main():
             reason=str(apple_readiness['mlp_pending_cells'])+' additional pending pairs; '+apple_readiness.get('mlp_blocker','Readiness unresolved'),
             evidence='campaign-coverage.json: apple_readiness'))
     remaining=remaining_catalog(cells)
+    if continuation_records:
+        continuation_ids={c['id'] for c in candidates.values()}-{'I.X.complete-proposed','AF.X.complete-proposed'}
+        related=load(OUT/'continuation-coverage.json',{'configurations':[]})
+        configurations={c['id']:c for c in related['configurations']}
+        configurations.update({c['id']:c for c in extra_configs})
+        continuation_rows=[]
+        for ident in sorted(continuation_ids):
+            rows=[c for c in cells if c['id']==ident]
+            continuation_rows.append(dict(id=ident,members=configurations.get(ident,{}).get('members',[]),
+                attempts=len(rows),complete_pairs=sum(c['execution_status']=='MEASURED_FULL' for c in rows),
+                quality_failed=sum(c['status']=='QUALITY_FAILED' for c in rows),
+                status='RECEIPTS_RETAINED_PENDING_ADMISSION' if rows else 'PENDING_MEASUREMENT',
+                receipts=[c['evidence'] for c in rows]))
+        write(OUT/'continuation-coverage.json',dict(configurations=list(configurations.values()),rows=continuation_rows,
+            policy='Exact continuation IDs stay separate from catalog IDs. Members/aliases are cross-links, not automatic constituent measurement or promotion credit.'))
+        write(OUT/'publication-continuations.json',dict(schema='mojolearn.campaign-continuations/1',manifests=continuation_records))
+        notes.extend(extra_notes)
+        notes.append('Targeted continuations: '+str(len(continuation_ids))+' additional exact profiles; '+
+            str(sum(bool(r['attempts']) for r in continuation_rows))+' have receipts. See continuation-coverage.json for members and pending scope, and publication-continuations.json for exact plan/review snapshots and missing inputs. The catalog coverage ledger counts authored catalog IDs only; it does not relabel targeted profile IDs as catalog receipts.')
+        for record in continuation_records:
+            missing=[r['path'] for r in record['sources'] if r['status']!='AVAILABLE']+[
+                r['source'] for r in record['inputs'] if r['status']=='PENDING_INPUT']
+            if missing:pending_work.append(dict(vendor='all',scope='Continuation '+record['id'],
+                reason='Pending sources/inputs: '+', '.join(missing),evidence='publication-continuations.json'))
+        remaining['continuation_selections']=continuation_rows
     write(OUT/'remaining-work.json',remaining)
     write(OUT/'campaign-coverage.json',dict(coverage=coverage,pending_work=pending_work,evidence_inputs=evidence_inputs,
           remaining_catalog={k:v for k,v in remaining.items() if k!='rows'},
