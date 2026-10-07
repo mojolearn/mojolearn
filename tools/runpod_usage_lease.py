@@ -5,7 +5,7 @@ plan CONFIG; adopt CONFIG; manage CONFIG [--once]
 Adoption installs an independent remote watchdog using its existing 0600 curl
 credential. Parent must separately retire *all* old EXIT traps/deadmen/timers.
 A healthy manager renews a 90-minute orphan deadline while work runs. Idle
-termination requires DONE, exact captured file hashes, then the configured 30 or 45 idle minutes.
+termination requires DONE, exact captured file hashes, then the configured 30, 45 or 60 idle minutes.
 Remove DONE before assigning new work. Job timeouts remain the job's concern.
 """
 import argparse
@@ -74,8 +74,8 @@ def validate(c):
     for key in ('remote_out','remote_state','remote_curlrc'):
         if not re.fullmatch(r'/[A-Za-z0-9_./-]+', c[key]) or '..' in Path(c[key]).parts:
             raise ValueError('unsafe remote path '+key)
-    if c.get('idle_seconds', 2700) not in (1800, 2700):
-        raise ValueError('supported idle policies are 30 or 45 minutes')
+    if c.get('idle_seconds', 2700) not in (1800, 2700, 3600):
+        raise ValueError('supported idle policies are 30, 45 or 60 minutes')
     if not 5400 <= c.get('orphan_seconds', 5400) <= 86400:
         raise ValueError('orphan lease must be at least 90 minutes')
     if not 10 <= c.get('poll_seconds', 30) <= 300:
@@ -406,7 +406,7 @@ def manage(c, once=False):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=('plan','adopt','manage','remote','guardian','hold','release-hold'));p.add_argument('config');p.add_argument('remote_action',nargs='?');p.add_argument('--once',action='store_true');p.add_argument('--reason',default='queued work');a=p.parse_args();c=validate(json.loads(Path(a.config).read_text()))
-    if a.action=='plan':print(json.dumps(dict(status='PLAN_ONLY',config_sha256=digest(c),idle_seconds=2700,orphan_seconds=c.get('orphan_seconds',5400),legacy_guards='UNCHANGED')))
+    if a.action=='plan':print(json.dumps(dict(status='PLAN_ONLY',config_sha256=digest(c),idle_seconds=c.get('idle_seconds',2700),orphan_seconds=c.get('orphan_seconds',5400),legacy_guards='UNCHANGED')))
     elif a.action=='adopt':adopt(c)
     elif a.action=='manage':manage(c,a.once)
     elif a.action in ('hold','release-hold'):print(json.dumps(remote_call(c,a.action,dict(reason=a.reason))))

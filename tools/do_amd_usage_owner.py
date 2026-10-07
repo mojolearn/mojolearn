@@ -2,7 +2,7 @@
 """Usage-based owner for the existing DigitalOcean AMD steward.
 
 Does not rent or replace a steward. The existing on-box selfkill and Mac
-backup remain independent: extend90 renews both, idle45 uses verified down.
+backup remain independent: extend90 renews both; configured idle30/45/60 uses verified down.
 """
 import argparse
 import fcntl
@@ -24,8 +24,8 @@ def validate(c):
     if not str(c['droplet_id']).isdigit():raise ValueError('invalid droplet ID')
     for field in ('state_dir', 'local_out', 'remote_out', 'steward_script'):
         if not Path(c[field]).is_absolute():raise ValueError('absolute path required: ' + field)
-    if c.get('idle_seconds',2700) not in (1800,2700) or c.get('renew_minutes',90)!=90:
-        raise ValueError('policy requires idle30/45min and orphan90min')
+    if c.get('idle_seconds',2700) not in (1800,2700,3600) or c.get('renew_minutes',90)!=90:
+        raise ValueError('policy requires idle30/45/60min and orphan90min')
     if not 10<=c.get('poll_seconds',60)<=300:raise ValueError('poll outside10..300seconds')
     if not 1<=c.get('capture_timeout',1800)<=1800:raise ValueError('capture timeout exceeds orphan margin')
     return c

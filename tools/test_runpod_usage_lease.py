@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """No SSH, real provider calls, or deletion: policy, capture and fake API tests."""
 import copy
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -38,6 +39,30 @@ class Policy(unittest.TestCase):
         self.assertEqual(u.decision(c,s,1810,True,'proof'),'DELETE_IDLE')
         self.assertEqual(u.decision(c,s,1810,False,'proof'),'KEEP')
         self.assertEqual(u.decision(c,s,1810,True,'changed'),'KEEP')
+    def test_requested_hour_waits_for_capture_and_all_pending_work(self):
+        c=dict(self.c,idle_seconds=3600);u.validate(c);s=u.new_state(c,0)
+        s=u.renew(c,s,10,captured='proof',done=True)
+        self.assertEqual(u.decision(c,s,3609,True,'proof'),'KEEP')
+        self.assertEqual(u.decision(c,s,3610,True,'proof'),'DELETE_IDLE')
+        self.assertEqual(u.decision(c,s,3610,True,'changed'),'KEEP')
+        held=dict(s,busy_hold='next batch queued')
+        self.assertEqual(u.decision(c,held,3610,True,'proof'),'KEEP')
+        self.assertEqual(u.decision(c,held,5410,True,'proof'),'DELETE_ORPHAN')
+        resumed=u.renew(c,s,3500,done=False)
+        self.assertIsNone(resumed['idle_since'])
+        self.assertEqual(u.decision(c,resumed,4000,True,'proof'),'KEEP')
+        final=u.renew(c,resumed,4000,captured='final-proof',done=True)
+        self.assertEqual(u.decision(c,final,7599,True,'final-proof'),'KEEP')
+        self.assertEqual(u.decision(c,final,7600,True,'final-proof'),'DELETE_IDLE')
+        with self.assertRaises(ValueError):u.validate(dict(c,capture_timeout=1801))
+    def test_plan_reports_configured_hour_without_provider_calls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=Path(tmp)/'config.json';p.write_text(json.dumps(dict(self.c,idle_seconds=3600)))
+            with patch('sys.argv',['lease','plan',str(p)]),patch('sys.stdout',new_callable=io.StringIO) as out:
+                u.main()
+            plan=json.loads(out.getvalue())
+            self.assertEqual(plan['idle_seconds'],3600)
+            self.assertEqual(plan['orphan_seconds'],5400)
     def test_heartbeat_preserves_idle_deadline(self):
         s=u.renew(self.c,self.s,10,'proof',True);s=u.renew(self.c,s,1000,'proof',True)
         self.assertEqual(s['idle_since'],10)
