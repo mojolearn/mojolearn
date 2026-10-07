@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""Unit tests for tools/six_lane_grid.py (pure Python, metadata only; no compile, no GPU)."""
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import six_lane_grid as G  # noqa: E402
+
+GUARD_TEXT = '''
+def _check_configuration() -> Bool:
+    comptime assert not (is_defined["MOJOLEARN_A"]() and is_defined["MOJOLEARN_B"]()), "A/B exclusive"
+    comptime assert not is_defined["MOJOLEARN_RETIRED"](), "retired"
+    comptime S = get_defined_int["MOJOLEARN_S",0]()
+    comptime assert S == 0 or S == 1 or S == 3, "S arms"
+    comptime R = get_defined_int["MOJOLEARN_R",7]()
+    comptime assert S != 3 or R == 7, "S3 takes no mask"
+    return True
+'''
+
+
+def ctrl(key, define, arms, default='off', kind='switch', **extra):
+    arms = {a: [G.norm_define(d) for d in ds] for a, ds in arms.items()}
+    return dict(key=key, file='t', define=define, kind=kind, arms=arms, default=default,
+                binding='_mojolearn_x', bits_change=False, status='new', **extra)
+
+
+def algo(aid, controls, groups=(), notes=()):
+    return dict(id=aid, controls=list(controls), groups=[list(g) for g in groups], not_reached=[],
+                arm_restrict={}, notes=list(notes), workload_bindings=['_mojolearn_x'])
+
+
+class GuardTests(unittest.TestCase):
+    def setUp(self):
+        self.g = G.Guards(GUARD_TEXT)
+
+    def test_parses_and_evaluates(self):
+        self.assertEqual(self.g.assert_count, 4)
+        self.assertEqual(self.g.problems([]), [])
+        self.assertEqual(self.g.problems(['MOJOLEARN_A', 'MOJOLEARN_B']), ['A/B exclusive'])
+        self.assertEqual(self.g.problems(['MOJOLEARN_RETIRED=1']), ['retired'])
+        self.assertEqual(self.g.problems(['MOJOLEARN_S=2']), ['S arms'])
+        self.assertEqual(self.g.problems(['MOJOLEARN_S=3', 'MOJOLEARN_R=1']), ['S3 takes no mask'])
+        self.assertEqual(self.g.problems(['MOJOLEARN_S=3']), [])
+
+    def test_unknown_guard_shape_raises(self):
+        with self.assertRaises(ValueError):
+            G.Guards('def _check_configuration() -> Bool:\n    comptime assert foo["X"](), "m"\n    return True\n')
+
+    def test_extra_pairs(self):
+        self.g.add_pair('MOJOLEARN_P', 'MOJOLEARN_Q', 'note')
+        self.assertTrue(self.g.problems(['MOJOLEARN_P=1', 'MOJOLEARN_Q=1']))
+        self.assertFalse(self.g.problems(['MOJOLEARN_P=1']))
+
+    def test_real_guard_file(self):
+        g = G.Guards(G.GUARDS.read_text())
+        self.assertGreater(g.assert_count, 50)
+        self.assertEqual(g.problems([]), [])
+        self.assertTrue(g.problems(['MOJOLEARN_IDN_NEURAL_NN01=1']))  # retired
+        self.assertTrue(g.problems(['MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3', 'MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES=1']))
+        self.assertTrue(g.problems(['MOJOLEARN_NN34_AFFINE_PREFIX=1', 'MOJOLEARN_IDN_M1_STATE_WINDOW=1']))
+
+
+class PlanTests(unittest.TestCase):
+    def setUp(self):
+        self.g = G.Guards(GUARD_TEXT)
+        self.controls = {
+            'a': ctrl('a', 'MOJOLEARN_A', {'off': [], 'on': ['MOJOLEARN_A']}),
+            'b': ctrl('b', 'MOJOLEARN_B', {'off': [], 'on': ['MOJOLEARN_B']}),
+            's': ctrl('s', 'MOJOLEARN_S', {'off': [], 'one': ['MOJOLEARN_S=1'], 'three': ['MOJOLEARN_S=3']}, kind='arms'),
+            'r': ctrl('r', 'MOJOLEARN_R', {'all': [], 'p': ['MOJOLEARN_R=1'], 'h': ['MOJOLEARN_R=2']}, default='all',
+                      kind='arms', note='Caller-class scope of s (role tags)'),
+            'w': ctrl('w', 'MOJOLEARN_W', {'4': [], '8': ['MOJOLEARN_W=8'], '16': ['MOJOLEARN_W=16']}, default='4', kind='int_sweep'),
+            'dead': ctrl('dead', 'MOJOLEARN_DEAD', {'off': [], 'on': ['MOJOLEARN_DEAD']}, note='UNREACHED on the board: serial arm'),
+            'off': ctrl('off', 'MOJOLEARN_OFFB', {'off': [], 'on': ['MOJOLEARN_OFFB']}, tags=['off_board']),
+        }
+        G.harness_problems = lambda defines: []  # isolate from the real CONFLICTS list
+
+    def tearDown(self):
+        import importlib
+        importlib.reload(G)
+
+    def run_plan(self, a, reach=None, cap=16):
+        reach = reach or {k: {a['id']} for k in a['controls']}
+        return G.plan_algorithm(a, self.controls, reach, self.g, cap)
+
+    def test_singles_all_on_crosses_and_exclusions(self):
+        p = self.run_plan(algo('x:t', ['a', 'b', 's', 'r', 'w', 'dead', 'off'], groups=[['s', 'r'], ['a', 'w']]))
+        excluded = {e['control'] for e in p['excluded']}
+        self.assertEqual(excluded, {'dead', 'off'})
+        tiers = [c['tier'] for c in p['configs']]
+        self.assertEqual(tiers[:8], ['single'] * 8)  # a, b, s=one, s=three, r=p(+s), r=h(+s), w=8, w=16
+        singles = [c['assignment'] for c in p['configs'] if c['tier'] == 'single']
+        self.assertIn({'s': 'one', 'r': 'p'}, singles)  # child carries parent representative arm
+        self.assertIn({'w': '8'}, singles)
+        self.assertNotIn({'w': '4'}, singles)  # default sweep value is B
+        all_on = [c for c in p['configs'] if c['tier'] == 'all_on'][0]
+        self.assertNotIn('b', all_on['assignment'])  # a/b exclusive: b dropped
+        self.assertEqual(p['dropped_from_all_on'][0]['control'], 'b')
+        for c in p['configs']:
+            self.assertEqual(self.g.problems(c['defines']), [])
+        crosses = [c['assignment'] for c in p['configs'] if c['tier'] == 'cross']
+        self.assertNotIn({'s': 'three', 'r': 'p'}, crosses)  # guard: S3 takes no mask
+        self.assertTrue(any(i['problem'] == 'S3 takes no mask' for i in G.summarize_invalid(p['invalid'])))
+        ids = [c['id'] for c in p['configs']]
+        self.assertEqual(len(ids), len(set(ids)))
+        defs = [tuple(c['defines']) for c in p['configs']]
+        self.assertEqual(len(defs), len(set(defs)))
+
+    def test_cap_defers_in_priority_order(self):
+        p = self.run_plan(algo('x:t', ['a', 'b', 's', 'r', 'w'], groups=[['s', 'r'], ['a', 'w']]), cap=3)
+        self.assertEqual(len(p['configs']), 3)
+        self.assertEqual([c['priority'] for c in p['configs']], [1, 2, 3])
+        self.assertTrue(p['deferred'])
+        self.assertTrue(any(d['tier'] == 'all_on' for d in p['deferred']))
+        self.assertEqual(len(p['deferred_groups']), 1)
+        self.assertGreater(p['deferred_groups'][0]['configs'], 0)
+
+    def test_note_restricts_arms(self):
+        a = algo('x:t', ['s'])
+        a['arm_restrict'] = {'s': ['three']}
+        p = self.run_plan(a)
+        self.assertEqual([c['assignment'] for c in p['configs']], [{'s': 'three'}])
+
+    def test_packing_respects_reach_and_guards(self):
+        def cfg(aid, assign, glob=False, prio=1):
+            return dict(id=aid + '.' + G.label(tuple(assign.items())), algorithm=aid, assignment=assign, priority=prio,
+                        defines=G.assignment_defines(tuple(assign.items()), self.controls), bindings=['_mojolearn_x'],
+                        global_reach=['g'] if glob else [], controls=list(assign))
+        reach = {'a': {'x:1'}, 'w': {'x:2'}, 'b': {'x:3'}, 's': {'x:1', 'x:2'}}
+        configs = [cfg('x:1', {'a': 'on'}), cfg('x:2', {'w': '8'}), cfg('x:3', {'b': 'on'}), cfg('x:2', {'s': 'one'}, prio=2),
+                   cfg('x:3', {'w': '16'}, glob=True, prio=2)]
+        packs = G.pack(configs, reach, self.g)
+        by = {m['id']: p for p in packs for m in p['members']}
+        self.assertIs(by['x:1.a=on'], by['x:2.w=8'])          # disjoint reach -> shared build
+        self.assertIsNot(by['x:1.a=on'], by['x:3.b=on'])       # A/B guard exclusion -> separate
+        self.assertIsNot(by['x:2.s=one'], by['x:1.a=on'])      # s reaches x:1 -> separate
+        self.assertEqual(len(by['x:3.w=16']['members']), 1)    # global reach never packed
+        for p in packs:
+            self.assertEqual(self.g.problems(p['defines']), [])
+
+
+class MappingTests(unittest.TestCase):
+    INV = {'classical:pca@dataset=taxi': 's', 'classical:pca@dataset=istella': 's',
+           'expanded:lda-clf@dataset=taxi': 's', 'expanded:lda-clf@dataset=taxi@input=classification-full-v1': 'v',
+           'expanded:lda-clf@lda_outputs@dataset=taxi': 's', 'rf:taxi': 's', 'rf:year': 's', 'oob:rf:taxi': 's',
+           'neural:lm-train-step': 's', 'neural:gemm': 's', 'expanded:cnn-clf@dataset=synthetic': 's'}
+
+    def test_map(self):
+        self.assertEqual(G.map_workloads('classical:pca', self.INV)[0], ['classical:pca@dataset=istella', 'classical:pca@dataset=taxi'])
+        self.assertEqual(G.map_workloads('expanded:lda-clf', self.INV)[0], ['expanded:lda-clf@dataset=taxi@input=classification-full-v1'])
+        self.assertIsNone(G.map_workloads('expanded:lda-clf@lda_outputs', self.INV)[0])  # capped original only
+        self.assertEqual(G.map_workloads('trees:rf', self.INV)[0], ['rf:taxi', 'rf:year'])
+        self.assertEqual(G.map_workloads('gemm:gemm', self.INV)[0], ['neural:gemm'])
+        self.assertEqual(G.map_workloads('neural:cnn-clf', self.INV)[0], ['expanded:cnn-clf@dataset=synthetic'])
+        self.assertIsNone(G.map_workloads('neural:mamba-forward', self.INV)[0])
+        self.assertIsNone(G.map_workloads('classical:pca@svd_solver=full', self.INV)[0])
+
+
+class RealInputTests(unittest.TestCase):
+    """End-to-end on the committed grid_controls; checks invariants, not counts."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.plan, cls.matrix, cls.build = G.generate()
+        cls.guards = G.Guards(G.GUARDS.read_text())
+        controls, *_ = G.load_controls()
+        for a, b, why in G.source_exclusions(controls):
+            cls.guards.add_pair(a, b, why)
+
+    def test_cap_and_guards(self):
+        for aid, a in self.plan['algorithms'].items():
+            self.assertLessEqual(len(a['configs']), G.CAP, aid)
+            for c in a['configs']:
+                self.assertEqual(self.guards.problems(c['defines']), [], c['id'])
+        for c in self.matrix['configurations']:
+            self.assertEqual(self.guards.problems(c['A']['defines']), [], c['id'])
+            self.assertEqual(G.harness_problems(c['A']['defines']), [], c['id'])
+            self.assertTrue(set(c['grid']['effective_defines']) <= set(c['A']['defines']))
+            self.assertEqual(c['B']['defines'], [])
+
+    def test_no_stale_catalog_defines(self):
+        retired = {'MOJOLEARN_IDN_NEURAL_NN01', 'MOJOLEARN_NN24_NORM_LANES8', 'MOJOLEARN_C29_TILE', 'MOJOLEARN_C52_PAIR_128'}
+        for j in self.build['jobs']:
+            self.assertFalse(retired & {d.split('=')[0] for d in j['defines']})
+            self.assertIn(G.IDENTICAL_DEFINE, j['defines'])
+            self.assertIn(j['vendor'], ('nvidia', 'amd'))
+
+    def test_every_config_has_builds_and_cells(self):
+        jobs = {j['key']: j for j in self.build['jobs']}
+        cells = {}
+        for cell in self.matrix['cells']:
+            cells.setdefault(cell['configuration'], set()).add(cell['vendor'])
+        for c in self.matrix['configurations']:
+            self.assertEqual(cells[c['id']], {'nvidia', 'amd'})
+            for vendor in ('nvidia', 'amd'):
+                for arm in ('A', 'B'):
+                    for key in c['grid']['builds'][vendor][arm]:
+                        self.assertIn(dict(configuration=c['id'], arm=arm), jobs[key]['configurations'])
+        s = self.plan['summary']
+        self.assertLessEqual(s['builds_after_packing'], s['builds_before_packing'])
+        self.assertEqual(s['builds_after_packing'], len(self.build['jobs']))
+        self.assertEqual(s['aa_pairs'], 2 * s['workloads'])
+
+    def test_nothing_silent(self):
+        listed = {k for a in self.plan['algorithms'].values() for k in a['declared_controls']}
+        excluded = {e['control'] for e in self.plan['excluded']}
+        controls, *_ = G.load_controls()
+        self.assertTrue((set(controls) - listed) <= excluded)
+        for aid, a in self.plan['algorithms'].items():
+            for k in a['declared_controls']:
+                if k not in a['eligible_controls']:
+                    self.assertIn(k, {e['control'] for e in a['excluded']}, aid)
+
+    def test_queue_accepts_matrix(self):
+        import six_lane_ab
+        from six_lane_matrix_io import write_matrix
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'm.json.gz'
+            write_matrix(path, self.matrix)
+            original = six_lane_ab.check_benchmark
+            six_lane_ab.check_benchmark = lambda: None  # format check only; benchmark freeze is the queue owner's gate
+            try:
+                args = type('A', (), dict(vendor='amd', recipes=None, matrix=path, select=None, output=Path(tmp) / 'q.json'))
+                six_lane_ab.queue(args)
+            finally:
+                six_lane_ab.check_benchmark = original
+            q = json.loads((Path(tmp) / 'q.json').read_text())
+        self.assertEqual(len(q['jobs']), sum(1 for c in self.matrix['cells'] if c['vendor'] == 'amd'))
+        self.assertTrue(all(j['blocked'] for j in q['jobs']))  # no recipes: every job stays blocked
+
+
+if __name__ == '__main__':
+    unittest.main()
