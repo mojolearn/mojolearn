@@ -199,6 +199,13 @@ def knn_large_request(n_index: Int, n_queries: Int, n_features: Int, k: Int) -> 
         # LEGACY (default OFF): the exact knn board shape (400k index,
         # 4k queries, 32 features, k in {10, 15}). Removed Oct 4 as
         # benchmark-shape tuning; the size rule below is unmeasured.
+        # This define exists ONLY as the B arm of the owed removal A/B
+        # (A = size rule, B = -D MOJOLEARN_LEGACY_SHAPE_KNN_BOARD), timed on
+        # NVIDIA + AMD over neighboring shapes and one non-board dataset:
+        # experiments/six_lane_integration/grid_controls/classical-misc.json
+        # `owed_removal_ab`. Gates only NVIDIA vector index loads and Apple
+        # preflight metadata (both bit-neutral). Delete it once that A/B lands.
+        # Never enable it in a shipped build.
         return n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15)
     # merge 2026-10-05: main's KNN_LARGE_MIN_* rule and the IDENTICAL lane's
     # pair-count rule both replaced the board shape; the IDENTICAL lane's
