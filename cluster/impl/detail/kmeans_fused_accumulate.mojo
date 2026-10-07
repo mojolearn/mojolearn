@@ -268,5 +268,9 @@ def launch_kmeans_fused_accumulate[
         block_dim=(KF_TPB, 1, 1),
     )
     var cells = n_clusters * n_features
-    launch_block_table_fold[store](ctx, sums_i32.unsafe_ptr(), table.unsafe_ptr(), n_blocks, cells)
-    launch_block_table_fold[store](ctx, weight_i32.unsafe_ptr(), table_w.unsafe_ptr(), n_blocks, n_clusters)
+    launch_block_table_fold[store](
+        ctx, sums_i32.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        table.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_blocks, cells)
+    launch_block_table_fold[store](
+        ctx, weight_i32.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        table_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_blocks, n_clusters)

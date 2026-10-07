@@ -337,12 +337,13 @@ def attention_v2_model_forward[diagnostic: Bool](
     mut weights: DeviceBuffer[DType.float32], b: Int, length: Int, heads: Int,
     kv_heads: Int, keys: Int, depth: Int, own0: Int, window: Int, scale: Float32,
 ) raises:
-    var qp = q.unsafe_ptr()
-    var kp = k.unsafe_ptr()
-    var vp = v.unsafe_ptr()
-    var op = output.unsafe_ptr()
-    var mp = maxima.unsafe_ptr()
-    var dp = denominators.unsafe_ptr()
+    # Erase the buffer origins: the tiled entry takes V2Ptr (MutAnyOrigin) pointers.
+    var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var kp = k.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var vp = v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var op = output.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var mp = maxima.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var dp = denominators.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var tiled = False
     comptime if V2_TILED_DEVICE:
         if b * length * heads > 0 and _v2_tiled_head_dim(depth):
@@ -803,16 +804,17 @@ def attention_v2_model_backward[diagnostic: Bool](
     mut dqk: DeviceBuffer[DType.float32], b: Int, length: Int, heads: Int,
     kv_heads: Int, keys: Int, depth: Int, own0: Int, window: Int, scale: Float32,
 ) raises:
-    var qp = q.unsafe_ptr()
-    var kp = k.unsafe_ptr()
-    var vp = v.unsafe_ptr()
-    var dyp = dy.unsafe_ptr()
-    var mp = maxima.unsafe_ptr()
-    var dp = denominators.unsafe_ptr()
-    var zp = zdots.unsafe_ptr()
-    var dqp = dq.unsafe_ptr()
-    var dkp = dk.unsafe_ptr()
-    var dvp = dv.unsafe_ptr()
+    # Erase the buffer origins: the tiled entry takes V2Ptr (MutAnyOrigin) pointers.
+    var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var kp = k.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var vp = v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var dyp = dy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var mp = maxima.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var dp = denominators.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var zp = zdots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var dqp = dq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var dkp = dk.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var dvp = dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var row_grid = (b * heads * length + 63) // 64
     var tiled = False
     comptime if V2_TILED_DEVICE:

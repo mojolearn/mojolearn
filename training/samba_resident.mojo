@@ -502,13 +502,13 @@ struct SambaResidentSession(Movable, Writable):
     def write_repr_to(self, mut writer: Some[Writer]):
         writer.write("SambaResidentSession")
 
-    def view(self, j: Int) -> DeviceBuffer[DType.float32]:
+    def view(self, j: Int) raises -> DeviceBuffer[DType.float32]:
         """Registry tensor `j` as a view of `param`."""
         return self.param.create_sub_buffer[DType.float32](
             self.offsets[j], self.offsets[j + 1] - self.offsets[j]
         )
 
-    def grad_view(self, j: Int) -> DeviceBuffer[DType.float32]:
+    def grad_view(self, j: Int) raises -> DeviceBuffer[DType.float32]:
         """Registry tensor `j` as a view of `grad`."""
         return self.grad.create_sub_buffer[DType.float32](
             self.offsets[j], self.offsets[j + 1] - self.offsets[j]
