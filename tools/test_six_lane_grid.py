@@ -158,6 +158,16 @@ class MappingTests(unittest.TestCase):
         self.assertIsNone(G.map_workloads('neural:mamba-forward', self.INV)[0])
         self.assertIsNone(G.map_workloads('classical:pca@svd_solver=full', self.INV)[0])
 
+    def test_expanded_datasets_follow_the_board_lane(self):
+        inv = {'expanded:theta@dataset=taxi': 's', 'expanded:theta@dataset=istella': 's',
+               'expanded:lu-solve@dataset=taxi': 's', 'expanded:lu-solve@dataset=synthetic': 's',
+               'expanded:ridge-cv@dataset=taxi': 's'}
+        ids, notes = G.map_workloads('expanded:theta', dict(inv))
+        self.assertEqual(ids, ['expanded:theta@dataset=synthetic', 'expanded:theta@dataset=taxi-hourly'])
+        self.assertTrue(any('not raced by board lane' in n for n in notes))
+        self.assertEqual(G.map_workloads('expanded:lu-solve', dict(inv))[0], ['expanded:lu-solve@dataset=synthetic'])
+        self.assertEqual(G.map_workloads('expanded:ridge-cv', dict(inv))[0], ['expanded:ridge-cv@dataset=taxi'])
+
 
 class RealInputTests(unittest.TestCase):
     """End-to-end on the committed grid_controls; checks invariants, not counts."""

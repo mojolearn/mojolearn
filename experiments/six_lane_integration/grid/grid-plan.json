@@ -335,7 +335,7 @@
    "algorithm": "expanded:auto-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:auto-theta@dataset=istella"
+   "workload_id": "expanded:auto-theta@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -344,7 +344,7 @@
    "algorithm": "expanded:auto-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:auto-theta@dataset=istella"
+   "workload_id": "expanded:auto-theta@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -353,7 +353,7 @@
    "algorithm": "expanded:auto-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:auto-theta@dataset=taxi"
+   "workload_id": "expanded:auto-theta@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -362,7 +362,7 @@
    "algorithm": "expanded:auto-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:auto-theta@dataset=taxi"
+   "workload_id": "expanded:auto-theta@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -371,7 +371,7 @@
    "algorithm": "expanded:autoarima",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:autoarima@dataset=istella"
+   "workload_id": "expanded:autoarima@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -380,7 +380,7 @@
    "algorithm": "expanded:autoarima",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:autoarima@dataset=istella"
+   "workload_id": "expanded:autoarima@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -389,7 +389,7 @@
    "algorithm": "expanded:autoarima",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:autoarima@dataset=taxi"
+   "workload_id": "expanded:autoarima@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -398,7 +398,7 @@
    "algorithm": "expanded:autoarima",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:autoarima@dataset=taxi"
+   "workload_id": "expanded:autoarima@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -443,7 +443,7 @@
    "algorithm": "expanded:damped-ets",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:damped-ets@dataset=istella"
+   "workload_id": "expanded:damped-ets@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -452,7 +452,7 @@
    "algorithm": "expanded:damped-ets",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:damped-ets@dataset=istella"
+   "workload_id": "expanded:damped-ets@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -461,7 +461,7 @@
    "algorithm": "expanded:damped-ets",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:damped-ets@dataset=taxi"
+   "workload_id": "expanded:damped-ets@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -470,7 +470,7 @@
    "algorithm": "expanded:damped-ets",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:damped-ets@dataset=taxi"
+   "workload_id": "expanded:damped-ets@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -479,7 +479,7 @@
    "algorithm": "expanded:dynamic-optimized-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:dynamic-optimized-theta@dataset=istella"
+   "workload_id": "expanded:dynamic-optimized-theta@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -488,7 +488,7 @@
    "algorithm": "expanded:dynamic-optimized-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:dynamic-optimized-theta@dataset=istella"
+   "workload_id": "expanded:dynamic-optimized-theta@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -497,7 +497,7 @@
    "algorithm": "expanded:dynamic-optimized-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:dynamic-optimized-theta@dataset=taxi"
+   "workload_id": "expanded:dynamic-optimized-theta@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -506,7 +506,7 @@
    "algorithm": "expanded:dynamic-optimized-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:dynamic-optimized-theta@dataset=taxi"
+   "workload_id": "expanded:dynamic-optimized-theta@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -515,7 +515,7 @@
    "algorithm": "expanded:dynamic-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:dynamic-theta@dataset=istella"
+   "workload_id": "expanded:dynamic-theta@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -524,7 +524,7 @@
    "algorithm": "expanded:dynamic-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:dynamic-theta@dataset=istella"
+   "workload_id": "expanded:dynamic-theta@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -533,7 +533,7 @@
    "algorithm": "expanded:dynamic-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:dynamic-theta@dataset=taxi"
+   "workload_id": "expanded:dynamic-theta@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -542,7 +542,7 @@
    "algorithm": "expanded:dynamic-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:dynamic-theta@dataset=taxi"
+   "workload_id": "expanded:dynamic-theta@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -839,24 +839,6 @@
    "algorithm": "expanded:lu-solve",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:lu-solve@dataset=istella"
-  },
-  {
-   "B_builds": [
-    "f7bea6bd6354ca0734cc"
-   ],
-   "algorithm": "expanded:lu-solve",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "nvidia",
-   "workload_id": "expanded:lu-solve@dataset=istella"
-  },
-  {
-   "B_builds": [
-    "59f5dc2e97d2a6e6782f"
-   ],
-   "algorithm": "expanded:lu-solve",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "amd",
    "workload_id": "expanded:lu-solve@dataset=synthetic"
   },
   {
@@ -867,24 +849,6 @@
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
    "workload_id": "expanded:lu-solve@dataset=synthetic"
-  },
-  {
-   "B_builds": [
-    "59f5dc2e97d2a6e6782f"
-   ],
-   "algorithm": "expanded:lu-solve",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "amd",
-   "workload_id": "expanded:lu-solve@dataset=taxi"
-  },
-  {
-   "B_builds": [
-    "f7bea6bd6354ca0734cc"
-   ],
-   "algorithm": "expanded:lu-solve",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "nvidia",
-   "workload_id": "expanded:lu-solve@dataset=taxi"
   },
   {
    "B_builds": [
@@ -1001,7 +965,7 @@
    "algorithm": "expanded:optimized-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:optimized-theta@dataset=istella"
+   "workload_id": "expanded:optimized-theta@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -1010,7 +974,7 @@
    "algorithm": "expanded:optimized-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:optimized-theta@dataset=istella"
+   "workload_id": "expanded:optimized-theta@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -1019,7 +983,7 @@
    "algorithm": "expanded:optimized-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:optimized-theta@dataset=taxi"
+   "workload_id": "expanded:optimized-theta@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -1028,7 +992,7 @@
    "algorithm": "expanded:optimized-theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:optimized-theta@dataset=taxi"
+   "workload_id": "expanded:optimized-theta@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -1397,7 +1361,7 @@
    "algorithm": "expanded:theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:theta@dataset=istella"
+   "workload_id": "expanded:theta@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -1406,7 +1370,7 @@
    "algorithm": "expanded:theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:theta@dataset=istella"
+   "workload_id": "expanded:theta@dataset=synthetic"
   },
   {
    "B_builds": [
@@ -1415,7 +1379,7 @@
    "algorithm": "expanded:theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "amd",
-   "workload_id": "expanded:theta@dataset=taxi"
+   "workload_id": "expanded:theta@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -1424,7 +1388,7 @@
    "algorithm": "expanded:theta",
    "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
    "vendor": "nvidia",
-   "workload_id": "expanded:theta@dataset=taxi"
+   "workload_id": "expanded:theta@dataset=taxi-hourly"
   },
   {
    "B_builds": [
@@ -4686,7 +4650,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane expanded:auto-theta (it races taxi-hourly,synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -4701,8 +4667,8 @@
     "_mojolearn_x_sequence"
    ],
    "workloads": [
-    "expanded:auto-theta@dataset=istella",
-    "expanded:auto-theta@dataset=taxi"
+    "expanded:auto-theta@dataset=synthetic",
+    "expanded:auto-theta@dataset=taxi-hourly"
    ]
   },
   "expanded:autoarima": {
@@ -4853,7 +4819,9 @@
     ]
    ],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane expanded:autoarima (it races taxi-hourly,synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -4870,8 +4838,8 @@
     "_mojolearn_tsa"
    ],
    "workloads": [
-    "expanded:autoarima@dataset=istella",
-    "expanded:autoarima@dataset=taxi"
+    "expanded:autoarima@dataset=synthetic",
+    "expanded:autoarima@dataset=taxi-hourly"
    ]
   },
   "expanded:bernoulli-nb": {
@@ -5167,7 +5135,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane expanded:damped-ets (it races taxi-hourly,synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -5182,8 +5152,8 @@
     "_mojolearn_x_sequence"
    ],
    "workloads": [
-    "expanded:damped-ets@dataset=istella",
-    "expanded:damped-ets@dataset=taxi"
+    "expanded:damped-ets@dataset=synthetic",
+    "expanded:damped-ets@dataset=taxi-hourly"
    ]
   },
   "expanded:dynamic-optimized-theta": {
@@ -5226,7 +5196,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane expanded:dynamic-optimized-theta (it races taxi-hourly,synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -5241,8 +5213,8 @@
     "_mojolearn_x_sequence"
    ],
    "workloads": [
-    "expanded:dynamic-optimized-theta@dataset=istella",
-    "expanded:dynamic-optimized-theta@dataset=taxi"
+    "expanded:dynamic-optimized-theta@dataset=synthetic",
+    "expanded:dynamic-optimized-theta@dataset=taxi-hourly"
    ]
   },
   "expanded:dynamic-theta": {
@@ -5285,7 +5257,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane expanded:dynamic-theta (it races taxi-hourly,synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -5300,8 +5274,8 @@
     "_mojolearn_x_sequence"
    ],
    "workloads": [
-    "expanded:dynamic-theta@dataset=istella",
-    "expanded:dynamic-theta@dataset=taxi"
+    "expanded:dynamic-theta@dataset=synthetic",
+    "expanded:dynamic-theta@dataset=taxi-hourly"
    ]
   },
   "expanded:elliptic-envelope": {
@@ -5922,7 +5896,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane expanded:garch (it races taxi-hourly,synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -5935,8 +5911,8 @@
     "_mojolearn_x_sequence"
    ],
    "workloads": [
-    "expanded:garch@dataset=istella",
-    "expanded:garch@dataset=taxi"
+    "expanded:garch@dataset=synthetic",
+    "expanded:garch@dataset=taxi-hourly"
    ]
   },
   "expanded:gaussian-nb": {
@@ -6984,7 +6960,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane expanded:lu-solve (it races synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -6999,9 +6977,7 @@
     "_mojolearn_x_decomp"
    ],
    "workloads": [
-    "expanded:lu-solve@dataset=istella",
-    "expanded:lu-solve@dataset=synthetic",
-    "expanded:lu-solve@dataset=taxi"
+    "expanded:lu-solve@dataset=synthetic"
    ]
   },
   "expanded:min-cov-det": {
@@ -7605,7 +7581,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane expanded:optimized-theta (it races taxi-hourly,synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -7620,8 +7598,8 @@
     "_mojolearn_x_sequence"
    ],
    "workloads": [
-    "expanded:optimized-theta@dataset=istella",
-    "expanded:optimized-theta@dataset=taxi"
+    "expanded:optimized-theta@dataset=synthetic",
+    "expanded:optimized-theta@dataset=taxi-hourly"
    ]
   },
   "expanded:ordinal": {
@@ -7991,7 +7969,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane expanded:prophet (it races taxi-hourly,synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -8004,8 +7984,8 @@
     "_mojolearn_x_sequence"
    ],
    "workloads": [
-    "expanded:prophet@dataset=istella",
-    "expanded:prophet@dataset=taxi"
+    "expanded:prophet@dataset=synthetic",
+    "expanded:prophet@dataset=taxi-hourly"
    ]
   },
   "expanded:qda": {
@@ -9594,7 +9574,9 @@
    ],
    "interaction_groups": [],
    "invalid": [],
-   "mapping_notes": [],
+   "mapping_notes": [
+    "datasets istella,taxi are not raced by board lane expanded:theta (it races taxi-hourly,synthetic)"
+   ],
    "notes": [],
    "parents": {},
    "raw_ids": [
@@ -9609,8 +9591,8 @@
     "_mojolearn_x_sequence"
    ],
    "workloads": [
-    "expanded:theta@dataset=istella",
-    "expanded:theta@dataset=taxi"
+    "expanded:theta@dataset=synthetic",
+    "expanded:theta@dataset=taxi-hourly"
    ]
   },
   "expanded:tweedie": {
@@ -38873,7 +38855,7 @@
  "summary": {
   "a_builds_after_packing": 636,
   "a_builds_before_packing": 768,
-  "aa_pairs": 322,
+  "aa_pairs": 318,
   "algorithms": 86,
   "algorithms_with_configs": 75,
   "b_builds": 50,
@@ -38907,7 +38889,7 @@
   "builds_after_packing": 686,
   "builds_before_packing": 818,
   "cap": 16,
-  "cells": 2478,
+  "cells": 2474,
   "configs": 540,
   "configs_per_vendor": 540,
   "controls": 222,
@@ -38920,7 +38902,7 @@
   "packed_multi_member": 104,
   "packs": 287,
   "unmapped_algorithms": 2,
-  "workloads": 161
+  "workloads": 159
  },
  "unmapped": [
   {
