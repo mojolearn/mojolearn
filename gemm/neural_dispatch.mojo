@@ -177,6 +177,8 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
             "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES legal set is 4, 5, 6 (fp32-equivalent error)"
         )
         if not neural_ozaki_into[OZAKI_SLICES](ctx,c,a,b,ws,m,n,k,op):
+            _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
+        return
     comptime if _SCHEDULED and not ((NEURAL_GEMM_ROLES & ROLE) != 0):
         comptime if NEURAL_PROFILE_CHANGED:
             neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)

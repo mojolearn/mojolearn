@@ -243,9 +243,13 @@ def enqueue_nn20_split_forward(
     # counter stacks after them.
     var summaries = rows * blocks * (hd + 2)
     var cells = rows * blocks
+    # Two disjoint views of one buffer: taken as locals first so the launch
+    # does not pass the same buffer mutably twice.
+    var block_summaries = block_scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var block_counters = block_summaries + summaries
     ctx.enqueue_function[nn20_split_block_kernel](
         q.unsafe_ptr(), k.unsafe_ptr(), v.unsafe_ptr(), lo.unsafe_ptr(), hi.unsafe_ptr(),
-        block_scratch.unsafe_ptr(), block_scratch.unsafe_ptr() + summaries,
+        block_summaries, block_counters,
         Int32(rows), Int32(keys), Int32(hd), Int32(hd), Int32(qpg), Int32(key_origin), scale,
         grid_dim=((cells + _SPLIT_TPB - 1) // _SPLIT_TPB, 1, 1), block_dim=(_SPLIT_TPB, 1, 1),
     )

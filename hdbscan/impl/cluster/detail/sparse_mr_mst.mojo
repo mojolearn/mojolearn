@@ -46,7 +46,7 @@ from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DI
 from core.classical_distance import direct_distance_step
 from checks.numerics import identical_sqrt
 from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
-from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES, C61_SAME_COMPONENT_SKIP
+from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES, C62_SAME_COMPONENT_SKIP
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -287,7 +287,7 @@ def sparse_mr_search_tiled_kernel(
     var uc_s = stack_allocation[
         2, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
-    comptime if C61_SAME_COMPONENT_SKIP:
+    comptime if C62_SAME_COMPONENT_SKIP:
         if tid == 0:
             var uc = Int32(-1)
             for q in range(SMR_TI):
@@ -322,7 +322,7 @@ def sparse_mr_search_tiled_kernel(
                 crj_s[unsafe_offset=tid] = core[j]
             else:
                 cj_s[unsafe_offset=tid] = Int32(-1)
-        comptime if C61_SAME_COMPONENT_SKIP:
+        comptime if C62_SAME_COMPONENT_SKIP:
             # uc_s[unsafe_offset=1]: 1 when some j < jb of this tile leaves the block's
             # component. Reset, barrier, mark, barrier, then a block-uniform
             # read; the trailing barrier on a skip keeps the next reset
