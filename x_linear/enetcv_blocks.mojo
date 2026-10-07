@@ -209,7 +209,7 @@ def fb_set_cell(fst: FP, fcnt: IP, m: Int, f_n: Int, p: Int, j: Int, k: Int, mj:
 
 
 def fb_prep_unit(u: Int, fst: FP, fcnt: IP, d: Int, f_n: Int, p: Int, fi: Bool,
-                 out: FP, xm: Int, gg: Int, q: Int, sc: Int):
+                 dst: FP, xm: Int, gg: Int, q: Int, sc: Int):
     """Unit u = j * m + k (j <= k) of training set p into the cd prep words:
     xm d | G d*d | q d | (y mean, |yc|^2, rows), as `_prep` writes them."""
     var m = d + 1
@@ -221,16 +221,16 @@ def fb_prep_unit(u: Int, fst: FP, fcnt: IP, d: Int, f_n: Int, p: Int, fi: Bool,
     var mk = fb_set_mean(fst, fcnt, m, f_n, p, k, fi)
     var v = fb_set_cell(fst, fcnt, m, f_n, p, j, k, mj, mk)
     if k < d:
-        st(out, gg + j * d + k, v)
-        st(out, gg + k * d + j, v)
+        st(dst, gg + j * d + k, v)
+        st(dst, gg + k * d + j, v)
         if j == k:
-            st(out, xm + j, mj)
+            st(dst, xm + j, mj)
     elif j < d:
-        st(out, q + j, v)
+        st(dst, q + j, v)
     else:
-        st(out, sc, mj)
-        st(out, sc + 1, v)
-        st(out, sc + 2, i2f(fb_set_count(fcnt, f_n, p)))
+        st(dst, sc, mj)
+        st(dst, sc + 1, v)
+        st(dst, sc + 2, i2f(fb_set_count(fcnt, f_n, p)))
 
 
 # ------------------------------------------------------------ the host column
@@ -289,13 +289,13 @@ def fb_host_stats(x: FP, y: FP, n: Int, d: Int, f_n: Int, wk: FP):
     _ = lohi^
 
 
-def fb_host_prep(wk: FP, d: Int, f_n: Int, fold: Int, fi: Bool, out: FP, xm: Int, gg: Int, q: Int, sc: Int):
+def fb_host_prep(wk: FP, d: Int, f_n: Int, fold: Int, fi: Bool, dst: FP, xm: Int, gg: Int, q: Int, sc: Int):
     """`_prep`'s words for the rows not in `fold` (all rows: fold < 0)."""
     var m = d + 1
     var p = f_n if fold < 0 else fold
     var fcnt = (wk + f_n * fb_words(m)).bitcast[Int32]()
     for u in range(m * m):
-        fb_prep_unit(u, wk, fcnt, d, f_n, p, fi, out, xm, gg, q, sc)
+        fb_prep_unit(u, wk, fcnt, d, f_n, p, fi, dst, xm, gg, q, sc)
 
 
 # ------------------------------------------------------------ the device kernels
