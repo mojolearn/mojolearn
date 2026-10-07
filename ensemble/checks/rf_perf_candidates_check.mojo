@@ -453,7 +453,7 @@ def run_histogram_arm[
             hists.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[BinT](),
             Int32(MAX_N_BINS), fx.wi_ptr().unsafe_origin_cast[MutAnyOrigin](),
             Int32(COL_START), fx.cs_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            fx.wl_ptr(coarse_table).unsafe_origin_cast[MutAnyOrigin](), Int32(GRID_Y),
+            fx.wl_ptr(coarse_table).unsafe_origin_cast[MutAnyOrigin](), Int32(GRID_Y), Int32(0),
             grid_dim=(fx.n_coarse if coarse_table else fx.n_fine, (GRID_Y + TILE - 1) // TILE),
             block_dim=TPB,
         )

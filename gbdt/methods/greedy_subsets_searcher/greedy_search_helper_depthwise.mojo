@@ -63,7 +63,7 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import T16, T17, T18, T19, T19_DEFER, T20, T21, C47_GBDT, C45_GBDT
+from gbdt.trees_identical_switches import T17_BATCH, T18, T19, T19_DEFER, T21, C47_GBDT, C45_GBDT
 
 from std.sys.info import has_apple_gpu_accelerator
 from std.builtin.sort import sort
@@ -170,7 +170,7 @@ from gbdt.options.catboost_options import (
 # cache reduces repeated work without changing any leaf's arithmetic.
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-comptime DEFER_HIST_COPY_1903 = T20 or T19_DEFER or not SPLIT_COST_IDENTICAL or (
+comptime DEFER_HIST_COPY_1903 = T19_DEFER or not SPLIT_COST_IDENTICAL or (
     (
         has_apple_gpu_accelerator()
         or (
@@ -1251,8 +1251,14 @@ comptime LG_EXACT_BATCH_WIDTH = 256 if AFT_N01 else (
         32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
     )
 ) if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else (
-    64 if (T17 or is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]()) else 32
+    T17_BATCH if T17_BATCH > 0 else (
+        64 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]() else 32
+    )
 )
+# T17 (trees-cleanup 2026-10-07): the IDENTICAL batch width is one int sweep,
+# `-D MOJOLEARN_TREES_T17_BATCH=32|64|128`; it wins over the older
+# `MOJOLEARN_GBDT_LG_EXACT_BATCH64` arm when both are given. Scheduling only:
+# the exact replay admits leaves in global best-first order at every width.
 
 #: FAST on Apple (trees-apple3): THE ESTIMATOR INHERITS THE SEARCHER'S
 #: PARTITION. When the tree is grown the row index already holds every row
@@ -2258,27 +2264,9 @@ def fit_non_symmetric_tree[
     # LG_EXACT_ID: each node's partition stats as of its score wait, the
     # stats a folded-back leaf keeps (`stat_count` per node)
     var lg_node_stats = List[Float32]()
-    # Default-off IDENTICAL lifetime candidate: keep scored parent words
-    # on device rather than copying the whole leaf-stat capacity each round.
-    # One current snapshot plus the binary tree's bounded node arena.
-    var lg_resident_stats = List[DeviceBuffer[DType.float32]]()
-    var lg_resident_snapshots = 0
-    # I17 2026-10-06 AMD MI325X Lossguide scoped LOSER (source 5b467815b):
-    # candidate/base 1.041, 1.292, 1.083 at rows/features10000/17,10001/18,32769/9.
-    # Complete 10-tree fits; logs show six resident snapshots/tree. Depthwise
-    # recorded zero snapshots: those controls do not measure this candidate.
-    # One same-process warmup and score; accepted identity evidence reused.
-    # Matching NVIDIA Lossguide ratios1.114/1.111/1.116 also lose; both
-    # vendors record six snapshots/tree. Candidate snapshot diagnostics are
-    # inside the timed fit; no isolated kernel-speed claim. Full-workload
-    # qualification remains pending. Keep resident frontier OFF.
-    # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I17;
-    # exact snapshot counts and raw timings remain in amd/live/repairs.
-    comptime if LG_EXACT_ID and (is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]() or T16):
-        if lg_exact and max_leaves>0 and stat_count>0 and max_leaves<=(1<<22)//(3*stat_count):
-            lg_resident_stats.append(ctx.enqueue_create_buffer[DType.float32]((2*max_leaves-1)*stat_count))
-            lg_resident_stats.append(ctx.enqueue_create_buffer[DType.float32](max_leaves*stat_count))
-            enqueue_fill(ctx,lg_resident_stats[0],Float32(0))
+    # I17/T16 resident Lossguide frontier: removed 2026-10-07 (trees-cleanup) after
+    # losing on both vendors (AMD 1.041/1.292/1.083, NVIDIA 1.114/1.111/1.116,
+    # source 5b467815b). Row in docs/apple-fast/EXPERIMENTS.md.
     comptime if LG_EXACT_BATCH:
         for _ in range(stat_count):  # small-loop(stat_count: stat planes, 1 plus classes): root node stats placeholder
             lg_node_stats.append(Float32(0.0))
@@ -3208,16 +3196,10 @@ def fit_non_symmetric_tree[
             # the host fold's
             comptime if LG_EXACT_ID:
                 if lg_exact:
-                    if len(lg_resident_stats)>0:
-                        var snapshot=part_stats.create_sub_buffer[DType.float32](0,max_leaves*stat_count)
-                        ctx.enqueue_copy(dst_buf=lg_resident_stats[1],src_buf=snapshot)
-                        _ = snapshot^
-                        lg_resident_snapshots+=1
-                    else:
-                        ctx.enqueue_copy(
-                            dst_ptr=h_part_stats.unsafe_ptr(),
-                            src_buf=part_stats,
-                        )
+                    ctx.enqueue_copy(
+                        dst_ptr=h_part_stats.unsafe_ptr(),
+                        src_buf=part_stats,
+                    )
             mgr.wait_complete()
             stage_times.end(ctx, "score.read")
             # the identity ladder's records are UNCHANGED: the
@@ -3572,18 +3554,12 @@ def fit_non_symmetric_tree[
                         var pn = lg_leaf_node[left_id]
                         lg_node_path[pn] = parent.path.copy()
                         comptime if LG_EXACT_ID:
-                            if len(lg_resident_stats)>0:
-                                var current=lg_resident_stats[1].create_sub_buffer[DType.float32](left_id*stat_count,stat_count)
-                                var kept=lg_resident_stats[0].create_sub_buffer[DType.float32](pn*stat_count,stat_count)
-                                ctx.enqueue_copy(dst_buf=kept,src_buf=current)
-                                _ = current^; _ = kept^
-                            else:
-                                for st in range(stat_count):  # small-loop(stat_count: stat planes, 1 plus classes): copy of the split node's stats
-                                    lg_node_stats[pn * stat_count + st] = (
-                                        h_part_stats.unsafe_ptr().unsafe_load(
-                                            left_id * stat_count + st
-                                        )
+                            for st in range(stat_count):  # small-loop(stat_count: stat planes, 1 plus classes): copy of the split node's stats
+                                lg_node_stats[pn * stat_count + st] = (
+                                    h_part_stats.unsafe_ptr().unsafe_load(
+                                        left_id * stat_count + st
                                     )
+                                )
                         var cn = len(lg_node_leaf)
                         lg_node_left[pn] = cn
                         lg_node_right[pn] = cn + 1
@@ -3982,13 +3958,6 @@ def fit_non_symmetric_tree[
                 ctx.enqueue_copy(
                     dst_ptr=h_leaf_vals.unsafe_ptr(), src_buf=d_leaf_vals
                 )
-            if len(lg_resident_stats)>0:
-                # All logical node slots were initialized, and only scored
-                # split parents are consumed by the exact replay. This copy
-                # rides the existing final leaf-value/statistics wait.
-                var kept=lg_resident_stats[0].create_sub_buffer[DType.float32](0,len(lg_node_stats))
-                ctx.enqueue_copy(dst_ptr=lg_node_stats.unsafe_ptr(),src_buf=kept)
-                _ = kept^
             ctx.enqueue_copy(
                 dst_ptr=h_part_stats.unsafe_ptr(), src_buf=part_stats
             )
@@ -4196,10 +4165,6 @@ def fit_non_symmetric_tree[
     comptime if REPORT_PART_STATS_WORK:
         print("part_stats_work", options.policy, n_rows,
               part_stats_leaves_reduced, part_stats_rows_reduced)
-    # Retain measured resident-snapshot diagnostics for the opt-in I17 caller.
-    comptime if LG_EXACT_ID and (is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]() or T16):
-        print("I17 frontier_resident_snapshots",lg_resident_snapshots,"retained_nodes",len(lg_node_stats)//stat_count)
-    _ = lg_resident_stats^
     return model^
 
 

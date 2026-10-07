@@ -10,22 +10,42 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # Every switch below is default OFF and IDENTICAL-only. The shared status above
 # applies individually to every switch and its parameter/sub-arm.
-comptime T01 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T01"]()
-comptime T01_REPLICAS = get_defined_int["MOJOLEARN_TREES_T01_REPLICAS", 4]()
-comptime T01_ROWS = get_defined_int["MOJOLEARN_TREES_T01_ROWS", 256]()
+# T01 (streamed exact histogram replicas, = N07) DELETED 2026-10-07: lost on
+# NVIDIA and AMD. Its T01_ROWS task-size knob is covered by T02's cost rule.
 comptime T02 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T02"]()
 comptime T03 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T03"]()
 comptime T04 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T04"]()
 comptime T05 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T05"]()
+# RF T05 per-node bound in row visits per thread (see builder.mojo T05_NODE_ROWS).
+comptime T05_ROW_VISITS = get_defined_int["MOJOLEARN_TREES_T05_ROW_VISITS", 32]()
 comptime T06 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T06"]()
 comptime T07 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T07"]()
 comptime T08 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T08"]()
 comptime T08_LAYOUT = get_defined_int["MOJOLEARN_TREES_T08_LAYOUT", 1]()
 comptime T08_BITS = get_defined_int["MOJOLEARN_TREES_T08_BITS", 8]()
+# T09 now names the ExtraTrees bootstrap-locality sort only (split from the
+# RF arms below on 2026-10-07 so RF and ET effects stay separable).
 comptime T09 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T09"]()
-comptime T10 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T10"]()
-comptime T11 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T11"]()
-comptime T11_LEVELS = get_defined_int["MOJOLEARN_TREES_T11_LEVELS", 8]()
+# RF bootstrap sample route: ONE switch with three arms (trees-cleanup
+# 2026-10-07; replaces RF T09 and T10, which silently disabled each other).
+#   -D MOJOLEARN_TREES_RF_SAMPLE=0  drawn order, two launches (sample, gather)
+#   -D MOJOLEARN_TREES_RF_SAMPLE=1  sorted bootstrap rows at every width (old RF T09)
+#   -D MOJOLEARN_TREES_RF_SAMPLE=2  fused sample + label gather (old T10)
+# Absent: the per-vendor incumbent, stated explicitly: NVIDIA = 2 (fused,
+# shipped from the H100 Taxi/Istella trials), AMD = 0 (a small MI325X Taxi
+# regression kept the two-launch route), Apple = its ROWS_SORTED_MIN_COLS
+# rule. Every arm draws the same multiset; only row order and launch count move.
+comptime RF_SAMPLE_SET = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_RF_SAMPLE"]()
+comptime RF_SAMPLE_ARM = get_defined_int["MOJOLEARN_TREES_RF_SAMPLE", -1]()
+comptime RF_SAMPLE_SORTED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 1
+comptime RF_SAMPLE_FUSED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 2
+# T11 device frontier levels per header drain: one int sweep
+# `-D MOJOLEARN_TREES_T11_LEVELS=1|2|4|8|16` (absent = incumbent K=4, or the
+# older K1/K2/K8 arms). Scheduling only, no bit moves. RF K1/K2/K8 already
+# measured "no combined improvement" (forest-final-decisions 2026-10-05), so
+# the RF grid should start at 16; ET has no such record.
+comptime T11 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T11_LEVELS"]()
+comptime T11_LEVELS = get_defined_int["MOJOLEARN_TREES_T11_LEVELS", 4]()
 comptime T12 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T12"]()
 comptime T12_BYTES = get_defined_int["MOJOLEARN_TREES_T12_BYTES", 256*1024*1024]()
 comptime T13 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T13"]()
@@ -46,6 +66,4 @@ def histogram_task_rows(histogram_bytes: Int, row_bytes: Int, reference: Int) ->
     comptime if T02:
         var rows = max(128, min(1024, (2 * histogram_bytes) // max(1, row_bytes)))
         return ((rows + 127) // 128) * 128
-    comptime if T01:
-        return max(128, min(1024, ((T01_ROWS + 127) // 128) * 128))
     return reference

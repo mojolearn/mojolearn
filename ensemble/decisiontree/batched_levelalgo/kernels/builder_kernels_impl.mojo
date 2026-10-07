@@ -380,7 +380,7 @@ which already priced the width for the reduction this scratch feeds.
 
 from ensemble.tree_moments import moment_pair, moment_finish
 from checks.soft_f64 import sf64_from_f32
-from ensemble.tree_identical_ideas import T01, T01_REPLICAS, T04, T05, T07, T08, T08_LAYOUT, T08_BITS, T14, T14_EXACT, C48
+from ensemble.tree_identical_ideas import T04, T05, T07, T08, T08_LAYOUT, T08_BITS, T14, T14_EXACT, C48
 from std.gpu import (
     WARP_SIZE,
     block_dim,
@@ -421,7 +421,6 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
     _quantize,
 )
 from std.atomic import Atomic, Ordering
-from std.ffi import _Global
 from std.gpu.primitives.warp import shuffle_idx as _hist_shuffle_idx
 from std.gpu.primitives.warp import sum as _hist_warp_sum
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
@@ -636,33 +635,10 @@ comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 # candidate round"). The candidate arm is P = 4.
 # =========================================================
 # `-D MOJOLEARN_2012_SMEM_COPIES4=1` selects P = 4; 1 is shipped.
-# N07 2026-10-06 representative RF caller LOSS, source cbcc8dcd3303.
-# rows/features=100000/32: AMD 335.854582 -> 347.276258 ms
-# (candidate/baseline 1.034); NVIDIA L40S 124.757991 -> 161.308000 ms
-# (1.293). NVIDIA neighbor 131071/17: 107.523736 -> 131.878435 ms
-# (1.227); matching AMD neighbor pending. Flag changes histogram COPIES=4
-# and TILE=4; the 128-bin fixture admits the bounded shared-memory route.
-# No per-fit launch counter was emitted by this timing driver. One excluded
-# same-context warmup and one scored fit, rc=0; prior identity evidence reused.
-# Default OFF: generated representative fits do not qualify the full datasets.
-# Evidence: measurements/20261006/index.json.
-comptime IDN_RF_STREAM_REPLICAS = T01 or (BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_STREAM_REPLICAS"]())
-comptime STREAM_REPLICAS = T01_REPLICAS if T01 else 4
-
-struct _StreamReplicaAudit(Defaultable, Movable):
-    var launches: Int64
-    def __init__(out self):
-        self.launches = Int64(0)
-
-comptime _STREAM_REPLICA_AUDIT = _Global[StorageType=_StreamReplicaAudit, name="MojolearnForestStreamReplicasV1", init_fn=_StreamReplicaAudit.__init__]
-
-def forest_stream_replica_count() raises -> Int:
-    # Enqueue reach only; no wait, device readback, or quality inference.
-    comptime if IDN_RF_STREAM_REPLICAS:
-        ref audit = _STREAM_REPLICA_AUDIT.get_or_create_ptr()[]
-        return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.launches)))
-    return 0
-
+# N07 / TREES_T01 streamed exact histogram replicas: DELETED 2026-10-07
+# (lane trees-cleanup). Lost on both vendors at source cbcc8dcd3303:
+# 100000x32 AMD 1.034, NVIDIA L40S 1.293; NVIDIA 131071x17 1.227.
+# Row in docs/apple-fast/EXPERIMENTS.md; recoverable at 8be4d20d4.
 comptime HIST_SMEM_COPIES_DEFAULT = 4 if is_defined["MOJOLEARN_2012_SMEM_COPIES4"]() else 1
 
 
@@ -2496,6 +2472,7 @@ def build_histograms_kernel[
     col_start: Int32,
     column_samples: MutPointer[Int32, MutAnyOrigin],
     workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
+    small_rows: Int32,
 ):
     """`buildHistogramsKernel`, `:285-352`.
 
@@ -2540,6 +2517,11 @@ def build_histograms_kernel[
     ref work_item = work_items[unsafe_offset = Int(nid)]
     var range_start = work_item.instances.begin
     var range_len = work_item.instances.count
+    # T05 per-node ownership: nodes of at most `small_rows` rows were built
+    # by `small_node_split_kernel` this round; uniform per block, no barrier yet.
+    comptime if T05:
+        if Int(small_rows) > 0 and Int(range_len) <= Int(small_rows):
+            return
 
     var offset_blockid = Int(workload_info_cta.offset_blockid)
     var num_blocks = Int(workload_info_cta.num_blocks)
@@ -2776,6 +2758,7 @@ def build_histograms_binned_columns_kernel[
     column_samples: MutPointer[Int32, MutAnyOrigin],
     workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
     columns_in_batch: Int32,
+    small_rows: Int32,
 ):
     """Experimental binned column tile; unchanged integer BinT operations.
 
@@ -2794,6 +2777,10 @@ def build_histograms_binned_columns_kernel[
     ref workload = workload_info[unsafe_offset=Int(block_idx.x)]
     var nid = Int(workload.nodeid)
     ref item = work_items[unsafe_offset=nid]
+    comptime if T05:
+        # T05 per-node ownership (see build_histograms_kernel).
+        if Int(small_rows) > 0 and Int(item.instances.count) <= Int(small_rows):
+            return
     var classes = Int(objective.NumClasses())
     var feature_stride = Int(max_n_bins) * classes
     var first = Int(block_idx.y) * TILE
@@ -2944,8 +2931,12 @@ def launch_build_histograms_kernel[
     smem_config: SharedMemoryConfig,
     argsp: MutPointer[HistogramArgs[O], MutUntrackedOrigin],
     num_outputs: Int = 0,
+    small_rows: Int = 0,
 ) raises:
     """`launchBuildHistogramsKernel`, `:396-421`.
+
+    `small_rows` > 0 (T05 only): nodes of at most that many rows are owned by
+    `small_node_split_kernel` this round and every histogram block skips them.
 
     Their `dim3 histogram_grid` arrives as two Ints and their
     `split_smem_config.histogram_dynamic_smem_size` is not a launch
@@ -2976,6 +2967,7 @@ def launch_build_histograms_kernel[
                 Int32(col_start),
                 column_samples.unsafe_origin_cast[MutAnyOrigin](),
                 workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(small_rows),
                 grid_dim=(histogram_grid_x, histogram_grid_y),
                 block_dim=TPB,
             )
@@ -2992,6 +2984,7 @@ def launch_build_histograms_kernel[
             Int32(col_start),
             column_samples.unsafe_origin_cast[MutAnyOrigin](),
             workload_info.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(small_rows),
             grid_dim=(histogram_grid_x, histogram_grid_y),
             block_dim=TPB,
         )
@@ -3027,7 +3020,7 @@ def launch_build_histograms_kernel[
             comptime USE4 = (
                 DEFAULT4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]()
             )
-            comptime TILE = 4 if IDN_RF_STREAM_REPLICAS else (10 if is_defined[
+            comptime TILE = (10 if is_defined[
                 "MOJOLEARN_RF_HIST_COLUMNS10"
             ]() else (
                 8 if (
@@ -3044,10 +3037,10 @@ def launch_build_histograms_kernel[
                 )
             ))
             comptime ENABLED = (
-                IDN_RF_STREAM_REPLICAS or USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
+                USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
             )
-            comptime COPIES = STREAM_REPLICAS if IDN_RF_STREAM_REPLICAS else 1
-            comptime if ENABLED and (SMEM_COPIES == 1 or IDN_RF_STREAM_REPLICAS) and sabotage == 0:
+            comptime COPIES = 1
+            comptime if ENABLED and SMEM_COPIES == 1 and sabotage == 0:
                 # Actual bin bytes bound the four-column replicated footprint.
                 # Above16KiB the original single-column replica/fallback path runs.
                 var need = COPIES * TILE * max_n_bins * num_outputs * size_of[O.BinT]()
@@ -3055,9 +3048,6 @@ def launch_build_histograms_kernel[
                     comptime SLOTS = BYTES // size_of[O.BinT]()
                     if num_outputs > 0 and need > 0 and need <= SLOTS * size_of[O.BinT]():
                         comptime tiled = build_histograms_binned_columns_kernel[O, TPB, TILE, SLOTS, sampled_labels, 0, COPIES]
-                        comptime if IDN_RF_STREAM_REPLICAS:
-                            ref audit = _STREAM_REPLICA_AUDIT.get_or_create_ptr()[]
-                            _ = Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.launches), Int64(1))
                         log_launch_ctx(ctx, "histogram_binned_columns" + String(TILE) + "_" + String(BYTES))
                         ctx.enqueue_function[tiled](
                             argsp.unsafe_origin_cast[MutAnyOrigin](),
@@ -3068,6 +3058,7 @@ def launch_build_histograms_kernel[
                             column_samples.unsafe_origin_cast[MutAnyOrigin](),
                             workload_info.unsafe_origin_cast[MutAnyOrigin](),
                             Int32(histogram_grid_y),
+                            Int32(small_rows),
                             grid_dim=(histogram_grid_x, (histogram_grid_y + TILE - 1) // TILE),
                             block_dim=TPB,
                         )
@@ -3085,7 +3076,7 @@ def launch_build_histograms_kernel[
                 sabotage,
                 True,
                 sampled_labels,
-                STREAM_REPLICAS if IDN_RF_STREAM_REPLICAS else SMEM_COPIES,
+                SMEM_COPIES,
             ]
             log_launch_ctx(ctx, "histogram_binned")
             ctx.enqueue_function[ksb](
@@ -3096,6 +3087,7 @@ def launch_build_histograms_kernel[
                 Int32(col_start),
                 column_samples.unsafe_origin_cast[MutAnyOrigin](),
                 workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(small_rows),
                 grid_dim=(histogram_grid_x, histogram_grid_y),
                 block_dim=TPB,
             )
@@ -3174,6 +3166,7 @@ def launch_build_histograms_kernel[
                             workload_info.unsafe_origin_cast[
                                 MutAnyOrigin
                             ](),
+                            Int32(small_rows),
                             grid_dim=(histogram_grid_x, histogram_grid_y),
                             block_dim=TPB,
                         )
@@ -3200,6 +3193,7 @@ def launch_build_histograms_kernel[
                             workload_info.unsafe_origin_cast[
                                 MutAnyOrigin
                             ](),
+                            Int32(small_rows),
                             grid_dim=(histogram_grid_x, histogram_grid_y),
                             block_dim=TPB,
                         )
@@ -3220,6 +3214,7 @@ def launch_build_histograms_kernel[
                 Int32(col_start),
                 column_samples.unsafe_origin_cast[MutAnyOrigin](),
                 workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(small_rows),
                 grid_dim=(histogram_grid_x, histogram_grid_y),
                 block_dim=TPB,
             )
@@ -3252,6 +3247,8 @@ def find_best_splits_kernel[
     mutex: MutPointer[Int32, MutAnyOrigin],
     splits: MutPointer[Split[O.DataT], MutAnyOrigin],
     cand: MutPointer[Split[O.DataT], MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    small_rows: Int32,
 ):
     """`findBestSplitsKernel`, `:353-393`.
 
@@ -3306,6 +3303,13 @@ def find_best_splits_kernel[
 
     # `:369`
     var nid = Int32(Int(block_idx.x))
+    # T05 per-node ownership: the fused kernel already published this node's
+    # candidates and purity; its histogram cells were never written.
+    comptime if T05:
+        if Int(small_rows) > 0 and Int(
+            work_items[unsafe_offset = Int(nid)].instances.count
+        ) <= Int(small_rows):
+            return
 
     # `:371-374`
     var col_index = col_start + Int32(Int(block_idx.y))
@@ -3470,6 +3474,7 @@ def small_node_split_kernel[
     SLOTS: Int,
     sampled_labels: Bool = False,
     candidates: Bool = False,
+    pinned_reduce: Bool = False,
 ](
     argsp: MutPointer[FindBestSplitsArgs[O], MutAnyOrigin],
     work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
@@ -3479,6 +3484,7 @@ def small_node_split_kernel[
     splits: MutPointer[Split[O.DataT], MutAnyOrigin],
     max_n_bins: Int32,
     cand: MutPointer[Split[O.DataT], MutAnyOrigin],
+    small_rows: Int32,
 ):
     """FAST (`SMALL_NODE_FUSED_DEFAULT`): `build_histograms_kernel` and
     `find_best_splits_kernel` for ONE (node, column) in ONE block, for a
@@ -3495,6 +3501,12 @@ def small_node_split_kernel[
     var objective = args.objective.copy()
     var nid = Int32(Int(block_idx.x))
     ref work_item = work_items[unsafe_offset = Int(nid)]
+    # T05 per-node dispatch (small_rows > 0): this kernel owns exactly the
+    # nodes of at most `small_rows` rows; larger nodes return here and take
+    # the multi-block histogram + find_best_splits route in the same round.
+    # Uniform per block, before any barrier. 0 keeps the host-batch FAST arm.
+    if Int(small_rows) > 0 and Int(work_item.instances.count) > Int(small_rows):
+        return
     var range_start = Int(work_item.instances.begin)
     var end = range_start + Int(work_item.instances.count)
     var col_index = col_start + Int32(Int(block_idx.y))
@@ -3525,7 +3537,13 @@ def small_node_split_kernel[
     )
     barrier()
 
-    comptime N_SPLIT_SCRATCH = ceildiv(TPB, WARP_SIZE)
+    # Pinned (IDENTICAL): the same width-32 shared-memory reduction as
+    # `find_best_splits_kernel` (DEVIATION 404), so wave64 AMD and warp-32
+    # NVIDIA publish the same winner.
+    comptime assert (not pinned_reduce) or (
+        TPB % PINNED_SPLIT_REDUCE_LANES == 0
+    ), "pinned split reduce needs TPB % 32 == 0 (DEVIATION 404)"
+    comptime N_SPLIT_SCRATCH = TPB if pinned_reduce else ceildiv(TPB, WARP_SIZE)
     var split_scratch = stack_allocation[
         N_SPLIT_SCRATCH,
         Split[O.DataT],
@@ -3561,11 +3579,22 @@ def small_node_split_kernel[
     )
     sp.pure = Int32(1) if node_pure else Int32(0)
     barrier()
-    comptime if candidates:
+    comptime if candidates and pinned_reduce:
+        sp.eval_best_split_pinned_to_candidate(
+            split_scratch,
+            cand.unsafe_offset(Int(nid)*Int(grid_dim.y)+Int(block_idx.y)),
+            quantiles_for_split, n_bins,
+        )
+    elif candidates:
         sp.eval_best_split_to_candidate(
             split_scratch,
             cand.unsafe_offset(Int(nid)*Int(grid_dim.y)+Int(block_idx.y)),
             quantiles_for_split, n_bins,
+        )
+    elif pinned_reduce:
+        sp.eval_best_split_pinned(
+            split_scratch, splits.unsafe_offset(Int(nid)),
+            mutex.unsafe_offset(Int(nid)), quantiles_for_split, n_bins,
         )
     else:
         sp.eval_best_split(
@@ -3754,8 +3783,13 @@ def launch_find_best_splits_kernel[
     argsp: MutPointer[FindBestSplitsArgs[O], MutUntrackedOrigin],
     cand: MutPointer[Split[O.DataT], MutUntrackedOrigin],
     num_outputs: Int = 0,
+    small_rows: Int = 0,
+    work_items: Optional[MutPointer[NodeWorkItem, MutUntrackedOrigin]] = None,
 ) raises:
     """`launchFindBestSplitsKernel`, `:423-445`.
+
+    `small_rows` > 0 (T05 only) needs `work_items`: blocks of nodes with at
+    most that many rows return at once (the fused kernel owns them).
 
     DEVIATION 1893: `argsp` is the caller's already-uploaded
     `FindBestSplitsArgs` blob (dataset + quantiles + objective), staged
@@ -3793,6 +3827,13 @@ def launch_find_best_splits_kernel[
     comptime k = find_best_splits_kernel[
         O, TPB, sabotage, pinned_reduce, zero_after, candidates
     ]
+    if small_rows > 0 and not work_items:
+        raise Error("launch_find_best_splits_kernel: small_rows needs work_items")
+    # With small_rows == 0 the kernel never reads `work_items`; any valid
+    # pointer is passed so the signature stays one kernel.
+    var wi = (
+        work_items.value() if work_items else splits.unsafe_bitcast[NodeWorkItem]()
+    )
     log_launch_ctx(ctx, "find_best_splits")
     ctx.enqueue_function[k](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
@@ -3803,6 +3844,8 @@ def launch_find_best_splits_kernel[
         mutex.unsafe_origin_cast[MutAnyOrigin](),
         splits.unsafe_origin_cast[MutAnyOrigin](),
         (cand if candidates else splits).unsafe_origin_cast[MutAnyOrigin](),
+        wi.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(small_rows),
         grid_dim=(split_grid_x, split_grid_y),
         block_dim=TPB,
     )

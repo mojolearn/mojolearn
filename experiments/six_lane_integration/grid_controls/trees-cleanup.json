@@ -1,0 +1,1555 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "trees-cleanup",
+ "branch": "lane/trees-cleanup",
+ "head": "78c441468",
+ "mode": "identical",
+ "controls": {
+  "T02": {
+   "define": "MOJOLEARN_TREES_T02",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T02"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:15",
+    "ensemble/tree_identical_ideas.mojo:histogram_task_rows",
+    "extratrees/impl/decisiontree/batched_levelalgo/kernels/et_loop_kernels.mojo:399"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept",
+   "note": "task rows = clamp(2*hist_bytes/row_bytes,128,1024); T01 (the other task-size arm) was deleted as a loser, so no 3-way arm remains"
+  },
+  "T03": {
+   "define": "MOJOLEARN_TREES_T03",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T03"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:16",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:104"
+   ],
+   "binding": "_mojolearn_rf",
+   "bits_change": false,
+   "status": "kept",
+   "note": "REACH: classifier with max_features = all only; no board rf lane (rf clf uses sqrt, rf reg is regression) reaches it; peripheral: decisiontree-clf / all-features:rf only"
+  },
+  "T04": {
+   "define": "MOJOLEARN_TREES_T04",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T04"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:17",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:2232",
+    "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:clear_live_histogram_bins_kernel"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T05": {
+   "define": "MOJOLEARN_TREES_T05",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T05"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:18",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:209",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:2533",
+    "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:small_node_split_kernel"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "rewritten",
+   "note": "RF: per-node device choice, node rows <= T05_ROW_VISITS*128 take the one-block fused hist+split (pinned IDENTICAL reduce), larger nodes the multi-block histogram; ET: per-node (<=128 rows) already"
+  },
+  "T05_ROW_VISITS": {
+   "define": "MOJOLEARN_TREES_T05_ROW_VISITS",
+   "kind": "int_sweep",
+   "arms": {
+    "8": [
+     "MOJOLEARN_TREES_T05",
+     "MOJOLEARN_TREES_T05_ROW_VISITS=8"
+    ],
+    "16": [
+     "MOJOLEARN_TREES_T05",
+     "MOJOLEARN_TREES_T05_ROW_VISITS=16"
+    ],
+    "32": [
+     "MOJOLEARN_TREES_T05",
+     "MOJOLEARN_TREES_T05_ROW_VISITS=32"
+    ],
+    "64": [
+     "MOJOLEARN_TREES_T05",
+     "MOJOLEARN_TREES_T05_ROW_VISITS=64"
+    ]
+   },
+   "default": "32",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:20",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:209"
+   ],
+   "binding": "_mojolearn_rf",
+   "bits_change": false,
+   "status": "new",
+   "note": "only meaningful with T05; legal {8,16,32,64}"
+  },
+  "T06": {
+   "define": "MOJOLEARN_TREES_T06",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T06"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:21",
+    "ensemble/decisiontree/batched_levelalgo/objectives.mojo:923",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:1920"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept",
+   "note": "entropy criterion variants only; inert on gini/MSE board lanes"
+  },
+  "T07": {
+   "define": "MOJOLEARN_TREES_T07",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T07"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:22",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:2352",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3625"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T08": {
+   "define": "MOJOLEARN_TREES_T08",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "bits8_layout1": [
+     "MOJOLEARN_TREES_T08",
+     "MOJOLEARN_TREES_T08_BITS=8",
+     "MOJOLEARN_TREES_T08_LAYOUT=1"
+    ],
+    "bits8_layout2": [
+     "MOJOLEARN_TREES_T08",
+     "MOJOLEARN_TREES_T08_BITS=8",
+     "MOJOLEARN_TREES_T08_LAYOUT=2"
+    ],
+    "bits8_layout3": [
+     "MOJOLEARN_TREES_T08",
+     "MOJOLEARN_TREES_T08_BITS=8",
+     "MOJOLEARN_TREES_T08_LAYOUT=3"
+    ],
+    "bits16_layout1": [
+     "MOJOLEARN_TREES_T08",
+     "MOJOLEARN_TREES_T08_BITS=16",
+     "MOJOLEARN_TREES_T08_LAYOUT=1"
+    ],
+    "bits16_layout2": [
+     "MOJOLEARN_TREES_T08",
+     "MOJOLEARN_TREES_T08_BITS=16",
+     "MOJOLEARN_TREES_T08_LAYOUT=2"
+    ],
+    "bits16_layout3": [
+     "MOJOLEARN_TREES_T08",
+     "MOJOLEARN_TREES_T08_BITS=16",
+     "MOJOLEARN_TREES_T08_LAYOUT=3"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:23",
+    "ensemble/randomforest.mojo:2878",
+    "ensemble/decisiontree/batched_levelalgo/dataset.mojo:190"
+   ],
+   "binding": "_mojolearn_rf",
+   "bits_change": false,
+   "status": "rewritten",
+   "note": "LAYOUT 1 row-major, 2 column-major, 3 tile32; BITS 16 only pays above 256 bins (doubles bin bytes otherwise)"
+  },
+  "T09_ET": {
+   "define": "MOJOLEARN_TREES_T09",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T09"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:28",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2318",
+    "ensemble/bootstrap_sort.mojo"
+   ],
+   "binding": "_mojolearn_trees",
+   "bits_change": false,
+   "status": "split_from:T09",
+   "note": "ET bootstrap locality sort only"
+  },
+  "RF_SAMPLE": {
+   "define": "MOJOLEARN_TREES_RF_SAMPLE",
+   "kind": "arms",
+   "arms": {
+    "vendor_default": [],
+    "two_launch": [
+     "MOJOLEARN_TREES_RF_SAMPLE=0"
+    ],
+    "sorted": [
+     "MOJOLEARN_TREES_RF_SAMPLE=1"
+    ],
+    "fused": [
+     "MOJOLEARN_TREES_RF_SAMPLE=2"
+    ]
+   },
+   "default": "vendor_default",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:38",
+    "ensemble/randomforest.mojo:152",
+    "ensemble/randomforest.mojo:166",
+    "ensemble/randomforest.mojo:205"
+   ],
+   "binding": "_mojolearn_rf",
+   "bits_change": false,
+   "status": "split_from:T09,T10",
+   "note": "replaces RF T09 + T10 (T09 silently disabled T10). vendor_default = fused on NVIDIA, two_launch on AMD; so on NVIDIA 'fused' == default and on AMD 'two_launch' == default"
+  },
+  "T11_LEVELS": {
+   "define": "MOJOLEARN_TREES_T11_LEVELS",
+   "kind": "int_sweep",
+   "arms": {
+    "incumbent": [],
+    "1": [
+     "MOJOLEARN_TREES_T11_LEVELS=1"
+    ],
+    "2": [
+     "MOJOLEARN_TREES_T11_LEVELS=2"
+    ],
+    "8": [
+     "MOJOLEARN_TREES_T11_LEVELS=8"
+    ],
+    "16": [
+     "MOJOLEARN_TREES_T11_LEVELS=16"
+    ]
+   },
+   "default": "incumbent",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:47",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:1018",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:5005"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "rewritten",
+   "note": "incumbent K=4; RF K1/K2/K8 already showed no combined gain (forest-final-decisions 2026-10-05): RF grid needs only 16; ET all"
+  },
+  "T12": {
+   "define": "MOJOLEARN_TREES_T12",
+   "kind": "int_sweep",
+   "arms": {
+    "off": [],
+    "64MiB": [
+     "MOJOLEARN_TREES_T12",
+     "MOJOLEARN_TREES_T12_BYTES=67108864"
+    ],
+    "256MiB": [
+     "MOJOLEARN_TREES_T12",
+     "MOJOLEARN_TREES_T12_BYTES=268435456"
+    ],
+    "1024MiB": [
+     "MOJOLEARN_TREES_T12",
+     "MOJOLEARN_TREES_T12_BYTES=1073741824"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:49",
+    "ensemble/randomforest.mojo:3017",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:6548"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "rewritten",
+   "note": "shared frontier workspace budget"
+  },
+  "T13": {
+   "define": "MOJOLEARN_TREES_T13",
+   "kind": "int_sweep",
+   "arms": {
+    "off": [],
+    "4MiB": [
+     "MOJOLEARN_TREES_T13",
+     "MOJOLEARN_TREES_T13_BYTES=4194304"
+    ],
+    "16MiB": [
+     "MOJOLEARN_TREES_T13",
+     "MOJOLEARN_TREES_T13_BYTES=16777216"
+    ],
+    "64MiB": [
+     "MOJOLEARN_TREES_T13",
+     "MOJOLEARN_TREES_T13_BYTES=67108864"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:51",
+    "ensemble/decisiontree/batched_levelalgo/builder.mojo:1698",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:5344"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "rewritten",
+   "note": "fit-owned capacity budget"
+  },
+  "T14": {
+   "define": "MOJOLEARN_TREES_T14",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T14"
+    ],
+    "exact": [
+     "MOJOLEARN_TREES_T14",
+     "MOJOLEARN_TREES_T14_EXACT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:53",
+    "ensemble/tree_moments.mojo",
+    "ensemble/host/rf_oracle.mojo:1042"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": true,
+   "status": "kept",
+   "note": "numeric version: host column changes together"
+  },
+  "T15": {
+   "define": "MOJOLEARN_TREES_T15",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T15"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:55",
+    "xtrees/exact_oob_sum.mojo",
+    "bindings/_mojolearn_rf.mojo:583"
+   ],
+   "binding": "_mojolearn_rf",
+   "bits_change": false,
+   "status": "kept",
+   "note": "oob/importance variants only (peripheral)"
+  },
+  "C48": {
+   "define": "MOJOLEARN_TREES_C48",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_C48"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "ensemble/tree_identical_ideas.mojo:56",
+    "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:6007"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T17_BATCH": {
+   "define": "MOJOLEARN_TREES_T17_BATCH",
+   "kind": "int_sweep",
+   "arms": {
+    "incumbent": [],
+    "32": [
+     "MOJOLEARN_TREES_T17_BATCH=32"
+    ],
+    "64": [
+     "MOJOLEARN_TREES_T17_BATCH=64"
+    ],
+    "128": [
+     "MOJOLEARN_TREES_T17_BATCH=128"
+    ]
+   },
+   "default": "incumbent",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:17",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:1254"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "rewritten",
+   "note": "Lossguide exact best-first batch width; incumbent 32 (== arm 32)"
+  },
+  "T18": {
+   "define": "MOJOLEARN_TREES_T18",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T18"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:20",
+    "gbdt/methods/doc_parallel_boosting.mojo:3612"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept",
+   "note": "real only for multi-permutation ordered/categorical fits"
+  },
+  "T19": {
+   "define": "MOJOLEARN_TREES_T19",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T19"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:23",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:276"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept",
+   "note": "fused partition chain, depthwise"
+  },
+  "T19_DEFER": {
+   "define": "MOJOLEARN_TREES_T19_DEFER",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T19_DEFER"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:59",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:173"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept",
+   "note": "deferred parent-hist copy (= GBDT_ID_DEFER_COPY); Apple IDENTICAL default already; changes NV/AMD only"
+  },
+  "T21": {
+   "define": "MOJOLEARN_TREES_T21",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T21"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:28",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:238"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept",
+   "note": "per-feature-group width for non-symmetric drivers"
+  },
+  "T21_STREAMS": {
+   "define": "MOJOLEARN_TREES_T21_STREAMS",
+   "kind": "int_sweep",
+   "arms": {
+    "1": [],
+    "2": [
+     "MOJOLEARN_TREES_T21_STREAMS=2"
+    ],
+    "4": [
+     "MOJOLEARN_TREES_T21_STREAMS=4"
+    ]
+   },
+   "default": "1",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:34",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2275"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "rewritten",
+   "note": "symmetric 8-bit histogram replica streams; replaces T21_STREAM / T21_STREAM4"
+  },
+  "T22": {
+   "define": "MOJOLEARN_TREES_T22",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T22"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:37",
+    "gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:507"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T23": {
+   "define": "MOJOLEARN_TREES_T23",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T23"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:68",
+    "gbdt/methods/leaves_estimation/device_walker.mojo:615"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T24": {
+   "define": "MOJOLEARN_TREES_T24",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T24"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:71",
+    "gbdt/methods/ordered_boosting.mojo:678"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T25": {
+   "define": "MOJOLEARN_TREES_T25",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T25"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:40",
+    "gbdt/methods/ordered_boosting.mojo:1572"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T26": {
+   "define": "MOJOLEARN_TREES_T26",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T26"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:74",
+    "gbdt/methods/doc_parallel_boosting.mojo:3551",
+    "gbdt/host/gbdt_oracle_depthwise.mojo:1177"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": true,
+   "status": "kept",
+   "note": "numeric version: host column changes together; RMSE depthwise/lossguide, 1 permutation"
+  },
+  "T27": {
+   "define": "MOJOLEARN_TREES_T27",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T27"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:43",
+    "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:199"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T28": {
+   "define": "MOJOLEARN_TREES_T28",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T28"
+    ],
+    "sort": [
+     "MOJOLEARN_TREES_T28",
+     "MOJOLEARN_TREES_T28_SORT"
+    ],
+    "prefix": [
+     "MOJOLEARN_TREES_T28",
+     "MOJOLEARN_TREES_T28_PREFIX"
+    ],
+    "sort_prefix": [
+     "MOJOLEARN_TREES_T28",
+     "MOJOLEARN_TREES_T28_SORT",
+     "MOJOLEARN_TREES_T28_PREFIX"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:46",
+    "gbdt/ctrs/fast_prep.mojo:135"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T29": {
+   "define": "MOJOLEARN_TREES_T29",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T29"
+    ],
+    "versioned": [
+     "MOJOLEARN_TREES_T29",
+     "MOJOLEARN_TREES_T29_VERSIONED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:49",
+    "gbdt/targets/kernel/pair_logit_group.mojo:633"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": true,
+   "status": "kept",
+   "note": "'versioned' changes bits (host oracle gbdt_oracle_pair.mojo:216 together); 'on' does not"
+  },
+  "T29_YETI": {
+   "define": "MOJOLEARN_TREES_T29_YETI",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T29_YETI"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:77",
+    "gbdt/targets/kernel/yeti_rank.mojo:195"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept",
+   "note": "may equal the NV/AMD incumbent (YETI_BLOCK_PARALLEL); expect no difference"
+  },
+  "T30": {
+   "define": "MOJOLEARN_TREES_T30",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "dart": [
+     "MOJOLEARN_TREES_T30"
+    ],
+    "dart_adaboost": [
+     "MOJOLEARN_TREES_T30",
+     "MOJOLEARN_TREES_T30_ADABOOST"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:55",
+    "xtrees/dart_device.mojo:407",
+    "xtrees/api.mojo:405"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_x_trees",
+   "bits_change": false,
+   "status": "kept",
+   "note": "DART/AdaBoost: not on the board lane list (peripheral)"
+  },
+  "C45_GBDT": {
+   "define": "MOJOLEARN_TREES_C45_GBDT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_C45_GBDT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:83",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2892",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:2465"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "C47_GBDT": {
+   "define": "MOJOLEARN_TREES_C47_GBDT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_C47_GBDT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_identical_switches.mojo:65",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:3333"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "FOREST_ROUTE": {
+   "define": "MOJOLEARN_TREES_FOREST_ROUTE",
+   "kind": "arms",
+   "arms": {
+    "walk_fold": [],
+    "leaf_reuse": [
+     "MOJOLEARN_TREES_FOREST_ROUTE=1"
+    ],
+    "leaf_reuse_finite": [
+     "MOJOLEARN_TREES_FOREST_ROUTE=2"
+    ]
+   },
+   "default": "walk_fold",
+   "source": [
+    "core/forest_experiments.mojo:30",
+    "core/forest_inference.mojo:509",
+    "core/forest_inference_model.mojo:355"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "split_from:T35,T36",
+   "note": "replaces T35_LEAF_REUSE/T36_FINITE_STAGE precedence"
+  },
+  "T32": {
+   "define": "MOJOLEARN_TREES_T32_SHARED_ROWS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T32_SHARED_ROWS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/forest_experiments.mojo:13",
+    "core/forest_inference.mojo:85"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept",
+   "note": "grove variants only"
+  },
+  "T33": {
+   "define": "MOJOLEARN_TREES_T33_COST_SCHEDULE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T33_COST_SCHEDULE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/forest_experiments.mojo:14",
+    "core/forest_inference.mojo:520",
+    "core/forest_inference.mojo:1383"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept",
+   "note": "acts in walk_fold (grove) and leaf_reuse* (leaf-ID launch); inert in the single cell walk_fold + T34"
+  },
+  "T34": {
+   "define": "MOJOLEARN_TREES_T34_CHUNK_FOLD",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T34_CHUNK_FOLD"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/forest_experiments.mojo:15",
+    "core/forest_inference.mojo:513",
+    "core/forest_host_predict.mojo:254"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": true,
+   "status": "kept",
+   "note": "fold numeric version on every route + host column"
+  },
+  "T37": {
+   "define": "MOJOLEARN_TREES_T37_WORKSPACE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T37_WORKSPACE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/forest_experiments.mojo:33",
+    "core/forest_inference_model.mojo:118"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T38": {
+   "define": "MOJOLEARN_TREES_T38_FUSED_LABELS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T38_FUSED_LABELS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/forest_experiments.mojo:34",
+    "core/forest_inference_model.mojo:484"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept",
+   "note": "labels variants; fused path needs FOREST_ROUTE 1|2"
+  },
+  "T39": {
+   "define": "MOJOLEARN_TREES_T39_AUXILIARY_WALK",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T39_AUXILIARY_WALK"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/forest_experiments.mojo:61",
+    "core/forest_auxiliary_units.mojo:71"
+   ],
+   "binding": "_mojolearn_rf,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept",
+   "note": "apply/staged only (peripheral)"
+  },
+  "C50_GB": {
+   "define": "MOJOLEARN_TREES_C50_GB_PACKED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_C50_GB_PACKED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/forest_experiments.mojo:63",
+    "gbdt/resident_model.mojo:251"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T40": {
+   "define": "MOJOLEARN_TREES_T40_ROWMAJOR",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T40_ROWMAJOR"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "isolation_forest/impl/isolation_tree_builder.mojo:159"
+   ],
+   "binding": "_mojolearn_svm",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T41": {
+   "define": "MOJOLEARN_TREES_T41_TREE_BATCH",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T41_TREE_BATCH"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "isolation_forest/impl/isolation_tree_builder.mojo:160"
+   ],
+   "binding": "_mojolearn_svm",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T42": {
+   "define": "MOJOLEARN_TREES_T42_CORRECTION_CACHE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T42_CORRECTION_CACHE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "isolation_forest/impl/isolation_tree_builder.mojo:161"
+   ],
+   "binding": "_mojolearn_svm",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "C47_IF": {
+   "define": "MOJOLEARN_TREES_C47_IF_LIVE_TASKS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_C47_IF_LIVE_TASKS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "isolation_forest/impl/isolation_tree_builder.mojo:162"
+   ],
+   "binding": "_mojolearn_svm",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "C48_IF": {
+   "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_C48_IF_PARTITION"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "isolation_forest/impl/isolation_tree_builder.mojo:163"
+   ],
+   "binding": "_mojolearn_svm",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "C50_IF": {
+   "define": "MOJOLEARN_TREES_C50_IF_PACKED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_C50_IF_PACKED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "isolation_forest/impl/isolation_forest.mojo:116"
+   ],
+   "binding": "_mojolearn_svm",
+   "bits_change": false,
+   "status": "kept"
+  },
+  "T43": {
+   "define": "MOJOLEARN_TREES_T43_RADIX_SELECT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T43_RADIX_SELECT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "isolation_forest/impl/isolation_forest.mojo:1496"
+   ],
+   "binding": "_mojolearn_svm",
+   "bits_change": false,
+   "status": "kept",
+   "note": "contamination variant only"
+  },
+  "T44": {
+   "define": "MOJOLEARN_TREES_T44_METADATA_CACHE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T44_METADATA_CACHE"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "core/forest_experiments.mojo:60",
+    "xtrees/api.mojo:82"
+   ],
+   "binding": "_mojolearn_x_trees,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept",
+   "note": "shap:* variants only"
+  },
+  "T45": {
+   "define": "MOJOLEARN_TREES_T45_LINEAR_UNWIND",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_T45_LINEAR_UNWIND"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "xtrees/shap.mojo:85"
+   ],
+   "binding": "_mojolearn_x_trees,_mojolearn_trees",
+   "bits_change": false,
+   "status": "kept",
+   "note": "shap:* variants only"
+  }
+ },
+ "algorithms": {
+  "trees:rf": {
+   "binding": "_mojolearn_rf",
+   "route": "fit: fit_forest -> RowSampler (RF_SAMPLE) -> batched_levelalgo Builder.enqueue_best_splits (T05 fused | histogram T02/T04/T08 + find_best_splits T07) -> node split (C48) -> device level loop (T11); predict: core/forest_inference launch_forest_inference (FOREST_ROUTE, T33, T34)",
+   "controls": [
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T05_ROW_VISITS",
+    "T07",
+    "T08",
+    "RF_SAMPLE",
+    "T11_LEVELS",
+    "T12",
+    "T13",
+    "T14",
+    "C48",
+    "FOREST_ROUTE",
+    "T33",
+    "T34",
+    "T37"
+   ],
+   "interaction_groups": [
+    [
+     "T02",
+     "T04",
+     "T08"
+    ],
+    [
+     "T05",
+     "T05_ROW_VISITS",
+     "T07"
+    ],
+    [
+     "C48",
+     "T11_LEVELS",
+     "T12",
+     "T13"
+    ],
+    [
+     "FOREST_ROUTE",
+     "T33",
+     "T34"
+    ]
+   ],
+   "note": "T03 does not fire on the default sqrt classifier or regressor; T14 regressor only"
+  },
+  "trees:et": {
+   "binding": "_mojolearn_trees",
+   "route": "fit: extratrees batched_levelalgo builder (T09_ET sort, T05 <=128-row fused, T02 et_loop, C48, ET_LOOP_K T11); predict: core/forest_inference",
+   "controls": [
+    "T02",
+    "T04",
+    "T05",
+    "T07",
+    "T09_ET",
+    "T11_LEVELS",
+    "T12",
+    "T13",
+    "T14",
+    "C48",
+    "FOREST_ROUTE",
+    "T33",
+    "T34",
+    "T37"
+   ],
+   "interaction_groups": [
+    [
+     "T02",
+     "T04"
+    ],
+    [
+     "T05",
+     "T07"
+    ],
+    [
+     "C48",
+     "T11_LEVELS",
+     "T12",
+     "T13"
+    ],
+    [
+     "FOREST_ROUTE",
+     "T33",
+     "T34"
+    ]
+   ]
+  },
+  "trees:gbdt-symmetric": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: doc-parallel oblivious searcher, 8-bit hist2 (T21_STREAMS), C45 score fusion, leaf estimation (T23, T27); predict: resident model (C50_GB)",
+   "controls": [
+    "T21_STREAMS",
+    "T23",
+    "T27",
+    "C45_GBDT",
+    "C50_GB"
+   ],
+   "interaction_groups": [
+    [
+     "T21_STREAMS",
+     "C45_GBDT"
+    ],
+    [
+     "T23",
+     "T27"
+    ]
+   ]
+  },
+  "trees:gbdt-symmetric-1000": {
+   "binding": "_mojolearn_gbdt",
+   "route": "as gbdt-symmetric",
+   "controls": [
+    "T21_STREAMS",
+    "T23",
+    "T27",
+    "C45_GBDT",
+    "C50_GB"
+   ],
+   "interaction_groups": [
+    [
+     "T21_STREAMS",
+     "C45_GBDT"
+    ],
+    [
+     "T23",
+     "T27"
+    ]
+   ]
+  },
+  "trees:gbdt-depthwise": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: greedy_search_helper_depthwise (T19 chain, T19_DEFER, T21 group width, T18, C45 root, T26 RMSE leaf); predict: C50_GB",
+   "controls": [
+    "T19",
+    "T19_DEFER",
+    "T21",
+    "T18",
+    "T26",
+    "T23",
+    "T27",
+    "C45_GBDT",
+    "C50_GB"
+   ],
+   "interaction_groups": [
+    [
+     "T19",
+     "T19_DEFER",
+     "T21",
+     "C45_GBDT"
+    ],
+    [
+     "T23",
+     "T27",
+     "T26"
+    ]
+   ]
+  },
+  "trees:gbdt-lossguide": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: greedy_search_helper_depthwise lossguide exact batch (T17_BATCH, C47_GBDT, T19_DEFER, T21); predict: C50_GB",
+   "controls": [
+    "T17_BATCH",
+    "C47_GBDT",
+    "T19_DEFER",
+    "T21",
+    "T18",
+    "T26",
+    "T23",
+    "T27",
+    "C45_GBDT",
+    "C50_GB"
+   ],
+   "interaction_groups": [
+    [
+     "T17_BATCH",
+     "C47_GBDT"
+    ],
+    [
+     "T19_DEFER",
+     "T21",
+     "C45_GBDT"
+    ],
+    [
+     "T23",
+     "T27",
+     "T26"
+    ]
+   ]
+  },
+  "trees:gbdt-multiclass": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: symmetric searcher, multi-dim leaf estimation (T23 off for blocked-Hessian); predict: C50_GB",
+   "controls": [
+    "T21_STREAMS",
+    "T23",
+    "T27",
+    "C45_GBDT",
+    "C50_GB"
+   ],
+   "interaction_groups": [
+    [
+     "T21_STREAMS",
+     "C45_GBDT"
+    ],
+    [
+     "T23",
+     "T27"
+    ]
+   ]
+  },
+  "trees:gbdt-categorical": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: CTR prep (T28 arms) + ordered/doc-parallel searcher (T22, T18), noise (T24), leaf reuse (T25); predict: C50_GB guarded",
+   "controls": [
+    "T28",
+    "T22",
+    "T18",
+    "T24",
+    "T25",
+    "T23",
+    "T27",
+    "C45_GBDT",
+    "C50_GB"
+   ],
+   "interaction_groups": [
+    [
+     "T28"
+    ],
+    [
+     "T22",
+     "T18",
+     "T25"
+    ],
+    [
+     "T24"
+    ],
+    [
+     "T23",
+     "T27"
+    ]
+   ]
+  },
+  "trees:gbdt-ordered": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: ordered boosting (T22, T24, T25, T18; T28 if cat features); predict: C50_GB guarded",
+   "controls": [
+    "T22",
+    "T24",
+    "T25",
+    "T18",
+    "T28",
+    "T23",
+    "T27",
+    "C45_GBDT",
+    "C50_GB"
+   ],
+   "interaction_groups": [
+    [
+     "T22",
+     "T18",
+     "T25"
+    ],
+    [
+     "T24"
+    ],
+    [
+     "T28"
+    ],
+    [
+     "T23",
+     "T27"
+    ]
+   ]
+  },
+  "trees:gbdt-rank-yetirank": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: yeti_rank objective (T29_YETI, T29) + symmetric searcher; predict: C50_GB",
+   "controls": [
+    "T29",
+    "T29_YETI",
+    "T21_STREAMS",
+    "T23",
+    "T27",
+    "C45_GBDT",
+    "C50_GB"
+   ],
+   "interaction_groups": [
+    [
+     "T29",
+     "T29_YETI"
+    ],
+    [
+     "T21_STREAMS",
+     "C45_GBDT"
+    ]
+   ]
+  },
+  "trees:gbdt-rank-pairlogit": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: pair_logit_group (T29 arms) + symmetric searcher; predict: C50_GB",
+   "controls": [
+    "T29",
+    "T21_STREAMS",
+    "T23",
+    "T27",
+    "C45_GBDT",
+    "C50_GB"
+   ],
+   "interaction_groups": [
+    [
+     "T29"
+    ],
+    [
+     "T21_STREAMS",
+     "C45_GBDT"
+    ]
+   ]
+  },
+  "trees:iforest": {
+   "binding": "_mojolearn_svm",
+   "route": "fit: isolation_tree_builder (T40, T41, C47_IF, C48_IF); score: isolation_forest (T42, C50_IF; T43 contamination variant)",
+   "controls": [
+    "T40",
+    "T41",
+    "T42",
+    "C47_IF",
+    "C48_IF",
+    "C50_IF",
+    "T43"
+   ],
+   "interaction_groups": [
+    [
+     "T40",
+     "T41",
+     "C47_IF",
+     "C48_IF"
+    ],
+    [
+     "T42",
+     "C50_IF"
+    ]
+   ]
+  }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_TREES_T01",
+   "reason": "N07 streamed replicas lost on NVIDIA (1.293, 1.227) and AMD (1.034); code deleted with MOJOLEARN_IDN_RF_STREAM_REPLICAS"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T01_REPLICAS",
+   "reason": "sub-parameter of deleted T01"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T01_ROWS",
+   "reason": "sub-parameter of deleted T01; T02 cost rule covers task rows"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T10",
+   "reason": "folded into MOJOLEARN_TREES_RF_SAMPLE=2"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T11",
+   "reason": "T11 is on iff MOJOLEARN_TREES_T11_LEVELS is defined"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T16",
+   "reason": "I17 resident Lossguide frontier lost on AMD (1.041/1.292/1.083) and NVIDIA (1.114/1.111/1.116); code deleted with MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T17",
+   "reason": "replaced by int sweep MOJOLEARN_TREES_T17_BATCH"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T20",
+   "reason": "same DEFER_HIST_COPY_1903 constant as T19_DEFER"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T21_STREAM",
+   "reason": "replaced by MOJOLEARN_TREES_T21_STREAMS=2"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T21_STREAM4",
+   "reason": "replaced by MOJOLEARN_TREES_T21_STREAMS=4"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T31_PACKED_A",
+   "reason": "no-op: packed nodes are the default"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T31_PACKED_B",
+   "reason": "duplicate of MOJOLEARN_FOREST_SEPARATE_NODES"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T35_LEAF_REUSE",
+   "reason": "MOJOLEARN_TREES_FOREST_ROUTE=1"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T36_FINITE_STAGE",
+   "reason": "MOJOLEARN_TREES_FOREST_ROUTE=2"
+  }
+ ],
+ "stage0_build": {
+  "note": "lanes do not compile (rule change 2026-10-07); the orchestrator builds each binding with IDENTICAL + column define, once all-off and once all-on",
+  "bindings": [
+   "_mojolearn_rf",
+   "_mojolearn_trees",
+   "_mojolearn_x_trees",
+   "_mojolearn_gbdt",
+   "_mojolearn_svm"
+  ],
+  "all_off": [],
+  "all_on": [
+   "MOJOLEARN_TREES_C45_GBDT",
+   "MOJOLEARN_TREES_C47_GBDT",
+   "MOJOLEARN_TREES_C47_IF_LIVE_TASKS",
+   "MOJOLEARN_TREES_C48",
+   "MOJOLEARN_TREES_C48_IF_PARTITION",
+   "MOJOLEARN_TREES_C50_GB_PACKED",
+   "MOJOLEARN_TREES_C50_IF_PACKED",
+   "MOJOLEARN_TREES_FOREST_ROUTE=2",
+   "MOJOLEARN_TREES_RF_SAMPLE=1",
+   "MOJOLEARN_TREES_T02",
+   "MOJOLEARN_TREES_T03",
+   "MOJOLEARN_TREES_T04",
+   "MOJOLEARN_TREES_T05",
+   "MOJOLEARN_TREES_T06",
+   "MOJOLEARN_TREES_T07",
+   "MOJOLEARN_TREES_T08",
+   "MOJOLEARN_TREES_T08_BITS=16",
+   "MOJOLEARN_TREES_T08_LAYOUT=3",
+   "MOJOLEARN_TREES_T09",
+   "MOJOLEARN_TREES_T11_LEVELS=16",
+   "MOJOLEARN_TREES_T12",
+   "MOJOLEARN_TREES_T13",
+   "MOJOLEARN_TREES_T14",
+   "MOJOLEARN_TREES_T14_EXACT",
+   "MOJOLEARN_TREES_T15",
+   "MOJOLEARN_TREES_T17_BATCH=128",
+   "MOJOLEARN_TREES_T18",
+   "MOJOLEARN_TREES_T19",
+   "MOJOLEARN_TREES_T19_DEFER",
+   "MOJOLEARN_TREES_T21",
+   "MOJOLEARN_TREES_T21_STREAMS=4",
+   "MOJOLEARN_TREES_T22",
+   "MOJOLEARN_TREES_T23",
+   "MOJOLEARN_TREES_T24",
+   "MOJOLEARN_TREES_T25",
+   "MOJOLEARN_TREES_T26",
+   "MOJOLEARN_TREES_T27",
+   "MOJOLEARN_TREES_T28",
+   "MOJOLEARN_TREES_T28_PREFIX",
+   "MOJOLEARN_TREES_T28_SORT",
+   "MOJOLEARN_TREES_T29",
+   "MOJOLEARN_TREES_T29_VERSIONED",
+   "MOJOLEARN_TREES_T29_YETI",
+   "MOJOLEARN_TREES_T30",
+   "MOJOLEARN_TREES_T30_ADABOOST",
+   "MOJOLEARN_TREES_T32_SHARED_ROWS",
+   "MOJOLEARN_TREES_T33_COST_SCHEDULE",
+   "MOJOLEARN_TREES_T34_CHUNK_FOLD",
+   "MOJOLEARN_TREES_T37_WORKSPACE",
+   "MOJOLEARN_TREES_T38_FUSED_LABELS",
+   "MOJOLEARN_TREES_T39_AUXILIARY_WALK",
+   "MOJOLEARN_TREES_T40_ROWMAJOR",
+   "MOJOLEARN_TREES_T41_TREE_BATCH",
+   "MOJOLEARN_TREES_T42_CORRECTION_CACHE",
+   "MOJOLEARN_TREES_T43_RADIX_SELECT",
+   "MOJOLEARN_TREES_T44_METADATA_CACHE",
+   "MOJOLEARN_TREES_T45_LINEAR_UNWIND"
+  ]
+ }
+}

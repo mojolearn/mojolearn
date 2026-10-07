@@ -3,7 +3,7 @@
 """Random Forest estimator surface, parameters, metrics, training dispatch, and host inference, aligned with pinned cuML behavior."""
 
 from ensemble.bootstrap_sort import sort_passes_for, sort_selected_rows
-from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, T09, T10, T12, T12_BYTES, T15
+from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, RF_SAMPLE_SET, RF_SAMPLE_SORTED, RF_SAMPLE_FUSED, T12, T12_BYTES, T15
 from std.math import fma
 from std.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys import size_of
@@ -148,8 +148,9 @@ comptime LABELS_SAMPLED_ORDER = True
 # see `fused_gather_ok` in `fit_forest`. Same drawn multiset, same integer /
 # fixed-point histograms, counts and leaves, so the forest is the one the
 # drawn order builds and the host column is untouched.
-comptime IDN_RF_ROWS_SORTED = T09 or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime IDN_RF_ROWS_SORTED = RF_SAMPLE_SORTED or (
+    not RF_SAMPLE_SET
+    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_IDN_RF_ROWS_SORTED"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -162,7 +163,7 @@ comptime IDN_RF_ROWS_SORTED = T09 or (
 # per-tree drain. Same Int32 row ids as the host copy_if: no bit moves. (This
 # replaces fam2-forests' `IDN_RF_WEIGHT_ROWS_DEVICE`, whose `_OFF` define and
 # host-compacted upload are gone.)
-comptime ROWS_SORTED_SAMPLE = (
+comptime ROWS_SORTED_SAMPLE = RF_SAMPLE_SORTED if RF_SAMPLE_SET else (
     is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
     or IDN_RF_ROWS_SORTED
     or (
@@ -201,7 +202,7 @@ comptime ROWS_SORTED_MIN_COLS = 64
 # route. HIP remains unchanged after a small Taxi regression on MI325X. The
 # explicit candidate define still permits experiments on other vendors, and
 # OFF restores the old two-launch route everywhere.
-comptime FUSED_BOOTSTRAP_GATHER = T10 or (
+comptime FUSED_BOOTSTRAP_GATHER = RF_SAMPLE_FUSED if RF_SAMPLE_SET else (
     not is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF"]()
     and (
         has_nvidia_gpu_accelerator()
@@ -3029,7 +3030,7 @@ def fit_forest_prepared[
         has_sw,
         Int(rf_params.n_trees) if oob_score else 0,
         n_slots=k_streams,
-        sort_rows=T09 or is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
+        sort_rows=RF_SAMPLE_SORTED or is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
         or n_cols >= ROWS_SORTED_MIN_COLS,
     )
     if has_sw:

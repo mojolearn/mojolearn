@@ -4,16 +4,32 @@
 All new switches are default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT
 VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED. No device-specific arithmetic.
 """
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
-comptime T31_PACKED_A = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T31_PACKED_A"]()
-comptime T31_PACKED_B = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T31_PACKED_B"]()
+# T31_PACKED_A/B removed (trees-cleanup 2026-10-07): packed nodes are already
+# the default layout (core/forest_inference.mojo FOREST_PACKED_NODES), so A was
+# a no-op and B duplicated MOJOLEARN_FOREST_SEPARATE_NODES.
 comptime T32_SHARED_ROWS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T32_SHARED_ROWS"]()
 comptime T33_COST_SCHEDULE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T33_COST_SCHEDULE"]()
 comptime T34_CHUNK_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T34_CHUNK_FOLD"]()
-comptime T35_LEAF_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T35_LEAF_REUSE"]()
-comptime T36_FINITE_STAGE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T36_FINITE_STAGE"]()
+# Forest prediction ROUTE: one arms switch (trees-cleanup 2026-10-07; replaces
+# T35_LEAF_REUSE / T36_FINITE_STAGE, whose silent precedence over T34 and the
+# grove schedule hid T33). `launch_forest_inference` takes exactly one route:
+#   -D MOJOLEARN_TREES_FOREST_ROUTE=0  (absent) walk-and-fold per row: grove
+#                                      lanes/rows, or the T34 chunk kernel when
+#                                      the T34 fold version is on
+#   -D MOJOLEARN_TREES_FOREST_ROUTE=1  leaf IDs once, then every output folds
+#                                      from them (old T35)
+#   -D MOJOLEARN_TREES_FOREST_ROUTE=2  route 1 with the finiteness check fused
+#                                      into the leaf-ID pass (old T36)
+# Orthogonal controls: T34_CHUNK_FOLD is the fold VERSION (bits) on every
+# route; T33_COST_SCHEDULE picks rows-vs-lanes by cache cost in route 0's grove
+# launch and in routes 1/2's leaf-ID launch. The one empty cell is route 0
+# with T34 on: the chunk kernel has no grove schedule, so T33 is inert there.
+comptime FOREST_ROUTE = get_defined_int["MOJOLEARN_TREES_FOREST_ROUTE", 0]() if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0
+comptime T35_LEAF_REUSE = FOREST_ROUTE == 1 or FOREST_ROUTE == 2
+comptime T36_FINITE_STAGE = FOREST_ROUTE == 2
 comptime T37_WORKSPACE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T37_WORKSPACE"]()
 comptime T38_FUSED_LABELS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T38_FUSED_LABELS"]()
 
