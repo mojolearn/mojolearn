@@ -151,6 +151,12 @@ class Guards:
             raise ValueError('Unrecognized guard line: ' + line)
         if not any(s[0] == 'assert' for s in self.steps):
             raise ValueError('No guard asserts parsed')
+        self.pairs = []
+
+    def add_pair(self, a, b, reason):
+        """A source-level exclusion outside the guard file (a binding's own comptime assert)."""
+        if (a, b, reason) not in self.pairs:
+            self.pairs.append((a, b, reason))
 
     @staticmethod
     def _check(expr, raw):
@@ -185,6 +191,9 @@ class Guards:
                 env[step[1]] = eval(step[2], env)
             elif not eval(step[1], env):
                 out.append(step[2])
+        for a, b, reason in self.pairs:
+            if a in values and b in values:
+                out.append('source exclusion ' + a + ' / ' + b + ' (' + reason + ')')
         return out
 
 
@@ -299,7 +308,11 @@ def workload_inventory():
                 and node.args and isinstance(node.args[0], ast.Constant)):
             for kw in node.keywords:
                 if kw.arg == 'datasets':
-                    for ds in ast.literal_eval(kw.value):
+                    try:
+                        datasets = ast.literal_eval(kw.value)
+                    except ValueError:
+                        continue  # computed dataset tuples: those lanes are in the matrix inventory
+                    for ds in datasets:
                         inv.setdefault('expanded:' + node.args[0].value + '@dataset=' + ds,
                                        'board lane _add("' + node.args[0].value + '") datasets in tools/bench_board_algos.py')
     return inv
@@ -394,6 +407,18 @@ def build_model(controls, algorithms, inv):
                               workloads=workloads, mapping=map_note if workloads is None else None,
                               mapping_notes=map_note if workloads is not None else [])
     return model, reach
+
+
+def source_exclusions(controls):
+    """Exclusions the controls declare outside the guard file."""
+    out = []
+    for key, c in sorted(controls.items()):
+        own = c['define']
+        for other in c.get('exclusive_with') or []:
+            out.append((own, other.split('=')[0], key + '.exclusive_with'))
+        for m in re.finditer(r'Refused \(comptime assert\) together with (MOJOLEARN_\w+)', control_text(c)):
+            out.append((own, m.group(1), key + ' note: "' + m.group(0) + '"'))
+    return out
 
 
 def control_exclusion(c, reach):
@@ -641,7 +666,7 @@ def pack(configs, reach, guards):
         placed = None
         if not cfg['global_reach']:
             for p in packs:
-                if p['bindings'] != cfg['bindings'] or p['global'] or cfg['algorithm'] in p['algorithms']:
+                if p['bindings'] != cfg['bindings'] or p['is_global'] or cfg['algorithm'] in p['algorithms']:
                     continue
                 ok = True
                 for other in p['members']:
@@ -662,7 +687,7 @@ def pack(configs, reach, guards):
                 break
         if placed is None:
             packs.append(dict(members=[cfg], algorithms={cfg['algorithm']}, bindings=cfg['bindings'],
-                              defines=list(cfg['defines']), global=bool(cfg['global_reach'])))
+                              defines=list(cfg['defines']), is_global=bool(cfg['global_reach'])))
         else:
             placed['members'].append(cfg)
             placed['algorithms'].add(cfg['algorithm'])
@@ -680,6 +705,8 @@ def build_key(path, vendor, defines):
 def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP):
     guards = Guards(Path(guards_path).read_text())
     controls, algorithms, removed, owed_misc, files = load_controls(controls_dir)
+    for a, b, why in source_exclusions(controls):
+        guards.add_pair(a, b, why)
     inv = workload_inventory()
     model, reach = build_model(controls, algorithms, inv)
     plans, unmapped, excluded_all = {}, [], {}
@@ -842,7 +869,7 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP):
         aa_pairs=sorted(aa.values(), key=lambda a: (a['algorithm'], a['workload_id'], a['vendor'])),
         builds=dict(before_packing=summary['builds_before_packing'], after_packing=summary['builds_after_packing'],
                     packs=[dict(id=p['id'], bindings=p['bindings'], defines=p['defines'], members=[m['id'] for m in p['members']],
-                                algorithms=sorted(p['algorithms']), global_reach=p['global']) for p in packs]),
+                                algorithms=sorted(p['algorithms']), global_reach=p['is_global']) for p in packs]),
         owed_special_ab=owed)
     return plan, matrix, build_plan
 
