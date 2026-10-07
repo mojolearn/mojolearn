@@ -9,7 +9,7 @@ the existing admission and finish/rollback policy before publishing outputs.
 from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -17,14 +17,18 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.checks.optimizer import _adam_oop_cell
 from training.checks.optimizer_contract import OptimizerConfig, StepScalars, step_scalars
 
+# L11 (2026-10-07): NN55 needs NN56, so they are arms of ONE switch,
+# -D MOJOLEARN_IDN_LM_GROUPED_ADAM=0|1|2: 1 = NN56 grouped OOP Adam,
+# 2 = NN56 plus NN55 block-status minima. Arm 1 alone isolates NN56.
+comptime IDN_LM_GROUPED_ADAM_ARM = get_defined_int["MOJOLEARN_IDN_LM_GROUPED_ADAM", 0]()
 comptime NN55_BLOCK_STATUS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN55_BLOCK_STATUS"]()
+    and IDN_LM_GROUPED_ADAM_ARM == 2
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime NN56_GROUPED_ADAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN56_GROUPED_ADAM"]()
+    and IDN_LM_GROUPED_ADAM_ARM >= 1
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime _FP = MutPointer[Float32, MutAnyOrigin]

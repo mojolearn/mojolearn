@@ -1459,3 +1459,10 @@ Losers and dead switches deleted from the code. Each stays recoverable at main 8
 | `MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE` (I06 / NI19, two query heads per K/V page) | attention forward GQA ratio 2 / length 1024/1536, B1, heads8, kv4, hd64 | measured @ e80a1d0 (fixed kvgrid schedule); deleted from lane/neural-gemm-attn-dedupe | overnight-ab-20261006 I06 | MI325X 2.434/3.581 -> 2.947/4.342 (1.211/1.212x); L40S 1.143/2.262 -> 1.311/2.506 (1.147/1.108x) | DROP | slower on both vendors. The four-head NN17 arm survives as `MOJOLEARN_IDN_ATTN_HEAD_SHARE=4` |
 | `MOJOLEARN_NN22_EAGER_DKDV_PAIR` | transformer eager attention backward dK/dV pairing | source @ 8be4d20d4; deleted | - | - | DROP (unmeasured) | only the eager fallback backward (`transformer/checks/transformer_backward.mojo`) read it, never the fused backward the board trains through; deleted by the lane brief instead of wiring into `fused_bwd_*` |
 | `MOJOLEARN_NN23_ROWDOT_DS` | transformer eager softmax backward row-dot + dS in one serial-per-row kernel | source @ 8be4d20d4; deleted | - | - | DROP (unmeasured) | same reach as NN22; one thread walks every key of its row twice, which the split flat-grid incumbent already parallelizes |
+
+## IDENTICAL neural sequence/training switch dedupe (lane/neural-seq-train-dedupe, 2026-10-07)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `IDN_SEQ_ROW_SERIAL_SCAN` (NI49 row-serial arm) | lstm-clf, lstm-reg (x_sequence) | lane/neural-seq-train-dedupe @ 83b9bf20a (deleted; last present at 8be4d20d4) | none | - | DROPPED-rule | one GPU thread per batch row, serial over units and timesteps: breaks the IDENTICAL parallel-GPU rule; never measured, not a board lane. Recoverable at 8be4d20d4 sequence/recurrent_scan.mojo:71-83 |
+| `NI13_CNN_WEIGHT_GENERATION_CACHE` | x_cnn (CNN forward) | lane/neural-seq-train-dedupe (deleted; last present at 8be4d20d4) | none | - | DROPPED-rejected | rejected by source review (the shipped route performs no repack for a cache to remove); x_cnn/neural_weight_cache.mojo had no importer. Recoverable at 8be4d20d4 |

@@ -1,11 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared NN54/NN57 arithmetic; host-only imports for CPU-only installations."""
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
 
+# L11 (2026-10-07): the CE token-total fold is ONE switch with arms,
+# -D MOJOLEARN_IDN_CE_TOKEN_FOLD=0|1|2: 0 = the pinned GEMM ones-fold
+# (default), 1 = NN54 128-row leaf tree, 2 = NI35 256-token tree v2. Both
+# arms run on the GPU (training/checks/loss.mojo identical_ce_forward_into)
+# and on the host column (training/byte_lm_host_kernels.mojo) together.
+comptime IDN_CE_TOKEN_FOLD_ARM = get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD", 0]()
 comptime NN54_LOSS_PROFILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN54_LOSS_PROFILE"]()
+    and IDN_CE_TOKEN_FOLD_ARM == 1
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime NN57_NORM_PROFILE = (

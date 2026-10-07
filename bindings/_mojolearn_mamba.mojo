@@ -136,7 +136,7 @@ rc 134), an open defect. Build:
 from bindings.hostptr import f32_ptr, read_f32, copy_f32
 from std.memory import bitcast, memcpy
 from std.time import perf_counter_ns
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from mamba.impl.ops.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS, NN34_COMPONENT_PROFILE
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
 from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
@@ -2656,7 +2656,7 @@ def mamba3_prefill_session_backward_owned_binding(session: PythonObject, addrs: 
 # compilation, identity, quality or end-to-end measurements have been run.
 comptime IDN_SAMBA_M3_FORWARD_TAPE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_SAMBA_FORWARD_TAPE"]()
+    and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 0]() == 3  # NI48 arm
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 

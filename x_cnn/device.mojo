@@ -42,7 +42,7 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 #: other build runs the paths below unchanged (x_cnn/afn_direct.mojo).
 from x_cnn.afn_direct import AFN_CNN_DIRECT, afn_conv_direct_applies, afn_conv_direct_launch
 from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell, nn14_wgrad_at, nn14_input_grad_at
-from x_cnn.ops import NN45_CONV_RELU, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
+from x_cnn.ops import NN45_CONV_RELU, IDN_CNN_CONV_RELU_ARM, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
 from x_cnn.neural_aux_contract import (
     NI55_GRAPH_FEATURE4, NI58_SAGE_FEATURE4, NI59_DROPOUT_CHANNEL,
     NI60_DROPOUT_APPLY4, NEURAL_AUX_FEATURE_TILE,
@@ -83,7 +83,7 @@ comptime NI11_DIRECT_TAPS64 = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI11_DIR
 comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI12_IMPLICIT_CONV"]()
 comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI14_BOUNDED_COL2IM"]()
 comptime NI15_BIAS_NO_ONES = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"]()
-comptime NI16_CONV_RELU_FUSED = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI16_CONV_RELU_FUSED"]()
+comptime NI16_CONV_RELU_FUSED = _NI_CNN_ENABLED and IDN_CNN_CONV_RELU_ARM == 2  # arm 2 of MOJOLEARN_IDN_CNN_CONV_RELU (x_cnn/ops.mojo)
 comptime NI18_FUSED_EPOCH_GATHER = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"]()
 #: lane/cnn-apple2: the FAST tier on Apple measures its GEMM plans (the
 #: simdgroup matrix plans among them). `-D MOJOLEARN_XCNN_NO_FAST_TUNE` is
@@ -2845,7 +2845,7 @@ def _conv_relu_on_device(
             return False
     _im2col(ctx, dx, cols, dp, rows, ckk, C)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
-    comptime if NN45_CONV_RELU or NI16_CONV_RELU_FUSED:
+    comptime if NN45_CONV_RELU:
         if relu_addr != 0:
             launch[nn45_conv_out_relu_at](ctx, fp(y2), fp(dbias), fp(yconv), FP(unsafe_from_address=relu_addr), ip(dp), ip(dp), rows * OC)
             return True
@@ -2916,7 +2916,7 @@ def conv_block_forward_into[resident: Bool = False](
     # NN45 needs the output address before layout; the direct path still
     # reports False and receives its usual separate ReLU below.
     var pout = outb[resident](ctx, 7, dst, no)
-    var relu_addr = Int(fp(pout)) if (NN45_CONV_RELU or NI16_CONV_RELU_FUSED) and not pool else 0
+    var relu_addr = Int(fp(pout)) if NN45_CONV_RELU and not pool else 0
     var fused_relu = _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C, saved, relu_addr)
     # the block's output: the pool's, or the ReLU's when there is no pool
     if pool:

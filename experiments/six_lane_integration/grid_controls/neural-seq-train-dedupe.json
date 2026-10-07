@@ -1,0 +1,1811 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "neural-seq-train-dedupe",
+ "branch": "lane/neural-seq-train-dedupe",
+ "head": "b81169c61",
+ "controls": {
+  "m3_angle_carry_cache": {
+   "define": "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/modules/mamba3_backward.mojo:1313",
+    "mamba/impl/modules/mamba3_backward.mojo:1389"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "split_from:NN38+NI43",
+   "entries": [
+    "NN38",
+    "NI43"
+   ],
+   "board": "samba-train-step",
+   "tags": [],
+   "note": "NN38 and NI43 enabled the identical seeds kernel; one switch. Same fold order as off (bits equal)."
+  },
+  "m2_yoff_exp": {
+   "define": "MOJOLEARN_IDN_M2_YOFF_EXP",
+   "kind": "arms",
+   "arms": {
+    "0": [],
+    "1": [
+     "MOJOLEARN_IDN_M2_YOFF_EXP=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_M2_YOFF_EXP=2"
+    ]
+   },
+   "default": "0",
+   "source": [
+    "mamba/impl/modules/ssd_minimal.mojo:1153",
+    "mamba/impl/modules/ssd_minimal.mojo:1519"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "rewritten",
+   "entries": [
+    "NN36",
+    "NI39"
+   ],
+   "board": "mamba2-forward, samba-*",
+   "tags": [],
+   "arm_names": {
+    "0": "recompute",
+    "1": "nn36_block_shared",
+    "2": "ni39_global_cache"
+   }
+  },
+  "m2_yd_rows": {
+   "define": "MOJOLEARN_IDN_M2_YD_ROWS",
+   "kind": "int_sweep",
+   "arms": {
+    "4": [],
+    "8": [
+     "MOJOLEARN_IDN_M2_YD_ROWS=8"
+    ]
+   },
+   "default": "4",
+   "source": [
+    "mamba/impl/modules/ssd_minimal.mojo:755"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "rewritten",
+   "entries": [
+    "NN33"
+   ],
+   "board": "mamba2-forward, samba-*",
+   "tags": [
+    "tile_param",
+    "tune_per_vendor"
+   ],
+   "note": "Y_diag tile rows; 8 also sets YD_JC=32. Was NN33_YDIAG_ROWS8."
+  },
+  "m2_cs_pt": {
+   "define": "MOJOLEARN_IDN_M2_CS_PT",
+   "kind": "int_sweep",
+   "arms": {
+    "8": [],
+    "16": [
+     "MOJOLEARN_IDN_M2_CS_PT=16"
+    ]
+   },
+   "default": "8",
+   "source": [
+    "mamba/impl/modules/ssd_minimal.mojo:756"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "rewritten",
+   "entries": [
+    "NN33"
+   ],
+   "board": "mamba2-forward, samba-*",
+   "tags": [
+    "tile_param",
+    "tune_per_vendor"
+   ],
+   "note": "C_state value channels per block. Was NN33_CSTATE_P16."
+  },
+  "m2_retain_gl": {
+   "define": "MOJOLEARN_IDN_M2_RETAIN_GL",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_M2_RETAIN_GL=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/modules/ssd_minimal.mojo:777"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI40"
+   ],
+   "board": "mamba2-forward, samba-*",
+   "tags": [],
+   "note": "Not merged with NN33: retaining G*L composes with any tile geometry (independent ideas in the same kernels); crossed in an interaction group instead."
+  },
+  "m2_grad_fold": {
+   "define": "MOJOLEARN_IDN_M2_GRAD_FOLD",
+   "kind": "arms",
+   "arms": {
+    "0": [],
+    "1": [
+     "MOJOLEARN_IDN_M2_GRAD_FOLD=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_M2_GRAD_FOLD=2"
+    ]
+   },
+   "default": "0",
+   "source": [
+    "mamba/impl/ops/neural_gradient_profile.mojo:21",
+    "mamba/impl/ops/mamba2_ssd_backward.mojo:80"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": true,
+   "status": "rewritten",
+   "entries": [
+    "NN39",
+    "NI44"
+   ],
+   "board": "off-board (no board lane trains Mamba-2)",
+   "tags": [
+    "off_board",
+    "bit_version"
+   ],
+   "arm_names": {
+    "0": "v1_leaf256",
+    "1": "nn39_tree",
+    "2": "ni44_leaf128"
+   }
+  },
+  "cnn_conv_relu": {
+   "define": "MOJOLEARN_IDN_CNN_CONV_RELU",
+   "kind": "arms",
+   "arms": {
+    "0": [],
+    "1": [
+     "MOJOLEARN_IDN_CNN_CONV_RELU=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_CNN_CONV_RELU=2"
+    ]
+   },
+   "default": "0",
+   "source": [
+    "x_cnn/ops.mojo:40",
+    "x_cnn/device.mojo:86"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "rewritten",
+   "entries": [
+    "NN45",
+    "NI16"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "arm_names": {
+    "0": "separate",
+    "1": "nn45_fwd_fused",
+    "2": "ni16_fwd_bwd_fused"
+   },
+   "note": "MOJOLEARN_XCNN_NO_DIRECT_CONV (x_cnn/device.mojo:321) is the pre-existing before-arm that exposes the fused path when direct conv would bypass it."
+  },
+  "seq_lstm_scan": {
+   "define": "MOJOLEARN_IDN_SEQ_LSTM_SCAN",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_SEQ_LSTM_SCAN=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "sequence/recurrent_scan.mojo:70"
+   ],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": true,
+   "status": "kept",
+   "entries": [
+    "NN41",
+    "NI49"
+   ],
+   "board": "off-board (x_sequence)",
+   "tags": [
+    "off_board",
+    "blocked_quality"
+   ],
+   "note": "Same kernel as SEQ_FAST_LSTM_SCAN, DROPPED-quality on M3 (rab10: lstm-clf acc 0.96->0.50). Owes a repair before any grid run. NI49 row-serial arm deleted."
+  },
+  "seq_wgrad": {
+   "define": "MOJOLEARN_IDN_SEQ_WGRAD",
+   "kind": "arms",
+   "arms": {
+    "0": [],
+    "1": [
+     "MOJOLEARN_IDN_SEQ_WGRAD=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_SEQ_WGRAD=2"
+    ]
+   },
+   "default": "0",
+   "source": [
+    "sequence/recurrent.mojo:80",
+    "sequence/checks/oracle.mojo:194"
+   ],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": true,
+   "status": "rewritten",
+   "entries": [
+    "NN43",
+    "NI51"
+   ],
+   "board": "off-board (x_sequence)",
+   "tags": [
+    "off_board",
+    "bit_version"
+   ],
+   "arm_names": {
+    "0": "sqrt_min512",
+    "1": "ni51_sqrt_min256",
+    "2": "nn43_fixed128"
+   }
+  },
+  "seq_ln_leaf": {
+   "define": "MOJOLEARN_IDN_SEQ_LN_LEAF",
+   "kind": "int_sweep",
+   "arms": {
+    "32": [
+     "MOJOLEARN_IDN_SEQ_LN_LEAF=32"
+    ],
+    "64": []
+   },
+   "default": "64",
+   "source": [
+    "sequence/layernorm.mojo:40"
+   ],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": true,
+   "status": "rewritten",
+   "entries": [
+    "NI51"
+   ],
+   "board": "off-board (x_sequence)",
+   "tags": [
+    "off_board",
+    "bit_version"
+   ],
+   "note": "Was IDN_SEQ_LN_LEAF32."
+  },
+  "moe_stable_pack": {
+   "define": "MOJOLEARN_IDN_MOE_STABLE_PACK",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_MOE_STABLE_PACK=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "sequence/moe_group.mojo:45",
+    "sequence/exec_device.mojo:699"
+   ],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": false,
+   "status": "split_from:NN44+NI53",
+   "entries": [
+    "NN44",
+    "NI53"
+   ],
+   "board": "off-board (x_sequence)",
+   "tags": [
+    "off_board"
+   ]
+  },
+  "moe_expert_bisect": {
+   "define": "MOJOLEARN_NN44_EXPERT_BISECT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN44_EXPERT_BISECT=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "sequence/moe_tiled.mojo:36"
+   ],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": false,
+   "status": "split_from:NN44",
+   "entries": [
+    "NN44"
+   ],
+   "board": "off-board (x_sequence)",
+   "tags": [
+    "off_board"
+   ]
+  },
+  "ce_token_fold": {
+   "define": "MOJOLEARN_IDN_CE_TOKEN_FOLD",
+   "kind": "arms",
+   "arms": {
+    "0": [],
+    "1": [
+     "MOJOLEARN_IDN_CE_TOKEN_FOLD=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_CE_TOKEN_FOLD=2"
+    ]
+   },
+   "default": "0",
+   "source": [
+    "training/neural_ab_profile_contract.mojo:11",
+    "training/checks/loss.mojo:1725",
+    "training/byte_lm_host_kernels.mojo:1080"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": true,
+   "status": "rewritten",
+   "entries": [
+    "NN54",
+    "NI35"
+   ],
+   "board": "lm-train-step",
+   "tags": [
+    "bit_version"
+   ],
+   "arm_names": {
+    "0": "gemm_ones_fold",
+    "1": "nn54_leaf128_tree",
+    "2": "ni35_token_tree256_v2"
+   },
+   "note": "Review said host-only; wrong: identical_ce_forward_into (GPU) already implements both arms, host column matches (byte_lm_host_kernels.mojo:1080-1084)."
+  },
+  "ce_grad_fused": {
+   "define": "MOJOLEARN_IDN_CE_GRAD_FUSED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_CE_GRAD_FUSED=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/neural_identical_experiments.mojo:44",
+    "training/checks/loss.mojo:1794"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": false,
+   "status": "split_from:NN52+NI33",
+   "entries": [
+    "NN52",
+    "NI33"
+   ],
+   "board": "lm-train-step",
+   "tags": [],
+   "note": "Review said dead; wrong: training/checks/loss.mojo identical_ce_backward_into is the shipped CE backward (byte_lm.mojo:78, :1707). NN52 and NI33 launched the same fused kernel."
+  },
+  "lm_resident_tokens": {
+   "define": "MOJOLEARN_IDN_LM_RESIDENT_TOKENS",
+   "kind": "arms",
+   "arms": {
+    "0": [],
+    "1": [
+     "MOJOLEARN_IDN_LM_RESIDENT_TOKENS=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_LM_RESIDENT_TOKENS=2"
+    ]
+   },
+   "default": "0",
+   "source": [
+    "training/neural_identical_experiments.mojo:39",
+    "training/byte_lm.mojo:1393",
+    "training/byte_lm.mojo:1800"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": false,
+   "status": "rewritten",
+   "entries": [
+    "NN51",
+    "NI32"
+   ],
+   "board": "lm-train-step",
+   "tags": [
+    "peripheral"
+   ],
+   "arm_names": {
+    "0": "revalidate",
+    "1": "ni32_ids",
+    "2": "nn51_ids_and_targets"
+   }
+  },
+  "lm_views": {
+   "define": "MOJOLEARN_IDN_LM_VIEWS",
+   "kind": "arms",
+   "arms": {
+    "0": [],
+    "1": [
+     "MOJOLEARN_IDN_LM_VIEWS=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_LM_VIEWS=2"
+    ],
+    "3": [
+     "MOJOLEARN_IDN_LM_VIEWS=3"
+    ]
+   },
+   "default": "0",
+   "source": [
+    "training/neural_identical_experiments.mojo:32",
+    "training/byte_lm.mojo:826"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": false,
+   "status": "rewritten",
+   "entries": [
+    "NN60",
+    "NI27"
+   ],
+   "board": "lm-train-step",
+   "tags": [
+    "memory"
+   ],
+   "arm_names": {
+    "0": "copies",
+    "1": "nn60_block",
+    "2": "nn60_emb_head",
+    "3": "ni27_all_incl_layer_pool"
+   }
+  },
+  "lm_grouped_adam": {
+   "define": "MOJOLEARN_IDN_LM_GROUPED_ADAM",
+   "kind": "arms",
+   "arms": {
+    "0": [],
+    "1": [
+     "MOJOLEARN_IDN_LM_GROUPED_ADAM=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_LM_GROUPED_ADAM=2"
+    ]
+   },
+   "default": "0",
+   "source": [
+    "training/neural_ab_optimizer.mojo:22",
+    "training/byte_lm.mojo:1850"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": false,
+   "status": "rewritten",
+   "entries": [
+    "NN55",
+    "NN56",
+    "NI30"
+   ],
+   "board": "lm-train-step",
+   "tags": [
+    "peripheral"
+   ],
+   "arm_names": {
+    "0": "per_group",
+    "1": "nn56_grouped",
+    "2": "nn56_grouped_nn55_block_status"
+   },
+   "note": "NN55 required NN56; arm 1 isolates NN56, arm 2 adds NN55. NI30 has no define."
+  },
+  "act_retain": {
+   "define": "MOJOLEARN_IDN_ACT_RETAIN",
+   "kind": "arms",
+   "arms": {
+    "0": [],
+    "1": [
+     "MOJOLEARN_IDN_ACT_RETAIN=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_ACT_RETAIN=2"
+    ],
+    "3": [
+     "MOJOLEARN_IDN_ACT_RETAIN=3"
+    ]
+   },
+   "default": "0",
+   "source": [
+    "transformer/experiments/checkpoint_contract.mojo:11",
+    "training/neural_attention_owner.mojo:451",
+    "training/neural_identical_experiments.mojo:58",
+    "bindings/_mojolearn_mamba.mojo:2659"
+   ],
+   "binding": "_mojolearn_transformer+_mojolearn_mamba",
+   "bits_change": false,
+   "status": "rewritten",
+   "entries": [
+    "NN31",
+    "NN32",
+    "NI48",
+    "NI36"
+   ],
+   "board": "samba-train-step",
+   "tags": [
+    "memory"
+   ],
+   "arm_names": {
+    "0": "replay",
+    "1": "nn32_retain",
+    "2": "nn31_bounded_checkpoints",
+    "3": "ni48_samba_owned_tapes"
+   },
+   "note": "NI36's tape half was NI48's define; NI36 now means only the scratch arm of train_scratch."
+  },
+  "train_scratch": {
+   "define": "MOJOLEARN_IDN_TRAIN_SCRATCH",
+   "kind": "arms",
+   "arms": {
+    "0": [],
+    "1": [
+     "MOJOLEARN_IDN_TRAIN_SCRATCH=1"
+    ],
+    "2": [
+     "MOJOLEARN_IDN_TRAIN_SCRATCH=2"
+    ],
+    "3": [
+     "MOJOLEARN_IDN_TRAIN_SCRATCH=3"
+    ]
+   },
+   "default": "0",
+   "source": [
+    "training/neural_identical_experiments.mojo:51",
+    "training/dev_tensors.mojo:221",
+    "training/neural_ab_lifetime.mojo:15",
+    "training/byte_lm.mojo:586"
+   ],
+   "binding": "_mojolearn_training (arm 1) / _mojolearn_byte_lm (arm 2)",
+   "bits_change": false,
+   "status": "rewritten",
+   "entries": [
+    "NI36",
+    "NN62"
+   ],
+   "board": "samba-train-step, mlp-train-step (arm 1); lm-train-step (arm 2)",
+   "tags": [
+    "memory"
+   ],
+   "arm_names": {
+    "0": "separate",
+    "1": "ni36_shared_dA_dW",
+    "2": "nn62_lifetime_arena",
+    "3": "both"
+   }
+  },
+  "train_live_status": {
+   "define": "MOJOLEARN_TRAIN_LIVE_STATUS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TRAIN_LIVE_STATUS=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/byte_lm.mojo:2172"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN61",
+    "NI29"
+   ],
+   "board": "lm-train-step",
+   "tags": [
+    "peripheral"
+   ],
+   "note": "NN61 and NI29 were the same define pair. MOJOLEARN_STEP_GLUE_TRIAL=1 is a runtime-arm trial build (env), not a grid dimension."
+  },
+  "nn29_ring_pair": {
+   "define": "MOJOLEARN_NN29_RING_PAIR",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN29_RING_PAIR=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "transformer/experiments/attention_schedules.mojo:24"
+   ],
+   "binding": "_mojolearn_transformer",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN29"
+   ],
+   "board": "off-board (decode ring; decode lanes are CPU)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn34_affine_prefix": {
+   "define": "MOJOLEARN_NN34_AFFINE_PREFIX",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN34_AFFINE_PREFIX=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/ops/neural_scan_profile.mojo:54"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": true,
+   "status": "kept",
+   "entries": [
+    "NN34"
+   ],
+   "board": "mamba1-forward, samba-*",
+   "tags": [
+    "bit_version"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "m1_state_window": {
+   "define": "MOJOLEARN_IDN_M1_STATE_WINDOW",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_M1_STATE_WINDOW=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/ops/selective_scan_interface.mojo:256"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI38"
+   ],
+   "board": "mamba1-forward",
+   "tags": [],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn35_conv_pair": {
+   "define": "MOJOLEARN_NN35_CONV_PAIR",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN35_CONV_PAIR=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/modules/mamba2.mojo:570"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN35",
+    "NI37"
+   ],
+   "board": "mamba1/2-forward, samba-*",
+   "tags": [],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn37_triangle_tasks": {
+   "define": "MOJOLEARN_NN37_TRIANGLE_TASKS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN37_TRIANGLE_TASKS=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/modules/ssd_minimal.mojo:376"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN37",
+    "NI41"
+   ],
+   "board": "mamba2-forward, samba-*",
+   "tags": [],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn40_owned_weights": {
+   "define": "MOJOLEARN_NN40_OWNED_WEIGHTS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN40_OWNED_WEIGHTS=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "bindings/_mojolearn_mamba.mojo:2097"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN40",
+    "NI45"
+   ],
+   "board": "mamba*-forward",
+   "tags": [
+    "memory"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn40_ws_headroom": {
+   "define": "MOJOLEARN_NN40_WS_HEADROOM",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN40_WS_HEADROOM=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/modules/idn_gemm_ws.mojo:54"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN40"
+   ],
+   "board": "mamba*-forward",
+   "tags": [
+    "memory"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "m3_yintra_tile": {
+   "define": "MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/ops/mamba3_siso.mojo:2331"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI42"
+   ],
+   "board": "mamba3-forward, samba-*",
+   "tags": [],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "m1_elementwise_fused": {
+   "define": "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "mamba/impl/modeling/modeling_mamba.mojo:406"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI46"
+   ],
+   "board": "mamba1-forward",
+   "tags": [],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "m3_decode_window": {
+   "define": "MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "bindings/_mojolearn_mamba.mojo:2019"
+   ],
+   "binding": "_mojolearn_mamba",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI47"
+   ],
+   "board": "off-board (decode)",
+   "tags": [
+    "off_board",
+    "peripheral"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn42_input_bias": {
+   "define": "MOJOLEARN_NN42_INPUT_BIAS_FUSED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN42_INPUT_BIAS_FUSED=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "sequence/ops.mojo:45"
+   ],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN42"
+   ],
+   "board": "off-board (x_sequence)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn46_gather_bounds": {
+   "define": "MOJOLEARN_NN46_GATHER_BOUNDS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN46_GATHER_BOUNDS=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/ops.mojo:42"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN46",
+    "NI14"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn47_apply_running": {
+   "define": "MOJOLEARN_NN47_APPLY_RUNNING",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN47_APPLY_RUNNING=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/ops.mojo:43"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN47",
+    "NI17"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn48_csr_tiles": {
+   "define": "MOJOLEARN_NN48_CSR_TILES",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN48_CSR_TILES=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/device.mojo:2005"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN48",
+    "NI55"
+   ],
+   "board": "off-board (graph)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn49_emb_vector4": {
+   "define": "MOJOLEARN_NN49_EMB_VECTOR4",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN49_EMB_VECTOR4=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "embedding/checks/embedding_identical.mojo:553"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN49",
+    "NI31"
+   ],
+   "board": "lm-train-step only when positions < vocab (not on board shapes)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn50_owned_runs": {
+   "define": "MOJOLEARN_NN50_OWNED_RUNS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN50_OWNED_RUNS=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "embedding/owned_runs.mojo:24"
+   ],
+   "binding": "_mojolearn_byte_lm",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN50"
+   ],
+   "board": "lm-train-step",
+   "tags": [],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn53_head_chunk": {
+   "define": "MOJOLEARN_NN53_HEAD_CHUNK512",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN53_HEAD_CHUNK512=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/chunked_lm_head_profile.mojo:12"
+   ],
+   "binding": "_mojolearn_training",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN53"
+   ],
+   "board": "off-board (opt-in chunked_lm_head_v2)",
+   "tags": [
+    "off_board",
+    "opt_in"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "chunked_lm_head_v2": {
+   "define": "MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/neural_identical_experiments.mojo:59"
+   ],
+   "binding": "_mojolearn_training",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI34"
+   ],
+   "board": "off-board (opt-in config)",
+   "tags": [
+    "off_board",
+    "opt_in"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn57_norm_profile": {
+   "define": "MOJOLEARN_NN57_NORM_PROFILE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN57_NORM_PROFILE=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/neural_ab_profile_contract.mojo:19"
+   ],
+   "binding": "_mojolearn_training",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN57"
+   ],
+   "board": "off-board (multi-GPU clip only)",
+   "tags": [
+    "off_board",
+    "multi_gpu"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn58_accumulate_status": {
+   "define": "MOJOLEARN_NN58_ACCUMULATE_STATUS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN58_ACCUMULATE_STATUS=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/neural_ab_pointwise.mojo:18"
+   ],
+   "binding": "_mojolearn_training",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN58"
+   ],
+   "board": "samba-train-step",
+   "tags": [
+    "peripheral"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn59_dropout_residual": {
+   "define": "MOJOLEARN_NN59_DROPOUT_RESIDUAL",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/residual_dropout_contract.mojo:15"
+   ],
+   "binding": "_mojolearn_training",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN59"
+   ],
+   "board": "mlp-train-step only with dropout",
+   "tags": [],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn63_shard_merge": {
+   "define": "MOJOLEARN_NN63_CANONICAL_SHARD_MERGE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN63_CANONICAL_SHARD_MERGE=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/neural_ab_shards.mojo:18"
+   ],
+   "binding": "_mojolearn_training",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN63"
+   ],
+   "board": "off-board (multi-GPU only)",
+   "tags": [
+    "off_board",
+    "multi_gpu"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "nn64_session_pack": {
+   "define": "MOJOLEARN_NN64_SESSION_PACK",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NN64_SESSION_PACK=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "training/neural_ab_lifetime.mojo:22"
+   ],
+   "binding": "_mojolearn_training",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NN64"
+   ],
+   "board": "off-board (mlp-infer is a CPU lane)",
+   "tags": [
+    "off_board",
+    "peripheral"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni10_cnn_tape": {
+   "define": "MOJOLEARN_NI10_BUDGETED_CNN_TAPE",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI10_BUDGETED_CNN_TAPE=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/ops.mojo:59"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI10"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni11_direct_taps64": {
+   "define": "MOJOLEARN_NI11_DIRECT_CONV_TAPS64",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI11_DIRECT_CONV_TAPS64=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/device.mojo:82"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI11"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni12_implicit_conv": {
+   "define": "MOJOLEARN_NI12_IMPLICIT_CONV",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI12_IMPLICIT_CONV=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/device.mojo:83"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI12"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni14_bounded_col2im": {
+   "define": "MOJOLEARN_NI14_BOUNDED_COL2IM",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI14_BOUNDED_COL2IM=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/device.mojo:84"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI14"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni14_tiled_col2im": {
+   "define": "MOJOLEARN_NI14_TILED_COL2IM",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI14_TILED_COL2IM=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/neural_col2im.mojo:24"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI14"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni15_bias_no_ones": {
+   "define": "MOJOLEARN_NI15_BIAS_NO_ONES",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI15_BIAS_NO_ONES=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/device.mojo:85"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI15"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni17_balanced_norm": {
+   "define": "MOJOLEARN_NI17_BALANCED_NORM",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI17_BALANCED_NORM=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/ops.mojo:1048"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI17"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni18_epoch_gather": {
+   "define": "MOJOLEARN_NI18_FUSED_EPOCH_GATHER",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI18_FUSED_EPOCH_GATHER=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/device.mojo:87"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI18"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni52_mlp_epoch_order": {
+   "define": "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "sequence/mlp.mojo:54"
+   ],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI52"
+   ],
+   "board": "off-board (x_sequence)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni54_af_col_fold": {
+   "define": "MOJOLEARN_IDN_AF_COL_CHUNK_FOLD",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_AF_COL_CHUNK_FOLD=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "sequence/adafactor.mojo:29"
+   ],
+   "binding": "_mojolearn_x_sequence",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI54"
+   ],
+   "board": "off-board (x_sequence)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni57_graph_tree64": {
+   "define": "MOJOLEARN_NI57_GRAPH_TREE64",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI57_GRAPH_TREE64=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/neural_aux_contract.mojo:18"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI57"
+   ],
+   "board": "off-board (graph)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni58_sage_feature4": {
+   "define": "MOJOLEARN_NI58_SAGE_FEATURE4",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI58_SAGE_FEATURE4=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/neural_aux_contract.mojo:19"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI58"
+   ],
+   "board": "off-board (graph)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni59_dropout_channel": {
+   "define": "MOJOLEARN_NI59_DROPOUT_CHANNEL",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI59_DROPOUT_CHANNEL=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/neural_aux_contract.mojo:20"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI59"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  },
+  "ni60_dropout_apply4": {
+   "define": "MOJOLEARN_NI60_DROPOUT_APPLY4",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_NI60_DROPOUT_APPLY4=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "x_cnn/neural_aux_contract.mojo:21"
+   ],
+   "binding": "_mojolearn_x_cnn",
+   "bits_change": false,
+   "status": "kept",
+   "entries": [
+    "NI60"
+   ],
+   "board": "off-board (x_cnn)",
+   "tags": [
+    "off_board"
+   ],
+   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+  }
+ },
+ "algorithms": {
+  "neural:lm-train-step": {
+   "binding": "_mojolearn_byte_lm",
+   "route": "fit step: training/byte_lm.mojo train step -> embedding (embedding/checks/embedding_identical) -> blocks -> identical_ce_forward_into/backward_into (training/checks/loss.mojo) -> optimizer (_byte_neural_group_update | identical_optimizer_step)",
+   "controls": [
+    "ce_token_fold",
+    "ce_grad_fused",
+    "lm_resident_tokens",
+    "lm_views",
+    "lm_grouped_adam",
+    "train_scratch",
+    "train_live_status",
+    "nn50_owned_runs"
+   ],
+   "interaction_groups": [
+    [
+     "ce_token_fold",
+     "ce_grad_fused"
+    ],
+    [
+     "lm_grouped_adam",
+     "train_live_status"
+    ],
+    [
+     "lm_views",
+     "train_scratch"
+    ],
+    [
+     "lm_resident_tokens",
+     "nn50_owned_runs"
+    ]
+   ]
+  },
+  "neural:mamba2-forward": {
+   "binding": "_mojolearn_mamba",
+   "route": "forward: mamba/impl/modules/mamba2.mojo -> ssd_minimal (cb_g, Y_diag tiles, C_state tiles, Y_off)",
+   "controls": [
+    "m2_yoff_exp",
+    "m2_yd_rows",
+    "m2_cs_pt",
+    "m2_retain_gl",
+    "nn37_triangle_tasks",
+    "nn35_conv_pair",
+    "nn40_owned_weights",
+    "nn40_ws_headroom"
+   ],
+   "interaction_groups": [
+    [
+     "m2_yd_rows",
+     "m2_retain_gl",
+     "nn37_triangle_tasks"
+    ],
+    [
+     "m2_cs_pt"
+    ],
+    [
+     "m2_yoff_exp"
+    ]
+   ]
+  },
+  "neural:mamba1-forward": {
+   "binding": "_mojolearn_mamba",
+   "route": "forward: modeling_mamba -> selective_scan_interface (neural_scan_profile)",
+   "controls": [
+    "nn34_affine_prefix",
+    "m1_state_window",
+    "m1_elementwise_fused",
+    "nn35_conv_pair",
+    "nn40_owned_weights",
+    "nn40_ws_headroom"
+   ],
+   "interaction_groups": [
+    [
+     "nn34_affine_prefix",
+     "m1_state_window"
+    ]
+   ]
+  },
+  "neural:mamba3-forward": {
+   "binding": "_mojolearn_mamba",
+   "route": "forward: mamba3_siso (Y_intra tiles)",
+   "controls": [
+    "m3_yintra_tile",
+    "nn40_owned_weights",
+    "nn40_ws_headroom"
+   ],
+   "interaction_groups": []
+  },
+  "neural:samba-train-step": {
+   "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
+   "route": "Python calls mamba3 prefill fwd/bwd (mamba3_backward angle suffix), transformer fwd/bwd (neural_attention_owner tape / forward tape), training samba_ops",
+   "controls": [
+    "m3_angle_carry_cache",
+    "act_retain",
+    "train_scratch",
+    "nn58_accumulate_status",
+    "m2_yoff_exp",
+    "m2_yd_rows",
+    "m2_cs_pt",
+    "m2_retain_gl"
+   ],
+   "interaction_groups": [
+    [
+     "act_retain",
+     "train_scratch"
+    ]
+   ]
+  },
+  "neural:mlp-train-step": {
+   "binding": "_mojolearn_training",
+   "route": "train_linear_backward_dev (training/dev_tensors.mojo)",
+   "controls": [
+    "train_scratch",
+    "nn59_dropout_residual"
+   ],
+   "interaction_groups": []
+  }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS",
+   "reason": "duplicate of NI43; use MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE (guard refuses)"
+  },
+  {
+   "define": "MOJOLEARN_NN36_SHARED_DECAY",
+   "reason": "now MOJOLEARN_IDN_M2_YOFF_EXP=1"
+  },
+  {
+   "define": "MOJOLEARN_IDN_M2_YOFF_EXP_CACHE",
+   "reason": "now MOJOLEARN_IDN_M2_YOFF_EXP=2"
+  },
+  {
+   "define": "MOJOLEARN_NN33_YDIAG_ROWS8",
+   "reason": "now MOJOLEARN_IDN_M2_YD_ROWS=8"
+  },
+  {
+   "define": "MOJOLEARN_NN33_CSTATE_P16",
+   "reason": "now MOJOLEARN_IDN_M2_CS_PT=16"
+  },
+  {
+   "define": "MOJOLEARN_NN39_M2_GRAD_TREE",
+   "reason": "now MOJOLEARN_IDN_M2_GRAD_FOLD=1"
+  },
+  {
+   "define": "MOJOLEARN_IDN_M2_GRAD_LEAF128",
+   "reason": "now MOJOLEARN_IDN_M2_GRAD_FOLD=2"
+  },
+  {
+   "define": "MOJOLEARN_NN45_CONV_RELU",
+   "reason": "now MOJOLEARN_IDN_CNN_CONV_RELU=1"
+  },
+  {
+   "define": "MOJOLEARN_NI16_CONV_RELU_FUSED",
+   "reason": "now MOJOLEARN_IDN_CNN_CONV_RELU=2"
+  },
+  {
+   "define": "MOJOLEARN_NN43_WGRAD_FIXED128",
+   "reason": "now MOJOLEARN_IDN_SEQ_WGRAD=2"
+  },
+  {
+   "define": "MOJOLEARN_IDN_SEQ_WGRAD_LEAF256",
+   "reason": "now MOJOLEARN_IDN_SEQ_WGRAD=1"
+  },
+  {
+   "define": "MOJOLEARN_IDN_SEQ_LN_LEAF32",
+   "reason": "now MOJOLEARN_IDN_SEQ_LN_LEAF=32"
+  },
+  {
+   "define": "MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN",
+   "reason": "DELETED: one GPU thread per batch row, serial over units/timesteps; breaks the IDENTICAL parallel rule (EXPERIMENTS row)"
+  },
+  {
+   "define": "MOJOLEARN_NN44_STABLE_GROUP",
+   "reason": "same kernel as NI53; use MOJOLEARN_IDN_MOE_STABLE_PACK"
+  },
+  {
+   "define": "MOJOLEARN_NN52_CE_WEIGHT_GRAD",
+   "reason": "same fused kernel as NI33; use MOJOLEARN_IDN_CE_GRAD_FUSED"
+  },
+  {
+   "define": "MOJOLEARN_NN54_LOSS_PROFILE",
+   "reason": "now MOJOLEARN_IDN_CE_TOKEN_FOLD=1"
+  },
+  {
+   "define": "MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2",
+   "reason": "now MOJOLEARN_IDN_CE_TOKEN_FOLD=2"
+  },
+  {
+   "define": "MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION",
+   "reason": "now MOJOLEARN_IDN_LM_RESIDENT_TOKENS=2"
+  },
+  {
+   "define": "MOJOLEARN_IDN_LM_OWNED_TOKENS",
+   "reason": "now MOJOLEARN_IDN_LM_RESIDENT_TOKENS=1"
+  },
+  {
+   "define": "MOJOLEARN_NN60_BLOCK_VIEWS",
+   "reason": "now MOJOLEARN_IDN_LM_VIEWS=1"
+  },
+  {
+   "define": "MOJOLEARN_NN60_EMB_HEAD_VIEWS",
+   "reason": "now MOJOLEARN_IDN_LM_VIEWS=2"
+  },
+  {
+   "define": "MOJOLEARN_IDN_LM_PARAM_VIEWS",
+   "reason": "now MOJOLEARN_IDN_LM_VIEWS=3"
+  },
+  {
+   "define": "MOJOLEARN_NN56_GROUPED_ADAM",
+   "reason": "now MOJOLEARN_IDN_LM_GROUPED_ADAM=1"
+  },
+  {
+   "define": "MOJOLEARN_NN55_BLOCK_STATUS",
+   "reason": "now MOJOLEARN_IDN_LM_GROUPED_ADAM=2 (it always needed NN56)"
+  },
+  {
+   "define": "MOJOLEARN_NN32_RETAIN_FORWARD",
+   "reason": "now MOJOLEARN_IDN_ACT_RETAIN=1"
+  },
+  {
+   "define": "MOJOLEARN_NN31_BOUNDED_CHECKPOINTS",
+   "reason": "now MOJOLEARN_IDN_ACT_RETAIN=2"
+  },
+  {
+   "define": "MOJOLEARN_IDN_SAMBA_FORWARD_TAPE",
+   "reason": "now MOJOLEARN_IDN_ACT_RETAIN=3 (NI48; untangled from NI36)"
+  },
+  {
+   "define": "MOJOLEARN_IDN_TRAIN_BACKWARD_SCRATCH",
+   "reason": "now MOJOLEARN_IDN_TRAIN_SCRATCH=1 (NI36)"
+  },
+  {
+   "define": "MOJOLEARN_NN62_LIFETIME_ARENA",
+   "reason": "now MOJOLEARN_IDN_TRAIN_SCRATCH=2"
+  },
+  {
+   "define": "MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE",
+   "reason": "DELETED: rejected at source review, x_cnn/neural_weight_cache.mojo had no importer (EXPERIMENTS row)"
+  }
+ ],
+ "notes": {
+  "no_define_entries": [
+   "NN30",
+   "NI28",
+   "NI30",
+   "NI31",
+   "NI37",
+   "NI41",
+   "NI45",
+   "NI50",
+   "NI56"
+  ],
+  "review_corrections": [
+   "NN52/NI33 are live (training/checks/loss.mojo is the shipped CE; byte_lm.mojo:78), merged not deleted",
+   "NN49 is live code (embedding/checks/embedding_identical.mojo is shipped) but engages only when positions < vocab, so off-board; kept",
+   "NN54/NI35 already have the GPU fold (training/checks/loss.mojo:1725-1730); merged, nothing to add",
+   "NN33/NI40 are composable (tile geometry vs G*L retention), not duplicates: NN33 became two int sweeps, NI40 kept, crossed via interaction group"
+  ],
+  "guard": "core/six_lane_experiment_guards.mojo refuses every retired define and any out-of-set arm value"
+ }
+}

@@ -44,6 +44,7 @@ from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.neural_identical_experiments import (
     IDN_LM_PARAM_VIEWS, IDN_LM_OWNED_TOKENS, IDN_TRAIN_NO_DECODE_CACHE,
+    IDN_LM_VIEWS_ARM, IDN_LM_RESIDENT_TOKENS_ARM,
 )
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_afn import (
@@ -801,19 +802,22 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
 # Existing sub-buffer APIs supply the mechanism; no new vendor capability is
 # assumed. These source drafts have no compile/identity/full-model A/B evidence.
 # Rebind from the CURRENT owner each call, including after optimizer swaps.
+# L11 (2026-10-07): NN60's arms are arms 1 and 2 of MOJOLEARN_IDN_LM_VIEWS
+# and NN51 is arm 2 of MOJOLEARN_IDN_LM_RESIDENT_TOKENS
+# (training/neural_identical_experiments.mojo).
 comptime NN60_EMB_HEAD_VIEWS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN60_EMB_HEAD_VIEWS"]()
+    and IDN_LM_VIEWS_ARM == 2
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime NN51_RESIDENT_TOKEN_VALIDATION = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION"]()
+    and IDN_LM_RESIDENT_TOKENS_ARM == 2
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime NN60_BLOCK_VIEWS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN60_BLOCK_VIEWS"]()
+    and IDN_LM_VIEWS_ARM == 1
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS

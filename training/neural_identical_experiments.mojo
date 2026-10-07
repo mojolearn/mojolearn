@@ -30,22 +30,41 @@ comptime IDN_RMS_ROW_BLOCK = _ENABLED and get_defined_int["MOJOLEARN_IDN_NORM", 
 # launch): preserve both silu_out and gated for tracing and backward.
 comptime IDN_TRAIN_SWIGLU = _ENABLED and is_defined["MOJOLEARN_IDN_TRAIN_SWIGLU"]()
 # NI27: views are rebound to the current owned arena after optimizer swaps.
-comptime IDN_LM_PARAM_VIEWS = _ENABLED and is_defined["MOJOLEARN_IDN_LM_PARAM_VIEWS"]()
+# L11 (2026-10-07): NN60 and NI27 are arms of ONE switch,
+# -D MOJOLEARN_IDN_LM_VIEWS=0|1|2|3: 1 = block weight views (NN60 block),
+# 2 = embedding/head views (NN60 emb/head), 3 = all views incl. the layer pool
+# (NI27). Aliases only; no arithmetic changes.
+comptime IDN_LM_VIEWS_ARM = get_defined_int["MOJOLEARN_IDN_LM_VIEWS", 0]()
+comptime IDN_LM_PARAM_VIEWS = _ENABLED and IDN_LM_VIEWS_ARM == 3
 # NI32: reuse validation only inside one owned, immutable byte-training call.
-comptime IDN_LM_OWNED_TOKENS = _ENABLED and is_defined["MOJOLEARN_IDN_LM_OWNED_TOKENS"]()
+# L11 (2026-10-07): NN51 and NI32 are arms of ONE switch,
+# -D MOJOLEARN_IDN_LM_RESIDENT_TOKENS=0|1|2: 1 = NI32 (the forward's ID check
+# covers the embedding gather/backward), 2 = NN51 (arm 1 plus prerefused
+# targets in the CE forward).
+comptime IDN_LM_RESIDENT_TOKENS_ARM = get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS", 0]()
+comptime IDN_LM_OWNED_TOKENS = _ENABLED and IDN_LM_RESIDENT_TOKENS_ARM >= 1
 # NI33: keep the original per-cell divides and the same ignored-row stores.
+# NN52 (retired MOJOLEARN_NN52_CE_WEIGHT_GRAD) launched the same fused kernel
+# in identical_ce_backward_into; one switch (L11, 2026-10-07).
 comptime IDN_CE_GRAD_FUSED = _ENABLED and is_defined["MOJOLEARN_IDN_CE_GRAD_FUSED"]()
 # NI36 narrow sub-arm: dA and dW GEMMs run serially on the same queue, so
 # their disjoint scratch lifetimes can share one allocation. No tape alias.
-comptime IDN_TRAIN_BACKWARD_SCRATCH = _ENABLED and is_defined["MOJOLEARN_IDN_TRAIN_BACKWARD_SCRATCH"]()
+# L11 (2026-10-07): NI36 (now only this scratch sharing; its tape half is
+# NI48 below) and NN62 are arms of ONE switch,
+# -D MOJOLEARN_IDN_TRAIN_SCRATCH=0|1|2|3: 1 = shared dA/dW scratch,
+# 2 = NN62 byte-LM lifetime arena (training/neural_ab_lifetime.mojo), 3 = both.
+comptime IDN_TRAIN_SCRATCH_ARM = get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH", 0]()
+comptime IDN_TRAIN_BACKWARD_SCRATCH = _ENABLED and (IDN_TRAIN_SCRATCH_ARM == 1 or IDN_TRAIN_SCRATCH_ARM == 3)
 # NI35: explicit V arithmetic profile for the CE token-total fold only.
 # Vocabulary folds, objective divisor, dlogits and optimizer are unchanged.
-comptime IDN_LOSS_TOKEN_TREE_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2"]()
+# Arm 2 of MOJOLEARN_IDN_CE_TOKEN_FOLD (training/neural_ab_profile_contract.mojo).
+comptime IDN_LOSS_TOKEN_TREE_V2 = _ENABLED and get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD", 0]() == 2
 # NI34: the existing explicit config stays supported; this opt-in chooses it
 # for default-constructed byte configs and enables compatible Samba callers.
 comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
 # NI36/NI48: immutable native forward tapes, consumed exactly once.
-comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and is_defined["MOJOLEARN_IDN_SAMBA_FORWARD_TAPE"]()
+# Arm 3 of MOJOLEARN_IDN_ACT_RETAIN (transformer/experiments/checkpoint_contract.mojo).
+comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 0]() == 3
 
 # NI20: fixed tile32 online attention numerical graph on every column. Arm 2
 # of the ONE softmax switch MOJOLEARN_IDN_ATTN_SOFTMAX (arm 1 is NN20,

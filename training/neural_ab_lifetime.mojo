@@ -7,13 +7,14 @@ last device consumer (including backward/replay/error handling) and must retain
 the arena until its final context drain. Public-model integration remains owed.
 """
 from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
+# Arms 2 and 3 of MOJOLEARN_IDN_TRAIN_SCRATCH (training/neural_identical_experiments.mojo).
 comptime NN62_LIFETIME_ARENA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN62_LIFETIME_ARENA"]()
+    and get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH", 0]() >= 2
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime NN64_SESSION_PACK = (

@@ -11,12 +11,17 @@ on host/NVIDIA/AMD/Apple. No real-number associativity claim is a bit proof.
 Backward quality and cross-column execution have NOT been checked.
 """
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
+# L11 (2026-10-07): NN39 and NI44 are arms of ONE switch,
+# -D MOJOLEARN_IDN_M2_GRAD_FOLD=0|1|2: 0 = v1 (256-row leaves, ascending tile
+# merge; default), 1 = NN39 binary tree over the tiles, 2 = NI44 128-row
+# leaves. Each arm is a bit version on every column together.
+comptime IDN_M2_GRAD_FOLD_ARM = get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD", 0]()
 comptime NN39_M2_GRAD_TREE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN39_M2_GRAD_TREE"]()
+    and IDN_M2_GRAD_FOLD_ARM == 1
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 

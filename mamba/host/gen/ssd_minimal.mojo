@@ -73,7 +73,7 @@ commands live in `mamba/checks/mamba2_check.mojo`'s header.
 
 from std.os import abort
 from mamba.host.device_shim import host_launch, launch_count
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
@@ -748,8 +748,14 @@ comptime M2_SSD_TILED = (
 # tile across 16 value channels (18 KiB). Both fit inside the existing
 # conservative 20 KiB resource guard. No dataset/shape-specific dispatch.
 # All newly introduced switches are OFF, uncompiled and unmeasured.
-comptime NN33_YDIAG_ROWS8 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN33_YDIAG_ROWS8"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime NN33_CSTATE_P16 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN33_CSTATE_P16"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# L11 (2026-10-07): the NN33 booleans became integer tile sweeps, one per
+# kernel: -D MOJOLEARN_IDN_M2_YD_ROWS=4|8 (default 4; 8 also halves YD_JC to
+# 32 to keep the page) and -D MOJOLEARN_IDN_M2_CS_PT=8|16 (default 8). The
+# legal sets are asserted in core/six_lane_experiment_guards.mojo. Tiles
+# move no bit; they may be tuned per vendor.
+comptime _M2_TILE_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime NN33_YDIAG_ROWS8 = _M2_TILE_SWEEP and get_defined_int["MOJOLEARN_IDN_M2_YD_ROWS", 4]() == 8
+comptime NN33_CSTATE_P16 = _M2_TILE_SWEEP and get_defined_int["MOJOLEARN_IDN_M2_CS_PT", 8]() == 16
 comptime M2_YD_ROWS = 8 if NN33_YDIAG_ROWS8 else 4
 comptime M2_YD_JC = 32 if NN33_YDIAG_ROWS8 else 64
 comptime M2_YD_QMAX = 256
@@ -948,6 +954,11 @@ def m2_statepass_kernel(gid_: Int,
 # NN36: OFF and unmeasured. Channel sharing is based on the existing
 # fixed Mamba head layout, not an observed benchmark shape. Host computes
 # the same explicitly rounded exp; no changed arithmetic profile.
+# L11 (2026-10-07): NN36 and NI39 are two arms of ONE switch,
+# -D MOJOLEARN_IDN_M2_YOFF_EXP=0|1|2: 0 recompute exp per cell (default),
+# 1 = NN36 block-shared exp (GPU shared memory; host takes arm 0's
+# expression), 2 = NI39 global per-position exp cache. Same exp, same bits.
+comptime IDN_M2_YOFF_EXP_ARM = get_defined_int["MOJOLEARN_IDN_M2_YOFF_EXP", 0]()
 comptime NN36_SHARED_DECAY = False
 
 
@@ -971,7 +982,7 @@ def nn36_m2_yoff_shared_exp_kernel(gid_: Int,
 
 comptime IDN_M2_YOFF_EXP_CACHE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_M2_YOFF_EXP_CACHE"]()
+    and IDN_M2_YOFF_EXP_ARM == 2
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not SSD_ANY_SABOTAGE
 )

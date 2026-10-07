@@ -23,7 +23,7 @@ pinned GEMM's (TN over the N*OH*OW rows, DEVIATION 5701).
 """
 from std.math import fma  # only a sabotage arm (seam 5709) spells the fused form
 from std.memory import bitcast
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from core.philox import philox4x32_10
 from checks.rtf_seam import rtf_mul_add
 from gemm.experiments.neural_profile import NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_cell, neural_merge_chains, neural_fold_push, neural_fold_drain
@@ -33,7 +33,12 @@ from gemm.contract import GEMM_NUMERICAL_PROFILE
 
 # NN45/46/47: source-only A/B arms; default OFF, no quality/identity/time
 # claim. Shared element functions define every floating seam for host/GPU.
-comptime NN45_CONV_RELU = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN45_CONV_RELU"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# L11 (2026-10-07): NN45 and NI16 are arms of ONE switch,
+# -D MOJOLEARN_IDN_CNN_CONV_RELU=0|1|2: 0 separate passes (default),
+# 1 = NN45 conv-out + bias + ReLU in one forward pass (host and device),
+# 2 = arm 1 plus NI16's fused ReLU backward rows (device). Same values.
+comptime IDN_CNN_CONV_RELU_ARM = get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU", 0]()
+comptime NN45_CONV_RELU = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and IDN_CNN_CONV_RELU_ARM >= 1 and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime NN46_GATHER_BOUNDS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN46_GATHER_BOUNDS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime NN47_APPLY_RUNNING = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN47_APPLY_RUNNING"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 
