@@ -27,7 +27,7 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
     add_acc, axpy_centered,
 )
-from experiments.classical_identical_ideas.linear_controls import C18_RESIDUAL_NEXT, ENETCV_FOLD_BLOCKS
+from experiments.classical_identical_ideas.linear_controls import C18_RESIDUAL_NEXT, ENETCV_FOLD_BLOCKS, ENETCV_SCORE_BLOCKS
 from x_linear.enetcv_blocks import fb_host_stats, fb_host_prep
 from std.sys.info import is_gpu
 from x_linear.team import Team
@@ -336,16 +336,21 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
                     st(fw, pb + k * (d + 1) + d, b)
                 # the held-out squared errors of the whole path, one row pass:
                 # alpha k's sum is its own accumulator, rows ascending
-                fill(fw, pacc, a_n, Float32(0))
-                for i in range(n):
-                    if Int(ld(fid, i)) == f:
-                        for k in range(a_n):
-                            var o = pb + k * (d + 1)
-                            var p = ld(fw, o + d)
-                            for j in range(d):
-                                p = fmad(ld(x, i * d + j), ld(fw, o + j), p)
-                            var r = fs(p, ld(y, i))
-                            st(fw, pacc + k, fmad(r, r, ld(fw, pacc + k)))
+                comptime if ENETCV_SCORE_BLOCKS > 0:
+                    # lane/classical-cv-folds: the device's (path, alpha, row
+                    # block) partials folded blocks ascending (`esb_host_score`)
+                    esb_host_score(x, y, fid, n, d, f, a_n, fw, pb, pacc)
+                else:
+                    fill(fw, pacc, a_n, Float32(0))
+                    for i in range(n):
+                        if Int(ld(fid, i)) == f:
+                            for k in range(a_n):
+                                var o = pb + k * (d + 1)
+                                var p = ld(fw, o + d)
+                                for j in range(d):
+                                    p = fmad(ld(x, i * d + j), ld(fw, o + j), p)
+                                var r = fs(p, ld(y, i))
+                                st(fw, pacc + k, fmad(r, r, ld(fw, pacc + k)))
                 for k in range(a_n):
                     st(res, mse + (l * a_n + k) * f_n + f, fd(ld(fw, pacc + k), i2f(n_te)) if n_te > 0 else Float32(0))
     if t.lead():
@@ -547,6 +552,71 @@ def ecv_held_sse(x: FP, y: FP, fid: FP, n: Int, d: Int, fold: Int, wb: FP, o: In
             var r = fs(p, ld(y, i))
             acc = fmad(r, r, acc)
     return acc
+
+
+# ------------------------------------------------ ENETCV_SCORE_BLOCKS (lane/classical-cv-folds, 2026-10-07)
+# `-D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024|4096` (rows per block, a
+# fixed count, not a data shape; default off, NOT MEASURED): the held-out
+# squared errors of a path point as block partials. The fold's held-out rows
+# lie in its span [lo, lo + span) (KFold: exactly them; a row of another
+# fold inside the span is skipped by its id). Block b of the span folds the
+# path point's squared errors over its held-out rows ascending from zero
+# (`ecv_held_sse`'s statements per row); the block partials are folded
+# blocks ascending (fa from zero, the kf_sq / kf_score shape). Changes
+# bits (the fold order; the host column and both GPU vendors together).
+# Cost reasoning (no shape rule): the incumbent runs one block per (fold,
+# l1_ratio) path over every held-out row for every alpha (n/k * A * d
+# multiply-adds on one block); here span / ESB_ROWS blocks per path share
+# that work, and the fold adds A * span / ESB_ROWS additions per path.
+comptime ESB_ROWS = ENETCV_SCORE_BLOCKS if ENETCV_SCORE_BLOCKS > 0 else 1
+"""Rows of a fold's span one score block owns (1 is a placeholder while the control is off)."""
+
+
+@always_inline
+def esb_blocks(span: Int) -> Int:
+    return (span + ESB_ROWS - 1) // ESB_ROWS
+
+
+def esb_part(x: FP, y: FP, fid: FP, d: Int, f: Int, lo: Int, span: Int, b: Int, wb: FP, o: Int) -> Float32:
+    """Block b of fold f's span: the squared errors of the path point
+    wb[o:o+d+1] (coef, intercept) over the block's held-out rows ascending,
+    from zero: the row's prediction a chain over j from the intercept, the
+    residual squared into the accumulator (fmad)."""
+    var b0 = ld(wb, o + d)
+    var acc = Float32(0)
+    var r_lo = lo + b * ESB_ROWS
+    var r_hi = min(r_lo + ESB_ROWS, lo + span)
+    for i in range(r_lo, r_hi):
+        if Int(ld(fid, i)) == f:
+            var p = b0
+            for j in range(d):
+                p = fmad(ld(x, i * d + j), ld(wb, o + j), p)
+            var r = fs(p, ld(y, i))
+            acc = fmad(r, r, acc)
+    return acc
+
+
+def esb_host_score(x: FP, y: FP, fid: FP, n: Int, d: Int, f: Int, a_n: Int, fw: FP, pb: Int, pacc: Int):
+    """The host column: fold f's span from a walk over the fold ids (the
+    device's `ecv_span_*` words: (lo, hi - lo), (0, 0) without a row), then
+    alpha k's block partials folded blocks ascending into fw[pacc + k]
+    (`esb_score_kernel` and `esb_fold_kernel`'s words)."""
+    var lo = n
+    var hi = 0
+    for i in range(n):
+        if Int(ld(fid, i)) == f:
+            if i < lo:
+                lo = i
+            hi = i + 1
+    var span = 0
+    if hi > 0:
+        span = hi - lo
+    else:
+        lo = 0
+    fill(fw, pacc, a_n, Float32(0))
+    for b in range(esb_blocks(span)):
+        for k in range(a_n):
+            st(fw, pacc + k, fa(ld(fw, pacc + k), esb_part(x, y, fid, d, f, lo, span, b, fw, pb + k * (d + 1))))
 
 
 def t_enet_gram_cd(t: Team, fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32,

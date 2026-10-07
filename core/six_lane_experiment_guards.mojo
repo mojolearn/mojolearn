@@ -27,6 +27,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C52_PAIR_ROWS"]() or get_defined_int["MOJOLEARN_C52_PAIR_ROWS",128]() == 128 or get_defined_int["MOJOLEARN_C52_PAIR_ROWS",128]() == 512, "invalid MOJOLEARN_C52_PAIR_ROWS (128|512)"
     comptime assert not (is_defined["MOJOLEARN_CLASSICAL_C19_ORDERED_128"]() or is_defined["MOJOLEARN_CLASSICAL_C19_ORDERED_32"]()), "retired: use -D MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32|128|2048"
     comptime assert get_defined_int["MOJOLEARN_CLASSICAL_C19_SGD_CHUNK",2048]() == 32 or get_defined_int["MOJOLEARN_CLASSICAL_C19_SGD_CHUNK",2048]() == 128 or get_defined_int["MOJOLEARN_CLASSICAL_C19_SGD_CHUNK",2048]() == 2048, "invalid MOJOLEARN_CLASSICAL_C19_SGD_CHUNK (32|128|2048)"
+    comptime assert get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 0 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 1024 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 4096, "invalid MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS (1024|4096)"
     comptime assert not is_defined["MOJOLEARN_C58_TEAM64"](), "retired: use -D MOJOLEARN_C58_TEAM_MIB=64|256"
     comptime assert get_defined_int["MOJOLEARN_C58_TEAM_MIB",256]() == 64 or get_defined_int["MOJOLEARN_C58_TEAM_MIB",256]() == 256, "invalid MOJOLEARN_C58_TEAM_MIB (64|256)"
     # Deleted 2026-10-07 (lane serial-cleanup): forbidden serial shape; incumbent route is parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.
