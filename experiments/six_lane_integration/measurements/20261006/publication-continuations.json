@@ -1,0 +1,42 @@
+{
+  "schema": "mojolearn.campaign-continuations/1",
+  "manifests": [
+    {
+      "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/board-continuation.json",
+      "sha256": "f715d183509a40a3a59198bf9d5ba33ea5f862f64f2ae40a2c5c91a588a759e8",
+      "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/f715d183509a40a3a59198bf9d5ba33ea5f862f64f2ae40a2c5c91a588a759e8/board-continuation.json",
+      "id": "targeted-ab-20261007",
+      "source_available": true,
+      "inputs": [
+        {
+          "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/planning/unified-matrix.json",
+          "sha256": "41bc2c508f3616c843908ae31827b4e707089418b39662b1920bb6e44e9de8d5",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/41bc2c508f3616c843908ae31827b4e707089418b39662b1920bb6e44e9de8d5/unified-matrix.json",
+          "kind": "matrix",
+          "status": "RETAINED"
+        },
+        {
+          "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+          "kind": "quality_review",
+          "status": "PENDING_INPUT"
+        }
+      ],
+      "sources": [
+        {
+          "vendor": "nvidia",
+          "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/nvidia/measurements",
+          "route": "native-sm90",
+          "status": "AVAILABLE",
+          "receipt_files": 0
+        },
+        {
+          "vendor": "amd",
+          "path": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/amd/measurements",
+          "route": "amd-native-gfx942",
+          "status": "AVAILABLE",
+          "receipt_files": 0
+        }
+      ]
+    }
+  ]
+}

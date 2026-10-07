@@ -86,6 +86,9 @@ def validate_variant(facts, cell=None):
     race. This rederives the sole reviewed variant contract from frozen source
     and the projector's retained full input receipt.
     """
+    if facts.get('input_variant_control_transfer'):
+        from six_lane_targeted_variants import validate_transfer
+        return validate_transfer(facts, cell, validate_variant)
     reg = facts.get('registered_input_variant')
     if reg and reg.get('variant') == 'mlp-full-v1':
         from six_lane_mlp_variants import validate_variant as validate_mlp

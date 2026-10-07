@@ -1,0 +1,24 @@
+{
+  "schema": "mojolearn.campaign-continuation/1",
+  "id": "targeted-ab-20261007",
+  "matrix": "planning/unified-matrix.json",
+  "sources": [
+    {
+      "vendor": "nvidia",
+      "path": "nvidia/measurements",
+      "route": "native-sm90"
+    },
+    {
+      "vendor": "amd",
+      "path": "amd/measurements",
+      "route": "amd-native-gfx942"
+    }
+  ],
+  "quality_reviews": [
+    "quality-review/targeted-quality.json"
+  ],
+  "notes": [
+    "Targeted queue uses one immutable source freeze with deduplicated builds; 106 profiles and 1540 planned paired vendor/workload cells, all pending execution. Missing recipes and control blockers remain explicit; no claim of all-algorithm coverage.",
+    "CPU/GPU workers use sixty-minute idle retention after all assigned queued work finishes and verified off-machine preservation. No numerical default was changed by this planning publication."
+  ]
+}

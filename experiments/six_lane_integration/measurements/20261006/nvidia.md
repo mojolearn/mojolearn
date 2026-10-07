@@ -6,6 +6,112 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | Candidate | Mode | Measurement status | Captured pairs |
 |---|---|---|---:|
 | I.X.complete-proposed | identical | FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED | 99 |
+| T.C13.only | identical | PENDING_MEASUREMENT | 0 |
+| T.C55.only | identical | PENDING_MEASUREMENT | 0 |
+| T.C13.C18 | identical | PENDING_MEASUREMENT | 0 |
+| T.C18.residual-only | identical | PENDING_MEASUREMENT | 0 |
+| T.combined.minus-C13 | identical | PENDING_MEASUREMENT | 0 |
+| T.combined.minus-C13-C18 | identical | PENDING_MEASUREMENT | 0 |
+| T.combined.minus-C55 | identical | PENDING_MEASUREMENT | 0 |
+| T.combined.reproduction | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C01:leaf128 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C01:leaf64 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C01:profile_c01_leaf128_c37_row_panels | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C01:profile_c01_leaf128_c37_row_panels_panel_128 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C01:profile_c01_leaf128_c52_pair128 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C01:profile_c01_leaf128_c52_pair512 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C01:profile_c01_leaf64_c37_row_panels | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C01:profile_c01_leaf64_c37_row_panels_panel_128 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C01:profile_c01_leaf64_c52_pair128 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C01:profile_c01_leaf64_c52_pair512 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C02:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C02:linear_pair | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C02:paired_stats | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C03:finite_extrema | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C04:load_center | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C05:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C05:ols_phase | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C05:phase_scratch | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C06:profile_c06_rows2_c30_direct_distance | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C06:profile_c06_rows2_c30_direct_distance_rows_4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C06:profile_c06_rows4_c30_direct_distance | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C06:profile_c06_rows4_c30_direct_distance_rows_4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C06:rows2 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C06:rows4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C07:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C07:combo_digit4_keys4096 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C07:combo_digit6_keys1024 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C07:combo_digit6_keys4096 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C07:digit4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C07:digit6 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C07:keys1024 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C07:keys4096 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C08:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C08:dictionary_inverse | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C08:grouped_output | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C13:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C13:fold_stats | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C13:logcv_weights | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C14:group_rhs | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C15:factor_solve | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C16:glm_fused | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C17:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C17:line_search_pairs | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C17:ovr_waves | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C18:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C18:combo_next_residual_gram_prefetch | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C18:combo_next_residual_tile64 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C18:combo_tile64_gram_prefetch | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C18:gram_prefetch | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C18:next_residual | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C18:tile64 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C19:ordered_128 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C19:ordered_32 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C23:centered_panels | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C24:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C24:combo_panel8_rows2048 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C24:combo_panel8_tree4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C24:combo_rows2048_tree4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C24:panel8 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C24:rows2048 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C24:tree4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C26:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C26:fixed_products | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C26:update_fused | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C27:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C27:combo_components_factor_components | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C27:combo_components_normalize_components | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C27:combo_factor_components_normalize_components | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C27:components | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C27:factor_components | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C27:normalize_components | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C30:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C30:direct_distance | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C36:centroid_tiles | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C36:centroid_tiles_rows_4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C37:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C37:row_panels | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C38:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C38:device_potential | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C38:reuse_nearest | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C39:retain_state | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C53:bgmm_center4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C53:center4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C53:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C55:class_group | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C56:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C56:lda_input | identical | PENDING_MEASUREMENT | 0 |
+| I.C.C56:qda_project4 | identical | PENDING_MEASUREMENT | 0 |
+| I.C.X.canonical_keys:interaction_canonical_keys | identical | PENDING_MEASUREMENT | 0 |
+| I.C.X.complete-proposed | identical | PENDING_MEASUREMENT | 0 |
+| I.C.X.complete_classical:combined | identical | PENDING_MEASUREMENT | 0 |
+| I.C.X.covariance_consumers:interaction_covariance_consumers | identical | PENDING_MEASUREMENT | 0 |
+| I.C.X.distance_selection:interaction_distance_selection | identical | PENDING_MEASUREMENT | 0 |
+| I.C.X.fold_fusion:interaction_fold_fusion | identical | PENDING_MEASUREMENT | 0 |
+| I.C.X.kmeans_complete:interaction_kmeans_complete | identical | PENDING_MEASUREMENT | 0 |
+| I.C.X.linear_trials:interaction_linear_trials | identical | PENDING_MEASUREMENT | 0 |
+| I.C.X.preparation_lifetime:interaction_preparation_lifetime | identical | PENDING_MEASUREMENT | 0 |
+| I.C.X.statistics_solve:interaction_statistics_solve | identical | PENDING_MEASUREMENT | 0 |
 
 ## Full-workload coverage
 
@@ -13,7 +119,7 @@ Counts are retained complete A/B pairs, not individually decided experiment swit
 
 | Vendor / mode | Complete pairs | Original failed attempts | Quality-rejected pairs | Remaining scope |
 |---|---:|---:|---:|---|
-| NVIDIA native / IDENTICAL | 99 | 2 | 4 | Native combined configurations measured; PTX, individual controls and other full-workload recipe gaps remain pending. |
+| NVIDIA / IDENTICAL | 99 | 2 | 4 | See exact selection and route receipts. PTX and unrecorded individual/full-workload scopes remain pending. |
 
 ## Individual experiment coverage
 
@@ -134,23 +240,26 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 ## Campaign notes
 
 - A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.
-- These are combined-configuration full workloads, not completed individual constituent experiments.
+- Complete-proposed receipts measure combined configurations. Additional exact selection IDs identify isolated or interaction/dropout profiles; no result automatically credits its members.
 - Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.
 - One excluded warmup and one scored sample per arm. Original failed attempts are retained.
-- AMD GPU measurements use accepted retained artifacts. Latest owner instruction forbids further compilation; unavailable paired artifacts remain blocked. NVIDIA PTX still awaits compatible artifacts.
+- The original AMD campaign used accepted retained artifacts and then stopped compilation. That dated stop is historical; later targeted build authorization and readiness belong to their own source freeze. No publisher action compiles, launches jobs or promotes defaults.
 - IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.
 - Scored output and partial/public-save model hashes are retained separately; partial hashes do not prove complete state identity.
 - Apple first four PCA/OLS pairs overlapped shared workspace storage data transfer; KMeans overlap unestablished. No quiet-storage or promotion claim.
 - Apple teardown preservation failed: the workspace was on the internal SSD, not retained EBS. Logs, timings, metrics and hash receipts survive; some raw array bytes remain unrecovered. See artifact-retention.json for exact recovery coverage and provenance. Original receipts are unchanged.
 - Races reuse accepted binaries without separate numerical verification reruns. Earlier separately authorized AMD builds are historical artifact evidence, not measurements. Full provider and worker logs remain under /Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006
 - R2 storage reconciliation: 0 new current-campaign measurements found in the recorded search. Storage locations, fetched archive hashes, historical comparisons and search limitations are retained in storage-reconciliation.json. Older medium/component results do not fill full-workload candidate gaps.
-- The AMD missing-artifact compiler was stopped under the latest owner instruction; see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready.
+- Historical AMD missing-artifact compiler stop: see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready. Later targeted compilation has its own authorization and freeze.
 - scored-hash-coverage.json is a dated, hash-bound metadata audit of captured scored outputs and model states. Complete output hashes do not establish complete fitted-model identity; missing model state remains pending.
 - Source-only review of NVIDIA GaussianNB Taxi and LDA Istella retains both combined-configuration quality failures: no implementation or harness bug established. Changed C55 reduction order is a source-supported explanation, not isolated causal proof. Unexercised controls and individual alternatives remain pending; see nvidia-nb-lda-source-diagnosis.json.
 - Apple source-only review retains QR combined-configuration quality failures; no concrete implementation defect or isolated L09 regression was established. Resampling A and B have equal saved quality and both fail the opponent quality requirement; this does not establish a new P10 regression. Original evidence and missing-array limitations remain explicit. See apple-qr-resample-source-diagnosis.json.
 - Full Taxi GMM refused both candidate and incumbent before scoring. Source-only review found no established implementation or harness defect; retain the incomplete pair and original failures, with zero scored samples and no candidate win/loss decision. See nvidia-gmm-taxi-source-diagnosis.json.
 - LassoCV and ElasticNetCV Taxi retain combined-configuration quality failures on NVIDIA and AMD. Source-only review does not establish an implementation defect or isolate a control; saved quality failures cannot promote these defaults. See cv-taxi-source-diagnosis.json.
 - Saved same-arm AMD/NVIDIA output comparison: 84 matched workloads; primary counts {"AGREE": 168}, repeated counts {"AGREE": 168}. Full identity counts {"INCOMPLETE": 84, "MATCH": 0, "MISMATCH": 0, "NOT_REQUIRED": 0}. These are saved-signature comparisons, not new model runs or default admission; unmatched and failed arms are retained in same-arm-output-comparison.json and its snapshot.
+- Targeted queue uses one immutable source freeze with deduplicated builds; 106 profiles and 1540 planned paired vendor/workload cells, all pending execution. Missing recipes and control blockers remain explicit; no claim of all-algorithm coverage.
+- CPU/GPU workers use sixty-minute idle retention after all assigned queued work finishes and verified off-machine preservation. No numerical default was changed by this planning publication.
+- Targeted continuations: 106 additional exact profiles; 0 have receipts. See continuation-coverage.json for members and pending scope, and publication-continuations.json for exact plan/review snapshots and missing inputs. The catalog coverage ledger counts authored catalog IDs only; it does not relabel targeted profile IDs as catalog receipts.
 
 ## Recorded source decisions
 
@@ -181,7 +290,8 @@ These are not completed measurements and have no inferred timing. This summary d
 | Scope | Status / reason | Evidence |
 |---|---|---|
 | NVIDIA PTX/default full A/B | Compatible retained full-workload artifacts unavailable; no timing worker or compilation substituted. | /Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-ptx/status.json |
-| Individual candidates, alternative arms and other affected workloads | This campaign measured complete-proposed combinations, not every individual catalog entry. Missing recipes, incompatible artifacts and untested interactions remain pending; do not infer constituent winners. | experiments/six_lane_integration/catalog.json |
+| Individual candidates, alternative arms and other affected workloads | Only exact recorded selections have receipts. Missing recipes, incompatible artifacts and untested interactions remain pending; combined results do not decide constituents. | experiments/six_lane_integration/catalog.json |
+| Continuation targeted-ab-20261007 | Pending sources/inputs: /Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json | publication-continuations.json |
 
 ## Failed or quality-rejected attempts
 

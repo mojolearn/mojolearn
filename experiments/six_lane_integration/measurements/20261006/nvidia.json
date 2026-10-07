@@ -11,15 +11,16 @@
       "title": "IDENTICAL complete proposed configuration",
       "mode": "identical",
       "vendors": [
-        "nvidia",
         "amd",
         "apple",
-        "host"
+        "host",
+        "nvidia"
       ],
       "cells": [
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:gmm@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "FAILED_OR_INCOMPLETE",
@@ -58,6 +59,7 @@
           "quality": "NOT_ASSESSED",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/03f523ab5951d08a295b/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "57d7802a66d37c98835a454ff0bcbaa4bf22660382302d41e123514f205618f8",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -752,6 +754,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:elasticnet@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -797,6 +800,7 @@
           "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/14941dbe10b9bd78a1e4/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "fbf191894b5c4a303edf219a0e47159e58d8fb7d0a703a96f0dcb8c6c0671668",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -1674,6 +1678,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:lasso@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -1719,6 +1724,7 @@
           "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/1b07971bfe465c3ca93f/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "32ac494cdb2dc082aba8d18aa3f0034c36ff5cc900b7994499268a3303c52a1e",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -2596,6 +2602,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:lasso@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -2641,6 +2648,7 @@
           "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/1e17ae43f1c2de4a7171/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "58c6cac6d1a0e706376db7dcb57f6daa29b537c648c764e9897365deff5efc86",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -3518,6 +3526,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:ridge@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -3563,6 +3572,7 @@
           "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/4238c569b4eada2d0199/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "0ef319b7b718eace211c38e70fa505e353e508d2c93d3cd939183a07e8ffa58f",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -4442,6 +4452,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:linearsvr@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -4487,6 +4498,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/49c28f55539ef700a59f/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "0fc42ce3ba28b97247caf0296d3caec109747b0bc7195df349529874e044fc12",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -5304,6 +5316,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:linearsvr@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -5349,6 +5362,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/55b2b5ab6491c0d7e9fe/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "aa0a63c3df4ffe5b2f386ab284a50504a69a2e2256c611a58d489dc44c972296",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -6109,6 +6123,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:elasticnet@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -6154,6 +6169,7 @@
           "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/71d06cebb7470b76364a/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "e3d080542065c87c62e05809ddd176c2e1f1daffab266122ac97ab67537f348e",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -7031,6 +7047,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:ridge@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -7076,6 +7093,7 @@
           "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/80deb286d318651dcdf8/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "3fdfedcb9c1daa65b02fa6884c774fa22b0e5ec5d66fdb3dc8e72b32c37de32f",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -7955,6 +7973,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:ridge-cv@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -8000,6 +8019,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/02c09435593c9525da9b/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "00d534db22dba05316bbae852b55455602b7e61d1853add5ed4417ab80af7b26",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -8760,6 +8780,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:poisson@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -8805,6 +8826,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/0898a3822c64a6e4b5f5/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "7bcc427eb43790d3813a51ef6dda90cde0c31c9bf2688d1d29945b5b4c83a2e4",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -9565,6 +9587,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:gamma@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -9610,6 +9633,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/165cf7faa6706b7ec7e7/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "03074c4f3e322ecbf5330702084efd802ec4749fd827367c511ccc10149827f1",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -10370,6 +10394,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:ridge-cv@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -10415,6 +10440,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/232a328ed5fdd06e4c08/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "cc4121371d0733cbdb0a95a0f7b3082ed65296ae719b5b3d840de52b2ca3de68",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -11175,6 +11201,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:enet-cv@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "QUALITY_FAILED",
@@ -11220,6 +11247,7 @@
           "quality": "FAIL",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/3392ecb27af9675963d9/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "9fc87489464b142ab9cd356046f588738393c45dca8793fe30236f3b4899c770",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -11980,6 +12008,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:enet-cv@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -12025,6 +12054,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/3dd9972e3d0f5ac10a3b/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "537174f8810c8a46e26214105e3dce17c230a217338d562e969805ae4463ae04",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -12785,6 +12815,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:pa-reg@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -12830,6 +12861,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/4f3241f1e19ae885bc04/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "6d335c4f3c76fcc54e162f2dfb5505a1003563f12191cfecf80a321d74b64b72",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -13590,6 +13622,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:tweedie@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -13635,6 +13668,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/5c653b5ce77f0c5b421f/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "3a622ca2f72b9781d3c8002b4bcc72960d67b0bdbc10cb97fe29968874c27f1c",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -14395,6 +14429,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:sgd-reg@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -14440,6 +14475,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/5c9e1357590bfdcd9481/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "53e077308c555200fc607849083ce103a811164e3a88727fbcc29cb8739fbfbb",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -15200,6 +15236,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:sgd-reg@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -15245,6 +15282,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/5ebcebb03580bebc2e0b/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "df3c67afc3399d0955ba72b2702a7e297db51ecce2b7e025dd4c853f3cc8ee7c",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -16005,6 +16043,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:pa-reg@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -16050,6 +16089,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/7362b2683eb55fce4826/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "362b070dec38ea6addeef38d10254b2856c3c95e269668b1a6cb9741de0200b5",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -16810,6 +16850,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:gamma@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -16855,6 +16896,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/8b94af90079b45be7f51/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "447c91425bfb4531af037e28077a4225571a24ae38349104bd3698fc057aaedf",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -17615,6 +17657,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:tweedie@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -17660,6 +17703,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/8dc79988b03268bfe3f9/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "237250a5f41c858d95d900700995b653e7d3c2fde0402e670b95e92e9a044763",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -18420,6 +18464,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:lasso-cv@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "QUALITY_FAILED",
@@ -18465,6 +18510,7 @@
           "quality": "FAIL",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/96ac4d3d170baa9b8709/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "82bd778ed89a56ac2b0dc0686a0508fd45c0e0d578c42b96a6dceddb5de799ff",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -19225,6 +19271,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:bayesian-ridge@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -19270,6 +19317,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/9a4596da96b758f8bfcc/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "5219971b255be9cc715d8c18bac47c395ff79f5aa49ba6c2576b7dc94791d646",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -20030,6 +20078,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:bayesian-ridge@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -20075,6 +20124,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/bb87a95b60730a62b9b0/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "afba4dda2e45a7f9bc536b253113581948b43b2b756a7b391aa26210d44d29e8",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -20835,6 +20885,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:poisson@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -20880,6 +20931,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/f3338c86505a1c49367a/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "f93fe6eab636a35f450de5fc37cb2e91326c13e8170afbf7106e5df232f38961",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -21640,6 +21692,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:lasso-cv@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -21685,6 +21738,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/ffcd41dde6ea522c48e3/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "62f123c1d09fb5b6ae34f0ccc87199d7d726cdb770607fefa02fa96005e59968",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -22445,6 +22499,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:gmm@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -22484,6 +22539,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-gmm-istella/f579c55ac28cfd6fb99a/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "7bca88b715434fe751631ff9d351a24ac70b142b999f526ce34bf124be3daa93",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -23244,6 +23300,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:pls@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -23289,6 +23346,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-pls/2f8b608f6ae23ccbef94/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "878a9416296322fa82b8886f27f1e2ffce277726d30e945ef5370c33d21ff3e4",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -24049,6 +24107,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:pls@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -24094,6 +24153,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-pls/53a58fdcb7a34a48e102/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "08efeb3d22daa5ed675ef4ef30b5ff5c92fccb72b4009345169ef6519aded13e",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -24854,6 +24914,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:tsvd@dataset=taxi@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -24889,6 +24950,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1/23a6a15473a435c3d0bc/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "63ca1fe30bca9db161fe3ad460bd0c493441c4b7d2a7dbdd12fc3cfcb95b7889",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -25640,6 +25702,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "FAILED_OR_INCOMPLETE",
@@ -25678,6 +25741,7 @@
           "quality": "NOT_ASSESSED",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1/2e86e210874fc70e8089/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "c161b9364038d8e4b92231bb2a77dcb689b49436e6b05f8255a28709d4425d3f",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -26372,6 +26436,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:tsvd@dataset=istella@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -26407,6 +26472,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1/7d663b8a073eb568e6c2/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "b13fe303e736cb81d87c19a528a18aa39eb8b93cebd1a4df0d408ab8aaa74433",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -27158,6 +27224,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -27197,6 +27264,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1/2e86e210874fc70e8089/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "c04b13ca9f19e35d266030e256d9e88d08b58382a792032abcd608f662f8a6ae",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -27939,6 +28007,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:gaussian-rp@dataset=istella@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -27978,6 +28047,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1/558553fad93edb103bb0/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "c341076412fd7f6c6da883ea842cf7d1068c93c760ce08aadba811e0b71d398e",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -28720,6 +28790,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:sparse-rp@dataset=taxi@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -28759,6 +28830,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1/74cf9f90c9322b0e8dfb/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "07c3bad08942982c6758a0f375f989e2440754827ee22010c40b8a7a5bfa71f4",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -29501,6 +29573,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:fastica@dataset=taxi@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -29540,6 +29613,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1/7a4fa0ba4b22d86c69f6/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "d983c275385f8c33787038126830600d06a16338a4b9b280980eb883dc989dc5",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -30284,6 +30358,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:gaussian-rp@dataset=taxi@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -30323,6 +30398,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1/7bb70a7fa1aee4e6b601/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "8c8a5cefffca15945fe97a39cb3c3a0dd559716d3464df649cdc9e997267ae9e",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -31065,6 +31141,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:incremental-pca@dataset=istella@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -31104,6 +31181,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1/bc13a842a218b5d36548/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "43d43b891968f3bc0df084b9b8e313a544bfa32539809607ce5edc1a245ab8ee",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -31846,6 +31924,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:fastica@dataset=istella@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -31885,6 +31964,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1/ce1bd77cb0829daa8a5f/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "0b84b6a5efcf9f83a181048bfe8afea02509095d4261164ff46085a27c5aaec4",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -32629,6 +32709,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:randomized-svd@dataset=istella@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -32668,6 +32749,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1/e5b2d774f15e52b0faac/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "5def4d2c4a56c5ad3b6da6edc09fd868456db081a8cb263d6368a97b13f5581f",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -33410,6 +33492,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -33449,6 +33532,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1/ecf473c2267b567ce952/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "a5f52c760deb1c54fc0f0b4f8f161b49234c9580319f5e96649b22354afdc5a1",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -34191,6 +34275,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:randomized-svd@dataset=taxi@input=tsvd-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -34230,6 +34315,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-tsvd-full-v1-repair1/ef64104419669a66a6c4/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "7d7ed3cc71b5db5646eb07dcf172275febce4e6ac2fa7aebac811cd437f138e3",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -34972,6 +35058,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:cross-val-score@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -35017,6 +35104,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv/3f0bb433239eba4eb84a/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "88bda032f3613526e4aebdd5c58c1f39eb2dab855dd4381d81fe7bcf67ebc75d",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -35759,6 +35847,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:isotonic@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -35802,6 +35891,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "f235aea787a111db6876de44f55917c7fc5712664a67a9e6618e1425bc91a3fb",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -36562,6 +36652,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:isotonic@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -36605,6 +36696,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv/8098b815ba2f70d2d83e/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "5c870ccaef592e9e37eadbce018c8e2b6af0523accd5e701650f5807bf63be12",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -37365,6 +37457,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:cross-val-score@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -37410,6 +37503,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "112346621e451240a3708bd58812355710c7748c0015bb2d0021217269f346a2",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -38152,6 +38246,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:multinomial-nb@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -38197,6 +38292,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "98f738946159b47c384049b6f1942f0597883f96709b954138247c0e2852a29b",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -38948,6 +39044,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:sgd-clf@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -38993,6 +39090,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/1a2fd8fe185bb3f4831a/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "8437062e141f34c9ded8514212ad4730ffc1e1574845e7f83693e3251f7ff8ef",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -39735,6 +39833,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:cca@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -39780,6 +39879,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/1e60b30fd5d06709dbd8/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "0696e83f28f6bf9ae3cc4a319a92b7ef168c5033a1e5a1e33b1869ec0db39590",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -40522,6 +40622,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:nmf@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -40567,6 +40668,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/203265618a2ec3b9cf54/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "f16c0777c7f91751a2bdde54eb7755d1194ace1520c8dcacd5cbb615028b3a1a",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -41309,6 +41411,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:nmf@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -41354,6 +41457,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/28a95c96e40d533552b6/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "558397aac5856db27e753e3c56b2f14dd10d48451694eab1074b2e6890f0489a",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -42096,6 +42200,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:factor-analysis@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -42141,6 +42246,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/2987d88e0b208c1a309e/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "82a1e5630b4348e54ca5805c594c6d5ed38ce7e5ae9898135656491388f8758f",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -42883,6 +42989,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:qda@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -42928,6 +43035,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/33aeb0153b3f880efede/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "3610ca060d6af39de752c3fa2fb5a5bce2b51cc90111cb10c5dc45413863b529",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -43679,6 +43787,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "QUALITY_FAILED",
@@ -43724,6 +43833,7 @@
           "quality": "FAIL",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/3643733e60c05588ed87/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "6123620f0c5280ce4e77e0b5d28a1b9b02eb361ca927365433d860e78a10b5c7",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -44475,6 +44585,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:standard-scaler@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -44520,6 +44631,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/37e8dac2dc36700f0a79/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "34879ee186e39adf2264d05af36ff64255f511651969924f015f408db24f8cbb",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -45262,6 +45374,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:target-encoder@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -45307,6 +45420,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/3c4e16a32a0bde28c8b2/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "cb6df36558611c21aff31e2db80135906fcee766a568be73bd72688449ad5562",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -46049,6 +46163,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:pls-canonical@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -46094,6 +46209,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/3fb9a1d72f63cad550da/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "9801a32c62cdb4635b8912d4f9e2b9600472aad9ae3dfaae75009f336f2f258e",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -46836,6 +46952,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:perceptron@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -46881,6 +46998,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/427f089dccc31312df6e/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "64f7090abf6e1eeff81a164137b99015938e81a8356698a08db9b541f1ab833d",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -47623,6 +47741,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:multinomial-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -47668,6 +47787,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/544180a6a68f814041d1/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "7363e32e37b5702c8a6da4bab2e8feb5d8d782d5a469f9856ba9fff7521c9188",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -48419,6 +48539,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:perceptron@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -48464,6 +48585,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/56ec902fd5742bb6a8d4/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "a964de79e9edef0b5765ba263942d9497ce34aab65c9b6addd1770b9fabae7f1",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -49206,6 +49328,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:target-encoder@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -49251,6 +49374,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/6ff694323765b5e01044/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "55dcb4aaf291524385fdd1946e97c484a45024e96ddf2664abfe07e48d2ad9a5",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -49993,6 +50117,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:sgd-ocsvm@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -50038,6 +50163,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/7190c2762992d986a679/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "1fb585bb6b6e26491f134822fab30e8edb7dca868ff85275fd239067bce5ac84",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -50780,6 +50906,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:categorical-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -50825,6 +50952,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/72433aef2997b99228ca/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "9088b118a79aa1044eda84408ebabd45d63b8fdee7a67ca960481446a74681a6",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -51576,6 +51704,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:ridge-clf@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -51621,6 +51750,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/744c225f65f592f226eb/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "e3f8c8b9497bd8c515cc4a09f26c1428d83e7f5d870881c42a80cb4088b6dfd8",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -52363,6 +52493,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:complement-nb@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -52408,6 +52539,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/7eea2881505888665bbc/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "fe128a44c788620e1cd532c81eb8bce167e2012ddfd32aeb38998b996868ba61",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -53159,6 +53291,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:minibatch-kmeans@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -53204,6 +53337,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/7f2d85c194475302e867/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "837ba5dc8477b39686811027b716cfc6e8dca264fabd43e460655d633f91430b",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -53955,6 +54089,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:minibatch-kmeans@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -54000,6 +54135,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/823d3c6f2b84e29dc172/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "fb949305c68f2d803041475b6f550568d50092c27eb04bb458e18a02b0f6b474",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -54751,6 +54887,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -54796,6 +54933,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/82bb645731713ca0427f/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "49b1d5bc8ddff6e21f9bcc63c070856fffcbb4adaf0084ed85a218389070430c",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -55547,6 +55685,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:cca@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -55592,6 +55731,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/8627ad6c4094e07a060d/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "35f8d8d44b49bbbe509e4a1a397ccc352d6daff2c3360523c03645e581a0eba3",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -56334,6 +56474,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:ridge-clf@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -56379,6 +56520,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/913d0db7a411d7dfa5c7/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "d74a55d2e879de460b1edc0d30543b2099e139a14210921f9e657bde40a1918b",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -57121,6 +57263,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:pa-clf@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -57166,6 +57309,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/9b7c81efc3ea984c5124/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "f757adbc0b9ee4762e2df133754f3680a2d57470d423bf2aeab8ababcd2f78c4",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -57908,6 +58052,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:maxabs-scaler@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -57953,6 +58098,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/9e3654bc4994eb6559fd/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "340a9c2a017f7a1bc1d94e42c5ddd76ab44443f15b24254acc6a0ebcec02c800",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -58695,6 +58841,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:complement-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -58740,6 +58887,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/a130a015c2dd50764eec/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "c472436a80708d19af9c886c43076db7f25cca1082ab725d93cb5756043eea87",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -59491,6 +59639,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:minmax-scaler@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -59536,6 +59685,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/a3949cbfd5c89074b638/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "2058eda1b41cd5d390fcd60ff8e9cf00b723522909030fe757e20b8875c7c8d7",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -60278,6 +60428,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:sgd-clf@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -60323,6 +60474,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/b151644ffaf019e1d46b/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "0c67b7bb02f9f0ac0a6639dbb4b84f23ce82a7ad6b8aa11fda7688ded9b89def",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -61065,6 +61217,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:pls-canonical@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -61110,6 +61263,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/b30ff22e3a212cfdfc6f/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "85fdc93abd9c04e7022c94bd7b3e334ece1cb1197d0979fac50a52e93fc665b2",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -61852,6 +62006,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:qda@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -61897,6 +62052,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/bd96f6301d2a48cd4d44/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "c6e8e19474fc4295991d0ed5e4f5b4f34953b6fdeb213c9df56cbcb0ab15a73f",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -62648,6 +62804,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:pa-clf@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -62693,6 +62850,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/bdb6d74ec2df7f0f981a/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "94a5c3e39ae799c6cde049ec6b4e4b639d09f0c49d5f88c6d5861201bf96dcf1",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -63435,6 +63593,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:categorical-nb@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -63480,6 +63639,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/c366ae5c82e1fb3858ad/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "59a49310b783120b7cd45bb97c3595b021140af5d22e5498f26eeca7002a3726",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -64231,6 +64391,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:maxabs-scaler@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -64276,6 +64437,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/d5201c24647176641677/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "9ee6625392507af192b473a071666f882c63118bb81f24270738cbdfa9ea6adb",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -65018,6 +65180,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "QUALITY_FAILED",
@@ -65063,6 +65226,7 @@
           "quality": "FAIL",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/da04cf28502e3d16dc99/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "46a7e514084b1230b2dfe157c9c0e5ea06ed8d96f3110d645c22144885fdaee9",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -65814,6 +65978,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:lda-clf@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -65859,6 +66024,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/e45284c67428eb18d1e8/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "055367af93814db459a602745d0fd15a0a27a4bebedcc47f83271b8c6b6f8ac6",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -66610,6 +66776,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:factor-analysis@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -66655,6 +66822,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/ea67f7807d5f024ee41c/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "59228062b1811110c590dd8f436d07f4dbc30932b4680b4c58c47d32bcbdf850",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -67397,6 +67565,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:standard-scaler@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -67442,6 +67611,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/f032fb902df53bb60773/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "40d751ed151342f337d0f9563779efdeffd73b596e729f19d24d705f59adec96",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -68184,6 +68354,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:sgd-ocsvm@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -68229,6 +68400,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/f1fd154b7e7101ee1bc0/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "65c0d1fae4ba3e87b20a4c8e733bf8632a456f2956406ec3eb1b7b3aaa47831a",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -68971,6 +69143,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:minmax-scaler@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -69016,6 +69189,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/f6f713795d0ce17722d7/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "4a6c7b5c3f083249a9b250cf72e97f655836377d38b9b4bdf5774c4ced974c8d",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -69758,6 +69932,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:logreg@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -69803,6 +69978,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-qn-full-v1/59c9e0ea23cbe7904fa9/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "fc0f6b65caba1645d1b107edc056b3b2001fb79601f7b563e89efe504609be63",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -70563,6 +70739,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:linearsvc@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -70608,6 +70785,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-qn-full-v1/91a3e631f7cf85d00d46/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "d56828d3cb169111948d8834ba58035391c8576dac9b4817c468e437c7ca6d24",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -71350,6 +71528,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:linearsvc@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -71395,6 +71574,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-qn-full-v1/b17a252c27cfe68ec555/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "02fc326dafa4af61096d9d57425e1f0488103831ef28f75f7a31a3a5e417feef",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -72137,6 +72317,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "more:logreg@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -72182,6 +72363,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-qn-full-v1/fe8d8d94e9be894f9b6a/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "9777fb477186c28b442f39823ed0d903c0260b38343de3b77ccb7d0bd5f2e79f",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -72942,6 +73124,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:mlp-clf@dataset=taxi@input=mlp-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -72987,6 +73170,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-mlp-full-v1/1ba37c58e15aeeb3e578/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "b134c9006f7a8a90dcfbbc950efda97c9e0b4edf33912e20f1d7523bcb38c47e",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -73738,6 +73922,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:mlp-clf@dataset=istella@input=mlp-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -73783,6 +73968,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-mlp-full-v1/5db8117591bd18566130/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "3dfec38c69209b687561cb0fd5ea07251ada42f1171f095fe005f5ccdb4e4fa9",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -74534,6 +74720,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:mlp-reg@dataset=istella@input=mlp-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -74579,6 +74766,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-mlp-full-v1/b4c0c2f107efa97a3834/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "adb9a992ce89c2d206452b5171e9177dae7f5ebb55371ae489e527b1e6b4e0ad",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -75339,6 +75527,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "expanded:mlp-reg@dataset=taxi@input=mlp-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -75384,6 +75573,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-mlp-full-v1/e47dbe9078881fe5518f/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "778b07153b61498df47fa93f89a93549000c6516ccd6760103f9d593c837a74b",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -76144,6 +76334,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "classical:ols@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -76193,6 +76384,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements/201c5234acc7b0ac4689/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "1b44f0a036f5da9a7f7f4a8369341ee475791e509fe55a6deb9989fbaa37dd90",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -76948,6 +77140,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "classical:ols@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -76997,6 +77190,7 @@
           "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements/5df5c5720c0d6d872c16/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "ea78f4faba47ebcc5621e56f14829a8ab47c627e511315b3e28355911f3a53a6",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -77813,6 +78007,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "classical:kmeans@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -77862,6 +78057,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements/8af58db47601e372485e/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "0e6afe69ba4f04c41f1060c3509e2b9a90b8f700b24786a73c87840291289ebf",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -78733,6 +78929,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "classical:pca@dataset=istella/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -78782,6 +78979,7 @@
           "quality": "PASS_TASK_METRICS",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements/aaee5fbb8a39edad255c/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "b7f9fc2b6cedd145ea5cbaafe538515849445ee06ef8f5e599908b25ecbafd61",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -79556,6 +79754,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "classical:pca@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -79605,6 +79804,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements/d93173a97b8d0e0dd273/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "e251aed785d8d4afafa1a8a65eec06eecc49ed55c858274f3f7b5d6f201bb993",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -80344,6 +80544,7 @@
         {
           "id": "I.X.complete-proposed",
           "vendor": "nvidia",
+          "mode": "identical",
           "case": "classical:kmeans@dataset=taxi/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -80393,6 +80594,7 @@
           "quality": "PENDING",
           "identity": "INCOMPLETE",
           "route": "native-sm90",
+          "receipt_origin": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements/fb6aa398a4fe2f787945/attempts/attempt-0001/receipt.json",
           "receipt_sha256": "042a2e7b8368aa935b1fe93171d733143111a143fcb216f7da2be7178fecaaf9",
           "source_coverage_pending": [
             "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
@@ -81268,27 +81470,1196 @@
         }
       ],
       "status": "FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED"
+    },
+    {
+      "id": "T.C13.only",
+      "title": "T.C13.only",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.C55.only",
+      "title": "T.C55.only",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.C13.C18",
+      "title": "T.C13.C18",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.C18.residual-only",
+      "title": "T.C18.residual-only",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.combined.minus-C13",
+      "title": "T.combined.minus-C13",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.combined.minus-C13-C18",
+      "title": "T.combined.minus-C13-C18",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.combined.minus-C55",
+      "title": "T.combined.minus-C55",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "T.combined.reproduction",
+      "title": "T.combined.reproduction",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C01:leaf128",
+      "title": "leaf128",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C01:leaf64",
+      "title": "leaf64",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C01:profile_c01_leaf128_c37_row_panels",
+      "title": "profile_c01_leaf128_c37_row_panels",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C01:profile_c01_leaf128_c37_row_panels_panel_128",
+      "title": "profile_c01_leaf128_c37_row_panels_panel_128",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C01:profile_c01_leaf128_c52_pair128",
+      "title": "profile_c01_leaf128_c52_pair128",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C01:profile_c01_leaf128_c52_pair512",
+      "title": "profile_c01_leaf128_c52_pair512",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C01:profile_c01_leaf64_c37_row_panels",
+      "title": "profile_c01_leaf64_c37_row_panels",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C01:profile_c01_leaf64_c37_row_panels_panel_128",
+      "title": "profile_c01_leaf64_c37_row_panels_panel_128",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C01:profile_c01_leaf64_c52_pair128",
+      "title": "profile_c01_leaf64_c52_pair128",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C01:profile_c01_leaf64_c52_pair512",
+      "title": "profile_c01_leaf64_c52_pair512",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C02:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C02:linear_pair",
+      "title": "linear_pair",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C02:paired_stats",
+      "title": "paired_stats",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C03:finite_extrema",
+      "title": "finite_extrema",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C04:load_center",
+      "title": "load_center",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C05:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C05:ols_phase",
+      "title": "ols_phase",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C05:phase_scratch",
+      "title": "phase_scratch",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C06:profile_c06_rows2_c30_direct_distance",
+      "title": "profile_c06_rows2_c30_direct_distance",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C06:profile_c06_rows2_c30_direct_distance_rows_4",
+      "title": "profile_c06_rows2_c30_direct_distance_rows_4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C06:profile_c06_rows4_c30_direct_distance",
+      "title": "profile_c06_rows4_c30_direct_distance",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C06:profile_c06_rows4_c30_direct_distance_rows_4",
+      "title": "profile_c06_rows4_c30_direct_distance_rows_4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C06:rows2",
+      "title": "rows2",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C06:rows4",
+      "title": "rows4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C07:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C07:combo_digit4_keys4096",
+      "title": "combo_digit4_keys4096",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C07:combo_digit6_keys1024",
+      "title": "combo_digit6_keys1024",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C07:combo_digit6_keys4096",
+      "title": "combo_digit6_keys4096",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C07:digit4",
+      "title": "digit4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C07:digit6",
+      "title": "digit6",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C07:keys1024",
+      "title": "keys1024",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C07:keys4096",
+      "title": "keys4096",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C08:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C08:dictionary_inverse",
+      "title": "dictionary_inverse",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C08:grouped_output",
+      "title": "grouped_output",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C13:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C13:fold_stats",
+      "title": "fold_stats",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C13:logcv_weights",
+      "title": "logcv_weights",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C14:group_rhs",
+      "title": "group_rhs",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C15:factor_solve",
+      "title": "factor_solve",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C16:glm_fused",
+      "title": "glm_fused",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C17:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C17:line_search_pairs",
+      "title": "line_search_pairs",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C17:ovr_waves",
+      "title": "ovr_waves",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C18:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C18:combo_next_residual_gram_prefetch",
+      "title": "combo_next_residual_gram_prefetch",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C18:combo_next_residual_tile64",
+      "title": "combo_next_residual_tile64",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C18:combo_tile64_gram_prefetch",
+      "title": "combo_tile64_gram_prefetch",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C18:gram_prefetch",
+      "title": "gram_prefetch",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C18:next_residual",
+      "title": "next_residual",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C18:tile64",
+      "title": "tile64",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C19:ordered_128",
+      "title": "ordered_128",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C19:ordered_32",
+      "title": "ordered_32",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C23:centered_panels",
+      "title": "centered_panels",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C24:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C24:combo_panel8_rows2048",
+      "title": "combo_panel8_rows2048",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C24:combo_panel8_tree4",
+      "title": "combo_panel8_tree4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C24:combo_rows2048_tree4",
+      "title": "combo_rows2048_tree4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C24:panel8",
+      "title": "panel8",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C24:rows2048",
+      "title": "rows2048",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C24:tree4",
+      "title": "tree4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C26:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C26:fixed_products",
+      "title": "fixed_products",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C26:update_fused",
+      "title": "update_fused",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C27:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C27:combo_components_factor_components",
+      "title": "combo_components_factor_components",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C27:combo_components_normalize_components",
+      "title": "combo_components_normalize_components",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C27:combo_factor_components_normalize_components",
+      "title": "combo_factor_components_normalize_components",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C27:components",
+      "title": "components",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C27:factor_components",
+      "title": "factor_components",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C27:normalize_components",
+      "title": "normalize_components",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C30:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C30:direct_distance",
+      "title": "direct_distance",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C36:centroid_tiles",
+      "title": "centroid_tiles",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C36:centroid_tiles_rows_4",
+      "title": "centroid_tiles_rows_4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C37:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C37:row_panels",
+      "title": "row_panels",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C38:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C38:device_potential",
+      "title": "device_potential",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C38:reuse_nearest",
+      "title": "reuse_nearest",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C39:retain_state",
+      "title": "retain_state",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C53:bgmm_center4",
+      "title": "bgmm_center4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C53:center4",
+      "title": "center4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C53:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C55:class_group",
+      "title": "class_group",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C56:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C56:lda_input",
+      "title": "lda_input",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.C56:qda_project4",
+      "title": "qda_project4",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.X.canonical_keys:interaction_canonical_keys",
+      "title": "interaction_canonical_keys",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.X.complete-proposed",
+      "title": "I.C.X.complete-proposed",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.X.complete_classical:combined",
+      "title": "combined",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.X.covariance_consumers:interaction_covariance_consumers",
+      "title": "interaction_covariance_consumers",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.X.distance_selection:interaction_distance_selection",
+      "title": "interaction_distance_selection",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.X.fold_fusion:interaction_fold_fusion",
+      "title": "interaction_fold_fusion",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.X.kmeans_complete:interaction_kmeans_complete",
+      "title": "interaction_kmeans_complete",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.X.linear_trials:interaction_linear_trials",
+      "title": "interaction_linear_trials",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.X.preparation_lifetime:interaction_preparation_lifetime",
+      "title": "interaction_preparation_lifetime",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
+    },
+    {
+      "id": "I.C.X.statistics_solve:interaction_statistics_solve",
+      "title": "interaction_statistics_solve",
+      "mode": "identical",
+      "vendors": [
+        "amd",
+        "nvidia"
+      ],
+      "cells": [],
+      "status": "PENDING_MEASUREMENT"
     }
   ],
   "notes": [
     "A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.",
-    "These are combined-configuration full workloads, not completed individual constituent experiments.",
+    "Complete-proposed receipts measure combined configurations. Additional exact selection IDs identify isolated or interaction/dropout profiles; no result automatically credits its members.",
     "Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.",
     "One excluded warmup and one scored sample per arm. Original failed attempts are retained.",
-    "AMD GPU measurements use accepted retained artifacts. Latest owner instruction forbids further compilation; unavailable paired artifacts remain blocked. NVIDIA PTX still awaits compatible artifacts.",
+    "The original AMD campaign used accepted retained artifacts and then stopped compilation. That dated stop is historical; later targeted build authorization and readiness belong to their own source freeze. No publisher action compiles, launches jobs or promotes defaults.",
     "IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.",
     "Scored output and partial/public-save model hashes are retained separately; partial hashes do not prove complete state identity.",
     "Apple first four PCA/OLS pairs overlapped shared workspace storage data transfer; KMeans overlap unestablished. No quiet-storage or promotion claim.",
     "Apple teardown preservation failed: the workspace was on the internal SSD, not retained EBS. Logs, timings, metrics and hash receipts survive; some raw array bytes remain unrecovered. See artifact-retention.json for exact recovery coverage and provenance. Original receipts are unchanged.",
     "Races reuse accepted binaries without separate numerical verification reruns. Earlier separately authorized AMD builds are historical artifact evidence, not measurements. Full provider and worker logs remain under /Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006",
     "R2 storage reconciliation: 0 new current-campaign measurements found in the recorded search. Storage locations, fetched archive hashes, historical comparisons and search limitations are retained in storage-reconciliation.json. Older medium/component results do not fill full-workload candidate gaps.",
-    "The AMD missing-artifact compiler was stopped under the latest owner instruction; see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready.",
+    "Historical AMD missing-artifact compiler stop: see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready. Later targeted compilation has its own authorization and freeze.",
     "scored-hash-coverage.json is a dated, hash-bound metadata audit of captured scored outputs and model states. Complete output hashes do not establish complete fitted-model identity; missing model state remains pending.",
     "Source-only review of NVIDIA GaussianNB Taxi and LDA Istella retains both combined-configuration quality failures: no implementation or harness bug established. Changed C55 reduction order is a source-supported explanation, not isolated causal proof. Unexercised controls and individual alternatives remain pending; see nvidia-nb-lda-source-diagnosis.json.",
     "Apple source-only review retains QR combined-configuration quality failures; no concrete implementation defect or isolated L09 regression was established. Resampling A and B have equal saved quality and both fail the opponent quality requirement; this does not establish a new P10 regression. Original evidence and missing-array limitations remain explicit. See apple-qr-resample-source-diagnosis.json.",
     "Full Taxi GMM refused both candidate and incumbent before scoring. Source-only review found no established implementation or harness defect; retain the incomplete pair and original failures, with zero scored samples and no candidate win/loss decision. See nvidia-gmm-taxi-source-diagnosis.json.",
     "LassoCV and ElasticNetCV Taxi retain combined-configuration quality failures on NVIDIA and AMD. Source-only review does not establish an implementation defect or isolate a control; saved quality failures cannot promote these defaults. See cv-taxi-source-diagnosis.json.",
-    "Saved same-arm AMD/NVIDIA output comparison: 84 matched workloads; primary counts {\"AGREE\": 168}, repeated counts {\"AGREE\": 168}. Full identity counts {\"INCOMPLETE\": 84, \"MATCH\": 0, \"MISMATCH\": 0, \"NOT_REQUIRED\": 0}. These are saved-signature comparisons, not new model runs or default admission; unmatched and failed arms are retained in same-arm-output-comparison.json and its snapshot."
+    "Saved same-arm AMD/NVIDIA output comparison: 84 matched workloads; primary counts {\"AGREE\": 168}, repeated counts {\"AGREE\": 168}. Full identity counts {\"INCOMPLETE\": 84, \"MATCH\": 0, \"MISMATCH\": 0, \"NOT_REQUIRED\": 0}. These are saved-signature comparisons, not new model runs or default admission; unmatched and failed arms are retained in same-arm-output-comparison.json and its snapshot.",
+    "Targeted queue uses one immutable source freeze with deduplicated builds; 106 profiles and 1540 planned paired vendor/workload cells, all pending execution. Missing recipes and control blockers remain explicit; no claim of all-algorithm coverage.",
+    "CPU/GPU workers use sixty-minute idle retention after all assigned queued work finishes and verified off-machine preservation. No numerical default was changed by this planning publication.",
+    "Targeted continuations: 106 additional exact profiles; 0 have receipts. See continuation-coverage.json for members and pending scope, and publication-continuations.json for exact plan/review snapshots and missing inputs. The catalog coverage ledger counts authored catalog IDs only; it does not relabel targeted profile IDs as catalog receipts."
   ],
   "decisions": [
     {
@@ -81329,7 +82700,7 @@
       "commit": "51a3eb11bd99b921e775fa5fc6f6dbedca125382",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "AF.X.complete-proposed/algos/resample@dataset=istella/attempt-0001",
@@ -81337,7 +82708,7 @@
       "commit": "55a815e13728392be41903769c33ece8948cad4a",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "AF.X.complete-proposed/algos/huber@dataset=istella/attempt-0001",
@@ -81345,7 +82716,7 @@
       "commit": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "AF.X.complete-proposed/algos/qr@dataset=istella/attempt-0001",
@@ -81353,7 +82724,7 @@
       "commit": "db59bb9557035da8fd11b0a020a84e33b0581c30",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/2268b1fe4abee7294d5e/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "AF.X.complete-proposed/algos/qr@dataset=taxi/attempt-0001",
@@ -81361,7 +82732,7 @@
       "commit": "db59bb9557035da8fd11b0a020a84e33b0581c30",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "I.X.complete-proposed/expanded:enet-cv@dataset=taxi/attempt-0001",
@@ -81369,7 +82740,7 @@
       "commit": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "I.X.complete-proposed/expanded:lasso-cv@dataset=taxi/attempt-0001",
@@ -81377,7 +82748,7 @@
       "commit": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "I.X.complete-proposed/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
@@ -81385,7 +82756,7 @@
       "commit": "db59bb9557035da8fd11b0a020a84e33b0581c30",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "I.X.complete-proposed/expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001",
@@ -81393,7 +82764,7 @@
       "commit": "db59bb9557035da8fd11b0a020a84e33b0581c30",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "I.X.complete-proposed/expanded:lasso-cv@dataset=taxi/attempt-0001",
@@ -81401,7 +82772,7 @@
       "commit": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/6e33969bb9b101021356/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "I.X.complete-proposed/expanded:enet-cv@dataset=taxi/attempt-0001",
@@ -81409,7 +82780,7 @@
       "commit": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/f3260b9ad432706adba9/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "I.X.complete-proposed/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
@@ -81417,7 +82788,7 @@
       "commit": "137caf2704fe0139c6a08a39e63869f74a827a8b",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classification-full-v1/659b9236920edb90c199/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     },
     {
       "candidate": "I.X.complete-proposed/expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001",
@@ -81425,21 +82796,27 @@
       "commit": "137caf2704fe0139c6a08a39e63869f74a827a8b",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classification-full-v1/896a91284fe76be2f130/attempt-0001/receipt.json",
       "default_changed": false,
-      "individual_constituents": "Not decided by this combined-configuration result"
+      "individual_constituents": "Only the recorded exact selection has this result; members receive no automatic decision"
     }
   ],
   "coverage": [
     {
       "vendor": "nvidia",
-      "label": "NVIDIA native / IDENTICAL",
+      "label": "NVIDIA / IDENTICAL",
+      "routes": [
+        "native-sm90"
+      ],
       "complete_pairs": 99,
       "failed_attempts": 2,
       "quality_failed": 4,
-      "remaining_scope": "Native combined configurations measured; PTX, individual controls and other full-workload recipe gaps remain pending."
+      "remaining_scope": "See exact selection and route receipts. PTX and unrecorded individual/full-workload scopes remain pending."
     },
     {
       "vendor": "amd",
       "label": "AMD GPU / IDENTICAL",
+      "routes": [
+        "amd-native-gfx942"
+      ],
       "complete_pairs": 84,
       "failed_attempts": 1,
       "quality_failed": 4,
@@ -81448,6 +82825,9 @@
     {
       "vendor": "apple",
       "label": "Apple / FAST",
+      "routes": [
+        "apple-fast"
+      ],
       "complete_pairs": 86,
       "failed_attempts": 3,
       "quality_failed": 5,
@@ -81476,7 +82856,7 @@
     {
       "vendor": "all",
       "scope": "Individual candidates, alternative arms and other affected workloads",
-      "reason": "This campaign measured complete-proposed combinations, not every individual catalog entry. Missing recipes, incompatible artifacts and untested interactions remain pending; do not infer constituent winners.",
+      "reason": "Only exact recorded selections have receipts. Missing recipes, incompatible artifacts and untested interactions remain pending; combined results do not decide constituents.",
       "evidence": "experiments/six_lane_integration/catalog.json"
     },
     {
@@ -81484,6 +82864,12 @@
       "scope": "Apple FAST MLP classifier/regressor \u00d7 Taxi/Istella",
       "reason": "4 additional pending pairs; No retained accepted Apple FAST x_sequence pair; IDENTICAL cannot substitute",
       "evidence": "campaign-coverage.json: apple_readiness"
+    },
+    {
+      "vendor": "all",
+      "scope": "Continuation targeted-ab-20261007",
+      "reason": "Pending sources/inputs: /Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
+      "evidence": "publication-continuations.json"
     }
   ],
   "remaining_catalog": {
@@ -129274,6 +130660,2018 @@
           "sha256": "9fa0e434f8a407671504078b47fbc48effc0cd460c528aa789eb6c7ae979ed04"
         },
         "source_status": null,
+        "receipts": []
+      }
+    ],
+    "continuation_selections": [
+      {
+        "id": "I.C.C01:leaf128",
+        "members": [
+          "I.C.C01"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C01:leaf64",
+        "members": [
+          "I.C.C01"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C01:profile_c01_leaf128_c37_row_panels",
+        "members": [
+          "I.C.C01"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C01:profile_c01_leaf128_c37_row_panels_panel_128",
+        "members": [
+          "I.C.C01"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C01:profile_c01_leaf128_c52_pair128",
+        "members": [
+          "I.C.C01"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C01:profile_c01_leaf128_c52_pair512",
+        "members": [
+          "I.C.C01"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C01:profile_c01_leaf64_c37_row_panels",
+        "members": [
+          "I.C.C01"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C01:profile_c01_leaf64_c37_row_panels_panel_128",
+        "members": [
+          "I.C.C01"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C01:profile_c01_leaf64_c52_pair128",
+        "members": [
+          "I.C.C01"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C01:profile_c01_leaf64_c52_pair512",
+        "members": [
+          "I.C.C01"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C02:combined",
+        "members": [
+          "I.C.C02"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C02:linear_pair",
+        "members": [
+          "I.C.C02"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C02:paired_stats",
+        "members": [
+          "I.C.C02"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C03:finite_extrema",
+        "members": [
+          "I.C.C03"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C04:load_center",
+        "members": [
+          "I.C.C04"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C05:combined",
+        "members": [
+          "I.C.C05"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C05:ols_phase",
+        "members": [
+          "I.C.C05"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C05:phase_scratch",
+        "members": [
+          "I.C.C05"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C06:profile_c06_rows2_c30_direct_distance",
+        "members": [
+          "I.C.C06"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C06:profile_c06_rows2_c30_direct_distance_rows_4",
+        "members": [
+          "I.C.C06"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C06:profile_c06_rows4_c30_direct_distance",
+        "members": [
+          "I.C.C06"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C06:profile_c06_rows4_c30_direct_distance_rows_4",
+        "members": [
+          "I.C.C06"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C06:rows2",
+        "members": [
+          "I.C.C06"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C06:rows4",
+        "members": [
+          "I.C.C06"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C07:combined",
+        "members": [
+          "I.C.C07"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C07:combo_digit4_keys4096",
+        "members": [
+          "I.C.C07"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C07:combo_digit6_keys1024",
+        "members": [
+          "I.C.C07"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C07:combo_digit6_keys4096",
+        "members": [
+          "I.C.C07"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C07:digit4",
+        "members": [
+          "I.C.C07"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C07:digit6",
+        "members": [
+          "I.C.C07"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C07:keys1024",
+        "members": [
+          "I.C.C07"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C07:keys4096",
+        "members": [
+          "I.C.C07"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C08:combined",
+        "members": [
+          "I.C.C08"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C08:dictionary_inverse",
+        "members": [
+          "I.C.C08"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C08:grouped_output",
+        "members": [
+          "I.C.C08"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C13:combined",
+        "members": [
+          "I.C.C13"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C13:fold_stats",
+        "members": [
+          "I.C.C13"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C13:logcv_weights",
+        "members": [
+          "I.C.C13"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C14:group_rhs",
+        "members": [
+          "I.C.C14"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C15:factor_solve",
+        "members": [
+          "I.C.C15"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C16:glm_fused",
+        "members": [
+          "I.C.C16"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C17:combined",
+        "members": [
+          "I.C.C17"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C17:line_search_pairs",
+        "members": [
+          "I.C.C17"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C17:ovr_waves",
+        "members": [
+          "I.C.C17"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C18:combined",
+        "members": [
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C18:combo_next_residual_gram_prefetch",
+        "members": [
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C18:combo_next_residual_tile64",
+        "members": [
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C18:combo_tile64_gram_prefetch",
+        "members": [
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C18:gram_prefetch",
+        "members": [
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C18:next_residual",
+        "members": [
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C18:tile64",
+        "members": [
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C19:ordered_128",
+        "members": [
+          "I.C.C19"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C19:ordered_32",
+        "members": [
+          "I.C.C19"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C23:centered_panels",
+        "members": [
+          "I.C.C23"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C24:combined",
+        "members": [
+          "I.C.C24"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C24:combo_panel8_rows2048",
+        "members": [
+          "I.C.C24"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C24:combo_panel8_tree4",
+        "members": [
+          "I.C.C24"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C24:combo_rows2048_tree4",
+        "members": [
+          "I.C.C24"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C24:panel8",
+        "members": [
+          "I.C.C24"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C24:rows2048",
+        "members": [
+          "I.C.C24"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C24:tree4",
+        "members": [
+          "I.C.C24"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C26:combined",
+        "members": [
+          "I.C.C26"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C26:fixed_products",
+        "members": [
+          "I.C.C26"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C26:update_fused",
+        "members": [
+          "I.C.C26"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C27:combined",
+        "members": [
+          "I.C.C27"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C27:combo_components_factor_components",
+        "members": [
+          "I.C.C27"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C27:combo_components_normalize_components",
+        "members": [
+          "I.C.C27"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C27:combo_factor_components_normalize_components",
+        "members": [
+          "I.C.C27"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C27:components",
+        "members": [
+          "I.C.C27"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C27:factor_components",
+        "members": [
+          "I.C.C27"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C27:normalize_components",
+        "members": [
+          "I.C.C27"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C30:combined",
+        "members": [
+          "I.C.C30"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C30:direct_distance",
+        "members": [
+          "I.C.C30"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C36:centroid_tiles",
+        "members": [
+          "I.C.C36"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C36:centroid_tiles_rows_4",
+        "members": [
+          "I.C.C36"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C37:combined",
+        "members": [
+          "I.C.C37"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C37:row_panels",
+        "members": [
+          "I.C.C37"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C38:combined",
+        "members": [
+          "I.C.C38"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C38:device_potential",
+        "members": [
+          "I.C.C38"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C38:reuse_nearest",
+        "members": [
+          "I.C.C38"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C39:retain_state",
+        "members": [
+          "I.C.C39"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C53:bgmm_center4",
+        "members": [
+          "I.C.C53"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C53:center4",
+        "members": [
+          "I.C.C53"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C53:combined",
+        "members": [
+          "I.C.C53"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C55:class_group",
+        "members": [
+          "I.C.C55"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C56:combined",
+        "members": [
+          "I.C.C56"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C56:lda_input",
+        "members": [
+          "I.C.C56"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.C56:qda_project4",
+        "members": [
+          "I.C.C56"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.X.canonical_keys:interaction_canonical_keys",
+        "members": [
+          "I.C.C07",
+          "I.C.C08",
+          "I.C.C10",
+          "I.C.C12",
+          "I.C.C31"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.X.complete-proposed",
+        "members": [
+          "I.C.C01",
+          "I.C.C02",
+          "I.C.C03",
+          "I.C.C04",
+          "I.C.C05",
+          "I.C.C06",
+          "I.C.C07",
+          "I.C.C08",
+          "I.C.C09",
+          "I.C.C10",
+          "I.C.C11",
+          "I.C.C12",
+          "I.C.C13",
+          "I.C.C14",
+          "I.C.C15",
+          "I.C.C16",
+          "I.C.C17",
+          "I.C.C18",
+          "I.C.C19",
+          "I.C.C20",
+          "I.C.C21",
+          "I.C.C22",
+          "I.C.C23",
+          "I.C.C24",
+          "I.C.C25",
+          "I.C.C26",
+          "I.C.C27",
+          "I.C.C28",
+          "I.C.C29",
+          "I.C.C30",
+          "I.C.C31",
+          "I.C.C32",
+          "I.C.C33",
+          "I.C.C34",
+          "I.C.C35",
+          "I.C.C36",
+          "I.C.C37",
+          "I.C.C38",
+          "I.C.C39",
+          "I.C.C40",
+          "I.C.C41",
+          "I.C.C42",
+          "I.C.C43",
+          "I.C.C44",
+          "I.C.C52",
+          "I.C.C53",
+          "I.C.C54",
+          "I.C.C55",
+          "I.C.C56",
+          "I.C.C57",
+          "I.C.C58",
+          "I.C.C59",
+          "I.C.C60"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.X.complete_classical:combined",
+        "members": [
+          "I.C.C01",
+          "I.C.C02",
+          "I.C.C03",
+          "I.C.C04",
+          "I.C.C05",
+          "I.C.C06",
+          "I.C.C07",
+          "I.C.C08",
+          "I.C.C09",
+          "I.C.C10",
+          "I.C.C11",
+          "I.C.C12",
+          "I.C.C13",
+          "I.C.C14",
+          "I.C.C15",
+          "I.C.C16",
+          "I.C.C17",
+          "I.C.C18",
+          "I.C.C19",
+          "I.C.C20",
+          "I.C.C21",
+          "I.C.C22",
+          "I.C.C23",
+          "I.C.C24",
+          "I.C.C25",
+          "I.C.C26",
+          "I.C.C27",
+          "I.C.C28",
+          "I.C.C29",
+          "I.C.C30",
+          "I.C.C31",
+          "I.C.C32",
+          "I.C.C33",
+          "I.C.C34",
+          "I.C.C35",
+          "I.C.C36",
+          "I.C.C37",
+          "I.C.C38",
+          "I.C.C39",
+          "I.C.C40",
+          "I.C.C41",
+          "I.C.C42",
+          "I.C.C43",
+          "I.C.C44",
+          "I.C.C52",
+          "I.C.C53",
+          "I.C.C54",
+          "I.C.C55",
+          "I.C.C56",
+          "I.C.C57",
+          "I.C.C58",
+          "I.C.C59",
+          "I.C.C60"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.X.covariance_consumers:interaction_covariance_consumers",
+        "members": [
+          "I.C.C02",
+          "I.C.C04",
+          "I.C.C14",
+          "I.C.C23",
+          "I.C.C53",
+          "I.C.C54",
+          "I.C.C55",
+          "I.C.C56",
+          "I.C.C57"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.X.distance_selection:interaction_distance_selection",
+        "members": [
+          "I.C.C06",
+          "I.C.C29",
+          "I.C.C30",
+          "I.C.C32",
+          "I.C.C36"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.X.fold_fusion:interaction_fold_fusion",
+        "members": [
+          "I.C.C01",
+          "I.C.C02",
+          "I.C.C09",
+          "I.C.C13",
+          "I.C.C23",
+          "I.C.C37",
+          "I.C.C52"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.X.kmeans_complete:interaction_kmeans_complete",
+        "members": [
+          "I.C.C36",
+          "I.C.C37",
+          "I.C.C38",
+          "I.C.C39"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.X.linear_trials:interaction_linear_trials",
+        "members": [
+          "I.C.C16",
+          "I.C.C17",
+          "I.C.C19"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.X.preparation_lifetime:interaction_preparation_lifetime",
+        "members": [
+          "I.C.C03",
+          "I.C.C04",
+          "I.C.C05",
+          "I.C.C08"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "I.C.X.statistics_solve:interaction_statistics_solve",
+        "members": [
+          "I.C.C13",
+          "I.C.C14",
+          "I.C.C15",
+          "I.C.C18",
+          "I.C.C23",
+          "I.C.C24"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.C13.C18",
+        "members": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.C13.only",
+        "members": [
+          "I.C.C13"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.C18.residual-only",
+        "members": [
+          "I.C.C18"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.C55.only",
+        "members": [
+          "I.C.C55"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.combined.minus-C13",
+        "members": [
+          "I.N.NN02",
+          "I.C.C01",
+          "I.C.C02",
+          "I.C.C03",
+          "I.C.C04",
+          "I.C.C05",
+          "I.C.C06",
+          "I.C.C07",
+          "I.C.C08",
+          "I.C.C09",
+          "I.C.C10",
+          "I.C.C11",
+          "I.C.C12",
+          "I.C.C13",
+          "I.C.C14",
+          "I.C.C15",
+          "I.C.C16",
+          "I.C.C17",
+          "I.C.C18",
+          "I.C.C19",
+          "I.C.C20",
+          "I.C.C21",
+          "I.C.C22",
+          "I.C.C23",
+          "I.C.C24",
+          "I.C.C25",
+          "I.C.C26",
+          "I.C.C27",
+          "I.C.C28",
+          "I.C.C29",
+          "I.C.C30",
+          "I.C.C31",
+          "I.C.C32",
+          "I.C.C33",
+          "I.C.C34",
+          "I.C.C35",
+          "I.C.C36",
+          "I.C.C37",
+          "I.C.C38",
+          "I.C.C39",
+          "I.C.C40",
+          "I.C.C41",
+          "I.C.C42",
+          "I.C.C43",
+          "I.C.C44",
+          "I.C.C52",
+          "I.C.C53",
+          "I.C.C54",
+          "I.C.C55",
+          "I.C.C56",
+          "I.C.C57",
+          "I.C.C58",
+          "I.C.C59",
+          "I.C.C60",
+          "I.T.T01",
+          "I.T.T02",
+          "I.T.T03",
+          "I.T.T04",
+          "I.T.T05",
+          "I.T.T06",
+          "I.T.T07",
+          "I.T.T08",
+          "I.T.T09",
+          "I.T.T10",
+          "I.T.T11",
+          "I.T.T12",
+          "I.T.T13",
+          "I.T.T14",
+          "I.T.T15",
+          "I.T.T16",
+          "I.T.T17",
+          "I.T.T18",
+          "I.T.T19",
+          "I.T.T20",
+          "I.T.T21",
+          "I.T.T22",
+          "I.T.T23",
+          "I.T.T24",
+          "I.T.T25",
+          "I.T.T26",
+          "I.T.T27",
+          "I.T.T28",
+          "I.T.T29",
+          "I.T.T30",
+          "I.T.T31",
+          "I.T.T32",
+          "I.T.T33",
+          "I.T.T34",
+          "I.T.T35",
+          "I.T.T36",
+          "I.T.T37",
+          "I.T.T38",
+          "I.T.T39",
+          "I.T.T40",
+          "I.T.T41",
+          "I.T.T42",
+          "I.T.T43",
+          "I.T.T44",
+          "I.T.T45",
+          "I.T.C45_GBDT",
+          "I.T.C47_GBDT",
+          "I.T.C47_IF",
+          "I.T.C48",
+          "I.T.C48_IF",
+          "I.T.C50_GB",
+          "I.T.C50_IF",
+          "I.N.NN03",
+          "I.N.NN04",
+          "I.N.NN05",
+          "I.N.NN06",
+          "I.N.NN07",
+          "I.N.NN11",
+          "I.N.NN12",
+          "I.N.NN14",
+          "I.N.NN16",
+          "I.N.NN20",
+          "I.N.NN24",
+          "I.N.NN25",
+          "I.N.NN26",
+          "I.N.NN27",
+          "I.N.NN28",
+          "I.N.NN29",
+          "I.N.NN31",
+          "I.N.NN32",
+          "I.N.NN33",
+          "I.N.NN34",
+          "I.N.NN35",
+          "I.N.NN36",
+          "I.N.NN37",
+          "I.N.NN38",
+          "I.N.NN39",
+          "I.N.NN40",
+          "I.N.NN42",
+          "I.N.NN43",
+          "I.N.NN44",
+          "I.N.NN45",
+          "I.N.NN46",
+          "I.N.NN47",
+          "I.N.NN48",
+          "I.N.NN49",
+          "I.N.NN50",
+          "I.N.NN51",
+          "I.N.NN52",
+          "I.N.NN53",
+          "I.N.NN54",
+          "I.N.NN55",
+          "I.N.NN56",
+          "I.N.NN57",
+          "I.N.NN58",
+          "I.N.NN59",
+          "I.N.NN60",
+          "I.N.NN62",
+          "I.N.NN63",
+          "I.N.NN64",
+          "I.N.NI06",
+          "I.N.NI07",
+          "I.N.NI09",
+          "I.N.NI10",
+          "I.N.NI11",
+          "I.N.NI14",
+          "I.N.NI15",
+          "I.N.NI16",
+          "I.N.NI17",
+          "I.N.NI18",
+          "I.N.NI26",
+          "I.N.NI27",
+          "I.N.NI36",
+          "I.N.NI42",
+          "I.N.NI46",
+          "I.N.NI47",
+          "I.N.NI48",
+          "I.N.NI49",
+          "I.N.NI52",
+          "I.N.NI54",
+          "I.N.NI57",
+          "I.N.NI58",
+          "I.N.NI59"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.combined.minus-C13-C18",
+        "members": [
+          "I.N.NN02",
+          "I.C.C01",
+          "I.C.C02",
+          "I.C.C03",
+          "I.C.C04",
+          "I.C.C05",
+          "I.C.C06",
+          "I.C.C07",
+          "I.C.C08",
+          "I.C.C09",
+          "I.C.C10",
+          "I.C.C11",
+          "I.C.C12",
+          "I.C.C13",
+          "I.C.C14",
+          "I.C.C15",
+          "I.C.C16",
+          "I.C.C17",
+          "I.C.C18",
+          "I.C.C19",
+          "I.C.C20",
+          "I.C.C21",
+          "I.C.C22",
+          "I.C.C23",
+          "I.C.C24",
+          "I.C.C25",
+          "I.C.C26",
+          "I.C.C27",
+          "I.C.C28",
+          "I.C.C29",
+          "I.C.C30",
+          "I.C.C31",
+          "I.C.C32",
+          "I.C.C33",
+          "I.C.C34",
+          "I.C.C35",
+          "I.C.C36",
+          "I.C.C37",
+          "I.C.C38",
+          "I.C.C39",
+          "I.C.C40",
+          "I.C.C41",
+          "I.C.C42",
+          "I.C.C43",
+          "I.C.C44",
+          "I.C.C52",
+          "I.C.C53",
+          "I.C.C54",
+          "I.C.C55",
+          "I.C.C56",
+          "I.C.C57",
+          "I.C.C58",
+          "I.C.C59",
+          "I.C.C60",
+          "I.T.T01",
+          "I.T.T02",
+          "I.T.T03",
+          "I.T.T04",
+          "I.T.T05",
+          "I.T.T06",
+          "I.T.T07",
+          "I.T.T08",
+          "I.T.T09",
+          "I.T.T10",
+          "I.T.T11",
+          "I.T.T12",
+          "I.T.T13",
+          "I.T.T14",
+          "I.T.T15",
+          "I.T.T16",
+          "I.T.T17",
+          "I.T.T18",
+          "I.T.T19",
+          "I.T.T20",
+          "I.T.T21",
+          "I.T.T22",
+          "I.T.T23",
+          "I.T.T24",
+          "I.T.T25",
+          "I.T.T26",
+          "I.T.T27",
+          "I.T.T28",
+          "I.T.T29",
+          "I.T.T30",
+          "I.T.T31",
+          "I.T.T32",
+          "I.T.T33",
+          "I.T.T34",
+          "I.T.T35",
+          "I.T.T36",
+          "I.T.T37",
+          "I.T.T38",
+          "I.T.T39",
+          "I.T.T40",
+          "I.T.T41",
+          "I.T.T42",
+          "I.T.T43",
+          "I.T.T44",
+          "I.T.T45",
+          "I.T.C45_GBDT",
+          "I.T.C47_GBDT",
+          "I.T.C47_IF",
+          "I.T.C48",
+          "I.T.C48_IF",
+          "I.T.C50_GB",
+          "I.T.C50_IF",
+          "I.N.NN03",
+          "I.N.NN04",
+          "I.N.NN05",
+          "I.N.NN06",
+          "I.N.NN07",
+          "I.N.NN11",
+          "I.N.NN12",
+          "I.N.NN14",
+          "I.N.NN16",
+          "I.N.NN20",
+          "I.N.NN24",
+          "I.N.NN25",
+          "I.N.NN26",
+          "I.N.NN27",
+          "I.N.NN28",
+          "I.N.NN29",
+          "I.N.NN31",
+          "I.N.NN32",
+          "I.N.NN33",
+          "I.N.NN34",
+          "I.N.NN35",
+          "I.N.NN36",
+          "I.N.NN37",
+          "I.N.NN38",
+          "I.N.NN39",
+          "I.N.NN40",
+          "I.N.NN42",
+          "I.N.NN43",
+          "I.N.NN44",
+          "I.N.NN45",
+          "I.N.NN46",
+          "I.N.NN47",
+          "I.N.NN48",
+          "I.N.NN49",
+          "I.N.NN50",
+          "I.N.NN51",
+          "I.N.NN52",
+          "I.N.NN53",
+          "I.N.NN54",
+          "I.N.NN55",
+          "I.N.NN56",
+          "I.N.NN57",
+          "I.N.NN58",
+          "I.N.NN59",
+          "I.N.NN60",
+          "I.N.NN62",
+          "I.N.NN63",
+          "I.N.NN64",
+          "I.N.NI06",
+          "I.N.NI07",
+          "I.N.NI09",
+          "I.N.NI10",
+          "I.N.NI11",
+          "I.N.NI14",
+          "I.N.NI15",
+          "I.N.NI16",
+          "I.N.NI17",
+          "I.N.NI18",
+          "I.N.NI26",
+          "I.N.NI27",
+          "I.N.NI36",
+          "I.N.NI42",
+          "I.N.NI46",
+          "I.N.NI47",
+          "I.N.NI48",
+          "I.N.NI49",
+          "I.N.NI52",
+          "I.N.NI54",
+          "I.N.NI57",
+          "I.N.NI58",
+          "I.N.NI59"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.combined.minus-C55",
+        "members": [
+          "I.N.NN02",
+          "I.C.C01",
+          "I.C.C02",
+          "I.C.C03",
+          "I.C.C04",
+          "I.C.C05",
+          "I.C.C06",
+          "I.C.C07",
+          "I.C.C08",
+          "I.C.C09",
+          "I.C.C10",
+          "I.C.C11",
+          "I.C.C12",
+          "I.C.C13",
+          "I.C.C14",
+          "I.C.C15",
+          "I.C.C16",
+          "I.C.C17",
+          "I.C.C18",
+          "I.C.C19",
+          "I.C.C20",
+          "I.C.C21",
+          "I.C.C22",
+          "I.C.C23",
+          "I.C.C24",
+          "I.C.C25",
+          "I.C.C26",
+          "I.C.C27",
+          "I.C.C28",
+          "I.C.C29",
+          "I.C.C30",
+          "I.C.C31",
+          "I.C.C32",
+          "I.C.C33",
+          "I.C.C34",
+          "I.C.C35",
+          "I.C.C36",
+          "I.C.C37",
+          "I.C.C38",
+          "I.C.C39",
+          "I.C.C40",
+          "I.C.C41",
+          "I.C.C42",
+          "I.C.C43",
+          "I.C.C44",
+          "I.C.C52",
+          "I.C.C53",
+          "I.C.C54",
+          "I.C.C55",
+          "I.C.C56",
+          "I.C.C57",
+          "I.C.C58",
+          "I.C.C59",
+          "I.C.C60",
+          "I.T.T01",
+          "I.T.T02",
+          "I.T.T03",
+          "I.T.T04",
+          "I.T.T05",
+          "I.T.T06",
+          "I.T.T07",
+          "I.T.T08",
+          "I.T.T09",
+          "I.T.T10",
+          "I.T.T11",
+          "I.T.T12",
+          "I.T.T13",
+          "I.T.T14",
+          "I.T.T15",
+          "I.T.T16",
+          "I.T.T17",
+          "I.T.T18",
+          "I.T.T19",
+          "I.T.T20",
+          "I.T.T21",
+          "I.T.T22",
+          "I.T.T23",
+          "I.T.T24",
+          "I.T.T25",
+          "I.T.T26",
+          "I.T.T27",
+          "I.T.T28",
+          "I.T.T29",
+          "I.T.T30",
+          "I.T.T31",
+          "I.T.T32",
+          "I.T.T33",
+          "I.T.T34",
+          "I.T.T35",
+          "I.T.T36",
+          "I.T.T37",
+          "I.T.T38",
+          "I.T.T39",
+          "I.T.T40",
+          "I.T.T41",
+          "I.T.T42",
+          "I.T.T43",
+          "I.T.T44",
+          "I.T.T45",
+          "I.T.C45_GBDT",
+          "I.T.C47_GBDT",
+          "I.T.C47_IF",
+          "I.T.C48",
+          "I.T.C48_IF",
+          "I.T.C50_GB",
+          "I.T.C50_IF",
+          "I.N.NN03",
+          "I.N.NN04",
+          "I.N.NN05",
+          "I.N.NN06",
+          "I.N.NN07",
+          "I.N.NN11",
+          "I.N.NN12",
+          "I.N.NN14",
+          "I.N.NN16",
+          "I.N.NN20",
+          "I.N.NN24",
+          "I.N.NN25",
+          "I.N.NN26",
+          "I.N.NN27",
+          "I.N.NN28",
+          "I.N.NN29",
+          "I.N.NN31",
+          "I.N.NN32",
+          "I.N.NN33",
+          "I.N.NN34",
+          "I.N.NN35",
+          "I.N.NN36",
+          "I.N.NN37",
+          "I.N.NN38",
+          "I.N.NN39",
+          "I.N.NN40",
+          "I.N.NN42",
+          "I.N.NN43",
+          "I.N.NN44",
+          "I.N.NN45",
+          "I.N.NN46",
+          "I.N.NN47",
+          "I.N.NN48",
+          "I.N.NN49",
+          "I.N.NN50",
+          "I.N.NN51",
+          "I.N.NN52",
+          "I.N.NN53",
+          "I.N.NN54",
+          "I.N.NN55",
+          "I.N.NN56",
+          "I.N.NN57",
+          "I.N.NN58",
+          "I.N.NN59",
+          "I.N.NN60",
+          "I.N.NN62",
+          "I.N.NN63",
+          "I.N.NN64",
+          "I.N.NI06",
+          "I.N.NI07",
+          "I.N.NI09",
+          "I.N.NI10",
+          "I.N.NI11",
+          "I.N.NI14",
+          "I.N.NI15",
+          "I.N.NI16",
+          "I.N.NI17",
+          "I.N.NI18",
+          "I.N.NI26",
+          "I.N.NI27",
+          "I.N.NI36",
+          "I.N.NI42",
+          "I.N.NI46",
+          "I.N.NI47",
+          "I.N.NI48",
+          "I.N.NI49",
+          "I.N.NI52",
+          "I.N.NI54",
+          "I.N.NI57",
+          "I.N.NI58",
+          "I.N.NI59"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
+        "receipts": []
+      },
+      {
+        "id": "T.combined.reproduction",
+        "members": [
+          "I.N.NN02",
+          "I.C.C01",
+          "I.C.C02",
+          "I.C.C03",
+          "I.C.C04",
+          "I.C.C05",
+          "I.C.C06",
+          "I.C.C07",
+          "I.C.C08",
+          "I.C.C09",
+          "I.C.C10",
+          "I.C.C11",
+          "I.C.C12",
+          "I.C.C13",
+          "I.C.C14",
+          "I.C.C15",
+          "I.C.C16",
+          "I.C.C17",
+          "I.C.C18",
+          "I.C.C19",
+          "I.C.C20",
+          "I.C.C21",
+          "I.C.C22",
+          "I.C.C23",
+          "I.C.C24",
+          "I.C.C25",
+          "I.C.C26",
+          "I.C.C27",
+          "I.C.C28",
+          "I.C.C29",
+          "I.C.C30",
+          "I.C.C31",
+          "I.C.C32",
+          "I.C.C33",
+          "I.C.C34",
+          "I.C.C35",
+          "I.C.C36",
+          "I.C.C37",
+          "I.C.C38",
+          "I.C.C39",
+          "I.C.C40",
+          "I.C.C41",
+          "I.C.C42",
+          "I.C.C43",
+          "I.C.C44",
+          "I.C.C52",
+          "I.C.C53",
+          "I.C.C54",
+          "I.C.C55",
+          "I.C.C56",
+          "I.C.C57",
+          "I.C.C58",
+          "I.C.C59",
+          "I.C.C60",
+          "I.T.T01",
+          "I.T.T02",
+          "I.T.T03",
+          "I.T.T04",
+          "I.T.T05",
+          "I.T.T06",
+          "I.T.T07",
+          "I.T.T08",
+          "I.T.T09",
+          "I.T.T10",
+          "I.T.T11",
+          "I.T.T12",
+          "I.T.T13",
+          "I.T.T14",
+          "I.T.T15",
+          "I.T.T16",
+          "I.T.T17",
+          "I.T.T18",
+          "I.T.T19",
+          "I.T.T20",
+          "I.T.T21",
+          "I.T.T22",
+          "I.T.T23",
+          "I.T.T24",
+          "I.T.T25",
+          "I.T.T26",
+          "I.T.T27",
+          "I.T.T28",
+          "I.T.T29",
+          "I.T.T30",
+          "I.T.T31",
+          "I.T.T32",
+          "I.T.T33",
+          "I.T.T34",
+          "I.T.T35",
+          "I.T.T36",
+          "I.T.T37",
+          "I.T.T38",
+          "I.T.T39",
+          "I.T.T40",
+          "I.T.T41",
+          "I.T.T42",
+          "I.T.T43",
+          "I.T.T44",
+          "I.T.T45",
+          "I.T.C45_GBDT",
+          "I.T.C47_GBDT",
+          "I.T.C47_IF",
+          "I.T.C48",
+          "I.T.C48_IF",
+          "I.T.C50_GB",
+          "I.T.C50_IF",
+          "I.N.NN03",
+          "I.N.NN04",
+          "I.N.NN05",
+          "I.N.NN06",
+          "I.N.NN07",
+          "I.N.NN11",
+          "I.N.NN12",
+          "I.N.NN14",
+          "I.N.NN16",
+          "I.N.NN20",
+          "I.N.NN24",
+          "I.N.NN25",
+          "I.N.NN26",
+          "I.N.NN27",
+          "I.N.NN28",
+          "I.N.NN29",
+          "I.N.NN31",
+          "I.N.NN32",
+          "I.N.NN33",
+          "I.N.NN34",
+          "I.N.NN35",
+          "I.N.NN36",
+          "I.N.NN37",
+          "I.N.NN38",
+          "I.N.NN39",
+          "I.N.NN40",
+          "I.N.NN42",
+          "I.N.NN43",
+          "I.N.NN44",
+          "I.N.NN45",
+          "I.N.NN46",
+          "I.N.NN47",
+          "I.N.NN48",
+          "I.N.NN49",
+          "I.N.NN50",
+          "I.N.NN51",
+          "I.N.NN52",
+          "I.N.NN53",
+          "I.N.NN54",
+          "I.N.NN55",
+          "I.N.NN56",
+          "I.N.NN57",
+          "I.N.NN58",
+          "I.N.NN59",
+          "I.N.NN60",
+          "I.N.NN62",
+          "I.N.NN63",
+          "I.N.NN64",
+          "I.N.NI06",
+          "I.N.NI07",
+          "I.N.NI09",
+          "I.N.NI10",
+          "I.N.NI11",
+          "I.N.NI14",
+          "I.N.NI15",
+          "I.N.NI16",
+          "I.N.NI17",
+          "I.N.NI18",
+          "I.N.NI26",
+          "I.N.NI27",
+          "I.N.NI36",
+          "I.N.NI42",
+          "I.N.NI46",
+          "I.N.NI47",
+          "I.N.NI48",
+          "I.N.NI49",
+          "I.N.NI52",
+          "I.N.NI54",
+          "I.N.NI57",
+          "I.N.NI58",
+          "I.N.NI59"
+        ],
+        "attempts": 0,
+        "complete_pairs": 0,
+        "quality_failed": 0,
+        "status": "PENDING_MEASUREMENT",
         "receipts": []
       }
     ]

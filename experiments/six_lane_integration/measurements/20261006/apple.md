@@ -123,23 +123,26 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 ## Campaign notes
 
 - A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.
-- These are combined-configuration full workloads, not completed individual constituent experiments.
+- Complete-proposed receipts measure combined configurations. Additional exact selection IDs identify isolated or interaction/dropout profiles; no result automatically credits its members.
 - Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.
 - One excluded warmup and one scored sample per arm. Original failed attempts are retained.
-- AMD GPU measurements use accepted retained artifacts. Latest owner instruction forbids further compilation; unavailable paired artifacts remain blocked. NVIDIA PTX still awaits compatible artifacts.
+- The original AMD campaign used accepted retained artifacts and then stopped compilation. That dated stop is historical; later targeted build authorization and readiness belong to their own source freeze. No publisher action compiles, launches jobs or promotes defaults.
 - IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.
 - Scored output and partial/public-save model hashes are retained separately; partial hashes do not prove complete state identity.
 - Apple first four PCA/OLS pairs overlapped shared workspace storage data transfer; KMeans overlap unestablished. No quiet-storage or promotion claim.
 - Apple teardown preservation failed: the workspace was on the internal SSD, not retained EBS. Logs, timings, metrics and hash receipts survive; some raw array bytes remain unrecovered. See artifact-retention.json for exact recovery coverage and provenance. Original receipts are unchanged.
 - Races reuse accepted binaries without separate numerical verification reruns. Earlier separately authorized AMD builds are historical artifact evidence, not measurements. Full provider and worker logs remain under /Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006
 - R2 storage reconciliation: 0 new current-campaign measurements found in the recorded search. Storage locations, fetched archive hashes, historical comparisons and search limitations are retained in storage-reconciliation.json. Older medium/component results do not fill full-workload candidate gaps.
-- The AMD missing-artifact compiler was stopped under the latest owner instruction; see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready.
+- Historical AMD missing-artifact compiler stop: see compilation-stopped.json. Accepted completed binaries remain reusable; interrupted/unbuilt jobs do not count as ready. Later targeted compilation has its own authorization and freeze.
 - scored-hash-coverage.json is a dated, hash-bound metadata audit of captured scored outputs and model states. Complete output hashes do not establish complete fitted-model identity; missing model state remains pending.
 - Source-only review of NVIDIA GaussianNB Taxi and LDA Istella retains both combined-configuration quality failures: no implementation or harness bug established. Changed C55 reduction order is a source-supported explanation, not isolated causal proof. Unexercised controls and individual alternatives remain pending; see nvidia-nb-lda-source-diagnosis.json.
 - Apple source-only review retains QR combined-configuration quality failures; no concrete implementation defect or isolated L09 regression was established. Resampling A and B have equal saved quality and both fail the opponent quality requirement; this does not establish a new P10 regression. Original evidence and missing-array limitations remain explicit. See apple-qr-resample-source-diagnosis.json.
 - Full Taxi GMM refused both candidate and incumbent before scoring. Source-only review found no established implementation or harness defect; retain the incomplete pair and original failures, with zero scored samples and no candidate win/loss decision. See nvidia-gmm-taxi-source-diagnosis.json.
 - LassoCV and ElasticNetCV Taxi retain combined-configuration quality failures on NVIDIA and AMD. Source-only review does not establish an implementation defect or isolate a control; saved quality failures cannot promote these defaults. See cv-taxi-source-diagnosis.json.
 - Saved same-arm AMD/NVIDIA output comparison: 84 matched workloads; primary counts {"AGREE": 168}, repeated counts {"AGREE": 168}. Full identity counts {"INCOMPLETE": 84, "MATCH": 0, "MISMATCH": 0, "NOT_REQUIRED": 0}. These are saved-signature comparisons, not new model runs or default admission; unmatched and failed arms are retained in same-arm-output-comparison.json and its snapshot.
+- Targeted queue uses one immutable source freeze with deduplicated builds; 106 profiles and 1540 planned paired vendor/workload cells, all pending execution. Missing recipes and control blockers remain explicit; no claim of all-algorithm coverage.
+- CPU/GPU workers use sixty-minute idle retention after all assigned queued work finishes and verified off-machine preservation. No numerical default was changed by this planning publication.
+- Targeted continuations: 106 additional exact profiles; 0 have receipts. See continuation-coverage.json for members and pending scope, and publication-continuations.json for exact plan/review snapshots and missing inputs. The catalog coverage ledger counts authored catalog IDs only; it does not relabel targeted profile IDs as catalog receipts.
 
 ## Recorded source decisions
 
@@ -170,8 +173,9 @@ These are not completed measurements and have no inferred timing. This summary d
 | Scope | Status / reason | Evidence |
 |---|---|---|
 | Apple FAST LogReg/LinearSVC × Taxi/Istella | 0/4 pairs completed; BLOCKED_ALLOCATE_HOSTS_UNCONDITIONAL_SCP_DENY; freeze 779cd5453425139e00229fb99cfa4ec852d7677c. Original launch-tag error and released-host evidence are retained. | campaign-coverage.json: apple_pending |
-| Individual candidates, alternative arms and other affected workloads | This campaign measured complete-proposed combinations, not every individual catalog entry. Missing recipes, incompatible artifacts and untested interactions remain pending; do not infer constituent winners. | experiments/six_lane_integration/catalog.json |
+| Individual candidates, alternative arms and other affected workloads | Only exact recorded selections have receipts. Missing recipes, incompatible artifacts and untested interactions remain pending; combined results do not decide constituents. | experiments/six_lane_integration/catalog.json |
 | Apple FAST MLP classifier/regressor × Taxi/Istella | 4 additional pending pairs; No retained accepted Apple FAST x_sequence pair; IDENTICAL cannot substitute | campaign-coverage.json: apple_readiness |
+| Continuation targeted-ab-20261007 | Pending sources/inputs: /Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json | publication-continuations.json |
 
 ## Failed or quality-rejected attempts
 
