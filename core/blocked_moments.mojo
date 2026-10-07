@@ -294,7 +294,7 @@ def bm_sum_level_kernel(
         rem.unsafe_store(Int(level_in) * cells + c, src.unsafe_load(2 * p * cells + c))
 
 
-def bm_sum_final_kernel(out: BmPtr, rem: BmPtr, cells_in: Int32, mask_in: Int32, divisor_in: Int32):
+def bm_sum_final_kernel(dst: BmPtr, rem: BmPtr, cells_in: Int32, mask_in: Int32, divisor_in: Int32):
     """Remainders right to left (`rem[L] + acc`, ascending L); then `/ divisor`
     when `divisor > 0`."""
     var cells = Int(cells_in)
@@ -311,7 +311,7 @@ def bm_sum_final_kernel(out: BmPtr, rem: BmPtr, cells_in: Int32, mask_in: Int32,
             have = True
     if Int(divisor_in) > 0:
         acc = bm_div(acc, Float32(Int(divisor_in)))
-    out.unsafe_store(c, acc)
+    dst.unsafe_store(c, acc)
 
 
 @always_inline
@@ -423,9 +423,9 @@ def _grid(total: Int) -> Int:
 
 def bm_sum_fold(
     ctx: DeviceContext, mut part: DeviceBuffer[DType.float32], leaves: Int, cells: Int,
-    out: BmPtr, divisor: Int,
+    dst: BmPtr, divisor: Int,
 ) raises:
-    """`out[c]` = the binary-counter fold of `part[k * cells + c]` over
+    """`dst[c]` = the binary-counter fold of `part[k * cells + c]` over
     `leaves` leaves (then `/ divisor` when `divisor > 0`). `part` is
     overwritten."""
     var ws = ctx.enqueue_create_buffer[DType.float32](max(1, (leaves // 2) * cells))
@@ -447,7 +447,7 @@ def bm_sum_fold(
         level += 1
         flip = not flip
     ctx.enqueue_function[bm_sum_final_kernel](
-        out, _bp(rem), Int32(cells), Int32(mask), Int32(divisor),
+        dst, _bp(rem), Int32(cells), Int32(mask), Int32(divisor),
         grid_dim=_grid(cells), block_dim=BM_TPB,
     )
     ctx.synchronize()
@@ -519,9 +519,9 @@ def bm_column_mean(ctx: DeviceContext, mu: BmPtr, x: BmPtr, n: Int, d: Int) rais
 
 
 def bm_centered_gram_panels(
-    ctx: DeviceContext, out: BmPtr, x: BmPtr, center: BmPtr, n: Int, d: Int, leaf: Int,
+    ctx: DeviceContext, dst: BmPtr, x: BmPtr, center: BmPtr, n: Int, d: Int, leaf: Int,
 ) raises:
-    """`out[i * d + j]` = sum over rows of (x_ri - c_i)(x_rj - c_j), the
+    """`dst[i * d + j]` = sum over rows of (x_ri - c_i)(x_rj - c_j), the
     centered (unscaled) Gram around one given center, in leaves of `leaf`
     rows folded by the binary counter: the value of the per-cell reference
     cells (`x_decomp/classical_cells.mojo::centered_gram_cell` at leaf 256,
@@ -535,7 +535,7 @@ def bm_centered_gram_panels(
         # no rows: every cell is +0.0 (the reference cells' empty answer);
         # the final kernel with an empty mask writes exactly that
         ctx.enqueue_function[bm_sum_final_kernel](
-            out, out, Int32(cells), Int32(0), Int32(0),
+            dst, dst, Int32(cells), Int32(0), Int32(0),
             grid_dim=_grid(cells), block_dim=BM_TPB,
         )
         ctx.synchronize()
@@ -547,7 +547,7 @@ def bm_centered_gram_panels(
         Int32(n), Int32(d), Int32(leaf), Int32(tiles), Int32(0),
         grid_dim=(leaves, tiles * (tiles + 1) // 2, 1), block_dim=BM_TPB,
     )
-    bm_sum_fold(ctx, part, leaves, cells, out, 0)
+    bm_sum_fold(ctx, part, leaves, cells, dst, 0)
     _ = part^
 
 
