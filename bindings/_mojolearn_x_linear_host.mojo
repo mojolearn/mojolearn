@@ -4,7 +4,8 @@
 HOST ONLY: the GPU binding's export names and address contract, running the
 same x_linear/ source (`fit_dispatch`, `decision_one`) directly on the CPU."""
 from std.os import abort
-from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
+from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS, ENETCV_FOLD_BLOCKS
+from x_linear.enetcv_blocks import fb_host_words
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -109,6 +110,9 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     var fpl = List[Float32](capacity=max(n_fp, 1))
     for i in range(n_fp):
         fpl.append(Float32(Float64(py=fp[i])))
+    comptime if ENETCV_FOLD_BLOCKS:
+        if Int(py=algo) == 9 and n_ip >= 4:
+            n_fw += fb_host_words(d, Int(ipl[3]))
     comptime if C13_LOGCV_WEIGHTS:
         if Int(py=algo) == ALGO_LOGCV:
             n_fw += Int(ipl[4]) + 1

@@ -7,6 +7,7 @@ Absence preserves the incumbent; measurements do not imply default promotion.
 Numerical profiles are shared by the host and all three device columns.
 """
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime CLASSICAL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -34,6 +35,16 @@ comptime C13_FOLD_STATS = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_
 # The LassoCV/ElasticNetCV fold cache (C13_CD_FOLD_STATS) was deleted on
 # lane/classical-cv (2026-10-07): T.C13.only measured it 4.0x/1.4x slower on
 # Taxi and quality-failing on both vendors (row in docs/apple-fast/EXPERIMENTS.md).
+# lane/classical-cv (2026-10-07), NEW, opt-in, NOT MEASURED: LassoCV /
+# ElasticNetCV fold statistics from fold-aligned compensated block partials
+# (x_linear/enetcv_blocks.mojo). Each fold's row span is cut into
+# ENETCV_FB_CHUNKS chunks (one switch, arms = chunks per fold 16|32|64, a
+# fixed count, not a data shape); every row is read once per pass, each
+# chunk's sums are compensated (TwoSum / Dot2), chunks merge ascending, and
+# the training sets combine fold statistics ascending by the parallel-axis
+# rule. Changes bits (host column and both GPU vendors together).
+comptime ENETCV_FOLD_BLOCKS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS"]()
+comptime ENETCV_FB_CHUNKS = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS", 32]() if ENETCV_FOLD_BLOCKS else 32
 comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_GROUP_RHS"]()
 comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"]()
 comptime C16_GLM_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C16_GLM_FUSED"]()
