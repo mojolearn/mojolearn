@@ -32,6 +32,9 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
   compile instead: read the call path and Mojo syntax carefully, keep each switch's code self-contained, and list in its
   final reply every binding the orchestrator must build.
 - **Orchestrator compiles go through the slot semaphore:** `bash ~/mojolearn-evidence/compile_slot.sh <command>`. It allows 4 compiles machine-wide at `nice -n 19`. Use `-j 1` and `MOJOLEARN_COMPILE_JOBS=1`.
+- **Never `git push --no-verify`.** The pre-push host-route fence judges a branch push only on what the branch adds over
+  its merge-base with main (`--branch` mode); main's own findings are main's to fix and never block a lane. A push to main
+  is judged on the whole tree. If main itself is red, fix main first (Andrew, 2026-10-07).
 - **One worktree per lane:** `~/mojolearn-wt/<lane>` on branch `lane/<lane>`. Commit after every edit and push often, because a crash or reboot loses anything uncommitted. Never `git stash`, rebase, `reset --hard` or `checkout --` someone else's edits.
   - A lane that doesn't read old evidence can use `tools/lean_worktree.sh ~/mojolearn-wt/<lane> lane/<lane>`: a sparse worktree without `bench/results/` except the canonical board dir.
 - **Nothing in `/private/tmp`.** It's wiped on reboot. Keep briefs, notes and scripts in the worktree or `~/mojolearn-evidence/`.

@@ -6,11 +6,16 @@ parallel (Andrew, Oct 1-2 2026). The CPU is only for CPU-only installs,
 MOJOLEARN_VENDOR=cpu verification digests and inference.
 
 Modes:
-    no_host_routes.py --tree REF [--baseline FILE]
+    no_host_routes.py --tree REF [--baseline FILE] [--branch]
         Scan EVERY file of REF that a GPU install runs. Fail on any finding
         that is not in the baseline, and on any baseline row that no longer
         matches (the baseline only shrinks). Prints the debt per class and
         per owner. This is what the pre-push hook and the GitHub check run.
+        --branch (the pre-push hook passes it for every ref except main):
+        findings already in merge-base(origin/main, REF) are main's, not the
+        branch's, and are reported but not refused. A push to main is always
+        judged on the whole tree (Andrew, 2026-10-07: 15 findings that reached
+        main refused every unrelated lane push for hours).
     no_host_routes.py --prune-baseline [REF]
         Rewrite REF's baseline (default HEAD, the worktree file) without its
         stale rows, and flip in-flight rows whose code is now in the tree to
@@ -1435,8 +1440,8 @@ def _baseline_text(ref, explicit):
     return "", False
 
 
-def check_tree(ref, baseline_path=None, overlay=None, quiet=False):
-    """0 clean, 1 new findings or stale rows."""
+def check_tree(ref, baseline_path=None, overlay=None, quiet=False, branch=False):
+    """0 clean, 1 new findings or stale rows. branch: main's own findings are not charged."""
     btext, own = _baseline_text(ref, baseline_path)
     rows = load_baseline(btext)
     tree = Tree(ref, overlay)
@@ -1450,7 +1455,25 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False):
     # written before the rule) is judged like a tree that predates the
     # baseline, for that rule only: what the branch adds over its merge-base
     late = {r for r in _LATE_RULES if not any(x["rule"] == r for x in rows)} if own else set()
-    if not own or late:
+    if branch:
+        # a branch push is judged on what it adds: findings already in its
+        # merge-base with main belong to main (and are refused on main's push)
+        mb = _git("merge-base", "refs/remotes/origin/main", ref)
+        if mb.returncode != 0:
+            mb = _git("merge-base", "origin/main", ref)
+        if mb.returncode == 0:
+            base_found = [(k, no) for k, no in tree_findings(Tree(mb.stdout.strip()))
+                          if k[0] not in _OWED_RULES]
+            base_debt = collections.Counter(_key(r) for r in rows if r["state"] in _DEBT_STATES)
+            for k, _ in base_found:
+                if base_debt[k] > 0:
+                    base_debt[k] -= 1
+                else:
+                    allowed_extra[k] += 1
+            if allowed_extra and not quiet:
+                print(f"no-host-routes: {sum(allowed_extra.values())} finding(s) already on main "
+                      "are main's to fix, not charged to this branch", file=sys.stderr)
+    elif not own or late:
         # the tree predates the baseline: judge only what the branch adds over
         # its merge-base with main (main's later fixes are not charged to it)
         mb = _git("merge-base", "refs/remotes/origin/main", ref)
@@ -1689,7 +1712,7 @@ def main(argv):
         bl = None
         if "--baseline" in args:
             bl = args[args.index("--baseline") + 1]
-        return check_tree(ref, bl)
+        return check_tree(ref, bl, branch="--branch" in args)
     if args[:1] == ["--prune-baseline"]:
         return prune_baseline(args[1] if len(args) > 1 else "HEAD")
     if args[:1] == ["--owed"]:

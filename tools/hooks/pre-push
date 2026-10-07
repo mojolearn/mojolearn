@@ -31,7 +31,11 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     # salvage/* refs are archives of old worktrees (owner, 2026-10-05): never merged as is, so no host-route
     # check; the size fence below still applies.
     case "$remote_ref" in refs/heads/salvage/*) continue ;; refs/heads/*) ;; *) continue ;; esac
-    python3 "$here/no_host_routes.py" --tree "$local_sha" || exit 4
+    # a push to main is judged on the whole tree; any other branch only on what
+    # it adds over its merge-base with main (owner, 2026-10-07)
+    mode=--branch
+    [ "$remote_ref" = "refs/heads/main" ] && mode=
+    python3 "$here/no_host_routes.py" --tree "$local_sha" $mode || exit 4
 done
 [ $? -eq 4 ] && bad=1
 echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
