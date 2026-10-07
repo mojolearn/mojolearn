@@ -766,7 +766,8 @@
    ],
    "board": "mamba3-forward, samba-*",
    "tags": [],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
+   "note": "bits_change not re-assessed by L11 (unchanged switch)",
+   "reach_note": "Declared for samba-forward and samba-train-step by lane/grid-prune 2026-10-07: samba layers are mamba3/attention (python/mojolearn/_samba_impl.py:55) and run mamba3_siso.mojo, where m3_angle_parallel is already declared for samba."
   },
   "m1_elementwise_fused": {
    "define": "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED",

@@ -391,7 +391,8 @@
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4"
+    "gemm_kpack_rpt4",
+    "m3_yintra_tile"
    ],
    "interaction_groups": [
     [
@@ -426,7 +427,8 @@
     "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
-    "gemm_kpack_rpt4"
+    "gemm_kpack_rpt4",
+    "m3_yintra_tile"
    ],
    "interaction_groups": [
     [
