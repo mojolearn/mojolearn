@@ -2041,7 +2041,6 @@
   {
    "B_builds": [
     "6cc82e7c19ec66b24aff",
-    "f245e856a5669f27d4a9",
     "26d3f23dfb1323b9680f"
    ],
    "algorithm": "neural:samba-forward",
@@ -2052,7 +2051,6 @@
   {
    "B_builds": [
     "bb7f5c6d7347a46156aa",
-    "f734527f36b07372a42b",
     "39edf692d437c7138fb5"
    ],
    "algorithm": "neural:samba-forward",
@@ -14635,6 +14633,18 @@
    ],
    "cross_groups": [
     {
+     "duplicates": 0,
+     "members": [
+      "attn_softmax",
+      "attn_v2_tq",
+      "attn_tile_order",
+      "attn_fwd_tq_rule"
+     ],
+     "new_configs": 18,
+     "note": null,
+     "product": 36
+    },
+    {
      "duplicates": 6,
      "members": [
       "neural_gemm_schedule",
@@ -14657,14 +14667,14 @@
      "product": 6
     },
     {
-     "duplicates": 2,
+     "duplicates": 14,
      "members": [
       "attn_tile_order",
       "attn_fwd_tq_rule",
       "attn_softmax",
       "attn_scale_mask"
      ],
-     "new_configs": 27,
+     "new_configs": 15,
      "note": null,
      "product": 36
     },
@@ -14696,6 +14706,7 @@
     }
    ],
    "declared_controls": [
+    "attn_v2_tq",
     "neural_gemm_schedule",
     "neural_gemm_schedule_roles",
     "gemm_leaf",
@@ -15015,6 +15026,157 @@
    ],
    "deferred_groups": [
     {
+     "configs": 18,
+     "listed": [
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-forward.attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-forward.attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree"
+       },
+       "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32"
+       },
+       "id": "G.neural:lm-forward.attn_softmax=online_tile32+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-forward.attn_softmax=online_tile32+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-forward.attn_softmax=online_tile32+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:lm-forward.attn_v2_tq=64+attn_softmax=online_tile32"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:lm-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:lm-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:lm-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:lm-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:lm-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      }
+     ],
+     "listed_truncated": false,
+     "members": [
+      "attn_softmax",
+      "attn_v2_tq",
+      "attn_tile_order",
+      "attn_fwd_tq_rule"
+     ],
+     "product": 36,
+     "reason": "group cross (18 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+    },
+    {
      "configs": 440,
      "listed": [
       {
@@ -15312,7 +15474,7 @@
      "reason": "group cross (2 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
-     "configs": 27,
+     "configs": 15,
      "listed": [
       {
        "assignment": {
@@ -15324,24 +15486,10 @@
       {
        "assignment": {
         "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree"
-       },
-       "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
         "attn_scale_mask": "on",
         "attn_softmax": "summary_tree"
        },
        "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_scale_mask=on+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32"
-       },
-       "id": "G.neural:lm-forward.attn_softmax=online_tile32+attn_fwd_tq_rule=on"
       },
       {
        "assignment": {
@@ -15360,25 +15508,11 @@
       },
       {
        "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_tile_order=asc"
-      },
-      {
-       "assignment": {
         "attn_scale_mask": "on",
         "attn_softmax": "summary_tree",
         "attn_tile_order": "asc"
        },
        "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_scale_mask=on+attn_tile_order=asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:lm-forward.attn_softmax=online_tile32+attn_tile_order=asc"
       },
       {
        "assignment": {
@@ -15391,25 +15525,10 @@
       {
        "assignment": {
         "attn_fwd_tq_rule": "on",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:lm-forward.attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
         "attn_scale_mask": "on",
         "attn_tile_order": "asc"
        },
        "id": "G.neural:lm-forward.attn_scale_mask=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_tile_order=asc+attn_fwd_tq_rule=on"
       },
       {
        "assignment": {
@@ -15419,14 +15538,6 @@
         "attn_tile_order": "asc"
        },
        "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_scale_mask=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:lm-forward.attn_softmax=online_tile32+attn_tile_order=asc+attn_fwd_tq_rule=on"
       },
       {
        "assignment": {
@@ -15446,25 +15557,11 @@
       },
       {
        "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "zdot_asc"
-       },
-       "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc"
-      },
-      {
-       "assignment": {
         "attn_scale_mask": "on",
         "attn_softmax": "summary_tree",
         "attn_tile_order": "zdot_asc"
        },
        "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_scale_mask=on+attn_tile_order=zdot_asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "zdot_asc"
-       },
-       "id": "G.neural:lm-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc"
       },
       {
        "assignment": {
@@ -15477,25 +15574,10 @@
       {
        "assignment": {
         "attn_fwd_tq_rule": "on",
-        "attn_tile_order": "zdot_asc"
-       },
-       "id": "G.neural:lm-forward.attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
         "attn_scale_mask": "on",
         "attn_tile_order": "zdot_asc"
        },
        "id": "G.neural:lm-forward.attn_scale_mask=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "zdot_asc"
-       },
-       "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
       },
       {
        "assignment": {
@@ -15505,14 +15587,6 @@
         "attn_tile_order": "zdot_asc"
        },
        "id": "G.neural:lm-forward.attn_softmax=summary_tree+attn_scale_mask=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "zdot_asc"
-       },
-       "id": "G.neural:lm-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
       },
       {
        "assignment": {
@@ -15532,7 +15606,7 @@
       "attn_scale_mask"
      ],
      "product": 36,
-     "reason": "group cross (27 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+     "reason": "group cross (15 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
      "configs": 42,
@@ -16050,6 +16124,13 @@
    },
    "dropped_from_all_on": [
     {
+     "arm": "64",
+     "control": "attn_v2_tq",
+     "problems": [
+      "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)"
+     ]
+    },
+    {
      "arm": "4",
      "control": "neural_gemm_ozaki_slices",
      "problems": [
@@ -16060,6 +16141,7 @@
     }
    ],
    "eligible_controls": [
+    "attn_v2_tq",
     "neural_gemm_schedule",
     "neural_gemm_schedule_roles",
     "gemm_leaf",
@@ -16081,10 +16163,17 @@
    ],
    "excluded": [],
    "files": [
+    "attention-tiled-v2",
     "neural-gemm-attn-dedupe",
     "neural-small"
    ],
    "interaction_groups": [
+    [
+     "attn_softmax",
+     "attn_v2_tq",
+     "attn_tile_order",
+     "attn_fwd_tq_rule"
+    ],
     [
      "neural_gemm_schedule",
      "neural_gemm_schedule_roles",
@@ -16128,11 +16217,25 @@
      "tiers": [
       "cross"
      ]
+    },
+    {
+     "count": 7,
+     "examples": [
+      "attn_v2_tq=64+attn_softmax=summary_tree",
+      "attn_v2_tq=64+attn_softmax=summary_tree",
+      "attn_v2_tq=64+attn_softmax=summary_tree+attn_fwd_tq_rule=on"
+     ],
+     "problem": "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)",
+     "tiers": [
+      "single",
+      "cross"
+     ]
     }
    ],
    "mapping_notes": [],
    "notes": [],
    "parents": {
+    "attn_v2_tq": "attn_softmax",
     "neural_gemm_schedule_roles": "neural_gemm_schedule"
    },
    "raw_ids": [
@@ -16143,6 +16246,7 @@
     "attn_scale_mask": "on",
     "attn_softmax": "summary_tree",
     "attn_tile_order": "asc",
+    "attn_v2_tq": "64",
     "gemm_fs2": "on",
     "gemm_kpack_rpt4": "on",
     "gemm_leaf": "neural128",
@@ -16491,6 +16595,19 @@
    ],
    "cross_groups": [
     {
+     "duplicates": 0,
+     "members": [
+      "attn_softmax",
+      "attn_v2_tq",
+      "attn_tile_order",
+      "attn_fwd_tq_rule",
+      "attn_stash"
+     ],
+     "new_configs": 87,
+     "note": null,
+     "product": 144
+    },
+    {
      "duplicates": 6,
      "members": [
       "ce_denom_rowfold",
@@ -16538,13 +16655,13 @@
      "product": 27
     },
     {
-     "duplicates": 0,
+     "duplicates": 6,
      "members": [
       "attn_softmax",
       "attn_scale_mask",
       "attn_stash"
      ],
-     "new_configs": 17,
+     "new_configs": 11,
      "note": null,
      "product": 24
     },
@@ -16599,7 +16716,7 @@
      "product": 6
     },
     {
-     "duplicates": 17,
+     "duplicates": 74,
      "members": [
       "attn_tile_order",
       "attn_fwd_tq_rule",
@@ -16608,7 +16725,7 @@
       "attn_stash",
       "attn_scale_mask"
      ],
-     "new_configs": 188,
+     "new_configs": 131,
      "note": null,
      "product": 288
     },
@@ -16640,6 +16757,7 @@
     }
    ],
    "declared_controls": [
+    "attn_v2_tq",
     "ce_denom_rowfold",
     "neural_gemm_schedule",
     "neural_gemm_schedule_roles",
@@ -17177,6 +17295,264 @@
     }
    ],
    "deferred_groups": [
+    {
+     "configs": 87,
+     "listed": [
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "recompute"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=recompute+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "packed"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=packed+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "alias_y"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=alias_y+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_stash": "recompute",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=recompute+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_stash": "packed",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=packed+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_stash": "alias_y",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=alias_y+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "recompute",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=recompute+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "packed",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=packed+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "alias_y",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=alias_y+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_stash": "recompute",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=recompute+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_stash": "packed",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=packed+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_stash": "alias_y",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=alias_y+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-train-step.attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "recompute",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=recompute+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "packed",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=packed+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "alias_y",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:lm-train-step.attn_stash=alias_y+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "recompute"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=recompute"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "packed"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=packed"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "alias_y"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=alias_y"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "recompute"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "packed"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "alias_y"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "recompute",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "packed",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "alias_y",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "recompute",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "packed",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "alias_y",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      }
+     ],
+     "listed_truncated": true,
+     "members": [
+      "attn_softmax",
+      "attn_v2_tq",
+      "attn_tile_order",
+      "attn_fwd_tq_rule",
+      "attn_stash"
+     ],
+     "product": 144,
+     "reason": "group cross (87 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+    },
     {
      "configs": 186,
      "listed": [
@@ -17886,7 +18262,7 @@
      "reason": "group cross (16 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
-     "configs": 17,
+     "configs": 11,
      "listed": [
       {
        "assignment": {
@@ -17908,27 +18284,6 @@
         "attn_stash": "alias_y"
        },
        "id": "G.neural:lm-train-step.attn_stash=alias_y+attn_scale_mask=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "recompute"
-       },
-       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=recompute"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "packed"
-       },
-       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=packed"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "alias_y"
-       },
-       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=alias_y"
       },
       {
        "assignment": {
@@ -17960,27 +18315,6 @@
         "attn_stash": "alias_y"
        },
        "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_scale_mask=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "recompute"
-       },
-       "id": "G.neural:lm-train-step.attn_softmax=online_tile32+attn_stash=recompute"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "packed"
-       },
-       "id": "G.neural:lm-train-step.attn_softmax=online_tile32+attn_stash=packed"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "alias_y"
-       },
-       "id": "G.neural:lm-train-step.attn_softmax=online_tile32+attn_stash=alias_y"
       },
       {
        "assignment": {
@@ -18021,7 +18355,7 @@
       "attn_stash"
      ],
      "product": 24,
-     "reason": "group cross (17 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+     "reason": "group cross (11 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
      "configs": 2,
@@ -18177,7 +18511,7 @@
      "reason": "group cross (2 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
-     "configs": 188,
+     "configs": 131,
      "listed": [
       {
        "assignment": {
@@ -18373,24 +18707,10 @@
       {
        "assignment": {
         "attn_fwd_tq_rule": "on",
-        "attn_stash": "recompute"
-       },
-       "id": "G.neural:lm-train-step.attn_stash=recompute+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
         "attn_scale_mask": "on",
         "attn_stash": "recompute"
        },
        "id": "G.neural:lm-train-step.attn_stash=recompute+attn_scale_mask=on+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_stash": "packed"
-       },
-       "id": "G.neural:lm-train-step.attn_stash=packed+attn_fwd_tq_rule=on"
       },
       {
        "assignment": {
@@ -18403,13 +18723,6 @@
       {
        "assignment": {
         "attn_fwd_tq_rule": "on",
-        "attn_stash": "alias_y"
-       },
-       "id": "G.neural:lm-train-step.attn_stash=alias_y+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
         "attn_scale_mask": "on",
         "attn_stash": "alias_y"
        },
@@ -18418,17 +18731,45 @@
       {
        "assignment": {
         "attn_fwd_tq_rule": "on",
+        "attn_scale_mask": "on",
         "attn_softmax": "summary_tree"
        },
-       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_fwd_tq_rule=on"
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_scale_mask=on+attn_fwd_tq_rule=on"
       },
       {
        "assignment": {
         "attn_fwd_tq_rule": "on",
         "attn_scale_mask": "on",
-        "attn_softmax": "summary_tree"
+        "attn_softmax": "summary_tree",
+        "attn_stash": "recompute"
        },
-       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_scale_mask=on+attn_fwd_tq_rule=on"
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_scale_mask=on+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_scale_mask": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "packed"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_scale_mask=on+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_scale_mask": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "alias_y"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_scale_mask=on+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_scale_mask": "on",
+        "attn_softmax": "online_tile32"
+       },
+       "id": "G.neural:lm-train-step.attn_softmax=online_tile32+attn_scale_mask=on+attn_fwd_tq_rule=on"
       }
      ],
      "listed_truncated": true,
@@ -18441,7 +18782,7 @@
       "attn_scale_mask"
      ],
      "product": 288,
-     "reason": "group cross (188 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+     "reason": "group cross (131 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
      "configs": 26,
@@ -18926,6 +19267,13 @@
    },
    "dropped_from_all_on": [
     {
+     "arm": "64",
+     "control": "attn_v2_tq",
+     "problems": [
+      "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)"
+     ]
+    },
+    {
      "arm": "neural128",
      "control": "gemm_leaf",
      "problems": [
@@ -18959,6 +19307,7 @@
     }
    ],
    "eligible_controls": [
+    "attn_v2_tq",
     "ce_denom_rowfold",
     "neural_gemm_schedule",
     "neural_gemm_schedule_roles",
@@ -18995,12 +19344,20 @@
    ],
    "excluded": [],
    "files": [
+    "attention-tiled-v2",
     "neural-ce-denom",
     "neural-gemm-attn-dedupe",
     "neural-seq-train-dedupe",
     "neural-small"
    ],
    "interaction_groups": [
+    [
+     "attn_softmax",
+     "attn_v2_tq",
+     "attn_tile_order",
+     "attn_fwd_tq_rule",
+     "attn_stash"
+    ],
     [
      "ce_denom_rowfold",
      "neural_gemm_schedule",
@@ -19108,11 +19465,25 @@
      "tiers": [
       "cross"
      ]
+    },
+    {
+     "count": 25,
+     "examples": [
+      "attn_v2_tq=64+attn_softmax=summary_tree",
+      "attn_v2_tq=64+attn_softmax=summary_tree",
+      "attn_v2_tq=64+attn_softmax=summary_tree+attn_stash=recompute"
+     ],
+     "problem": "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)",
+     "tiers": [
+      "single",
+      "cross"
+     ]
     }
    ],
    "mapping_notes": [],
    "notes": [],
    "parents": {
+    "attn_v2_tq": "attn_softmax",
     "neural_gemm_schedule_roles": "neural_gemm_schedule"
    },
    "raw_ids": [
@@ -19125,6 +19496,7 @@
     "attn_stash": "recompute",
     "attn_tile_order": "asc",
     "attn_tile_rule_off": "on",
+    "attn_v2_tq": "64",
     "ce_denom_rowfold": "on",
     "ce_grad_fused": "on",
     "ce_token_fold": "1",
@@ -23406,7 +23778,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23414,7 +23785,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=summary_tree",
-     "pack": "P148",
+     "pack": "P163",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -23427,7 +23798,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23435,7 +23805,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=online_tile32",
-     "pack": "P149",
+     "pack": "P164",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -23449,7 +23819,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23458,7 +23827,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on",
-     "pack": "P150",
+     "pack": "P165",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -23473,7 +23842,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23483,7 +23851,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2",
-     "pack": "P151",
+     "pack": "P166",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -23498,7 +23866,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23508,7 +23875,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8",
-     "pack": "P152",
+     "pack": "P167",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -23523,7 +23890,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23533,7 +23899,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16",
-     "pack": "P153",
+     "pack": "P168",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -23546,7 +23912,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23554,7 +23919,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_tile_order=asc",
-     "pack": "P154",
+     "pack": "P169",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -23567,7 +23932,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23575,7 +23939,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_tile_order=zdot_asc",
-     "pack": "P155",
+     "pack": "P170",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -23588,7 +23952,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23596,7 +23959,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.attn_fwd_tq_rule=on",
-     "pack": "P156",
+     "pack": "P171",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -23609,7 +23972,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23617,7 +23979,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.grouped_projections_v2=on",
-     "pack": "P157",
+     "pack": "P172",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -23630,7 +23992,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23638,7 +23999,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.m3_angle_parallel=on",
-     "pack": "P158",
+     "pack": "P173",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -23652,7 +24013,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23661,7 +24021,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32",
-     "pack": "P159",
+     "pack": "P174",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -23675,7 +24035,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer"
      ],
      "defines": [
@@ -23684,7 +24043,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128",
-     "pack": "P160",
+     "pack": "P175",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -23697,7 +24056,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer",
       "_mojolearn_x_cnn"
      ],
@@ -23721,7 +24079,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer",
       "_mojolearn_x_cnn"
      ],
@@ -23745,7 +24102,6 @@
      },
      "bindings": [
       "_mojolearn_mamba",
-      "_mojolearn_training",
       "_mojolearn_transformer",
       "_mojolearn_x_cnn"
      ],
@@ -23766,25 +24122,38 @@
    ],
    "cross_groups": [
     {
-     "duplicates": 4,
+     "duplicates": 1,
+     "members": [
+      "attn_softmax",
+      "attn_v2_tq",
+      "attn_tile_order",
+      "attn_fwd_tq_rule",
+      "nn20_split_kv"
+     ],
+     "new_configs": 35,
+     "note": null,
+     "product": 72
+    },
+    {
+     "duplicates": 5,
      "members": [
       "attn_softmax",
       "nn20_split_kv",
       "nn20_split_kv_leaves"
      ],
-     "new_configs": 4,
+     "new_configs": 3,
      "note": null,
      "product": 24
     },
     {
-     "duplicates": 2,
+     "duplicates": 24,
      "members": [
       "attn_tile_order",
       "attn_fwd_tq_rule",
       "attn_softmax",
       "nn20_split_kv"
      ],
-     "new_configs": 22,
+     "new_configs": 0,
      "note": null,
      "product": 36
     },
@@ -23810,44 +24179,10 @@
      "new_configs": 369,
      "note": null,
      "product": 384
-    },
-    {
-     "duplicates": 10,
-     "members": [
-      "samba_resident_step",
-      "attn_tile_order",
-      "nn20_split_kv",
-      "attn_softmax"
-     ],
-     "new_configs": 14,
-     "note": null,
-     "product": 36
-    },
-    {
-     "duplicates": 2,
-     "members": [
-      "samba_resident_step",
-      "m3_angle_parallel",
-      "m3_angle_block"
-     ],
-     "new_configs": 3,
-     "note": null,
-     "product": 12
-    },
-    {
-     "duplicates": 83,
-     "members": [
-      "samba_resident_step",
-      "gemm_tile_min_blocks",
-      "gemm_tile_short_k",
-      "gemm_split_min_leaves"
-     ],
-     "new_configs": 95,
-     "note": null,
-     "product": 192
     }
    ],
    "declared_controls": [
+    "attn_v2_tq",
     "attn_softmax",
     "nn20_split_kv",
     "nn20_split_kv_leaves",
@@ -23861,8 +24196,7 @@
     "gemm_tile_short_k",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4",
-    "gemm_fs2",
-    "samba_resident_step"
+    "gemm_fs2"
    ],
    "deferred": [
     {
@@ -23979,14 +24313,6 @@
     },
     {
      "assignment": {
-      "samba_resident_step": "on"
-     },
-     "id": "G.neural:samba-forward.samba_resident_step=on",
-     "reason": "cap 16 reached in priority order",
-     "tier": "single"
-    },
-    {
-     "assignment": {
       "attn_fwd_tq_rule": "on",
       "attn_softmax": "summary_tree",
       "attn_tile_order": "asc",
@@ -24000,8 +24326,7 @@
       "m3_angle_parallel": "on",
       "neural_gemm_ozaki_slices": "4",
       "nn20_split_kv": "on",
-      "nn20_split_kv_leaves": "2",
-      "samba_resident_step": "on"
+      "nn20_split_kv_leaves": "2"
      },
      "id": "G.neural:samba-forward.all_on",
      "reason": "cap 16 reached in priority order",
@@ -24010,8 +24335,101 @@
    ],
    "deferred_groups": [
     {
-     "configs": 4,
+     "configs": 35,
      "listed": [
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-forward.attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-forward.attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
       {
        "assignment": {
         "attn_softmax": "online_tile32",
@@ -24019,6 +24437,176 @@
        },
        "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on"
       },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:samba-forward.attn_v2_tq=64+attn_softmax=online_tile32"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_v2_tq": "64",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_v2_tq=64+attn_softmax=online_tile32+nn20_split_kv=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:samba-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_v2_tq": "64",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_v2_tq=64+attn_softmax=online_tile32+nn20_split_kv=on+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:samba-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "attn_v2_tq": "64",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_v2_tq=64+attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:samba-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "attn_v2_tq": "64",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:samba-forward.attn_v2_tq=64+attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:samba-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_tile_order=zdot_asc"
+      }
+     ],
+     "listed_truncated": true,
+     "members": [
+      "attn_softmax",
+      "attn_v2_tq",
+      "attn_tile_order",
+      "attn_fwd_tq_rule",
+      "nn20_split_kv"
+     ],
+     "product": 72,
+     "reason": "group cross (35 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+    },
+    {
+     "configs": 3,
+     "listed": [
       {
        "assignment": {
         "attn_softmax": "online_tile32",
@@ -24051,193 +24639,7 @@
       "nn20_split_kv_leaves"
      ],
      "product": 24,
-     "reason": "group cross (4 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
-    {
-     "configs": 22,
-     "listed": [
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_tile_order=asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_tile_order=asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:samba-forward.attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "zdot_asc"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "zdot_asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=zdot_asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "zdot_asc"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "zdot_asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=zdot_asc"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_tile_order": "zdot_asc"
-       },
-       "id": "G.neural:samba-forward.attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "zdot_asc"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "zdot_asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "zdot_asc"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "zdot_asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
-      }
-     ],
-     "listed_truncated": false,
-     "members": [
-      "attn_tile_order",
-      "attn_fwd_tq_rule",
-      "attn_softmax",
-      "nn20_split_kv"
-     ],
-     "product": 36,
-     "reason": "group cross (22 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+     "reason": "group cross (3 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
      "configs": 369,
@@ -24498,446 +24900,20 @@
      ],
      "product": 384,
      "reason": "group cross (369 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
-    {
-     "configs": 14,
-     "listed": [
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "nn20_split_kv": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "nn20_split_kv": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc",
-        "nn20_split_kv": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc",
-        "nn20_split_kv": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "zdot_asc",
-        "nn20_split_kv": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "zdot_asc",
-        "nn20_split_kv": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=zdot_asc+samba_resident_step=on"
-      }
-     ],
-     "listed_truncated": false,
-     "members": [
-      "samba_resident_step",
-      "attn_tile_order",
-      "nn20_split_kv",
-      "attn_softmax"
-     ],
-     "product": 36,
-     "reason": "group cross (14 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
-    {
-     "configs": 3,
-     "listed": [
-      {
-       "assignment": {
-        "m3_angle_parallel": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.m3_angle_parallel=on+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_angle_block": "32",
-        "m3_angle_parallel": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_angle_block": "128",
-        "m3_angle_parallel": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128+samba_resident_step=on"
-      }
-     ],
-     "listed_truncated": false,
-     "members": [
-      "samba_resident_step",
-      "m3_angle_parallel",
-      "m3_angle_block"
-     ],
-     "product": 12,
-     "reason": "group cross (3 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
-    {
-     "configs": 95,
-     "listed": [
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_split_min_leaves=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_tile_short_k": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_short_k=0+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "gemm_tile_short_k": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_short_k=0+gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "gemm_tile_short_k": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_short_k=0+gemm_split_min_leaves=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_tile_short_k": "512",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_short_k=512+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "gemm_tile_short_k": "512",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_short_k=512+gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "gemm_tile_short_k": "512",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_short_k=512+gemm_split_min_leaves=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_tile_short_k": "1024",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_short_k=1024+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "gemm_tile_short_k": "1024",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_short_k=1024+gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "gemm_tile_short_k": "1024",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_short_k=1024+gemm_split_min_leaves=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_tile_min_blocks": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "gemm_tile_min_blocks": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "gemm_tile_min_blocks": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_split_min_leaves=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_tile_min_blocks": "0",
-        "gemm_tile_short_k": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_tile_short_k=0+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "gemm_tile_min_blocks": "0",
-        "gemm_tile_short_k": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_tile_short_k=0+gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "gemm_tile_min_blocks": "0",
-        "gemm_tile_short_k": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_tile_short_k=0+gemm_split_min_leaves=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_tile_min_blocks": "0",
-        "gemm_tile_short_k": "512",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_tile_short_k=512+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "gemm_tile_min_blocks": "0",
-        "gemm_tile_short_k": "512",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_tile_short_k=512+gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "gemm_tile_min_blocks": "0",
-        "gemm_tile_short_k": "512",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_tile_short_k=512+gemm_split_min_leaves=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_tile_min_blocks": "0",
-        "gemm_tile_short_k": "1024",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_tile_short_k=1024+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "gemm_tile_min_blocks": "0",
-        "gemm_tile_short_k": "1024",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_tile_short_k=1024+gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "gemm_tile_min_blocks": "0",
-        "gemm_tile_short_k": "1024",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=0+gemm_tile_short_k=1024+gemm_split_min_leaves=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_tile_min_blocks": "128",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "gemm_tile_min_blocks": "128",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=128+gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "gemm_tile_min_blocks": "128",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=128+gemm_split_min_leaves=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_tile_min_blocks": "128",
-        "gemm_tile_short_k": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=128+gemm_tile_short_k=0+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "gemm_tile_min_blocks": "128",
-        "gemm_tile_short_k": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=128+gemm_tile_short_k=0+gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "gemm_tile_min_blocks": "128",
-        "gemm_tile_short_k": "0",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=128+gemm_tile_short_k=0+gemm_split_min_leaves=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_tile_min_blocks": "128",
-        "gemm_tile_short_k": "512",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=128+gemm_tile_short_k=512+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "3",
-        "gemm_tile_min_blocks": "128",
-        "gemm_tile_short_k": "512",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=128+gemm_tile_short_k=512+gemm_split_min_leaves=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_split_min_leaves": "2",
-        "gemm_tile_min_blocks": "128",
-        "gemm_tile_short_k": "512",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-forward.gemm_tile_min_blocks=128+gemm_tile_short_k=512+gemm_split_min_leaves=2+samba_resident_step=on"
-      }
-     ],
-     "listed_truncated": true,
-     "members": [
-      "samba_resident_step",
-      "gemm_tile_min_blocks",
-      "gemm_tile_short_k",
-      "gemm_split_min_leaves"
-     ],
-     "product": 192,
-     "reason": "group cross (95 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     }
    ],
    "dropped_arms": {},
-   "dropped_from_all_on": [],
+   "dropped_from_all_on": [
+    {
+     "arm": "64",
+     "control": "attn_v2_tq",
+     "problems": [
+      "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)"
+     ]
+    }
+   ],
    "eligible_controls": [
+    "attn_v2_tq",
     "attn_softmax",
     "nn20_split_kv",
     "nn20_split_kv_leaves",
@@ -24951,16 +24927,22 @@
     "gemm_tile_short_k",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4",
-    "gemm_fs2",
-    "samba_resident_step"
+    "gemm_fs2"
    ],
    "excluded": [],
    "files": [
+    "attention-tiled-v2",
     "neural-fusions",
-    "neural-small",
-    "samba-resident"
+    "neural-small"
    ],
    "interaction_groups": [
+    [
+     "attn_softmax",
+     "attn_v2_tq",
+     "attn_tile_order",
+     "attn_fwd_tq_rule",
+     "nn20_split_kv"
+    ],
     [
      "attn_softmax",
      "nn20_split_kv",
@@ -24982,29 +24964,27 @@
      "gemm_split_min_leaves",
      "gemm_kpack_rpt4",
      "gemm_fs2"
-    ],
-    [
-     "samba_resident_step",
-     "attn_tile_order",
-     "nn20_split_kv",
-     "attn_softmax"
-    ],
-    [
-     "samba_resident_step",
-     "m3_angle_parallel",
-     "m3_angle_block"
-    ],
-    [
-     "samba_resident_step",
-     "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
-     "gemm_split_min_leaves"
     ]
    ],
-   "invalid": [],
+   "invalid": [
+    {
+     "count": 13,
+     "examples": [
+      "attn_v2_tq=64+attn_softmax=summary_tree",
+      "attn_v2_tq=64+attn_softmax=summary_tree",
+      "attn_v2_tq=64+attn_softmax=summary_tree+nn20_split_kv=on"
+     ],
+     "problem": "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)",
+     "tiers": [
+      "single",
+      "cross"
+     ]
+    }
+   ],
    "mapping_notes": [],
    "notes": [],
    "parents": {
+    "attn_v2_tq": "attn_softmax",
     "m3_angle_block": "m3_angle_parallel",
     "nn20_split_kv": "attn_softmax",
     "nn20_split_kv_leaves": "nn20_split_kv"
@@ -25016,6 +24996,7 @@
     "attn_fwd_tq_rule": "on",
     "attn_softmax": "summary_tree",
     "attn_tile_order": "asc",
+    "attn_v2_tq": "64",
     "gemm_fs2": "on",
     "gemm_kpack_rpt4": "on",
     "gemm_split_min_leaves": "3",
@@ -25026,14 +25007,12 @@
     "m3_angle_parallel": "on",
     "neural_gemm_ozaki_slices": "4",
     "nn20_split_kv": "on",
-    "nn20_split_kv_leaves": "2",
-    "samba_resident_step": "on"
+    "nn20_split_kv_leaves": "2"
    },
    "unmapped_reason": null,
    "unresolved_interactions": [],
    "workload_bindings": [
     "_mojolearn_mamba",
-    "_mojolearn_training",
     "_mojolearn_transformer"
    ],
    "workloads": [
@@ -25079,7 +25058,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=stream",
-     "pack": "P161",
+     "pack": "P148",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -25102,7 +25081,7 @@
       "note: \"stream_all (NI02) moves every GEMM caller (gemm lane, classical, neural)\""
      ],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_all",
-     "pack": "P162",
+     "pack": "P149",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -25123,7 +25102,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_exact",
-     "pack": "P163",
+     "pack": "P150",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -25144,7 +25123,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=async",
-     "pack": "P164",
+     "pack": "P151",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -25165,7 +25144,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=pages",
-     "pack": "P165",
+     "pack": "P152",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -25186,7 +25165,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=fold_exact",
-     "pack": "P166",
+     "pack": "P153",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -25207,7 +25186,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=threadmap",
-     "pack": "P167",
+     "pack": "P154",
      "packed_extra_defines": [],
      "priority": 8,
      "queued": true,
@@ -25228,7 +25207,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=pages_threadmap",
-     "pack": "P168",
+     "pack": "P155",
      "packed_extra_defines": [],
      "priority": 9,
      "queued": true,
@@ -25251,7 +25230,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection",
-     "pack": "P169",
+     "pack": "P156",
      "packed_extra_defines": [],
      "priority": 10,
      "queued": true,
@@ -25274,7 +25253,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=head",
-     "pack": "P170",
+     "pack": "P157",
      "packed_extra_defines": [],
      "priority": 11,
      "queued": true,
@@ -25297,7 +25276,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=wgrad",
-     "pack": "P171",
+     "pack": "P158",
      "packed_extra_defines": [],
      "priority": 12,
      "queued": true,
@@ -25320,7 +25299,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection_head",
-     "pack": "P172",
+     "pack": "P159",
      "packed_extra_defines": [],
      "priority": 13,
      "queued": true,
@@ -25343,7 +25322,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection_wgrad",
-     "pack": "P173",
+     "pack": "P160",
      "packed_extra_defines": [],
      "priority": 14,
      "queued": true,
@@ -25366,7 +25345,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=head_wgrad",
-     "pack": "P174",
+     "pack": "P161",
      "packed_extra_defines": [],
      "priority": 15,
      "queued": true,
@@ -25387,7 +25366,7 @@
      ],
      "global_reach": [],
      "id": "G.neural:samba-train-step.gemm_leaf=neural128",
-     "pack": "P175",
+     "pack": "P162",
      "packed_extra_defines": [],
      "priority": 16,
      "queued": true,
@@ -25396,6 +25375,19 @@
     }
    ],
    "cross_groups": [
+    {
+     "duplicates": 0,
+     "members": [
+      "attn_softmax",
+      "attn_v2_tq",
+      "attn_tile_order",
+      "attn_fwd_tq_rule",
+      "attn_stash"
+     ],
+     "new_configs": 87,
+     "note": null,
+     "product": 144
+    },
     {
      "duplicates": 6,
      "members": [
@@ -25421,12 +25413,12 @@
      "product": 567
     },
     {
-     "duplicates": 0,
+     "duplicates": 6,
      "members": [
       "attn_softmax",
       "attn_stash"
      ],
-     "new_configs": 6,
+     "new_configs": 0,
      "note": null,
      "product": 12
     },
@@ -25441,7 +25433,7 @@
      "product": 16
     },
     {
-     "duplicates": 6,
+     "duplicates": 63,
      "members": [
       "attn_tile_order",
       "attn_fwd_tq_rule",
@@ -25449,7 +25441,7 @@
       "attn_softmax",
       "attn_stash"
      ],
-     "new_configs": 92,
+     "new_configs": 35,
      "note": null,
      "product": 144
     },
@@ -25488,66 +25480,10 @@
      "new_configs": 10327,
      "note": null,
      "product": 10368
-    },
-    {
-     "duplicates": 142,
-     "members": [
-      "samba_resident_step",
-      "neural_gemm_schedule",
-      "neural_gemm_schedule_roles",
-      "gemm_leaf"
-     ],
-     "new_configs": 152,
-     "note": null,
-     "product": 378
-    },
-    {
-     "duplicates": 0,
-     "members": [
-      "samba_resident_step",
-      "ce_denom_rowfold"
-     ],
-     "new_configs": 1,
-     "note": null,
-     "product": 4
-    },
-    {
-     "duplicates": 28,
-     "members": [
-      "samba_resident_step",
-      "attn_tile_order",
-      "attn_softmax",
-      "attn_stash"
-     ],
-     "new_configs": 35,
-     "note": null,
-     "product": 72
-    },
-    {
-     "duplicates": 3,
-     "members": [
-      "samba_resident_step",
-      "m3_angle_parallel",
-      "m3_s17_tail",
-      "m3_angle_carry_cache"
-     ],
-     "new_configs": 15,
-     "note": null,
-     "product": 24
-    },
-    {
-     "duplicates": 0,
-     "members": [
-      "samba_resident_step",
-      "act_retain",
-      "nn58_accumulate_status"
-     ],
-     "new_configs": 10,
-     "note": null,
-     "product": 16
     }
    ],
    "declared_controls": [
+    "attn_v2_tq",
     "ce_denom_rowfold",
     "neural_gemm_schedule",
     "neural_gemm_schedule_roles",
@@ -25578,8 +25514,7 @@
     "gemm_tile_short_k",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4",
-    "gemm_fs2",
-    "samba_resident_step"
+    "gemm_fs2"
    ],
    "deferred": [
     {
@@ -26026,14 +25961,6 @@
     },
     {
      "assignment": {
-      "samba_resident_step": "on"
-     },
-     "id": "G.neural:samba-train-step.samba_resident_step=on",
-     "reason": "cap 16 reached in priority order",
-     "tier": "single"
-    },
-    {
-     "assignment": {
       "act_retain": "1",
       "attn_fwd_tq_rule": "on",
       "attn_softmax": "summary_tree",
@@ -26059,7 +25986,6 @@
       "nn58_accumulate_status": "on",
       "norm": "lanes8",
       "rope": "qk_pair",
-      "samba_resident_step": "on",
       "train_scratch": "1",
       "train_swiglu": "on"
      },
@@ -26069,6 +25995,264 @@
     }
    ],
    "deferred_groups": [
+    {
+     "configs": 87,
+     "listed": [
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "recompute"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "packed"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=packed+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "alias_y"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_stash": "recompute",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_stash": "packed",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=packed+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_stash": "alias_y",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "recompute",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "packed",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=packed+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "alias_y",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_stash": "recompute",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_stash": "packed",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=packed+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_stash": "alias_y",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-train-step.attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "recompute",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "packed",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=packed+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_stash": "alias_y",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "recompute"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "packed"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "alias_y"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "recompute"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "packed"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "alias_y"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "recompute",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "packed",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "alias_y",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "recompute",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "packed",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_stash": "alias_y",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      }
+     ],
+     "listed_truncated": true,
+     "members": [
+      "attn_softmax",
+      "attn_v2_tq",
+      "attn_tile_order",
+      "attn_fwd_tq_rule",
+      "attn_stash"
+     ],
+     "product": 144,
+     "reason": "group cross (87 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+    },
     {
      "configs": 186,
      "listed": [
@@ -26607,60 +26791,6 @@
      "reason": "group cross (304 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
-     "configs": 6,
-     "listed": [
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "recompute"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "packed"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "alias_y"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "recompute"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=recompute"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "packed"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=packed"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "alias_y"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=alias_y"
-      }
-     ],
-     "listed_truncated": false,
-     "members": [
-      "attn_softmax",
-      "attn_stash"
-     ],
-     "product": 12,
-     "reason": "group cross (6 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
-    {
      "configs": 9,
      "listed": [
       {
@@ -26736,7 +26866,7 @@
      "reason": "group cross (9 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
-     "configs": 92,
+     "configs": 35,
      "listed": [
       {
        "assignment": {
@@ -26823,161 +26953,178 @@
       },
       {
        "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_stash": "recompute"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_stash": "packed"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=packed+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_stash": "alias_y"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_stash": "recompute"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_stash": "packed"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_stash": "alias_y"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_stash": "recompute"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=recompute+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_stash": "packed"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=packed+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_stash": "alias_y"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=alias_y+attn_fwd_tq_rule=on"
+       "id": "G.neural:samba-train-step.attn_tile_order=asc+attn_tile_rule_off=on"
       },
       {
        "assignment": {
         "attn_stash": "recompute",
-        "attn_tile_order": "asc"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_tile_order=asc"
+       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_tile_order=asc+attn_tile_rule_off=on"
       },
       {
        "assignment": {
         "attn_stash": "packed",
-        "attn_tile_order": "asc"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_stash=packed+attn_tile_order=asc"
+       "id": "G.neural:samba-train-step.attn_stash=packed+attn_tile_order=asc+attn_tile_rule_off=on"
       },
       {
        "assignment": {
         "attn_stash": "alias_y",
-        "attn_tile_order": "asc"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_tile_order=asc"
+       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_tile_order=asc+attn_tile_rule_off=on"
       },
       {
        "assignment": {
         "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_tile_order=asc"
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_tile_order=asc+attn_tile_rule_off=on"
       },
       {
        "assignment": {
         "attn_softmax": "summary_tree",
         "attn_stash": "recompute",
-        "attn_tile_order": "asc"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_tile_order=asc"
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_tile_order=asc+attn_tile_rule_off=on"
       },
       {
        "assignment": {
         "attn_softmax": "summary_tree",
         "attn_stash": "packed",
-        "attn_tile_order": "asc"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_tile_order=asc"
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_tile_order=asc+attn_tile_rule_off=on"
       },
       {
        "assignment": {
         "attn_softmax": "summary_tree",
         "attn_stash": "alias_y",
-        "attn_tile_order": "asc"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_tile_order=asc"
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_tile_order=asc+attn_tile_rule_off=on"
       },
       {
        "assignment": {
         "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_tile_order=asc"
+       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_tile_order=asc+attn_tile_rule_off=on"
       },
       {
        "assignment": {
         "attn_softmax": "online_tile32",
         "attn_stash": "recompute",
-        "attn_tile_order": "asc"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=recompute+attn_tile_order=asc"
+       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=recompute+attn_tile_order=asc+attn_tile_rule_off=on"
       },
       {
        "assignment": {
         "attn_softmax": "online_tile32",
         "attn_stash": "packed",
-        "attn_tile_order": "asc"
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
        },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=packed+attn_tile_order=asc"
+       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=packed+attn_tile_order=asc+attn_tile_rule_off=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_stash": "alias_y",
+        "attn_tile_order": "asc",
+        "attn_tile_rule_off": "on"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=alias_y+attn_tile_order=asc+attn_tile_rule_off=on"
+      },
+      {
+       "assignment": {
+        "attn_tile_order": "zdot_asc",
+        "attn_tile_rule_off": "on"
+       },
+       "id": "G.neural:samba-train-step.attn_tile_order=zdot_asc+attn_tile_rule_off=on"
+      },
+      {
+       "assignment": {
+        "attn_stash": "recompute",
+        "attn_tile_order": "zdot_asc",
+        "attn_tile_rule_off": "on"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_tile_order=zdot_asc+attn_tile_rule_off=on"
+      },
+      {
+       "assignment": {
+        "attn_stash": "packed",
+        "attn_tile_order": "zdot_asc",
+        "attn_tile_rule_off": "on"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=packed+attn_tile_order=zdot_asc+attn_tile_rule_off=on"
+      },
+      {
+       "assignment": {
+        "attn_stash": "alias_y",
+        "attn_tile_order": "zdot_asc",
+        "attn_tile_rule_off": "on"
+       },
+       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_tile_order=zdot_asc+attn_tile_rule_off=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc",
+        "attn_tile_rule_off": "on"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_tile_order=zdot_asc+attn_tile_rule_off=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "recompute",
+        "attn_tile_order": "zdot_asc",
+        "attn_tile_rule_off": "on"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_tile_order=zdot_asc+attn_tile_rule_off=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "packed",
+        "attn_tile_order": "zdot_asc",
+        "attn_tile_rule_off": "on"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_tile_order=zdot_asc+attn_tile_rule_off=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_stash": "alias_y",
+        "attn_tile_order": "zdot_asc",
+        "attn_tile_rule_off": "on"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_tile_order=zdot_asc+attn_tile_rule_off=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "attn_tile_rule_off": "on"
+       },
+       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_tile_order=zdot_asc+attn_tile_rule_off=on"
       }
      ],
      "listed_truncated": true,
@@ -26989,7 +27136,7 @@
       "attn_stash"
      ],
      "product": 144,
-     "reason": "group cross (92 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+     "reason": "group cross (35 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
      "configs": 3,
@@ -27309,792 +27456,6 @@
      ],
      "product": 10368,
      "reason": "group cross (10327 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
-    {
-     "configs": 152,
-     "listed": [
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.gemm_leaf=neural256+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "neural_gemm_schedule": "stream",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_schedule": "stream",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_schedule": "stream",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+gemm_leaf=neural256+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "projection",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "projection",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection+gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "projection",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection+gemm_leaf=neural256+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "head",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=head+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "head",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=head+gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "head",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=head+gemm_leaf=neural256+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "wgrad",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=wgrad+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "wgrad",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=wgrad+gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "wgrad",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=wgrad+gemm_leaf=neural256+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "projection_head",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection_head+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "projection_head",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection_head+gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "projection_head",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection_head+gemm_leaf=neural256+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "projection_wgrad",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection_wgrad+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "projection_wgrad",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection_wgrad+gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "projection_wgrad",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection_wgrad+gemm_leaf=neural256+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "head_wgrad",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=head_wgrad+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "head_wgrad",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=head_wgrad+gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_schedule": "stream",
-        "neural_gemm_schedule_roles": "head_wgrad",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=head_wgrad+gemm_leaf=neural256+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "neural_gemm_schedule": "stream_all",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_all+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_schedule": "stream_all",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_all+gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_schedule": "stream_all",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_all+gemm_leaf=neural256+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "neural_gemm_schedule": "stream_exact",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_exact+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_schedule": "stream_exact",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_exact+gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_schedule": "stream_exact",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_exact+gemm_leaf=neural256+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "neural_gemm_schedule": "stream_exact",
-        "neural_gemm_schedule_roles": "projection",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_exact+neural_gemm_schedule_roles=projection+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural128",
-        "neural_gemm_schedule": "stream_exact",
-        "neural_gemm_schedule_roles": "projection",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_exact+neural_gemm_schedule_roles=projection+gemm_leaf=neural128+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "gemm_leaf": "neural256",
-        "neural_gemm_schedule": "stream_exact",
-        "neural_gemm_schedule_roles": "projection",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.neural_gemm_schedule=stream_exact+neural_gemm_schedule_roles=projection+gemm_leaf=neural256+samba_resident_step=on"
-      }
-     ],
-     "listed_truncated": true,
-     "members": [
-      "samba_resident_step",
-      "neural_gemm_schedule",
-      "neural_gemm_schedule_roles",
-      "gemm_leaf"
-     ],
-     "product": 378,
-     "reason": "group cross (152 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
-    {
-     "configs": 1,
-     "listed": [
-      {
-       "assignment": {
-        "ce_denom_rowfold": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.ce_denom_rowfold=on+samba_resident_step=on"
-      }
-     ],
-     "listed_truncated": false,
-     "members": [
-      "samba_resident_step",
-      "ce_denom_rowfold"
-     ],
-     "product": 4,
-     "reason": "group cross (1 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
-    {
-     "configs": 35,
-     "listed": [
-      {
-       "assignment": {
-        "attn_stash": "recompute",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=recompute+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_stash": "packed",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=packed+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_stash": "alias_y",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=alias_y+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "recompute",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "packed",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "alias_y",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "recompute",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=recompute+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "packed",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=packed+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "alias_y",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=alias_y+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_stash": "recompute",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_stash": "packed",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=packed+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_stash": "alias_y",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "recompute",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "packed",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "alias_y",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "recompute",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=recompute+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "packed",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=packed+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_stash": "alias_y",
-        "attn_tile_order": "asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_stash=alias_y+attn_tile_order=asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_stash": "recompute",
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=recompute+attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_stash": "packed",
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=packed+attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_stash": "alias_y",
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_stash=alias_y+attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "recompute",
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=recompute+attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "packed",
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=packed+attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_stash": "alias_y",
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=summary_tree+attn_stash=alias_y+attn_tile_order=zdot_asc+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "zdot_asc",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.attn_softmax=online_tile32+attn_tile_order=zdot_asc+samba_resident_step=on"
-      }
-     ],
-     "listed_truncated": true,
-     "members": [
-      "samba_resident_step",
-      "attn_tile_order",
-      "attn_softmax",
-      "attn_stash"
-     ],
-     "product": 72,
-     "reason": "group cross (35 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
-    {
-     "configs": 15,
-     "listed": [
-      {
-       "assignment": {
-        "m3_angle_parallel": "on",
-        "m3_s17_tail": "dbuf"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_parallel=on+m3_s17_tail=dbuf"
-      },
-      {
-       "assignment": {
-        "m3_angle_carry_cache": "on",
-        "m3_angle_parallel": "on",
-        "m3_s17_tail": "dbuf"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_carry_cache=on+m3_angle_parallel=on+m3_s17_tail=dbuf"
-      },
-      {
-       "assignment": {
-        "m3_angle_parallel": "on",
-        "m3_s17_tail": "pipe"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_parallel=on+m3_s17_tail=pipe"
-      },
-      {
-       "assignment": {
-        "m3_angle_carry_cache": "on",
-        "m3_angle_parallel": "on",
-        "m3_s17_tail": "pipe"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_carry_cache=on+m3_angle_parallel=on+m3_s17_tail=pipe"
-      },
-      {
-       "assignment": {
-        "m3_angle_carry_cache": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_carry_cache=on+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_s17_tail": "dbuf",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_s17_tail=dbuf+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_angle_carry_cache": "on",
-        "m3_s17_tail": "dbuf",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_carry_cache=on+m3_s17_tail=dbuf+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_s17_tail": "pipe",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_s17_tail=pipe+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_angle_carry_cache": "on",
-        "m3_s17_tail": "pipe",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_carry_cache=on+m3_s17_tail=pipe+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_angle_parallel": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_parallel=on+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_angle_carry_cache": "on",
-        "m3_angle_parallel": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_carry_cache=on+m3_angle_parallel=on+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_angle_parallel": "on",
-        "m3_s17_tail": "dbuf",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_parallel=on+m3_s17_tail=dbuf+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_angle_carry_cache": "on",
-        "m3_angle_parallel": "on",
-        "m3_s17_tail": "dbuf",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_carry_cache=on+m3_angle_parallel=on+m3_s17_tail=dbuf+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_angle_parallel": "on",
-        "m3_s17_tail": "pipe",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_parallel=on+m3_s17_tail=pipe+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "m3_angle_carry_cache": "on",
-        "m3_angle_parallel": "on",
-        "m3_s17_tail": "pipe",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.m3_angle_carry_cache=on+m3_angle_parallel=on+m3_s17_tail=pipe+samba_resident_step=on"
-      }
-     ],
-     "listed_truncated": false,
-     "members": [
-      "samba_resident_step",
-      "m3_angle_parallel",
-      "m3_s17_tail",
-      "m3_angle_carry_cache"
-     ],
-     "product": 24,
-     "reason": "group cross (15 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
-    },
-    {
-     "configs": 10,
-     "listed": [
-      {
-       "assignment": {
-        "act_retain": "1",
-        "nn58_accumulate_status": "on"
-       },
-       "id": "G.neural:samba-train-step.act_retain=1+nn58_accumulate_status=on"
-      },
-      {
-       "assignment": {
-        "act_retain": "2",
-        "nn58_accumulate_status": "on"
-       },
-       "id": "G.neural:samba-train-step.act_retain=2+nn58_accumulate_status=on"
-      },
-      {
-       "assignment": {
-        "act_retain": "3",
-        "nn58_accumulate_status": "on"
-       },
-       "id": "G.neural:samba-train-step.act_retain=3+nn58_accumulate_status=on"
-      },
-      {
-       "assignment": {
-        "nn58_accumulate_status": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.nn58_accumulate_status=on+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "act_retain": "1",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.act_retain=1+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "act_retain": "1",
-        "nn58_accumulate_status": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.act_retain=1+nn58_accumulate_status=on+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "act_retain": "2",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.act_retain=2+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "act_retain": "2",
-        "nn58_accumulate_status": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.act_retain=2+nn58_accumulate_status=on+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "act_retain": "3",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.act_retain=3+samba_resident_step=on"
-      },
-      {
-       "assignment": {
-        "act_retain": "3",
-        "nn58_accumulate_status": "on",
-        "samba_resident_step": "on"
-       },
-       "id": "G.neural:samba-train-step.act_retain=3+nn58_accumulate_status=on+samba_resident_step=on"
-      }
-     ],
-     "listed_truncated": false,
-     "members": [
-      "samba_resident_step",
-      "act_retain",
-      "nn58_accumulate_status"
-     ],
-     "product": 16,
-     "reason": "group cross (10 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     }
    ],
    "dropped_arms": {
@@ -28110,6 +27471,13 @@
     ]
    },
    "dropped_from_all_on": [
+    {
+     "arm": "64",
+     "control": "attn_v2_tq",
+     "problems": [
+      "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)"
+     ]
+    },
     {
      "arm": "neural128",
      "control": "gemm_leaf",
@@ -28144,6 +27512,7 @@
     }
    ],
    "eligible_controls": [
+    "attn_v2_tq",
     "ce_denom_rowfold",
     "neural_gemm_schedule",
     "neural_gemm_schedule_roles",
@@ -28174,18 +27543,24 @@
     "gemm_tile_short_k",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4",
-    "gemm_fs2",
-    "samba_resident_step"
+    "gemm_fs2"
    ],
    "excluded": [],
    "files": [
+    "attention-tiled-v2",
     "neural-ce-denom",
     "neural-gemm-attn-dedupe",
     "neural-seq-train-dedupe",
-    "neural-small",
-    "samba-resident"
+    "neural-small"
    ],
    "interaction_groups": [
+    [
+     "attn_softmax",
+     "attn_v2_tq",
+     "attn_tile_order",
+     "attn_fwd_tq_rule",
+     "attn_stash"
+    ],
     [
      "ce_denom_rowfold",
      "neural_gemm_schedule",
@@ -28230,48 +27605,9 @@
      "gemm_fs2",
      "gemm_leaf",
      "neural_gemm_schedule"
-    ],
-    [
-     "samba_resident_step",
-     "neural_gemm_schedule",
-     "neural_gemm_schedule_roles",
-     "gemm_leaf"
-    ],
-    [
-     "samba_resident_step",
-     "ce_denom_rowfold"
-    ],
-    [
-     "samba_resident_step",
-     "attn_tile_order",
-     "attn_softmax",
-     "attn_stash"
-    ],
-    [
-     "samba_resident_step",
-     "m3_angle_parallel",
-     "m3_s17_tail",
-     "m3_angle_carry_cache"
-    ],
-    [
-     "samba_resident_step",
-     "act_retain",
-     "nn58_accumulate_status"
     ]
    ],
    "invalid": [
-    {
-     "count": 126,
-     "examples": [
-      "neural_gemm_schedule=stream_all+neural_gemm_schedule_roles=projection",
-      "neural_gemm_schedule=stream_all+neural_gemm_schedule_roles=projection+gemm_leaf=neural128",
-      "neural_gemm_schedule=stream_all+neural_gemm_schedule_roles=projection+gemm_leaf=neural256"
-     ],
-     "problem": "schedule 3 (stream_all) is a global GEMM arm; it takes no role mask",
-     "tiers": [
-      "cross"
-     ]
-    },
     {
      "count": 102,
      "examples": [
@@ -28280,6 +27616,18 @@
       "ce_denom_rowfold=on+neural_gemm_schedule=stream+gemm_leaf=neural128"
      ],
      "problem": "MOJOLEARN_IDN_CE_DENOM_ROWFOLD reproduces the v1 GEMM contract chain and fold; it excludes the neural leaf/chains profile",
+     "tiers": [
+      "cross"
+     ]
+    },
+    {
+     "count": 90,
+     "examples": [
+      "neural_gemm_schedule=stream_all+neural_gemm_schedule_roles=projection",
+      "neural_gemm_schedule=stream_all+neural_gemm_schedule_roles=projection+gemm_leaf=neural128",
+      "neural_gemm_schedule=stream_all+neural_gemm_schedule_roles=projection+gemm_leaf=neural256"
+     ],
+     "problem": "schedule 3 (stream_all) is a global GEMM arm; it takes no role mask",
      "tiers": [
       "cross"
      ]
@@ -28295,11 +27643,25 @@
      "tiers": [
       "cross"
      ]
+    },
+    {
+     "count": 25,
+     "examples": [
+      "attn_v2_tq=64+attn_softmax=summary_tree",
+      "attn_v2_tq=64+attn_softmax=summary_tree",
+      "attn_v2_tq=64+attn_softmax=summary_tree+attn_stash=recompute"
+     ],
+     "problem": "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)",
+     "tiers": [
+      "single",
+      "cross"
+     ]
     }
    ],
    "mapping_notes": [],
    "notes": [],
    "parents": {
+    "attn_v2_tq": "attn_softmax",
     "m3_angle_block": "m3_angle_parallel",
     "neural_gemm_schedule_roles": "neural_gemm_schedule"
    },
@@ -28313,6 +27675,7 @@
     "attn_stash": "recompute",
     "attn_tile_order": "asc",
     "attn_tile_rule_off": "on",
+    "attn_v2_tq": "64",
     "ce_denom_rowfold": "on",
     "gemm_fs2": "on",
     "gemm_kpack_rpt4": "on",
@@ -28336,24 +27699,11 @@
     "nn58_accumulate_status": "on",
     "norm": "lanes8",
     "rope": "qk_pair",
-    "samba_resident_step": "on",
     "train_scratch": "1",
     "train_swiglu": "on"
    },
    "unmapped_reason": null,
-   "unresolved_interactions": [
-    {
-     "file": "samba-resident",
-     "group": [
-      "samba_resident_step",
-      "ce_denom_rowfold",
-      "ce_grad_fused"
-     ],
-     "members_outside_grid": [
-      "ce_grad_fused (resolves to ce_grad_fused, not declared for this algorithm)"
-     ]
-    }
-   ],
+   "unresolved_interactions": [],
    "workload_bindings": [
     "_mojolearn_mamba",
     "_mojolearn_training",
@@ -28689,13 +28039,26 @@
    ],
    "cross_groups": [
     {
-     "duplicates": 4,
+     "duplicates": 1,
+     "members": [
+      "attn_softmax",
+      "attn_v2_tq",
+      "attn_tile_order",
+      "attn_fwd_tq_rule",
+      "nn20_split_kv"
+     ],
+     "new_configs": 35,
+     "note": null,
+     "product": 72
+    },
+    {
+     "duplicates": 5,
      "members": [
       "attn_softmax",
       "nn20_split_kv",
       "nn20_split_kv_leaves"
      ],
-     "new_configs": 4,
+     "new_configs": 3,
      "note": null,
      "product": 24
     },
@@ -28722,7 +28085,7 @@
      "product": 6
     },
     {
-     "duplicates": 4,
+     "duplicates": 26,
      "members": [
       "attn_tile_order",
       "attn_fwd_tq_rule",
@@ -28730,7 +28093,7 @@
       "attn_scale_mask",
       "nn20_split_kv"
      ],
-     "new_configs": 49,
+     "new_configs": 27,
      "note": null,
      "product": 72
     },
@@ -28762,6 +28125,7 @@
     }
    ],
    "declared_controls": [
+    "attn_v2_tq",
     "attn_softmax",
     "nn20_split_kv",
     "nn20_split_kv_leaves",
@@ -29067,8 +28431,101 @@
    ],
    "deferred_groups": [
     {
-     "configs": 4,
+     "configs": 35,
      "listed": [
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:transformer-forward.attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:transformer-forward.attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
       {
        "assignment": {
         "attn_softmax": "online_tile32",
@@ -29076,6 +28533,176 @@
        },
        "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on"
       },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:transformer-forward.attn_v2_tq=64+attn_softmax=online_tile32"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_v2_tq": "64",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_v2_tq=64+attn_softmax=online_tile32+nn20_split_kv=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:transformer-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_v2_tq": "64",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_v2_tq=64+attn_softmax=online_tile32+nn20_split_kv=on+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:transformer-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "attn_v2_tq": "64",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_v2_tq=64+attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:transformer-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "asc",
+        "attn_v2_tq": "64",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_v2_tq=64+attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "attn_v2_tq": "64"
+       },
+       "id": "G.neural:transformer-forward.attn_v2_tq=64+attn_softmax=online_tile32+attn_tile_order=zdot_asc"
+      }
+     ],
+     "listed_truncated": true,
+     "members": [
+      "attn_softmax",
+      "attn_v2_tq",
+      "attn_tile_order",
+      "attn_fwd_tq_rule",
+      "nn20_split_kv"
+     ],
+     "product": 72,
+     "reason": "group cross (35 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+    },
+    {
+     "configs": 3,
+     "listed": [
       {
        "assignment": {
         "attn_softmax": "online_tile32",
@@ -29108,7 +28735,7 @@
       "nn20_split_kv_leaves"
      ],
      "product": 24,
-     "reason": "group cross (4 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+     "reason": "group cross (3 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
      "configs": 228,
@@ -29390,7 +29017,7 @@
      "reason": "group cross (2 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
-     "configs": 49,
+     "configs": 27,
      "listed": [
       {
        "assignment": {
@@ -29418,21 +29045,6 @@
       {
        "assignment": {
         "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
         "attn_scale_mask": "on",
         "attn_softmax": "summary_tree"
        },
@@ -29446,21 +29058,6 @@
         "nn20_split_kv": "on"
        },
        "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_scale_mask=on+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_fwd_tq_rule=on"
       },
       {
        "assignment": {
@@ -29488,21 +29085,6 @@
       },
       {
        "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_tile_order=asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=asc"
-      },
-      {
-       "assignment": {
         "attn_scale_mask": "on",
         "attn_softmax": "summary_tree",
         "attn_tile_order": "asc"
@@ -29517,21 +29099,6 @@
         "nn20_split_kv": "on"
        },
        "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_scale_mask=on+attn_tile_order=asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+attn_tile_order=asc"
-      },
-      {
-       "assignment": {
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc"
       },
       {
        "assignment": {
@@ -29553,34 +29120,10 @@
       {
        "assignment": {
         "attn_fwd_tq_rule": "on",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:transformer-forward.attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
         "attn_scale_mask": "on",
         "attn_tile_order": "asc"
        },
        "id": "G.neural:transformer-forward.attn_scale_mask=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "summary_tree",
-        "attn_tile_order": "asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
       },
       {
        "assignment": {
@@ -29600,23 +29143,6 @@
         "nn20_split_kv": "on"
        },
        "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_scale_mask=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+attn_tile_order=asc+attn_fwd_tq_rule=on"
-      },
-      {
-       "assignment": {
-        "attn_fwd_tq_rule": "on",
-        "attn_softmax": "online_tile32",
-        "attn_tile_order": "asc",
-        "nn20_split_kv": "on"
-       },
-       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_tile_order=asc+attn_fwd_tq_rule=on"
       },
       {
        "assignment": {
@@ -29646,13 +29172,86 @@
       },
       {
        "assignment": {
+        "attn_scale_mask": "on",
         "attn_softmax": "summary_tree",
         "attn_tile_order": "zdot_asc"
        },
-       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_tile_order=zdot_asc"
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_scale_mask=on+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_scale_mask": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_scale_mask=on+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_scale_mask": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+attn_scale_mask=on+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_scale_mask": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_scale_mask=on+attn_tile_order=zdot_asc"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_scale_mask": "on",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:transformer-forward.attn_scale_mask=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_scale_mask": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+attn_scale_mask=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_scale_mask": "on",
+        "attn_softmax": "summary_tree",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=summary_tree+nn20_split_kv=on+attn_scale_mask=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_scale_mask": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+attn_scale_mask=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
+      },
+      {
+       "assignment": {
+        "attn_fwd_tq_rule": "on",
+        "attn_scale_mask": "on",
+        "attn_softmax": "online_tile32",
+        "attn_tile_order": "zdot_asc",
+        "nn20_split_kv": "on"
+       },
+       "id": "G.neural:transformer-forward.attn_softmax=online_tile32+nn20_split_kv=on+attn_scale_mask=on+attn_tile_order=zdot_asc+attn_fwd_tq_rule=on"
       }
      ],
-     "listed_truncated": true,
+     "listed_truncated": false,
      "members": [
       "attn_tile_order",
       "attn_fwd_tq_rule",
@@ -29661,7 +29260,7 @@
       "nn20_split_kv"
      ],
      "product": 72,
-     "reason": "group cross (49 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
+     "reason": "group cross (27 configs) does not fit the remaining cap (0); generate after one-at-a-time results"
     },
     {
      "configs": 26,
@@ -30146,6 +29745,13 @@
    },
    "dropped_from_all_on": [
     {
+     "arm": "64",
+     "control": "attn_v2_tq",
+     "problems": [
+      "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)"
+     ]
+    },
+    {
      "arm": "4",
      "control": "neural_gemm_ozaki_slices",
      "problems": [
@@ -30156,6 +29762,7 @@
     }
    ],
    "eligible_controls": [
+    "attn_v2_tq",
     "attn_softmax",
     "nn20_split_kv",
     "nn20_split_kv_leaves",
@@ -30178,11 +29785,19 @@
    ],
    "excluded": [],
    "files": [
+    "attention-tiled-v2",
     "neural-fusions",
     "neural-gemm-attn-dedupe",
     "neural-small"
    ],
    "interaction_groups": [
+    [
+     "attn_softmax",
+     "attn_v2_tq",
+     "attn_tile_order",
+     "attn_fwd_tq_rule",
+     "nn20_split_kv"
+    ],
     [
      "attn_softmax",
      "nn20_split_kv",
@@ -30220,10 +29835,25 @@
      "neural_gemm_schedule"
     ]
    ],
-   "invalid": [],
+   "invalid": [
+    {
+     "count": 13,
+     "examples": [
+      "attn_v2_tq=64+attn_softmax=summary_tree",
+      "attn_v2_tq=64+attn_softmax=summary_tree",
+      "attn_v2_tq=64+attn_softmax=summary_tree+nn20_split_kv=on"
+     ],
+     "problem": "MOJOLEARN_IDN_ATTN_V2_TQ is only read by the online_tile32 arm (MOJOLEARN_IDN_ATTN_SOFTMAX=2)",
+     "tiers": [
+      "single",
+      "cross"
+     ]
+    }
+   ],
    "mapping_notes": [],
    "notes": [],
    "parents": {
+    "attn_v2_tq": "attn_softmax",
     "nn20_split_kv": "attn_softmax",
     "nn20_split_kv_leaves": "nn20_split_kv"
    },
@@ -30235,6 +29865,7 @@
     "attn_scale_mask": "on",
     "attn_softmax": "summary_tree",
     "attn_tile_order": "asc",
+    "attn_v2_tq": "64",
     "gemm_fs2": "on",
     "gemm_kpack_rpt4": "on",
     "gemm_leaf": "neural128",
@@ -40350,8 +39981,8 @@
  },
  "all_switches": "NOT MEASURED until each config has an A/A floor, scored A/B on NVIDIA and AMD, identity and quality evidence",
  "builds": {
-  "after_packing": 790,
-  "before_packing": 920,
+  "after_packing": 758,
+  "before_packing": 888,
   "packs": [
    {
     "algorithms": [
@@ -43221,249 +42852,6 @@
    },
    {
     "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_ATTN_SOFTMAX=1"
-    ],
-    "global_reach": false,
-    "id": "P148",
-    "members": [
-     "G.neural:samba-forward.attn_softmax=summary_tree"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_ATTN_SOFTMAX=2"
-    ],
-    "global_reach": false,
-    "id": "P149",
-    "members": [
-     "G.neural:samba-forward.attn_softmax=online_tile32"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
-     "MOJOLEARN_IDN_NN20_SPLIT_KV=1"
-    ],
-    "global_reach": false,
-    "id": "P150",
-    "members": [
-     "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
-     "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
-     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=2"
-    ],
-    "global_reach": false,
-    "id": "P151",
-    "members": [
-     "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
-     "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
-     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=8"
-    ],
-    "global_reach": false,
-    "id": "P152",
-    "members": [
-     "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
-     "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
-     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=16"
-    ],
-    "global_reach": false,
-    "id": "P153",
-    "members": [
-     "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_ATTN_TILE_ORDER=1"
-    ],
-    "global_reach": false,
-    "id": "P154",
-    "members": [
-     "G.neural:samba-forward.attn_tile_order=asc"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_ATTN_TILE_ORDER=2"
-    ],
-    "global_reach": false,
-    "id": "P155",
-    "members": [
-     "G.neural:samba-forward.attn_tile_order=zdot_asc"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_ATTN_FWD_TQ_RULE=1"
-    ],
-    "global_reach": false,
-    "id": "P156",
-    "members": [
-     "G.neural:samba-forward.attn_fwd_tq_rule=on"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_NI07_GROUPED_PROJECTIONS=1"
-    ],
-    "global_reach": false,
-    "id": "P157",
-    "members": [
-     "G.neural:samba-forward.grouped_projections_v2=on"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
-    ],
-    "global_reach": false,
-    "id": "P158",
-    "members": [
-     "G.neural:samba-forward.m3_angle_parallel=on"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32=1",
-     "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
-    ],
-    "global_reach": false,
-    "id": "P159",
-    "members": [
-     "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
-    ]
-   },
-   {
-    "algorithms": [
-     "neural:samba-forward"
-    ],
-    "bindings": [
-     "_mojolearn_mamba",
-     "_mojolearn_training",
-     "_mojolearn_transformer"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_M3_ANGLE_BLOCK_128=1",
-     "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
-    ],
-    "global_reach": false,
-    "id": "P160",
-    "members": [
-     "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
-    ]
-   },
-   {
-    "algorithms": [
      "neural:samba-train-step"
     ],
     "bindings": [
@@ -43475,7 +42863,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=2"
     ],
     "global_reach": false,
-    "id": "P161",
+    "id": "P148",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=stream"
     ]
@@ -43493,7 +42881,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3"
     ],
     "global_reach": true,
-    "id": "P162",
+    "id": "P149",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=stream_all"
     ]
@@ -43511,7 +42899,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=4"
     ],
     "global_reach": false,
-    "id": "P163",
+    "id": "P150",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=stream_exact"
     ]
@@ -43529,7 +42917,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8"
     ],
     "global_reach": false,
-    "id": "P164",
+    "id": "P151",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=async"
     ]
@@ -43547,7 +42935,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=9"
     ],
     "global_reach": false,
-    "id": "P165",
+    "id": "P152",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=pages"
     ]
@@ -43565,7 +42953,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=11"
     ],
     "global_reach": false,
-    "id": "P166",
+    "id": "P153",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=fold_exact"
     ]
@@ -43583,7 +42971,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=15"
     ],
     "global_reach": false,
-    "id": "P167",
+    "id": "P154",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=threadmap"
     ]
@@ -43601,7 +42989,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=24"
     ],
     "global_reach": false,
-    "id": "P168",
+    "id": "P155",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=pages_threadmap"
     ]
@@ -43620,7 +43008,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES=1"
     ],
     "global_reach": false,
-    "id": "P169",
+    "id": "P156",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection"
     ]
@@ -43639,7 +43027,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES=2"
     ],
     "global_reach": false,
-    "id": "P170",
+    "id": "P157",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=head"
     ]
@@ -43658,7 +43046,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES=4"
     ],
     "global_reach": false,
-    "id": "P171",
+    "id": "P158",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=wgrad"
     ]
@@ -43677,7 +43065,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES=3"
     ],
     "global_reach": false,
-    "id": "P172",
+    "id": "P159",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection_head"
     ]
@@ -43696,7 +43084,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES=5"
     ],
     "global_reach": false,
-    "id": "P173",
+    "id": "P160",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=projection_wgrad"
     ]
@@ -43715,7 +43103,7 @@
      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES=6"
     ],
     "global_reach": false,
-    "id": "P174",
+    "id": "P161",
     "members": [
      "G.neural:samba-train-step.neural_gemm_schedule=stream+neural_gemm_schedule_roles=head_wgrad"
     ]
@@ -43733,7 +43121,7 @@
      "MOJOLEARN_IDN_GEMM_LEAF=1"
     ],
     "global_reach": false,
-    "id": "P175",
+    "id": "P162",
     "members": [
      "G.neural:samba-train-step.gemm_leaf=neural128"
     ]
@@ -43744,7 +43132,236 @@
     ],
     "bindings": [
      "_mojolearn_mamba",
-     "_mojolearn_training",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_ATTN_SOFTMAX=1"
+    ],
+    "global_reach": false,
+    "id": "P163",
+    "members": [
+     "G.neural:samba-forward.attn_softmax=summary_tree"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_ATTN_SOFTMAX=2"
+    ],
+    "global_reach": false,
+    "id": "P164",
+    "members": [
+     "G.neural:samba-forward.attn_softmax=online_tile32"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+     "MOJOLEARN_IDN_NN20_SPLIT_KV=1"
+    ],
+    "global_reach": false,
+    "id": "P165",
+    "members": [
+     "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+     "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=2"
+    ],
+    "global_reach": false,
+    "id": "P166",
+    "members": [
+     "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+     "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=8"
+    ],
+    "global_reach": false,
+    "id": "P167",
+    "members": [
+     "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+     "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+     "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=16"
+    ],
+    "global_reach": false,
+    "id": "P168",
+    "members": [
+     "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_ATTN_TILE_ORDER=1"
+    ],
+    "global_reach": false,
+    "id": "P169",
+    "members": [
+     "G.neural:samba-forward.attn_tile_order=asc"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_ATTN_TILE_ORDER=2"
+    ],
+    "global_reach": false,
+    "id": "P170",
+    "members": [
+     "G.neural:samba-forward.attn_tile_order=zdot_asc"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_ATTN_FWD_TQ_RULE=1"
+    ],
+    "global_reach": false,
+    "id": "P171",
+    "members": [
+     "G.neural:samba-forward.attn_fwd_tq_rule=on"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_NI07_GROUPED_PROJECTIONS=1"
+    ],
+    "global_reach": false,
+    "id": "P172",
+    "members": [
+     "G.neural:samba-forward.grouped_projections_v2=on"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
+    ],
+    "global_reach": false,
+    "id": "P173",
+    "members": [
+     "G.neural:samba-forward.m3_angle_parallel=on"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32=1",
+     "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
+    ],
+    "global_reach": false,
+    "id": "P174",
+    "members": [
+     "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
+     "_mojolearn_transformer"
+    ],
+    "defines": [
+     "MOJOLEARN_IDN_M3_ANGLE_BLOCK_128=1",
+     "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
+    ],
+    "global_reach": false,
+    "id": "P175",
+    "members": [
+     "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
+    ]
+   },
+   {
+    "algorithms": [
+     "neural:samba-forward"
+    ],
+    "bindings": [
+     "_mojolearn_mamba",
      "_mojolearn_transformer",
      "_mojolearn_x_cnn"
     ],
@@ -43763,7 +43380,6 @@
     ],
     "bindings": [
      "_mojolearn_mamba",
-     "_mojolearn_training",
      "_mojolearn_transformer",
      "_mojolearn_x_cnn"
     ],
@@ -43782,7 +43398,6 @@
     ],
     "bindings": [
      "_mojolearn_mamba",
-     "_mojolearn_training",
      "_mojolearn_transformer",
      "_mojolearn_x_cnn"
     ],
@@ -47052,6 +46667,13 @@
     "path": "experiments/six_lane_integration/grid_controls/apple-fast-round2.json",
     "sha256": "bf501efac8f43ae7de6a5bf34714174a8888e57a617ce90180f033817e7a8e4d"
    },
+   "attention-tiled-v2": {
+    "branch": "lane/attention-tiled-v2",
+    "head": "cd4a0e870",
+    "lane": "attention-tiled-v2",
+    "path": "experiments/six_lane_integration/grid_controls/attention-tiled-v2.json",
+    "sha256": "135b14189dbc9550cb5a22c3d25c533daefb846de131c1f545a628605396e74f"
+   },
    "classical-cv": {
     "branch": "lane/classical-cv",
     "head": "0410922f36b2",
@@ -47134,7 +46756,7 @@
     "head": "d0b538fa7",
     "lane": "neural-gemm-attn-dedupe",
     "path": "experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json",
-    "sha256": "a9761ed51b05eeb4f8888e10d627f3e7c0460dbe4684631fa3efb1014004866f"
+    "sha256": "975bd00e5b74bf0dbfe138a86c0a54f38a584defde92cff06831a77c7ce0d510"
    },
    "neural-ozaki-gemm": {
     "branch": "lane/neural-ozaki-gemm",
@@ -47156,13 +46778,6 @@
     "lane": "neural-small",
     "path": "experiments/six_lane_integration/grid_controls/neural-small.json",
     "sha256": "0f6e159de7b4643b1473b8eca8ec27bf56b7d041aa3f01776feec229880a8061"
-   },
-   "samba-resident": {
-    "branch": "lane/samba-resident",
-    "head": "3ccf36dd8",
-    "lane": "samba-resident",
-    "path": "experiments/six_lane_integration/grid_controls/samba-resident.json",
-    "sha256": "07056f4dc41cc1a11a0bf5c27fba523e341c853ac945c808e3b99da7bfea2a70"
    },
    "trees-cleanup": {
     "branch": "lane/trees-cleanup",
@@ -47194,9 +46809,9 @@
    }
   },
   "guards": {
-   "asserts": 120,
+   "asserts": 121,
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "5820827ff597947f62d8434f337137a93218a67bdd10069c876303aef98aef05"
+   "sha256": "5b904856be9ff41f9e12c708d91750f6292a5e5821544208a8a0fe9c897d5795"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -47282,6 +46897,7 @@
  ],
  "removed_per_file": {
   "apple-fast-round2": 0,
+  "attention-tiled-v2": 0,
   "classical-cv": 3,
   "classical-cv-folds": 0,
   "classical-decomp": 4,
@@ -47297,7 +46913,6 @@
   "neural-ozaki-gemm": 0,
   "neural-seq-train-dedupe": 30,
   "neural-small": 4,
-  "samba-resident": 0,
   "trees-cleanup": 15,
   "trees-hist-ideas": 0,
   "trees-predict-ideas": 0,
@@ -47306,8 +46921,8 @@
  "schema": "mojolearn.six-lane-grid-plan/1",
  "status": "PLANNED_NOT_RUN",
  "summary": {
-  "a_builds_after_packing": 740,
-  "a_builds_before_packing": 870,
+  "a_builds_after_packing": 708,
+  "a_builds_before_packing": 838,
   "aa_pairs": 322,
   "algorithms": 86,
   "algorithms_with_configs": 75,
@@ -47339,18 +46954,18 @@
    "_mojolearn_x_prep",
    "_mojolearn_x_sequence"
   ],
-  "builds_after_packing": 790,
-  "builds_before_packing": 920,
+  "builds_after_packing": 758,
+  "builds_before_packing": 888,
   "cap": 16,
   "cells": 2722,
   "configs": 597,
   "configs_per_vendor": 597,
   "controls": 234,
-  "deferred_configs": 348,
-  "deferred_cross_configs": 198608,
-  "deferred_cross_groups": 115,
+  "deferred_configs": 346,
+  "deferred_cross_configs": 198361,
+  "deferred_cross_groups": 110,
   "excluded_controls": 56,
-  "guard_asserts": 120,
+  "guard_asserts": 121,
   "mapped_algorithms": 84,
   "packed_multi_member": 101,
   "packs": 318,
