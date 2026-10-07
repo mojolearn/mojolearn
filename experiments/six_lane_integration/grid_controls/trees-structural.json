@@ -102,15 +102,9 @@
    "binding": "_mojolearn_gbdt",
    "route": "fit: fit_non_symmetric_tree lossguide exact batch round width (LG_LEVEL_ROUNDS over T17_BATCH, then C47_GBDT memory cap)",
    "controls": [
-    "LG_LEVEL_ROUNDS",
-    "C47_GBDT"
+    "LG_LEVEL_ROUNDS"
    ],
-   "interaction_groups": [
-    [
-     "LG_LEVEL_ROUNDS",
-     "C47_GBDT"
-    ]
-   ]
+   "interaction_groups": []
   },
   "trees:gbdt-categorical": {
    "binding": "_mojolearn_gbdt",
