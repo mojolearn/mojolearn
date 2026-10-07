@@ -113,7 +113,7 @@ else
     || { status grid FAILED; problem "grid generation failed; see $LOGS/grid.log"; exit 1; }
   echo "$HEAD" > "$GRID/.source"
 fi
-[ -f "$GRID/grid-matrix.json.gz" ] && say "  $(tail -1 "${GRID}.log" 2>/dev/null | grep -o '"cells_per_vendor": [0-9]*' || grep -o '"cells_per_vendor": [0-9]*' "$GRID/grid-plan.json" | head -1)"
+[ -f "$GRID/grid-plan.json" ] && say "  grid: $("$PY3" -c 'import json,sys; s=json.load(open(sys.argv[1]))["summary"]; r=s.get("regimes",{}); print("%s cells per vendor; %s" % (s["cells_per_vendor"], ", ".join("%s %s cells" % (k, v["cells_per_vendor"]) for k, v in r.items())))' "$GRID/grid-plan.json")"
 [ $DRY = 1 ] && [ $PROBLEMS -gt 0 ] && [ ! -f "$GRID/grid-matrix.json.gz" ] && { say "dry run stops: $PROBLEMS problem(s)"; exit 1; }
 
 # ---------------------------------------------------------------- 2 compile (one shard per binding, resumable)

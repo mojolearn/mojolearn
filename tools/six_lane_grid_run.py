@@ -216,7 +216,7 @@ def install_kit(args):
                 present += 1
             continue
         if args.dry_run:
-            print('would place ' + str(target))
+            placed += 1  # would place
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
