@@ -22,8 +22,6 @@ below) when the page fits; the per-value kernels otherwise. (The
 `MOJOLEARN_X_LINEAR_ENETCV_GRID` / `_STAGED` A/B switches were deleted,
 cpu-gpu-cleanup c-linear.)
 """
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS
-from x_linear.classical_fold_stats import fold_stat_words, fold_mean_cell, fold_gram_cell, fold_prep_from_cache
 from std.gpu import block_idx, block_dim, thread_idx
 from std.atomic import Atomic
 from max.gpu.sync import barrier
@@ -36,6 +34,11 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.ops import FP, IP, fa, fm, fs, fd, fmad, ld, st, ldi, i2f, fill
 from x_linear.team import Team, TEAM_SLOTS, LINEAR_TPB, team_at
 from x_linear.tops import upper_cell, _acc_fa, _acc_fmad
+from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BLOCKS
+from x_linear.enetcv_blocks import (
+    FB_C, FB_NT, FB_TPB, FB_TC, fb_words, fb_means_kernel, fb_fold_means_kernel, fb_gram_kernel,
+    fb_fold_gram_kernel, fb_combine_kernel,
+)
 from x_linear.cd import (
     ecv_alphas, ecv_alpha_cell, ecv_choose, ecv_finish, ecv_rows, ecv_fold_fa, ecv_cfmad, ecv_held_sse, ECV_UH,
     t_enet_gram_cd,
@@ -604,6 +607,10 @@ def _blocks(count: Int) -> Int:
     return max((count + ECV_TPB - 1) // ECV_TPB, 1)
 
 
+def _fb_blocks(count: Int) -> Int:
+    return max((count + FB_TPB - 1) // FB_TPB, 1)
+
+
 def ecv_span_init_kernel(lohi: MutPointer[Int32, MutAnyOrigin], f_n_in: Int32, n_in: Int32):
     """One thread a fold: its span starts empty (lo = n, hi = 0)."""
     var f = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -644,35 +651,6 @@ def ecv_span_finish_kernel(
             span.unsafe_store(2 * f + 1, Int32(0))
 
 
-def classical_fold_means_kernel(x: FP, y: FP, n: Int32, d: Int32, folds: Int32, fi: Int32, cache: FP, wf: IP, woff: Int32, nonce: Int32):
-    var c = Int(block_idx.x) * ECV_TPB + Int(thread_idx.x)
-    var width = Int(d) + 1
-    if c < Int(folds) * width:
-        fold_mean_cell(x, y, Int(n), Int(d), c // width, c % width, fi != 0, cache)
-    witness_end(wf, woff, nonce)
-
-
-def classical_fold_grams_kernel(x: FP, y: FP, n: Int32, d: Int32, folds: Int32, cache: FP, wf: IP, woff: Int32, nonce: Int32):
-    var c = Int(block_idx.x) * ECV_TPB + Int(thread_idx.x)
-    var width = Int(d) + 1
-    var cells = width * (width + 1) // 2
-    if c < Int(folds) * cells:
-        var pair = upper_cell(c % cells, width)
-        fold_gram_cell(x, y, Int(n), Int(d), c // cells, pair[0], pair[1], cache)
-    witness_end(wf, woff, nonce)
-
-
-def classical_fold_combine_kernel(cache: FP, d: Int32, ip: IP, ew: FP, wf: IP, woff: Int32, nonce: Int32):
-    var p = Int(block_idx.x) * ECV_TPB + Int(thread_idx.x)
-    var dd = Int(d)
-    var folds = ldi(ip, 3)
-    if p <= folds:
-        var lay = _EcvLayout(dd, ldi(ip, 2), folds, ldi(ip, 4))
-        var base = lay.prep(p)
-        fold_prep_from_cache(cache, dd, folds, _fold_of(p, folds), ew, base, base + dd, base + dd + dd * dd, base + 2 * dd + dd * dd)
-    witness_end(wf, woff, nonce)
-
-
 def enetcv_fit_grid(
     ctx: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, res: FP,
@@ -683,7 +661,6 @@ def enetcv_fit_grid(
     var l_n = Int(ip[4])
     var lay = _EcvLayout(d, a_n, f_n, l_n)
     var paths = f_n * l_n
-    var dcache = ctx.enqueue_create_buffer[DType.float32](max(f_n * fold_stat_words(d), 1) if C13_FOLD_STATS else 1)
     var nt = min(LINEAR_TPB, max(32, (d + 31) // 32 * 32))
     var hip = ip.copy()
     var hfp = fp.copy()
@@ -712,7 +689,18 @@ def enetcv_fit_grid(
     var sp_len = max(2 * f_n, 1)
     var dspan = ctx.enqueue_create_buffer[DType.int32](sp_len)
     ctx.enqueue_memset(dspan, Int32(0))
-    if staged_score:
+    # ENETCV_FOLD_BLOCKS (x_linear/enetcv_blocks.mojo): every fold's
+    # statistics from fold-aligned compensated chunk partials, one read of
+    # each row per pass, instead of F + 1 full scans
+    var m = d + 1
+    var fb_tiles = (m + FB_TC - 1) // FB_TC
+    var fb_pairs = fb_tiles * (fb_tiles + 1) // 2
+    var fb_ps = ctx.enqueue_create_buffer[DType.float32](max(f_n * FB_C * m, 1) if ENETCV_FOLD_BLOCKS else 1)
+    var fb_pn = ctx.enqueue_create_buffer[DType.int32](max(f_n * FB_C, 1) if ENETCV_FOLD_BLOCKS else 1)
+    var fb_pg = ctx.enqueue_create_buffer[DType.float32](max(f_n * FB_C * m * m, 1) if ENETCV_FOLD_BLOCKS else 1)
+    var fb_st = ctx.enqueue_create_buffer[DType.float32](max(f_n * fb_words(m), 1) if ENETCV_FOLD_BLOCKS else 1)
+    var fb_cn = ctx.enqueue_create_buffer[DType.int32](max(f_n, 1) if ENETCV_FOLD_BLOCKS else 1)
+    if staged_score or ENETCV_FOLD_BLOCKS:
         var dlohi = ctx.enqueue_create_buffer[DType.int32](sp_len)
         ctx.enqueue_function[ecv_span_init_kernel](
             dlohi.unsafe_ptr(), Int32(f_n), Int32(n), grid_dim=_blocks(f_n), block_dim=ECV_TPB,
@@ -736,16 +724,35 @@ def enetcv_fit_grid(
         dout.enqueue_fill(Float32(0))
         dew.enqueue_fill(Float32(0))
         dtw.enqueue_fill(Float32(0))
-        comptime if C13_FOLD_STATS:
-            ctx.enqueue_function[classical_fold_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(f_n), ip[1], dcache.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                             grid_dim=_blocks(f_n * (d + 1)), block_dim=ECV_TPB)
-            wo += _blocks(f_n * (d + 1))
-            ctx.enqueue_function[classical_fold_grams_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(f_n), dcache.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                             grid_dim=_blocks(f_n * (d + 1) * (d + 2) // 2), block_dim=ECV_TPB)
-            wo += _blocks(f_n * (d + 1) * (d + 2) // 2)
-            ctx.enqueue_function[classical_fold_combine_kernel](dcache.unsafe_ptr(), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                               grid_dim=_blocks(f_n + 1), block_dim=ECV_TPB)
-            wo += _blocks(f_n + 1)
+        comptime if ENETCV_FOLD_BLOCKS:
+            ctx.enqueue_function[fb_means_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(f_n), dspan.unsafe_ptr(),
+                fb_ps.unsafe_ptr(), fb_pn.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                grid_dim=_fb_blocks(f_n * FB_C * m), block_dim=FB_TPB,
+            )
+            wo += _fb_blocks(f_n * FB_C * m)
+            ctx.enqueue_function[fb_fold_means_kernel](
+                fb_ps.unsafe_ptr(), fb_pn.unsafe_ptr(), Int32(d), Int32(f_n), fb_st.unsafe_ptr(), fb_cn.unsafe_ptr(),
+                wit.p(), Int32(wo), nonce, grid_dim=_fb_blocks(f_n * m), block_dim=FB_TPB,
+            )
+            wo += _fb_blocks(f_n * m)
+            if f_n > 0:
+                ctx.enqueue_function[fb_gram_kernel](
+                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(f_n), dspan.unsafe_ptr(),
+                    fb_st.unsafe_ptr(), fb_pg.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                    grid_dim=f_n * FB_C * fb_pairs, block_dim=FB_NT,
+                )
+                wo += f_n * FB_C * fb_pairs
+            ctx.enqueue_function[fb_fold_gram_kernel](
+                fb_pg.unsafe_ptr(), Int32(d), Int32(f_n), fb_st.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                grid_dim=_fb_blocks(f_n * m * m), block_dim=FB_TPB,
+            )
+            wo += _fb_blocks(f_n * m * m)
+            ctx.enqueue_function[fb_combine_kernel](
+                fb_st.unsafe_ptr(), fb_cn.unsafe_ptr(), Int32(d), Int32(f_n), ip[1], Int32(lay.ps), dew.unsafe_ptr(),
+                wit.p(), Int32(wo), nonce, grid_dim=_fb_blocks((f_n + 1) * m * m), block_dim=FB_TPB,
+            )
+            wo += _fb_blocks((f_n + 1) * m * m)
         else:
             if staged:
                 var tiles = (d + 1 + ECV_TC - 1) // ECV_TC
@@ -820,4 +827,9 @@ def enetcv_fit_grid(
     _ = dtw^
     _ = dsp^
     _ = dspan^
+    _ = fb_ps^
+    _ = fb_pn^
+    _ = fb_pg^
+    _ = fb_st^
+    _ = fb_cn^
     _ = wit^

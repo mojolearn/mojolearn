@@ -1513,3 +1513,13 @@ Old code is recoverable at main 8be4d20d4.
 | define | algorithm / dataset | branch @ sha | evidence | before -> after (candidate/baseline) | verdict | reason |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_CLASSICAL_C55_CLASS_GROUP` | GaussianNB, LDA, QDA, Multinomial/Bernoulli/Complement NB, feature-selection class stats / taxi, istella | main @ 8be4d20d4 (measured source 6fe3cfce38fd); deleted on lane/classical-nbda | experiments/six_lane_integration/measurements/20261006/BOARD.md rows T.C55.only; ~/mojolearn-evidence/board-review-20261007/review_classical.md C55 | NV sm90 gaussian-nb taxi/istella 3.76x/1.68x, lda-clf taxi/istella 2.39x/1.28x; AMD gfx942 7.30x/3.23x, 3.47x/1.69x | DROPPED (code deleted) | one thread per (class group, column) walking all n rows twice with a plain f32 running sum: serial, slower on both vendors, and quality failed (gaussian-nb taxi, lda-clf istella). Replaced by C61 (blocked single-pass, Chan merge, compensated) |
+
+## IDENTICAL CV coordinate descent (lane/classical-cv, 2026-10-07)
+
+Code recoverable at `lane/ridgecv-c13@c59be1781` (and main@8be4d20d4 under the old name `MOJOLEARN_CLASSICAL_C13_FOLD_STATS`).
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS` (was the CD half of `C13_FOLD_STATS`) | lasso-cv, enet-cv / taxi, istella (IDENTICAL, NV sm90 + AMD gfx942) | lane/ridgecv-c13@c59be1781, measured source 6fe3cfce38fd | T.C13.only (targeted-ab-20261007) | candidate/baseline NV 4.01/1.11 (lasso taxi/istella), 0.79/1.11 (enet); AMD 1.40/1.13, 1.35/1.10 | DROPPED, code deleted | each fold cell rescans all n rows filtered by fold id (F-fold redundant reads) with a plain f32 serial sum; Taxi quality gate FAIL on both vendors (picked alpha moves). Replaced by `MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS`. RidgeCV half kept as `C13_FOLD_STATS` (default on). |
+| `MOJOLEARN_CLASSICAL_C18_TILE64` | plain Lasso/ElasticNet solver CD (`solver/impl/cd.mojo` `CD_FUSED_STEPS` 64 vs 128) | lane/ridgecv-c13@c59be1781 | none | unmeasured | DROPPED (orchestrator brief L5), code deleted | never measured; not on any CV route. A tile size belongs in an int sweep if revived. |
+| `MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH` | plain Lasso/ElasticNet solver CD (`solver/impl/cd.mojo` Gram word prefetch) | lane/ridgecv-c13@c59be1781 | none | unmeasured | DROPPED (orchestrator brief L5), code deleted | never measured; not on any CV route. |

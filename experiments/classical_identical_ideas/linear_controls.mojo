@@ -18,7 +18,32 @@ comptime CLASSICAL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # complete declared model state match. Apple/host/PTX identity remains pending.
 # Evidence: experiments/six_lane_integration/measurements/20261006/retained-pairs.json
 # and BOARD.md. C13+C18 reproduces the saved C13 quality loss; no promotion.
-comptime C13_FOLD_STATS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C13_FOLD_STATS"]()
+# C13 split (lane/ridgecv-c13, 2026-10-07). C13_FOLD_STATS now covers RidgeCV
+# only (x_linear/ridgecv.mojo, the RidgeCV route in x_linear/device.mojo and
+# the host binding's RidgeCV scratch). Default ON in IDENTICAL: in the six-lane
+# campaign (source 55a815e, all candidates on, one excluded warmup + one scored
+# run per arm) RidgeCV full Taxi ran 2.75 s vs 29.95 s incumbent on NVIDIA
+# sm90 (0.092x) and 2.38 s vs 28.03 s on AMD gfx942 (0.085x); full Istella
+# 46.4 s vs 57.9 s (0.80x) and 89.9 s vs 104.0 s (0.86x). r2/rmse identical to
+# the incumbent on both vendors, NVIDIA and AMD output hashes equal. C13 is the
+# only candidate control on the RidgeCV route (catalog.json). Evidence:
+# experiments/six_lane_integration/measurements/20261006/BOARD.md (ridge-cv rows).
+# `-D MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF` restores the per-fold passes (arm B
+# of the isolated confirmation A/B owed on nv and amd).
+comptime C13_FOLD_STATS = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF"]()
+# The LassoCV/ElasticNetCV fold cache (C13_CD_FOLD_STATS) was deleted on
+# lane/classical-cv (2026-10-07): T.C13.only measured it 4.0x/1.4x slower on
+# Taxi and quality-failing on both vendors (row in docs/apple-fast/EXPERIMENTS.md).
+# lane/classical-cv (2026-10-07), NEW, opt-in, NOT MEASURED: LassoCV /
+# ElasticNetCV fold statistics from fold-aligned compensated block partials
+# (x_linear/enetcv_blocks.mojo). Each fold's row span is cut into
+# ENETCV_FB_CHUNKS chunks (one switch, arms = chunks per fold 16|32|64, a
+# fixed count, not a data shape); every row is read once per pass, each
+# chunk's sums are compensated (TwoSum / Dot2), chunks merge ascending, and
+# the training sets combine fold statistics ascending by the parallel-axis
+# rule. Changes bits (host column and both GPU vendors together).
+comptime ENETCV_FOLD_BLOCKS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS"]()
+comptime ENETCV_FB_CHUNKS = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS", 32]() if ENETCV_FOLD_BLOCKS else 32
 comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_GROUP_RHS"]()
 comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"]()
 comptime C16_GLM_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C16_GLM_FUSED"]()
@@ -83,8 +108,6 @@ comptime C27_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_
 comptime C28_BUCKET_SOLVES = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES"]()
 
 # Additional independent component/residual sub-arms; the header status applies.
-comptime C18_TILE64 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C18_TILE64"]()
-comptime C18_GRAM_PREFETCH = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH"]()
 comptime C27_FA_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS"]()
 comptime C27_NORM_VECTOR = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_NORM_VECTOR"]()
 comptime C13_LOGCV_WEIGHTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"]()
