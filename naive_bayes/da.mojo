@@ -13,7 +13,7 @@ does not see. Arrays are laid out with row stride d and zero padding past
 the data-dependent ranks, so every stage has a size known when the program is
 built.
 """
-from experiments.classical_identical_ideas.stats_controls import C56_QDA_PROJECT4
+from experiments.classical_identical_ideas.stats_controls import C56_QDA_PROJECT
 from checks.numerics import ftz
 from x_prep.common import FP, IP, p, ld, st, RUN, run_block
 from x_prep.prims import add, acc_add, sub, mul, div, logf, sqrtf
@@ -232,23 +232,24 @@ def qda_dec_unit(t: Int, f: FP, q: IP):
     var K = p(q, 6)
     var i = t // K
     var k = t % K
-    # C56: four independent projection columns reuse centered input. Each
-    # column retains ascending c; norm2 retains ascending r. The four-register
-    # tile is a bounded live-state choice, independent of dataset dimensions.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    comptime if C56_QDA_PROJECT4:
+    # C56_QDA_PROJECT (experiments/classical_identical_ideas/stats_controls.mojo):
+    # W adjacent projection columns per pass over the centred row. Each column
+    # keeps ascending c and the norm keeps ascending r: the off words.
+    comptime W = C56_QDA_PROJECT
+    comptime if W > 0:
+        comptime assert W == 2 or W == 4 or W == 8, "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT must be 2, 4 or 8"
         var norm = Float32(0)
-        for r0 in range(0, d, 4):
-            var acc = InlineArray[Float32, 4](fill=Float32(0))
+        for r0 in range(0, d, W):
+            var acc = InlineArray[Float32, W](fill=Float32(0))
             for c in range(d):
-                var centered = sub(ld(f, p(q, 0)+i*d+c), ld(f, p(q, 3)+k*d+c))
-                comptime for lane in range(4):
-                    if r0+lane < d:
-                        acc[lane] = add(acc[lane], mul(centered, ld(f, p(q, 4)+k*d*d+c*d+r0+lane)))
-            comptime for lane in range(4):
-                if r0+lane < d:
+                var centered = sub(ld(f, p(q, 0) + i * d + c), ld(f, p(q, 3) + k * d + c))
+                comptime for lane in range(W):
+                    if r0 + lane < d:
+                        acc[lane] = add(acc[lane], mul(centered, ld(f, p(q, 4) + k * d * d + c * d + r0 + lane)))
+            comptime for lane in range(W):
+                if r0 + lane < d:
                     norm = add(norm, mul(acc[lane], acc[lane]))
-        st(f, p(q, 7)+t, sub(ld(f, p(q, 5)+k), mul(Float32(0.5), norm)))
+        st(f, p(q, 7) + t, sub(ld(f, p(q, 5) + k), mul(Float32(0.5), norm)))
         return
     var norm2 = Float32(0)
     for r in range(d):

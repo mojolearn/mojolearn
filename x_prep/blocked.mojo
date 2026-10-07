@@ -601,6 +601,260 @@ def csb_var_unit(t: Int, f: FP, q: IP):
     st(f, p(q, 5) + t, v)
 
 
+# ------------------------------------------- C61 single-pass class statistics
+# lane classical-nbda (2026-10-07), IDENTICAL on every vendor and the host
+# column, OFF by default (experiments/classical_identical_ideas/
+# shared_controls.mojo C61_NB_ARM / C61_DA; Python stages these only when the
+# binding reports them). csbm_part walks each (block, column) ONCE and keeps,
+# per class, csb1_part's sum and count chains (same words) plus a Welford mean
+# and M2; csbm_fold folds blocks ascending: count and sum exactly as csb_fold
+# (so the class means are csb_fold's words) and M2 by Chan's pairwise rule
+# with a compensated (two-sum) M2 accumulator; csbm_pool merges the class M2
+# of a column (classes ascending, compensated), optionally with the
+# between-class term (the whole column's population variance). No chain is
+# longer than one XB-row block or one pass over nb block partials.
+
+
+@always_inline
+def _comp_add(mut hi: Float32, mut lo: Float32, x: Float32):
+    """hi + lo += x with Knuth's two-sum: the rounding error of each add is
+    kept in lo (the identical add/sub, so the same words on every target)."""
+    var s = add(hi, x)
+    var bb = sub(s, hi)
+    var e = add(sub(hi, sub(s, bb)), sub(x, bb))
+    hi = s
+    lo = add(lo, e)
+
+
+@always_inline
+def _chan_step(
+    mut na: Float32, mut ma: Float32, mut hi: Float32, mut lo: Float32, nb: Float32, mb: Float32, m2b: Float32
+):
+    """Chan's merge of (nb, mb, m2b) into (na, ma, hi + lo); nb > 0."""
+    if na == Float32(0):
+        na = nb
+        ma = mb
+        _comp_add(hi, lo, m2b)
+        return
+    var nn = add(na, nb)
+    var delta = sub(mb, ma)
+    var rb = div(nb, nn)
+    ma = add(ma, mul(delta, rb))
+    _comp_add(hi, lo, m2b)
+    _comp_add(hi, lo, mul(mul(delta, delta), mul(na, rb)))
+    na = nn
+
+
+@always_inline
+def _csbm_reg_take(
+    x: Float32, k: Int, w: Float32, W: Int,
+    mut s: SIMD[DType.float32, CSB1_REG], mut cw: SIMD[DType.float32, CSB1_REG],
+    mut m: SIMD[DType.float32, CSB1_REG], mut m2: SIMD[DType.float32, CSB1_REG],
+):
+    """One row of csbm_part's register path: csb1_part's sum and count adds,
+    then the class's Welford step (weighted: West's rule)."""
+    if W < 0:
+        comptime for u in range(CSB1_REG):
+            if k == u:
+                s[u] = acc_add(s[u], x)
+                cw[u] = cw[u] + Float32(1)
+                var e = sub(x, m[u])
+                m[u] = add(m[u], div(e, cw[u]))
+                m2[u] = add(m2[u], mul(e, sub(x, m[u])))
+    else:
+        comptime for u in range(CSB1_REG):
+            if k == u:
+                s[u] = add(s[u], mul(w, x))
+                cw[u] = add(cw[u], w)
+                if cw[u] != Float32(0):
+                    var e = sub(x, m[u])
+                    m[u] = add(m[u], div(mul(w, e), cw[u]))
+                    m2[u] = add(m2[u], mul(w, mul(e, sub(x, m[u]))))
+
+
+@always_inline
+def _csbm_mem_take(
+    f: FP, x: Float32, k: Int, w: Float32, W: Int, PS: Int, PC: Int, PM: Int, PM2: Int, base: Int, d: Int, K: Int
+):
+    """One row of csbm_part's table path (K > CSB1_REG): the same operations
+    on the partial tables' words."""
+    if k < 0 or k >= K:
+        return
+    var at = base + k * d
+    var c: Float32
+    if W < 0:
+        st(f, PS + at, add(ld(f, PS + at), x))
+        c = ld(f, PC + at) + Float32(1)
+        st(f, PC + at, c)
+        var mo = ld(f, PM + at)
+        var e = sub(x, mo)
+        var mn = add(mo, div(e, c))
+        st(f, PM + at, mn)
+        st(f, PM2 + at, add(ld(f, PM2 + at), mul(e, sub(x, mn))))
+    else:
+        st(f, PS + at, add(ld(f, PS + at), mul(w, x)))
+        c = add(ld(f, PC + at), w)
+        st(f, PC + at, c)
+        if c != Float32(0):
+            var mo = ld(f, PM + at)
+            var e = sub(x, mo)
+            var mn = add(mo, div(mul(w, e), c))
+            st(f, PM + at, mn)
+            st(f, PM2 + at, add(ld(f, PM2 + at), mul(w, mul(e, sub(x, mn)))))
+
+
+def csbm_part_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, Y, K, PS, PC, PM, PM2, nb, W]; t = b*d + c. For EVERY
+    class k of (block b, column c), from one walk of the block's rows,
+    ascending, at (b*K + k)*d + c: PS / PC = csb1_part's words (sum, count or
+    weight sum), PM = the block's Welford class mean, PM2 = its sum of
+    squared deviations from that mean (W >= 0: weighted)."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var Y = p(q, 3)
+    var K = p(q, 4)
+    var PS = p(q, 5)
+    var PC = p(q, 6)
+    var PM = p(q, 7)
+    var PM2 = p(q, 8)
+    var W = p(q, 10)
+    var c = t % d
+    var b = t // d
+    var r = _span(b, n)
+    var base = b * K * d + c
+    var full = r[0] + (r[1] - r[0]) - (r[1] - r[0]) % RUN
+    if K <= CSB1_REG:
+        var s = SIMD[DType.float32, CSB1_REG](0)
+        var cw = SIMD[DType.float32, CSB1_REG](0)
+        var m = SIMD[DType.float32, CSB1_REG](0)
+        var m2 = SIMD[DType.float32, CSB1_REG](0)
+        for i0 in range(r[0], full, RUN):
+            var bx = run_block[RUN](f, X + i0 * d + c, d)
+            var by = run_block[RUN](f, Y + i0, 1)
+            var bw = SIMD[DType.float32, RUN](0)
+            if W >= 0:
+                bw = run_block[RUN](f, W + i0, 1)
+            comptime for u in range(RUN):
+                _csbm_reg_take(ftz(bx[u]), Int(ftz(by[u])), ftz(bw[u]), W, s, cw, m, m2)
+        for i in range(full, r[1]):
+            var w = Float32(0)
+            if W >= 0:
+                w = ld(f, W + i)
+            _csbm_reg_take(ld(f, X + i * d + c), Int(ld(f, Y + i)), w, W, s, cw, m, m2)
+        comptime for u in range(CSB1_REG):
+            if u < K:
+                st(f, PS + base + u * d, s[u])
+                st(f, PC + base + u * d, cw[u])
+                st(f, PM + base + u * d, m[u])
+                st(f, PM2 + base + u * d, m2[u])
+    else:
+        for k in range(K):
+            st(f, PS + base + k * d, Float32(0))
+            st(f, PC + base + k * d, Float32(0))
+            st(f, PM + base + k * d, Float32(0))
+            st(f, PM2 + base + k * d, Float32(0))
+        for i0 in range(r[0], full, RUN):
+            var bx = run_block[RUN](f, X + i0 * d + c, d)
+            var by = run_block[RUN](f, Y + i0, 1)
+            var bw = SIMD[DType.float32, RUN](0)
+            if W >= 0:
+                bw = run_block[RUN](f, W + i0, 1)
+            comptime for u in range(RUN):
+                _csbm_mem_take(f, ftz(bx[u]), Int(ftz(by[u])), ftz(bw[u]), W, PS, PC, PM, PM2, base, d, K)
+        for i in range(full, r[1]):
+            var w = Float32(0)
+            if W >= 0:
+                w = ld(f, W + i)
+            _csbm_mem_take(f, ld(f, X + i * d + c), Int(ld(f, Y + i)), w, W, PS, PC, PM, PM2, base, d, K)
+
+
+def csbm_fold_unit(t: Int, f: FP, q: IP):
+    """q = [PS, PC, PM, PM2, nb, K, d, CN, CNT, MEAN, SUM, VAR, M2O, W];
+    t = k*d + c. CN / CNT / MEAN / SUM exactly as csb_fold (blocks ascending);
+    the blocks' (count, mean, M2) merged ascending by Chan's rule (`_chan_step`)
+    into M2O and VAR = M2 / count (zero for an empty class). Offsets < 0 are
+    not written."""
+    var PS = p(q, 0)
+    var PC = p(q, 1)
+    var PM = p(q, 2)
+    var PM2 = p(q, 3)
+    var nb = p(q, 4)
+    var K = p(q, 5)
+    var d = p(q, 6)
+    var W = p(q, 13)
+    var kd = K * d
+    var s = Float32(0)
+    var cw = Float32(0)
+    var na = Float32(0)
+    var ma = Float32(0)
+    var hi = Float32(0)
+    var lo = Float32(0)
+    var cnt = 0
+    for b in range(nb):
+        var at = b * kd + t
+        var nbk = ld(f, PC + at)
+        if W < 0:
+            cnt += Int(nbk)
+        else:
+            cw = add(cw, nbk)
+        s = add(s, ld(f, PS + at))
+        if nbk != Float32(0):
+            _chan_step(na, ma, hi, lo, nbk, ld(f, PM + at), ld(f, PM2 + at))
+    if W < 0:
+        cw = Float32(cnt)
+    var mean = Float32(0)
+    var m2 = add(hi, lo)
+    var v = Float32(0)
+    if cw != Float32(0):
+        mean = div(s, cw)
+        v = div(m2, cw)
+    st(f, p(q, 7) + t, cw)
+    if t % d == 0 and p(q, 8) >= 0:
+        st(f, p(q, 8) + t // d, cw)
+    if p(q, 9) >= 0:
+        st(f, p(q, 9) + t, mean)
+    if p(q, 10) >= 0:
+        st(f, p(q, 10) + t, s)
+    if p(q, 11) >= 0:
+        st(f, p(q, 11) + t, v)
+    if p(q, 12) >= 0:
+        st(f, p(q, 12) + t, m2)
+
+
+def csbm_pool_unit(t: Int, f: FP, q: IP):
+    """q = [M2, MEAN, CN, K, d, n, OUT, BETWEEN]; t = column c. Over the
+    classes ascending (empty ones skipped): the sum of the class M2 words,
+    compensated; BETWEEN != 0 adds the between-class term by Chan's rule on
+    (CN, MEAN), giving the column's whole M2. OUT[c] = that sum / n (the
+    population variance: LDA 'svd''s within-class std, or GaussianNB's
+    epsilon column variance); zero when n is zero."""
+    var M2 = p(q, 0)
+    var MEAN = p(q, 1)
+    var CN = p(q, 2)
+    var K = p(q, 3)
+    var d = p(q, 4)
+    var n = p(q, 5)
+    var between = p(q, 7) != 0
+    var na = Float32(0)
+    var ma = Float32(0)
+    var hi = Float32(0)
+    var lo = Float32(0)
+    for k in range(K):
+        var at = k * d + t
+        var nk = ld(f, CN + at)
+        if nk == Float32(0):
+            continue
+        if between:
+            _chan_step(na, ma, hi, lo, nk, ld(f, MEAN + at), ld(f, M2 + at))
+        else:
+            _comp_add(hi, lo, ld(f, M2 + at))
+    var v = Float32(0)
+    if n > 0:
+        v = div(add(hi, lo), Float32(n))
+    st(f, p(q, 6) + t, v)
+
+
 # ---------------------------------------------------------------- categories
 def cat_hpart_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, Y, K, NCAT, CMAX, W, H, R]; t = b*d + j (CategoricalNB

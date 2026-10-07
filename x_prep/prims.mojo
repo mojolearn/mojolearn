@@ -10,7 +10,6 @@ Normalizer, `_handle_zeros_in_scale`), `preprocessing/_encoders.py`
 (`_unique`, `_encode`), numpy `lib/_function_base_impl.py` (`_lerp`, the
 linear percentile) for the quantile unit.
 """
-from experiments.classical_identical_ideas.shared_controls import C55_CLASS_GROUP
 from std.memory import bitcast
 from std.sys.info import is_gpu
 from checks.numerics import ftz, identical_mul, identical_div, identical_sqrt, identical_exp, identical_log
@@ -469,9 +468,6 @@ def class_stats_unit(t: Int, f: FP, q: IP):
     variance of column c (and, for c == 0, the row count). Offsets < 0 are not
     written; an empty class writes zeros. Rows are loaded RUN at a time
     (`run_block`) and folded one by one in the same order."""
-    comptime if C55_CLASS_GROUP:
-        class_stats_group_unit[False](t, f, q)
-        return
     var X = p(q, 0)
     var n = p(q, 1)
     var d = p(q, 2)
@@ -528,9 +524,6 @@ def class_stats_w_unit(t: Int, f: FP, q: IP):
     MEAN = SUM / CNT and VAR = sum w (x - MEAN)^2 / CNT (numpy `average`
     with weights). Offsets < 0 are not written; a class of zero weight
     writes zeros."""
-    comptime if C55_CLASS_GROUP:
-        class_stats_group_unit[True](t, f, q)
-        return
     var X = p(q, 0)
     var n = p(q, 1)
     var d = p(q, 2)
@@ -946,64 +939,6 @@ def nan_keep_unit(t: Int, f: FP, q: IP):
         f.unsafe_store(p(q, 4) + t, canonical_nan())
     else:
         f.unsafe_store(p(q, 4) + t, raw(f, p(q, 2) + t))
-
-
-# C55 groups eight independent classes per feature, reading each label and
-# feature once per class tile. Eight fixes register use, never a data route.
-# Each class consumes exactly its original ascending row subsequence; the
-# variance remains a second centered pass, and weights retain multiplication
-# and addition order. Both host and device dispatch these same units.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-def class_stats_group_unit[weighted: Bool](t: Int, f: FP, q: IP):
-    var d = p(q, 2)
-    var klass = t // d
-    if klass % 8 != 0:
-        return
-    var c = t % d
-    var n = p(q, 1)
-    var K = p(q, 4)
-    var sums = InlineArray[Float32, 8](fill=Float32(0))
-    var weights = InlineArray[Float32, 8](fill=Float32(0))
-    var counts = InlineArray[Int, 8](fill=0)
-    var means = InlineArray[Float32, 8](fill=Float32(0))
-    var squares = InlineArray[Float32, 8](fill=Float32(0))
-    for row in range(n):
-        var k = Int(ld(f, p(q, 3) + row)) - klass
-        if k < 0 or k >= 8:
-            continue
-        var value = ld(f, p(q, 0) + row*d+c)
-        comptime if weighted:
-            var w = ld(f, p(q, 9) + row)
-            sums[k] = add(sums[k], mul(w, value))
-            weights[k] = add(weights[k], w)
-        else:
-            sums[k] = add(sums[k], value)
-            counts[k] += 1
-    for k in range(min(8, K-klass)):
-        comptime if not weighted:
-            weights[k] = Float32(counts[k])
-        if weights[k] != Float32(0):
-            means[k] = div(sums[k], weights[k])
-    if p(q, 7) >= 0:
-        for row in range(n):
-            var k = Int(ld(f, p(q, 3) + row)) - klass
-            if k < 0 or k >= 8 or weights[k] == Float32(0):
-                continue
-            var e = sub(ld(f, p(q, 0) + row*d+c), means[k])
-            var square = mul(e, e)
-            comptime if weighted:
-                square = mul(ld(f, p(q, 9) + row), square)
-            squares[k] = add(squares[k], square)
-    for k in range(min(8, K-klass)):
-        var at = (klass+k)*d+c
-        if c == 0 and p(q, 5) >= 0:
-            st(f, p(q, 5)+klass+k, weights[k])
-        if p(q, 6) >= 0:
-            st(f, p(q, 6)+at, means[k])
-        if p(q, 7) >= 0:
-            st(f, p(q, 7)+at, div(squares[k], weights[k]) if weights[k] != Float32(0) else Float32(0))
-        if p(q, 8) >= 0:
-            st(f, p(q, 8)+at, sums[k])
 
 
 # C08 fit-local dictionary and inverse map. One canonical dictionary is
