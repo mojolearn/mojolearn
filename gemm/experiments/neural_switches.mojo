@@ -63,8 +63,3 @@ comptime ROLE_WGRAD = 4
 comptime ROLE_ALL = 7
 comptime NEURAL_GEMM_ROLES = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES", 7]()
 
-
-@always_inline
-def neural_role_selected[ROLE: Int]() -> Bool:
-    """True when products tagged ROLE take the selected schedule."""
-    return (NEURAL_GEMM_ROLES & ROLE) != 0

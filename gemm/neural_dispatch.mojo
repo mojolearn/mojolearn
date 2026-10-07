@@ -33,6 +33,9 @@ from gemm.experiments.neural_streaming import (
 from gemm.experiments.neural_tiled import NN09,NN15,neural_tiled_ab
 from gemm.experiments.neural_plans import NN01,NN08,NN10,NN12,neural_schedule_ab,neural_async_ab,neural_cost_plan
 from gemm.experiments.neural_grouped import NN05,NN07,_neural_operand_pack_kernel
+from gemm.experiments.neural_switches import (
+    ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD,ROLE_ALL,NEURAL_GEMM_ROLES,
+)
 
 comptime NEURAL_PAIR_ENABLED = NN05 or NN07
 comptime NEURAL_GEMM_EXPERIMENT_ENABLED = (
@@ -56,6 +59,11 @@ comptime _STAGING = NN09 or NN15
 # standalone register/shared fold kernel. Other schedule families do not
 # implement its storage arm; reject those combinations instead of masking it.
 comptime _ROUTES = Int(NN01)+Int(NN08)+Int(NN10)+Int(_STREAM)+Int(_STAGING)+Int(NN11 and not _STREAM)
+# One arm of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE is selected. Products whose
+# caller role is outside MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES keep the
+# unscheduled route (selected profile, else the incumbent) in the same build.
+comptime _SCHEDULED = _ROUTES > 0
+comptime _ROLE_SPLIT = _SCHEDULED and NEURAL_GEMM_ROLES != ROLE_ALL
 
 
 def _overlaps(mut a: DeviceBuffer[DType.float32],na: Int,
@@ -67,7 +75,22 @@ def _overlaps(mut a: DeviceBuffer[DType.float32],na: Int,
     return ap<bp+4*nb and bp<ap+4*na
 
 
+def _unscheduled_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
+    comptime if NEURAL_PROFILE_CHANGED:
+        return 1
+    return _incumbent_workspace(m,n,k)
+
+
 def identical_gemm_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
+    """Covers every route the build can take for (m, n, k): with a role mask,
+    one workspace serves both the scheduled and the unscheduled roles."""
+    var count = _scheduled_workspace_max_floats(m,n,k)
+    comptime if _ROLE_SPLIT:
+        count = max(count,_unscheduled_workspace_max_floats(m,n,k))
+    return count
+
+
+def _scheduled_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
     comptime if _STREAM:
         var leaves = neural_partition[NEURAL_LEAF](k)[1]
         comptime if NN02 and not _CONTROL:
@@ -121,16 +144,26 @@ def _selected_cost_plan(m: Int,n: Int,k: Int) raises -> Int:
     return 1 if staged<flat else PLAN_FLAT
 
 
-def identical_gemm_into[allow_vendor: Bool = True](
+def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
 ) raises:
+    """ROLE is the caller class (ROLE_PROJECTION, ROLE_HEAD, ROLE_WGRAD) that
+    MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES selects on; it never changes the
+    route of a build without a schedule arm."""
+    comptime assert ROLE == ROLE_PROJECTION or ROLE == ROLE_HEAD or ROLE == ROLE_WGRAD, "neural GEMM role"
     comptime if not NEURAL_GEMM_EXPERIMENT_ENABLED:
         _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
         return
     _admit_product(c,a,b,ws,m,n,k,op)
     if m==0 or n==0:
+        return
+    comptime if _SCHEDULED and not ((NEURAL_GEMM_ROLES & ROLE) != 0):
+        comptime if NEURAL_PROFILE_CHANGED:
+            neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
+        else:
+            _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
         return
     comptime if NN01:
         _ = neural_schedule_ab[not _CONTROL](ctx,c,a,b,ws,m,n,k,op,_ARM)
@@ -161,7 +194,7 @@ def identical_gemm_into[allow_vendor: Bool = True](
         _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
 
 
-def identical_gemm[allow_vendor: Bool = True](
+def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
 ) raises:
@@ -171,7 +204,7 @@ def identical_gemm[allow_vendor: Bool = True](
     neural_validate(m,n,k,op)
     var workspace = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m,n,k))
     try:
-        identical_gemm_into[allow_vendor](ctx,c,a,b,workspace,m,n,k,op)
+        identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,workspace,m,n,k,op)
     except error:
         ctx.synchronize()
         raise error
@@ -292,7 +325,7 @@ struct GemmWorkspace(Movable):
             step_count_device_alloc()
             self.buffer = ctx.enqueue_create_buffer[DType.float32](required)
 
-    def run[allow_vendor: Bool = True](mut self,ctx: DeviceContext,
+    def run[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](mut self,ctx: DeviceContext,
         mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
         mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
         comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
@@ -300,15 +333,15 @@ struct GemmWorkspace(Movable):
         comptime if NN12 and _CONTROL:
             # B charges fresh scratch and its last-consumer wait per product.
             # OFF keeps the pre-existing model workspace reuse unchanged.
-            identical_gemm[allow_vendor](ctx,c,a,b,m,n,k,op)
+            identical_gemm[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
             return
         var required = identical_gemm_workspace_max_floats(m,n,k)
         comptime if NN12 and not _CONTROL:
             if required>_RETAINED:
-                identical_gemm[allow_vendor](ctx,c,a,b,m,n,k,op)
+                identical_gemm[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
                 return
         self._ensure(ctx,required)
-        comptime if NN12 and NN10 and not _CONTROL:
+        comptime if NN12 and NN10 and not _CONTROL and ((NEURAL_GEMM_ROLES & ROLE) != 0):
             _admit_product(c,a,b,self.buffer,m,n,k,op)
             if m==0 or n==0:
                 return
@@ -319,7 +352,7 @@ struct GemmWorkspace(Movable):
                 self.last_k = k
             _profile_or_cost_into(ctx,c,a,b,self.buffer,m,n,k,op,self.cached_plan)
         else:
-            identical_gemm_into[allow_vendor](ctx,c,a,b,self.buffer,m,n,k,op)
+            identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
 
     def run_pair(mut self,ctx: DeviceContext,mut c1: DeviceBuffer[DType.float32],
         mut c2: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
