@@ -7,7 +7,7 @@ do not use vendor-specific reduction collectives or reduced precision.
 """
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -21,7 +21,9 @@ from gemm.checks.gemm_identical import (
 
 comptime _NEURAL_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime NI07_GROUPED_PROJECTIONS = _NEURAL_ARMS and is_defined["MOJOLEARN_NI07_GROUPED_PROJECTIONS"]()
-comptime NI09_TILED_BIAS = _NEURAL_ARMS and is_defined["MOJOLEARN_NI09_TILED_BIAS"]()
+# NI09 = the CNN arm (mask bit 2) of MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE; the
+# MLP arm (bit 1) is NN06 in gemm/experiments/neural_epilogue.mojo.
+comptime NI09_TILED_BIAS = _NEURAL_ARMS and (get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE", 0]() & 2) != 0
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime BiasFn = def(Float32, Float32) thin -> Float32
 # A 256-thread block owns 16x16 outputs and 2 KiB of operand staging.

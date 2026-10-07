@@ -7,7 +7,7 @@ this generic component does not redefine another caller's activation. Order is p
 Each enabled stage owns an explicit FP32/FTZ boundary in both A and B.
 """
 from gemm.experiments.neural_profile_device import neural_profile_device
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from std.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz,identical_mul,identical_fmax
@@ -19,7 +19,13 @@ from gemm.experiments.neural_profile import (
 
 # OFF: no compile/identity/quality/timing evidence in this worktree. This is
 # separate from I05's previously losing bias-only scalar component candidate.
-comptime NN06 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN06"]()
+# ONE epilogue-fusion switch with per-caller arms (NN06 + NI09 merged,
+# 2026-10-07): -D MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=<mask>, 1 = MLP caller
+# (this rounded epilogue, training/mlp_ops.mojo), 2 = CNN caller (NI09 tiled
+# bias, x_cnn/device.mojo), 3 = both. One idea, two kernels; the mask lets
+# the grid time each caller family separately.
+comptime NEURAL_GEMM_EPILOGUE = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE", 0]()
+comptime NN06 = NEURAL_EXPERIMENTS_ALLOWED and (NEURAL_GEMM_EPILOGUE & 1) != 0
 comptime EP_BIAS = 1
 comptime EP_SCALE = 2
 comptime EP_RESIDUAL = 4
