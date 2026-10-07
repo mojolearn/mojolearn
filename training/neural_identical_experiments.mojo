@@ -17,12 +17,17 @@ comptime _ENABLED = (
 
 # NI23: rotate K while writing the packed attention layout. S; same products
 # and add, with all saved stages retained. Full prefill only by cache semantics.
-comptime IDN_ROPE_CACHE = _ENABLED and is_defined["MOJOLEARN_IDN_ROPE_CACHE"]()
-# NI24: only owned training-prefill callers may omit the persistent cache copy.
+# Arm 2 of the ONE RoPE switch MOJOLEARN_IDN_ROPE (arm 1 is NN27).
+comptime IDN_ROPE_CACHE = _ENABLED and get_defined_int["MOJOLEARN_IDN_ROPE", 0]() == 2
+# NI24 (+ NN28, merged 2026-10-07; NN28 was the same capability on fewer
+# callers): only owned training-prefill callers may omit the persistent cache
+# copy. One switch for byte_lm, its layer pool and modeling_llama.
 comptime IDN_TRAIN_NO_DECODE_CACHE = _ENABLED and is_defined["MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE"]()
 # NI25 S sub-arm: serial original statistics, cooperative output scaling.
-comptime IDN_RMS_ROW_BLOCK = _ENABLED and is_defined["MOJOLEARN_IDN_RMS_ROW_BLOCK"]()
-# NI26: preserve both silu_out and gated for tracing and backward.
+# Arm 3 of the ONE norm switch MOJOLEARN_IDN_NORM (norm_profile_contract.mojo).
+comptime IDN_RMS_ROW_BLOCK = _ENABLED and get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 3
+# NI26 (+ NN26, merged 2026-10-07; both enabled the same training_swiglu
+# launch): preserve both silu_out and gated for tracing and backward.
 comptime IDN_TRAIN_SWIGLU = _ENABLED and is_defined["MOJOLEARN_IDN_TRAIN_SWIGLU"]()
 # NI27: views are rebound to the current owned arena after optimizer swaps.
 comptime IDN_LM_PARAM_VIEWS = _ENABLED and is_defined["MOJOLEARN_IDN_LM_PARAM_VIEWS"]()

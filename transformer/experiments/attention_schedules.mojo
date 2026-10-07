@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""NN22/25/26/29 source-only scheduling candidates, 2026-10-06.
+"""NN25/26/29 source-only scheduling candidates, 2026-10-06.
+
+NN22 (eager dK/dV pairing) and NN23 (row-dot dS) were deleted on 2026-10-07:
+only transformer/checks read them, never a public binding route.
 
 No compilation, identity, quality or timing evidence exists for these drafts.
 Every switch requires IDENTICAL and is disabled by MOJOLEARN_IDN_ALL_OFF.
@@ -9,7 +12,7 @@ from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
 from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div,
     identical_mul, identical_mul_add, identical_rsqrt, identical_silu,
@@ -18,9 +21,8 @@ from checks.numerics import (
 comptime NN_AB_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 # Each flag below is OFF: full transformer/LM/Samba train-step NVIDIA+AMD
 # ratios, host/three-GPU words, task quality and sample counts are pending.
-comptime NN25_RMS_SPLIT_SCALE = NN_AB_ENABLED and is_defined["MOJOLEARN_NN25_RMS_SPLIT_SCALE"]()
-comptime NN26_TRAIN_SWIGLU = NN_AB_ENABLED and is_defined["MOJOLEARN_NN26_TRAIN_SWIGLU"]()
-comptime NN22_EAGER_DKDV_PAIR = NN_AB_ENABLED and is_defined["MOJOLEARN_NN22_EAGER_DKDV_PAIR"]()
+# NN25 = arms 2 and 4 of MOJOLEARN_IDN_NORM (norm_profile_contract.mojo).
+comptime NN25_RMS_SPLIT_SCALE = NN_AB_ENABLED and (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 2 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4)
 comptime NN29_RING_PAIR = NN_AB_ENABLED and is_defined["MOJOLEARN_NN29_RING_PAIR"]()
 
 
@@ -85,49 +87,6 @@ def training_swiglu_kernel(
     gated.unsafe_store(i, ftz(identical_mul(sil, ftz(up.unsafe_load(i)))))
 
 
-def eager_dkdv_pair_kernel(
-    dk: MutPointer[Float32, MutAnyOrigin],
-    dv: MutPointer[Float32, MutAnyOrigin],
-    dcell: MutPointer[Float32, MutAnyOrigin],
-    weights: MutPointer[Float32, MutAnyOrigin],
-    q: MutPointer[Float32, MutAnyOrigin],
-    dctx: MutPointer[Float32, MutAnyOrigin],
-    b_in: Int32, l_in: Int32, nh_in: Int32, nkv_in: Int32,
-    hd_in: Int32, s_in: Int32,
-):
-    """NN22: pair independent eager K/V chains and share address arithmetic.
-
-    Distinct from rejected cooperative/stacked fused-attention experiments:
-    this consumes already materialized dcell/weights. Each chain includes
-    every h then t term, including masked signed zeros; no atomics, shared
-    tree or omitted terms. Full models must exercise eager/fallback scope.
-    """
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var l = Int(l_in)
-    var nh = Int(nh_in)
-    var nkv = Int(nkv_in)
-    var hd = Int(hd_in)
-    var s = Int(s_in)
-    if i >= Int(b_in) * nkv * s * hd:
-        return
-    var d = i % hd
-    var j = (i // hd) % s
-    var kvh = (i // (hd * s)) % nkv
-    var bb = i // (hd * s * nkv)
-    var nrep = nh // nkv
-    var ak = Float32(0.0)
-    var av = Float32(0.0)
-    for hh in range(nrep):
-        var h = kvh * nrep + hh
-        for t in range(l):
-            var cell = ((bb * nh + h) * l + t) * s + j
-            var qi = (bb * l + t) * nh * hd + h * hd + d
-            ak = ftz(identical_mul_add(ftz(dcell.unsafe_load(cell)), ftz(q.unsafe_load(qi)), ak))
-            av = ftz(identical_mul_add(ftz(weights.unsafe_load(cell)), ftz(dctx.unsafe_load(qi)), av))
-    dk.unsafe_store(i, ak)
-    dv.unsafe_store(i, av)
-
-
 def kv_ring_pair_kernel(
     ring_k: MutPointer[Float32, MutAnyOrigin],
     ring_v: MutPointer[Float32, MutAnyOrigin],
@@ -165,8 +124,12 @@ def kv_ring_pair_kernel(
 # NN27 retains LlamaRopeTable's existing validated construction/lifetime;
 # the new schedule shares its immutable position cells between Q and K.
 # No pointer-based trust cache or skipped refusal scan is introduced.
-comptime NN27_QK_ROPE_PAIR = NN_AB_ENABLED and is_defined["MOJOLEARN_NN27_QK_ROPE_PAIR"]()
-comptime NN28_DEAD_TRAINING_CACHE = NN_AB_ENABLED and is_defined["MOJOLEARN_NN28_DEAD_TRAINING_CACHE"]()
+# ONE RoPE switch (NN27 + NI23 merged, 2026-10-07): -D MOJOLEARN_IDN_ROPE=<arm>,
+#   1  qk_pair   NN27: rotate Q and K in one launch (this kernel)
+#   2  k_cache   NI23: rotate K while writing the prefill cache
+#                (training/neural_identical_experiments.mojo)
+# Same products and adds as the incumbent: no bit change.
+comptime NN27_QK_ROPE_PAIR = NN_AB_ENABLED and get_defined_int["MOJOLEARN_IDN_ROPE", 0]() == 1
 
 
 def qk_rope_pair_kernel(
@@ -222,7 +185,6 @@ def qk_rope_pair_kernel(
         k_out.unsafe_store(ki, ftz(ftz(ka) + ftz(kb)))
 
 comptime NN21_SCALE_MASK = NN_AB_ENABLED and is_defined["MOJOLEARN_NN21_SCALE_MASK"]()
-comptime NN23_ROWDOT_DS = NN_AB_ENABLED and is_defined["MOJOLEARN_NN23_ROWDOT_DS"]()
 
 
 def score_scale_mask_kernel(
@@ -251,29 +213,3 @@ def score_scale_mask_kernel(
     var fill = Float32(0.0) if visible else mask_fill
     masked.unsafe_store(i, ftz(score + fill))
 
-
-def eager_rowdot_ds_kernel(
-    zdot: MutPointer[Float32, MutAnyOrigin],
-    ds: MutPointer[Float32, MutAnyOrigin],
-    dy: MutPointer[Float32, MutAnyOrigin],
-    y: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, keys_in: Int32,
-):
-    """NN23 eager extension: consume z immediately after its exact fold.
-
-    One owner completes the whole row dot before writing any dS. It stores
-    z for tracing and fused fallback witnesses. No masked terms are omitted.
-    This saves a launch and row-z broadcasts, but serial cell stores may
-    lose against the split flat grid; full workloads must decide that.
-    """
-    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if row >= Int(rows_in):
-        return
-    var keys = Int(keys_in)
-    var base = row * keys
-    var z = Float32(0.0)
-    for j in range(keys):
-        z = ftz(identical_mul_add(ftz(dy.unsafe_load(base + j)), ftz(y.unsafe_load(base + j)), z))
-    zdot.unsafe_store(row, ftz(z))
-    for j in range(keys):
-        var delta = ftz(ftz(dy.unsafe_load(base + j)) - ftz(z))
-        ds.unsafe_store(base + j, ftz(identical_mul(ftz(y.unsafe_load(base + j)), delta)))

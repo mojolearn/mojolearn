@@ -811,11 +811,6 @@ comptime NN51_RESIDENT_TOKEN_VALIDATION = (
     and is_defined["MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-comptime NN28_DEAD_TRAINING_CACHE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN28_DEAD_TRAINING_CACHE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
 comptime NN60_BLOCK_VIEWS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_NN60_BLOCK_VIEWS"]()
@@ -1426,11 +1421,11 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
+                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
+                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
         else:
             if fuse_next:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
@@ -1440,11 +1435,11 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
+                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
+                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
         if _byte_layer_sync():
             step_count_sync()
             ctx.synchronize()

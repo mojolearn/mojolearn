@@ -1,11 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pure host/device NN24 scalar contract; no device runtime dependencies."""
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import (GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_rsqrt)
 
+# ONE norm switch (NN24 + NN25 + NI25 merged, 2026-10-07):
+# -D MOJOLEARN_IDN_NORM=<arm>, absent = the v1 serial row fold, one launch.
+#   1  lanes8              NN24: eight-lane fixed fold (a bit version)
+#   2  split_scale         NN25: v1 fold, then a cell-parallel scale launch
+#   3  row_block           NI25: block-per-row cooperative scale, v1 fold
+#   4  lanes8_split_scale  NN24 fold inside the NN25 schedule
+# row_block does not implement the lanes8 fold, so they are not combinable;
+# every arm changes the host oracle and every device column together.
+comptime IDN_NORM_ARM = get_defined_int["MOJOLEARN_IDN_NORM", 0]()
 comptime NN24_NORM_LANES8 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN24_NORM_LANES8"]()
+    and (IDN_NORM_ARM == 1 or IDN_NORM_ARM == 4)
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime NN24_LANES = 8 if NN24_NORM_LANES8 else 1
