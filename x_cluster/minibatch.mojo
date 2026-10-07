@@ -14,7 +14,6 @@ rows, then per init the init rows and the k-means++ picks, then per step the
 batch rows (uniform with replacement, unit weights) and any reassignment.
 Not scikit-learn's Mersenne Twister stream, so a fit agrees with sklearn's
 at a tolerance, never bit for bit (NOT_IMPLEMENTED.tsv)."""
-from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS, C37_PANEL_ROWS
 from experiments.classical_identical_ideas.graph_controls import C39_RETAIN_STATE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -593,27 +592,13 @@ def minibatch_step[O: ClusterOps](
         if wsum > Float32(0):
             for f in range(d):
                 c_new[j * d + f] = ftz(identical_mul(c[j * d + f], w[j]))
-            comptime if C37_ROW_PANELS:
-                for f in range(d):
-                    var acc=c_new[j*d+f]
-                    for first in range(0,batch,C37_PANEL_ROWS):
-                        var part=Float32(0)
-                        for t in range(first,min(first+C37_PANEL_ROWS,batch)):
-                            if Int(bl[t])==j:
-                                var value=ftz(bx[t*d+f])
-                                if bweighted:
-                                    value=ftz(identical_mul(value,bw[t]))
-                                part=ftz(part+value)
-                        acc=ftz(acc+part)
-                    c_new[j*d+f]=acc
-            else:
-                for t in range(batch):
-                    if Int(bl[t]) == j:
-                        for f in range(d):
-                            if bweighted:
-                                c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(identical_mul(ftz(bx[t * d + f]), bw[t])))
-                            else:
-                                c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(bx[t * d + f]))
+            for t in range(batch):
+                if Int(bl[t]) == j:
+                    for f in range(d):
+                        if bweighted:
+                            c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(identical_mul(ftz(bx[t * d + f]), bw[t])))
+                        else:
+                            c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(bx[t * d + f]))
             w[j] = ftz(w[j] + wsum)
             var alpha = ftz(identical_div(Float32(1), w[j]))
             for f in range(d):

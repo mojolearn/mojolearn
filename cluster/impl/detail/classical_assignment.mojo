@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-"""C36 independent rows share centroid registers, C30 direct profile.
-NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+"""KMEANS_ASSIGN row arms (old C36 rows and the C30 KMeans direct profile,
+merged into one control in graph_controls.mojo). NOT MEASURED.
 A thread owns R adjacent samples and broadcasts each center feature to R
 ascending independent folds. Scratch is R accumulators, never n by k.
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE, C36_ROWS, C36_CENTROID_TILES, C30_REGISTER_ROWS
-comptime ASSIGN_ROWS = C36_ROWS if C36_CENTROID_TILES else C30_REGISTER_ROWS
+from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE, KMEANS_ROW_ASSIGN_ROWS
+#: Rows per thread; 2 when the control is absent (the kernel is then not launched).
+comptime ASSIGN_ROWS = KMEANS_ROW_ASSIGN_ROWS if KMEANS_ROW_ASSIGN_ROWS > 0 else 2
 
 def classical_assign_group(
     group: Int, outi: MutPointer[UInt32,MutAnyOrigin], outd: MutPointer[Float32,MutAnyOrigin],
@@ -15,6 +16,7 @@ def classical_assign_group(
     xn: MutPointer[Float32,MutAnyOrigin], cn: MutPointer[Float32,MutAnyOrigin],
     n: Int, k: Int, d: Int, rooted: Bool,
 ):
+    comptime assert ASSIGN_ROWS == 2 or ASSIGN_ROWS == 4, "MOJOLEARN_KMEANS_ROW_ASSIGN takes 2 or 4"
     var first = group * ASSIGN_ROWS
     if first >= n:
         return
@@ -27,7 +29,7 @@ def classical_assign_group(
             comptime for r in range(ASSIGN_ROWS):
                 if first+r < n:
                     var xv = ftz(x[(first+r)*d+f])
-                    comptime if C30_DIRECT_DISTANCE:
+                    comptime if KMEANS_DIRECT_DISTANCE:
                         var delta = ftz(xv-cv)
                         sums[r] = ftz(sums[r] + ftz(identical_mul(delta,delta)))
                     else:
@@ -35,7 +37,7 @@ def classical_assign_group(
         comptime for r in range(ASSIGN_ROWS):
             if first+r < n:
                 var dist = sums[r]
-                comptime if not C30_DIRECT_DISTANCE:
+                comptime if not KMEANS_DIRECT_DISTANCE:
                     dist = ftz(identical_mul_add(Float32(-2),ftz(dist),ftz(ftz(xn[first+r])+ftz(cn[center]))))
                     if dist*dist < Float32(1e-6) and xn[first+r] == cn[center]:
                         dist = Float32(0)

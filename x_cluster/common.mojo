@@ -1,7 +1,7 @@
 """Helpers every cluster-lane driver shares (lane/algos-cluster), compiled
 from this one source into both bindings; the n-sized work goes through
 `ClusterOps`."""
-from experiments.classical_identical_ideas.graph_controls import C38_REUSE_NEAREST
+from experiments.classical_identical_ideas.graph_controls import XCLUSTER_KPP_DISTINCT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -96,7 +96,7 @@ def greedy_kmeans_pp_indices[O: ClusterOps](
             vs.append(rng.unit() * pot)
         ops.kpp_search(closest, ws, m, vs, ids)
         ops.gather_rows(xs, d, ids, n_trials, cslot)
-        comptime if C38_REUSE_NEAREST:
+        comptime if XCLUSTER_KPP_DISTINCT:
             ops.kpp_distinct(cslot,ids,n_trials,xs,m,d,dc_s)
         else:
             ops.sqdist(cslot, n_trials, xs, m, d, dc_s)

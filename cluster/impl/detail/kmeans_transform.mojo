@@ -30,7 +30,7 @@ across cells, so the launch geometry below is scheduling only and moves no
 bit.
 """
 from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -88,7 +88,7 @@ def kmeans_transform_kernel(
         dist * dist < TRANSFORM_CLAMP_PRECISION and xn == yn
     ):
         dist = Float32(0.0)
-    comptime if C30_DIRECT_DISTANCE:
+    comptime if KMEANS_DIRECT_DISTANCE:
         dist = direct_squared_distance(x + row*d, centroids + col*d, d)
     if is_sqrt_in != 0:
         dist = identical_sqrt(dist)

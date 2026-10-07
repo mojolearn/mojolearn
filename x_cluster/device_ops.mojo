@@ -4,8 +4,9 @@ bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
 from experiments.classical_identical_ideas.stats_controls import C53_BGMM_STATS
 from mixture.checks.mstep import center_pair_kernel
-from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS
-from experiments.classical_identical_ideas.graph_controls import C36_CENTROID_TILES, C36_ROWS
+from experiments.classical_identical_ideas.graph_controls import XCLUSTER_ROW_ASSIGN, XCLUSTER_ROW_ASSIGN_ROWS
+#: Rows per thread of `_xc_nearest_group` (MOJOLEARN_XCLUSTER_ROW_ASSIGN=2|4).
+comptime XC_ASSIGN_ROWS = XCLUSTER_ROW_ASSIGN_ROWS if XCLUSTER_ROW_ASSIGN_ROWS > 0 else 2
 from experiments.classical_identical_ideas.graph_controls import C42_ACTIVE_TRIANGLE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -1946,8 +1947,8 @@ struct DeviceOps(ClusterOps):
 
     def nearest(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, labels: Int, dist: Int) raises:
         self._ph0()
-        comptime if C36_CENTROID_TILES:
-            self.ctx.enqueue_function[_c36_nearest_group](self._fp(a),Int32(na),self._fp(b),Int32(nb),Int32(d),self._ip(labels),self._fp(dist),grid_dim=_grid((na+C36_ROWS-1)//C36_ROWS),block_dim=TPB)
+        comptime if XCLUSTER_ROW_ASSIGN:
+            self.ctx.enqueue_function[_xc_nearest_group](self._fp(a),Int32(na),self._fp(b),Int32(nb),Int32(d),self._ip(labels),self._fp(dist),grid_dim=_grid((na+XC_ASSIGN_ROWS-1)//XC_ASSIGN_ROWS),block_dim=TPB)
             self._ph1("nearest")
             return
         self.ctx.enqueue_function[_nearest_kernel](
@@ -2728,7 +2729,7 @@ struct DeviceOps(ClusterOps):
 
     def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
         self._ph0()
-        comptime if C36_CENTROID_TILES:
+        comptime if XCLUSTER_ROW_ASSIGN:
             self.gather_rows(src,d,idx,m,dst)
             self.nearest(dst,m,c,k,d,labels,dist)
             self._ph1("mb_assign")
@@ -2741,7 +2742,7 @@ struct DeviceOps(ClusterOps):
 
     def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
         self._ph0()
-        comptime if MB_BLOCK_FITS and not C37_ROW_PANELS:
+        comptime if MB_BLOCK_FITS:
             self.ctx.enqueue_function[_mb_centers_block_kernel](
                 self._fp(b), Int32(batch), self._ip(labels), self._fp(c), self._fp(w), Int32(d),
                 grid_dim=k, block_dim=MB_TPB,
@@ -3637,23 +3638,24 @@ def _c38_distinct_kernel[COPY: Bool](c: FPtr,ids: IPtr,nt: Int32,x: FPtr,n: Int3
             output[cell]=sq_dist_rows(c,trial,x,row,Int(d))
 
 
-def _c36_nearest_group(a: FPtr,na: Int32,c: FPtr,k: Int32,d: Int32,labels: IPtr,dist: FPtr):
-    var first=_tid()*C36_ROWS
-    var best=InlineArray[Float32,C36_ROWS](fill=Float32(0))
-    var ids=InlineArray[Int32,C36_ROWS](fill=Int32(0))
+def _xc_nearest_group(a: FPtr,na: Int32,c: FPtr,k: Int32,d: Int32,labels: IPtr,dist: FPtr):
+    comptime assert XC_ASSIGN_ROWS == 2 or XC_ASSIGN_ROWS == 4, "MOJOLEARN_XCLUSTER_ROW_ASSIGN takes 2 or 4"
+    var first=_tid()*XC_ASSIGN_ROWS
+    var best=InlineArray[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
+    var ids=InlineArray[Int32,XC_ASSIGN_ROWS](fill=Int32(0))
     for center in range(Int(k)):
-        var acc=InlineArray[Float32,C36_ROWS](fill=Float32(0))
+        var acc=InlineArray[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
         for f in range(Int(d)):
             var cv=ftz(c[center*Int(d)+f])
-            comptime for r in range(C36_ROWS):
+            comptime for r in range(XC_ASSIGN_ROWS):
                 if first+r<Int(na):
                     var delta=ftz(ftz(a[(first+r)*Int(d)+f])-cv)
                     acc[r]=ftz(acc[r]+ftz(identical_mul(delta,delta)))
-        comptime for r in range(C36_ROWS):
+        comptime for r in range(XC_ASSIGN_ROWS):
             if center==0 or acc[r]<best[r]:
                 best[r]=acc[r]
                 ids[r]=Int32(center)
-    comptime for r in range(C36_ROWS):
+    comptime for r in range(XC_ASSIGN_ROWS):
         if first+r<Int(na):
             labels[first+r]=ids[r]
             dist[first+r]=best[r]

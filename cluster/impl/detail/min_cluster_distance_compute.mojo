@@ -46,7 +46,9 @@ One departure of theirs is copied even though it looks like a bug guard:
 The tile is indexed with `IndexT`, so the tile itself, not the dataset, is
 what must fit the index type.
 """
-from experiments.classical_identical_ideas.graph_controls import C36_CENTROID_TILES, C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import (
+    KMEANS_ROW_ASSIGN, KMEANS_DIRECT_DISTANCE, KMEANS_ROW_ASSIGN_MAX_KD,
+)
 from cluster.impl.detail.classical_assignment import ASSIGN_ROWS, classical_assign_kernel, classical_assign_gated_kernel
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -85,6 +87,23 @@ from cluster.impl.distance.unfused_distance_nn import (
     reduce_min_kernel,
 )
 
+
+
+def kmeans_row_assign_takes(n_clusters: Int, n_features: Int) -> Bool:
+    """KMEANS_ASSIGN (graph_controls.mojo): the row-register kernel takes this
+    assignment. The direct arms always do (the tiled kernel has no direct
+    arithmetic). The expanded row arms do only while the per-thread chain
+    `k * d` is at most `KMEANS_ROW_ASSIGN_MAX_KD` (cost rule, see there); past
+    it the tiled kernel keeps the launch. Either kernel gives the expanded
+    arms the same bits."""
+    comptime assert not KMEANS_DIRECT_DISTANCE or KMEANS_ROW_ASSIGN, (
+        "MOJOLEARN_KMEANS_DIRECT_DISTANCE is an arm of MOJOLEARN_KMEANS_ROW_ASSIGN=2|4"
+    )
+    comptime if not KMEANS_ROW_ASSIGN:
+        return False
+    comptime if KMEANS_DIRECT_DISTANCE:
+        return True
+    return n_clusters * n_features <= KMEANS_ROW_ASSIGN_MAX_KD
 
 def compute_centroid_norms(
     ctx: DeviceContext,
@@ -137,7 +156,7 @@ def _launch_fused[
     call feeds the occupancy query -- theirs passes the double-buffered
     `P::SmemSize` because that is what their kernel allocates.
     """
-    comptime if C36_CENTROID_TILES or C30_DIRECT_DISTANCE:
+    if kmeans_row_assign_takes(n_clusters, n_features):
         ctx.enqueue_function[classical_assign_kernel](
             out_key.unsafe_ptr(), out_value.unsafe_ptr(), x.unsafe_ptr(), centroids.unsafe_ptr(),
             x_norm.unsafe_ptr(), centroid_norm.unsafe_ptr(), Int32(n_samples), Int32(n_clusters), Int32(n_features), is_sqrt,
@@ -293,7 +312,7 @@ def _launch_fused_gated[
     """`_launch_fused` on one device with the kernel gated on `gate[0]`
     (fam2-cluster, `IDN_KMEANS_DEVICE_CONV`). The caller has already ruled
     out the multi-device split (`assignment_device_count() == 1`)."""
-    comptime if C36_CENTROID_TILES or C30_DIRECT_DISTANCE:
+    if kmeans_row_assign_takes(n_clusters, n_features):
         ctx.enqueue_function[classical_assign_gated_kernel](
             gate.unsafe_ptr(), out_key.unsafe_ptr(), out_value.unsafe_ptr(), x.unsafe_ptr(), centroids.unsafe_ptr(),
             x_norm.unsafe_ptr(), centroid_norm.unsafe_ptr(), Int32(n_samples), Int32(n_clusters), Int32(n_features), is_sqrt,
