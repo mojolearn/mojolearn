@@ -1448,3 +1448,9 @@ both NVIDIA and AMD results, no material vendor regression, same-version
 identity on Apple and the host column, and end-to-end quality/performance
 on taxi + Istella or enwik8 + Pile GitHub as appropriate. No default flips
 are authorized by the synthetic screen alone.
+
+## IDENTICAL neural sequence/training switch dedupe (lane/neural-seq-train-dedupe, 2026-10-07)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `IDN_SEQ_ROW_SERIAL_SCAN` (NI49 row-serial arm) | lstm-clf, lstm-reg (x_sequence) | lane/neural-seq-train-dedupe @ 83b9bf20a (deleted; last present at 8be4d20d4) | none | - | DROPPED-rule | one GPU thread per batch row, serial over units and timesteps: breaks the IDENTICAL parallel-GPU rule; never measured, not a board lane. Recoverable at 8be4d20d4 sequence/recurrent_scan.mojo:71-83 |
