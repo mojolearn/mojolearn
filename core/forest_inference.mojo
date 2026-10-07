@@ -506,7 +506,8 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
     comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
     if n_rows == 0:
         return
-    comptime if T35_LEAF_REUSE or T36_FINITE_STAGE:
+    # One route per build (core.forest_experiments FOREST_ROUTE).
+    comptime if T35_LEAF_REUSE:
         _launch_forest_leaf_reuse[RF_INPUT, GROVE, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
         return
     comptime if T34_CHUNK_FOLD:
