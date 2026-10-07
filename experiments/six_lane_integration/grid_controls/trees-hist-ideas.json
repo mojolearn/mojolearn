@@ -1,0 +1,199 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "trees-hist-ideas",
+ "branch": "lane/trees-hist-ideas",
+ "head": "bea554330",
+ "note": "NOT COMPILED (lanes never compile). All four keep bits by construction (same Int32 addends, integer sums); IDCHECK still owed. Host column unchanged (bits unchanged). Apple column compiles the incumbent arithmetic for PACKED_GH and WARP_AGG.",
+ "controls": {
+  "hist_packed_gh": {
+   "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_HIST_PACKED_GH"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_hist_switches.mojo:31",
+    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:105",
+    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:146",
+    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:249"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "new",
+   "reach": "every fused 8-bit two-stat histogram launch (>128 folds, stat_count 2): symmetric, depthwise, lossguide, rank; NVIDIA/AMD only"
+  },
+  "hist_warp_agg": {
+   "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_HIST_WARP_AGG"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_hist_switches.mojo:36",
+    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:193",
+    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:549",
+    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:815"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "new",
+   "reach": "body loop of the fused 8-bit kernels (direct + gather); whole-wave same-bin aggregation only; NVIDIA/AMD only"
+  },
+  "hist_multistat": {
+   "define": "MOJOLEARN_TREES_HIST_MULTISTAT",
+   "kind": "int_sweep",
+   "arms": {
+    "off": [],
+    "4": [
+     "MOJOLEARN_TREES_HIST_MULTISTAT=4"
+    ],
+    "8": [
+     "MOJOLEARN_TREES_HIST_MULTISTAT=8"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_hist_switches.mojo:43",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:3600",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2550",
+    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit_wide.mojo:77"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "new",
+   "reach": "multi-stat (stat_count>2) one-byte blocks >128 folds on the shared-Int32 route, which replaces launch_one_byte[8] (grid z = stat_count)"
+  },
+  "hist_sym_feature_parallel": {
+   "define": "MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "gbdt/trees_hist_switches.mojo:47",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:3563",
+    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit_wide.mojo:260"
+   ],
+   "binding": "_mojolearn_gbdt",
+   "bits_change": false,
+   "status": "new",
+   "reach": "SymmetricTree two-stat 8-bit blocks from run_tree_layout_traced / TSynchronizedSymmetricLevelState (symmetric_policy=True); FG in {2,4} only when ceil(columns/FG)*live_parts >= 2*SM count, else incumbent"
+  }
+ },
+ "algorithms": {
+  "trees/gbdt-symmetric": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: doc_parallel_boosting -> run_tree_layout_traced -> launch_histograms_for_blocks -> launch_hist2_8bit (254 borders, I32 mode) -> hist2_8bit_kernel/gather_kernel; switch on: launch_hist2_8bit_wide[2,FG]",
+   "controls": [
+    "hist_packed_gh",
+    "hist_warp_agg",
+    "hist_sym_feature_parallel"
+   ],
+   "interaction_groups": [
+    [
+     "hist_packed_gh",
+     "hist_warp_agg"
+    ]
+   ]
+  },
+  "trees/gbdt-symmetric-1000": {
+   "binding": "_mojolearn_gbdt",
+   "route": "as trees/gbdt-symmetric",
+   "controls": [
+    "hist_packed_gh",
+    "hist_warp_agg",
+    "hist_sym_feature_parallel"
+   ],
+   "interaction_groups": [
+    [
+     "hist_packed_gh",
+     "hist_warp_agg"
+    ]
+   ]
+  },
+  "trees/gbdt-depthwise": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: greedy_search_helper_depthwise -> launch_histograms_for_blocks -> launch_hist2_8bit or launch_hist2_width_group[8] (2581) -> hist2_8bit_kernel",
+   "controls": [
+    "hist_packed_gh",
+    "hist_warp_agg"
+   ],
+   "interaction_groups": [
+    [
+     "hist_packed_gh",
+     "hist_warp_agg"
+    ]
+   ]
+  },
+  "trees/gbdt-lossguide": {
+   "binding": "_mojolearn_gbdt",
+   "route": "as trees/gbdt-depthwise",
+   "controls": [
+    "hist_packed_gh",
+    "hist_warp_agg"
+   ],
+   "interaction_groups": [
+    [
+     "hist_packed_gh",
+     "hist_warp_agg"
+    ]
+   ]
+  },
+  "trees/gbdt-multiclass": {
+   "binding": "_mojolearn_gbdt",
+   "route": "fit: symmetric greedy -> launch_histograms_for_blocks -> (stat_count>2) launch_one_byte[8] PASS; switch on: launch_hist2_8bit_wide[MULTISTAT,1]",
+   "controls": [
+    "hist_multistat"
+   ],
+   "interaction_groups": []
+  },
+  "trees/gbdt-rank-yetirank": {
+   "binding": "_mojolearn_gbdt",
+   "route": "SymmetricTree greedy (run_tree_layout_traced); two-stat 8-bit path assumed, stat_count not re-verified",
+   "controls": [
+    "hist_packed_gh",
+    "hist_warp_agg",
+    "hist_sym_feature_parallel"
+   ],
+   "interaction_groups": [
+    [
+     "hist_packed_gh",
+     "hist_warp_agg"
+    ]
+   ]
+  },
+  "trees/gbdt-rank-pairlogit": {
+   "binding": "_mojolearn_gbdt",
+   "route": "as trees/gbdt-rank-yetirank",
+   "controls": [
+    "hist_packed_gh",
+    "hist_warp_agg",
+    "hist_sym_feature_parallel"
+   ],
+   "interaction_groups": [
+    [
+     "hist_packed_gh",
+     "hist_warp_agg"
+    ]
+   ]
+  }
+ },
+ "not_reached": {
+  "trees/gbdt-ordered": "pointwise PointHist8 (pointwise_hist2_one_byte_8bit.mojo), not the greedy fused kernel",
+  "trees/gbdt-categorical": "same greedy kernels for float features (reach as depthwise/symmetric by policy); CTR/ordered parts not touched",
+  "use_pointwise_searcher": "PointHist8 already defers runs; not touched"
+ },
+ "removed": []
+}
