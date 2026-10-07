@@ -45,6 +45,33 @@ comptime C13_FOLD_STATS = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_
 comptime ENETCV_FOLD_BLOCKS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS"]()
 comptime ENETCV_FB_CHUNKS = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS", 32]() if ENETCV_FOLD_BLOCKS else 32
 comptime C14_GROUP_RHS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C14_GROUP_RHS"]()
+# lane/classical-cv-folds (2026-10-07), NEW, opt-in, NOT MEASURED: RidgeCV's
+# float-float fallback (x_linear/ridge_ff_blocks.mojo). The incumbent runs one
+# thread per statistic serially over every training row (`kf_ff_unit_kernel`,
+# `ridge_ff_unit_kernel`) and the float-float Cholesky of each untrusted alpha
+# on ONE thread (`kf_ff_solve_kernel` at grid 1 / block 1). Here every
+# float-float statistic is FOLD_BLOCK-row block partials (one thread per
+# (statistic, block), the rw_gram_parts_kernel shape) folded blocks
+# ascending, and the solve is one block team per alpha (`t_ff_cholesky`, the
+# t_cholesky split: every entry keeps its own chain). Changes bits (the block
+# fold order of the float-float sums; the host column and both GPU vendors
+# together). Cost reasoning: the work n * (d+1)^2 / 2 float-float adds is
+# unchanged; the thread count goes from (d+1)^2 / 2 to n / FOLD_BLOCK times
+# that, with each block's threads reading the same row tile. No shape rule.
+comptime RIDGECV_FF_BLOCKED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED"]()
+# lane/classical-cv-folds (2026-10-07), NEW, opt-in, NOT MEASURED: LassoCV /
+# ElasticNetCV held-out scoring as (path, alpha, row-block) partials. The
+# incumbent `ecv_score_staged_kernel` is ONE block per (fold, l1_ratio) path
+# walking every held-out row for every alpha. Here each block owns
+# ENETCV_SCORE_BLOCKS rows of the fold's span (the integer arm: rows per
+# block, legal 1024 | 4096, a fixed count, not a data shape), thread k folds
+# alpha k's squared errors over them from zero, and a thread per (path,
+# alpha) folds the block partials ascending (`fold_parts`, the kf_sq /
+# kf_score shape). Changes bits (the block fold order; host column and both
+# GPU vendors together). Absent (0) = the incumbent.
+comptime _ESB_RAW = get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS", 0]()
+comptime ENETCV_SCORE_BLOCKS = _ESB_RAW if CLASSICAL_IDN else 0
+comptime ENETCV_SCORE_BLOCKS_LEGAL = _ESB_RAW == 0 or _ESB_RAW == 1024 or _ESB_RAW == 4096
 comptime C15_FACTOR_SOLVE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"]()
 comptime C16_GLM_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C16_GLM_FUSED"]()
 comptime C17_OVR = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C17_OVR"]()

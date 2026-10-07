@@ -33,15 +33,15 @@ from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.ops import FP, IP, fa, fm, fs, fd, fmad, ld, st, ldi, i2f, fill
 from x_linear.team import Team, TEAM_SLOTS, LINEAR_TPB, team_at
-from x_linear.tops import upper_cell, _acc_fa, _acc_fmad
-from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BLOCKS
+from x_linear.tops import upper_cell, _acc_fa, _acc_fmad, fold_parts
+from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BLOCKS, ENETCV_SCORE_BLOCKS
 from x_linear.enetcv_blocks import (
     FB_C, FB_NT, FB_TPB, FB_TC, fb_words, fb_means_kernel, fb_fold_means_kernel, fb_gram_kernel,
     fb_fold_gram_kernel, fb_combine_kernel,
 )
 from x_linear.cd import (
     ecv_alphas, ecv_alpha_cell, ecv_choose, ecv_finish, ecv_rows, ecv_fold_fa, ecv_cfmad, ecv_held_sse, ECV_UH,
-    t_enet_gram_cd,
+    t_enet_gram_cd, ESB_ROWS, esb_blocks,
 )
 
 comptime ECV_TPB = 64
@@ -317,6 +317,116 @@ def _ecv_score_staged_kernel_body(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res:
 
 def ecv_score_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res: FP, ew: FP, spans: IP, wf: IP, woff: Int32, nonce: Int32):
     _ecv_score_staged_kernel_body(x, y, n, d, ip, res, ew, spans)
+    witness_end(wf, woff, nonce)
+
+
+# ------------------------------------------------ ENETCV_SCORE_BLOCKS (lane/classical-cv-folds)
+# The held-out scores as (path, alpha, row block) partials (x_linear/cd.mojo
+# `esb_part`, the cost reasoning there): block (r, b) stages ESB_ROWS rows
+# of the fold's span in tiles as `_ecv_score_staged_kernel_body` does and
+# thread k folds alpha k's squared errors over them from zero; a thread per
+# (path, alpha) folds the partials blocks ascending. The grid is paths times
+# the block count of n rows (a span is at most n; the spans live on the
+# device, so the host sizes the grid without them): a block past its fold's
+# span exits at once.
+@always_inline
+def _esb_score_kernel_body(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP, spans: IP, part: FP, nbmax: Int32):
+    var dd = Int(d)
+    var nn = Int(n)
+    var lay = _EcvLayout(dd, ldi(ip, 2), ldi(ip, 3), ldi(ip, 4))
+    var nbm = Int(nbmax)
+    var blk = Int(block_idx.x)
+    var r = blk // nbm
+    var bq = blk % nbm
+    var f = r // lay.l_n
+    var tid = Int(thread_idx.x)
+    var lo = Int(spans.unsafe_load(2 * f))
+    var span = Int(spans.unsafe_load(2 * f + 1))
+    var r_lo = bq * ESB_ROWS
+    var r_hi = min(r_lo + ESB_ROWS, span)
+    if r_lo >= span:
+        return
+    var fv = Float32(f)
+    var tr = max(1, min(ECV_SR, ECV_SW // max(dd, 1)))
+    var xs = stack_allocation[ECV_SW, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var ys = stack_allocation[ECV_SR, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var fs_ = stack_allocation[ECV_SR, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var kb = 0
+    while kb < lay.a_n:
+        var k = kb + tid
+        var live = k < lay.a_n
+        var o = lay.path(r) + 2 * dd + min(k, lay.a_n - 1) * (dd + 1)
+        var b0 = ld(ew, o + dd)
+        var acc = Float32(0)
+        var r0 = r_lo
+        while r0 < r_hi:
+            var cnt = min(tr, r_hi - r0)
+            barrier()
+            var base = (lo + r0) * dd
+            for u in range(tid, cnt * dd, ECV_SNT):
+                xs[u] = ld(x, base + u)
+            for u in range(tid, cnt, ECV_SNT):
+                ys[u] = ld(y, lo + r0 + u)
+                fs_[u] = ld(y, nn + lo + r0 + u)
+            barrier()
+            if live:
+                var q = 0
+                while q + ECV_UH <= cnt:
+                    var pv = SIMD[DType.float32, ECV_UH](b0)
+                    for j in range(dd):
+                        var wj = ld(ew, o + j)
+                        comptime for u in range(ECV_UH):
+                            pv[u] = fmad(xs[(q + u) * dd + j], wj, pv[u])
+                    comptime for u in range(ECV_UH):
+                        if fs_[q + u] == fv:
+                            var e = fs(pv[u], ys[q + u])
+                            acc = _acc_fmad(e, e, acc)
+                    q += ECV_UH
+                while q < cnt:
+                    if fs_[q] == fv:
+                        var pp = b0
+                        for j in range(dd):
+                            pp = fmad(xs[q * dd + j], ld(ew, o + j), pp)
+                        var e = fs(pp, ys[q])
+                        acc = _acc_fmad(e, e, acc)
+                    q += 1
+            r0 += cnt
+        if live:
+            st(part, (r * lay.a_n + k) * nbm + bq, acc)
+        kb += ECV_SNT
+
+
+def esb_score_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP, spans: IP, part: FP, nbmax: Int32,
+                     wf: IP, woff: Int32, nonce: Int32):
+    _esb_score_kernel_body(x, y, n, d, ip, ew, spans, part, nbmax)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _esb_fold_kernel_body(n: Int32, d: Int32, ip: IP, res: FP, ew: FP, spans: IP, part: FP, nbmax: Int32):
+    """Thread (r, k): alpha k of path r: its block partials folded blocks
+    ascending (`fold_parts` from zero) over the held-out row count, into
+    res's mse words."""
+    var dd = Int(d)
+    var nn = Int(n)
+    var lay = _EcvLayout(dd, ldi(ip, 2), ldi(ip, 3), ldi(ip, 4))
+    var g = Int(block_idx.x) * ECV_TPB + Int(thread_idx.x)
+    if g >= lay.f_n * lay.l_n * lay.a_n:
+        return
+    var k = g % lay.a_n
+    var r = g // lay.a_n
+    var f = r // lay.l_n
+    var l = r % lay.l_n
+    var span = Int(spans.unsafe_load(2 * f + 1))
+    var acc = fold_parts(part, (r * lay.a_n + k) * Int(nbmax), esb_blocks(span))
+    var n_te = nn - Int(ld(ew, lay.prep(f) + 2 * dd + dd * dd + 2))
+    var mse = dd + 4 + lay.l_n * lay.a_n
+    st(res, mse + (l * lay.a_n + k) * lay.f_n + f, fd(acc, i2f(n_te)) if n_te > 0 else Float32(0))
+
+
+def esb_fold_kernel(n: Int32, d: Int32, ip: IP, res: FP, ew: FP, spans: IP, part: FP, nbmax: Int32,
+                    wf: IP, woff: Int32, nonce: Int32):
+    _esb_fold_kernel_body(n, d, ip, res, ew, spans, part, nbmax)
     witness_end(wf, woff, nonce)
 
 @always_inline
@@ -682,6 +792,11 @@ def enetcv_fit_grid(
         ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
     var staged = ECV_STAGED and f_n + 1 <= ECV_NT // ECV_TC
     var staged_score = ECV_SCORE_STAGED and n_y >= 2 * n
+    # ENETCV_SCORE_BLOCKS: the (path, alpha, row block) partial table, sized
+    # by the block count of n rows (a span is at most n); one word otherwise
+    var score_blocks = ENETCV_SCORE_BLOCKS > 0 and n_y >= 2 * n
+    var esb_nbmax = esb_blocks(n) if ENETCV_SCORE_BLOCKS > 0 else 1
+    var dpart = ctx.enqueue_create_buffer[DType.float32](max(paths * a_n * esb_nbmax, 1) if ENETCV_SCORE_BLOCKS > 0 else 1)
     # each fold's held-out rows lie in [lo, lo + span) (KFold: exactly
     # them; rows of other folds inside are skipped by their id)
     # (lane cpu3-core: the spans come from the resident fold ids on the
@@ -700,7 +815,7 @@ def enetcv_fit_grid(
     var fb_pg = ctx.enqueue_create_buffer[DType.float32](max(f_n * FB_C * m * m, 1) if ENETCV_FOLD_BLOCKS else 1)
     var fb_st = ctx.enqueue_create_buffer[DType.float32](max(f_n * fb_words(m), 1) if ENETCV_FOLD_BLOCKS else 1)
     var fb_cn = ctx.enqueue_create_buffer[DType.int32](max(f_n, 1) if ENETCV_FOLD_BLOCKS else 1)
-    if staged_score or ENETCV_FOLD_BLOCKS:
+    if staged_score or score_blocks or ENETCV_FOLD_BLOCKS:
         var dlohi = ctx.enqueue_create_buffer[DType.int32](sp_len)
         ctx.enqueue_function[ecv_span_init_kernel](
             dlohi.unsafe_ptr(), Int32(f_n), Int32(n), grid_dim=_blocks(f_n), block_dim=ECV_TPB,
@@ -788,7 +903,32 @@ def enetcv_fit_grid(
                 wit.p(), Int32(wo), nonce, grid_dim=paths, block_dim=nt,
             )
             wo += paths
-            if staged_score:
+            var scored = False
+            comptime if ENETCV_SCORE_BLOCKS > 0:
+                # lane/classical-cv-folds: the staged page is the blocked
+                # kernel's too; the host column folds the same blocks, so
+                # the route never falls back where the page does not fit
+                comptime assert ECV_SCORE_STAGED, "ENETCV_SCORE_BLOCKS needs the staged score page on this column"
+                if score_blocks:
+                    if wo + paths * esb_nbmax + _blocks(paths * a_n) + 1 > ECV_WIT_CAP:
+                        raise Error("ElasticNetCV: witness capacity (ENETCV_SCORE_BLOCKS)")
+                    ctx.enqueue_copy(dst_buf=dsp, src_buf=dspan)
+                    ctx.enqueue_function[esb_score_kernel](
+                        dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+                        dsp.unsafe_ptr(), dpart.unsafe_ptr(), Int32(esb_nbmax), wit.p(), Int32(wo), nonce,
+                        grid_dim=paths * esb_nbmax, block_dim=ECV_SNT,
+                    )
+                    wo += paths * esb_nbmax
+                    ctx.enqueue_function[esb_fold_kernel](
+                        Int32(n), Int32(d), dip.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(), dsp.unsafe_ptr(),
+                        dpart.unsafe_ptr(), Int32(esb_nbmax), wit.p(), Int32(wo), nonce,
+                        grid_dim=_blocks(paths * a_n), block_dim=ECV_TPB,
+                    )
+                    wo += _blocks(paths * a_n)
+                    scored = True
+            if scored:
+                pass
+            elif staged_score:
                 ctx.enqueue_copy(dst_buf=dsp, src_buf=dspan)
                 ctx.enqueue_function[ecv_score_staged_kernel](
                     dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dout.unsafe_ptr(),
@@ -827,6 +967,7 @@ def enetcv_fit_grid(
     _ = dtw^
     _ = dsp^
     _ = dspan^
+    _ = dpart^
     _ = fb_ps^
     _ = fb_pn^
     _ = fb_pg^

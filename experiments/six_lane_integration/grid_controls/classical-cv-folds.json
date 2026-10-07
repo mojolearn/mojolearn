@@ -1,0 +1,117 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "classical-cv-folds",
+ "branch": "lane/classical-cv-folds",
+ "head": "f010fea8907e",
+ "controls": {
+  "ridgecv_ff_blocked": {
+   "define": "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/linear_controls.mojo:61",
+    "x_linear/ridge_ff_blocks.mojo",
+    "x_linear/device.mojo:3715",
+    "x_linear/device.mojo:3887",
+    "x_linear/ridgecv.mojo:275",
+    "x_linear/ridge.mojo:349"
+   ],
+   "binding": "_mojolearn_x_linear (device grid) + _mojolearn_x_linear_host (host column)",
+   "bits_change": true,
+   "status": "new",
+   "note": "RidgeCV's float-float fallback (the only route when the float32 Gram cannot be factored): every float-float statistic becomes FOLD_BLOCK-row block partials (one thread per (statistic, block), the rw_gram_parts_kernel shape) folded blocks ascending, and the float-float Cholesky of each untrusted alpha runs on one block team (t_cholesky split, every entry its own chain) in one launch per fold instead of grid 1 / block 1 per alpha. The Ridge refit (_ridge_ff_grid) takes the same blocked statistics and team solve. Host column (ridgecv.mojo _kf_ff_stats_host, ridge.mojo _ridge_ff_host) folds the same blocks. Bits change (block fold order); NV and AMD must match per arm. Cost reasoning: same work, n/FOLD_BLOCK times the threads in flight; no shape rule. NOT COMPILED (lanes never compile), NOT MEASURED."
+  },
+  "enetcv_score_blocks": {
+   "define": "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",
+   "kind": "int_sweep",
+   "arms": {
+    "off": [],
+    "1024": [
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=1024"
+    ],
+    "4096": [
+     "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/linear_controls.mojo:72",
+    "x_linear/cd.mojo:339",
+    "x_linear/cd.mojo:580",
+    "x_linear/cd_grid.mojo:333",
+    "x_linear/cd_grid.mojo:907",
+    "core/six_lane_experiment_guards.mojo:30"
+   ],
+   "binding": "_mojolearn_x_linear (device grid) + _mojolearn_x_linear_host (host column)",
+   "bits_change": true,
+   "status": "new",
+   "note": "Arm value = rows of the fold's span per score block (fixed count, not a data shape; legal set enforced in core/six_lane_experiment_guards.mojo). The held-out squared errors of every path point become (path, alpha, row-block) partials: block (path, b) stages its rows in the staged kernel's tiles, thread k folds alpha k from zero; a thread per (path, alpha) folds the partials blocks ascending (fold_parts). Replaces ecv_score_staged_kernel's one block per (fold, l1_ratio) path over all held-out rows. Host column (cd.mojo esb_host_score) folds the same blocks. Bits change (fold order); NV and AMD must match per arm. Requires the staged score page (comptime assert). NOT COMPILED, NOT MEASURED."
+  }
+ },
+ "algorithms": {
+  "expanded:ridge-cv": {
+   "binding": "_mojolearn_x_linear",
+   "route": "fit: _expansion_linear.py RidgeCV -> x_linear_fit ALGO_RIDGE_KFOLD -> device.mojo _ridge_kfold_grid: unit A (C13 fold cache or kf_means/kf_cells, kf_solve_kernel with trust flags), unit B (float-float stats + solve for untrusted alphas [ridgecv_ff_blocked], kf_pred, kf_ysum/kf_sq/kf_score); then Ridge refit ALGO_RIDGE -> ridge_fit_grid, _ridge_ff_grid when untrusted [ridgecv_ff_blocked; c14_group_rhs in t_ridge_solve_best]",
+   "controls": [
+    "ridgecv_ff_blocked",
+    "c13_fold_stats_ridgecv",
+    "c14_group_rhs"
+   ],
+   "interaction_groups": [
+    [
+     "ridgecv_ff_blocked",
+     "c13_fold_stats_ridgecv"
+    ],
+    [
+     "ridgecv_ff_blocked",
+     "c14_group_rhs"
+    ]
+   ]
+  },
+  "expanded:lasso-cv": {
+   "binding": "_mojolearn_x_linear",
+   "route": "fit: _expansion_linear.py _enetcv_fit -> x_linear_fit ALGO_ENETCV -> device.mojo -> cd_grid.mojo enetcv_fit_grid: spans, prep stats [enetcv_fold_blocks | staged means+gram], ecv_grid_kernel, ecv_path_kernel (t_enet_gram_cd [c18_residual_next]), score [enetcv_score_blocks | ecv_score_staged_kernel], refit",
+   "controls": [
+    "enetcv_score_blocks",
+    "enetcv_fold_blocks",
+    "c18_residual_next"
+   ],
+   "interaction_groups": [
+    [
+     "enetcv_score_blocks",
+     "enetcv_fold_blocks"
+    ],
+    [
+     "enetcv_score_blocks",
+     "c18_residual_next"
+    ]
+   ]
+  },
+  "expanded:enet-cv": {
+   "binding": "_mojolearn_x_linear",
+   "route": "same as lasso-cv with the l1_ratio grid (paths = folds x l1_ratios)",
+   "controls": [
+    "enetcv_score_blocks",
+    "enetcv_fold_blocks",
+    "c18_residual_next"
+   ],
+   "interaction_groups": [
+    [
+     "enetcv_score_blocks",
+     "enetcv_fold_blocks"
+    ],
+    [
+     "enetcv_score_blocks",
+     "c18_residual_next"
+    ]
+   ]
+  }
+ },
+ "removed": []
+}
