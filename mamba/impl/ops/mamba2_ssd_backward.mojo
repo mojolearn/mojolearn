@@ -38,7 +38,7 @@ from mamba.impl.modeling.modeling_mamba import mamba_scratch
 
 # NN39: shared pure Mojo profile imported by both device and checked-in
 # generated host source. Future regeneration preserves the same import.
-from mamba.impl.ops.neural_gradient_profile import NN39_M2_GRAD_TREE, nn39_gradient_tree
+from mamba.impl.ops.neural_gradient_profile import NN39_M2_GRAD_TREE, IDN_M2_GRAD_FOLD_ARM, nn39_gradient_tree
 
 comptime M2_SSD_BWD_TPB = 128
 
@@ -79,7 +79,7 @@ comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
 # Default OFF. No gradient/trajectory quality or performance claim is made.
 comptime IDN_M2_GRAD_LEAF128 = (
     IDN_M2_BWD_FOLD_TILED
-    and is_defined["MOJOLEARN_IDN_M2_GRAD_LEAF128"]()
+    and IDN_M2_GRAD_FOLD_ARM == 2
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime M2_BWD_FOLD_ROWS = 128 if IDN_M2_GRAD_LEAF128 else 256

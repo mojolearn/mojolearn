@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """CPU-safe identifier for selected, same-version neural arithmetic graphs."""
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS
 from training.neural_ab_profile_contract import NN54_LOSS_PROFILE, NN57_NORM_PROFILE
@@ -21,8 +21,10 @@ def neural_arithmetic_suffix() -> String:
         # without importing a device scan implementation into host bindings.
         comptime if is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]():
             result += ".nn-mamba1-v2-affine32"
-        comptime if is_defined["MOJOLEARN_NN39_M2_GRAD_TREE"]():
+        comptime if get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD", 0]() == 1:
             result += ".nn-mamba2-grad-v2-tree"
+        elif get_defined_int["MOJOLEARN_IDN_M2_GRAD_FOLD", 0]() == 2:
+            result += ".nn-mamba2-grad-v2-leaf128"
         comptime if is_defined["MOJOLEARN_NN43_WGRAD_FIXED128"]() and not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]():
             result += ".nn-recurrent-grad-v2-fixed128"
         comptime if NN54_LOSS_PROFILE:
