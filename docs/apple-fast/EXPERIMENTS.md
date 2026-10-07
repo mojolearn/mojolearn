@@ -1534,3 +1534,13 @@ Code recoverable at `lane/ridgecv-c13@c59be1781` (and main@8be4d20d4 under the o
 | `MOJOLEARN_C29_TILE_128` | kNN stream top-k tile | `lane/classical-misc` @ `79aa4a19c` | loop-shape knob only | REPLACED by `MOJOLEARN_C29_TILE=128\|256` | int sweep |
 | `MOJOLEARN_C58_TEAM64` | sequence team budget (garch, prophet) | `lane/classical-misc` @ `f7abb25cf` | memory budget, no effect below ~300 series | REPLACED by `MOJOLEARN_C58_TEAM_MIB=64\|256` | int sweep |
 | `MOJOLEARN_C62_SAME_COMPONENT_SKIP` | HDBSCAN sparse MR Boruvka search (tiled, NV/AMD) | `lane/classical-misc` @ `f7abb25cf` | unmeasured | OPEN | new default-off switch: skips j tiles whose cells the epilogue already excludes; bit-identical by construction |
+
+## Serial-shape deletions (lane/serial-cleanup, 2026-10-07)
+
+Evidence: `~/mojolearn-evidence/board-review-20261007/knn_svm_serial_check.md` (both incumbent routes read and found parallel). Deleted code is recoverable at `origin/integration/switches-20261007` @ `608a7cf4a`.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_CLASSICAL_C20_ROW_CACHE` | SVC / SVR SMO square tile | integration/switches-20261007 @ 608a7cf4a | none | - | DROPPED (deleted, guard refuses) | forbidden serial shape; incumbent parallel. Host loop of 3 launches per working-set row incl. a 1x1 publish kernel. Its early return hid `C22_TRIANGLE` and the square-tile half of `C20_PAIR_LOAD`: both reachable again and each OWES its own A/B |
+| `MOJOLEARN_C29_STREAM_TOPK` | kNN brute force (KNN, kNN graphs) | integration/switches-20261007 @ 608a7cf4a | none | - | DROPPED (deleted, guard refuses) | forbidden serial shape; incumbent parallel. One thread per query over every index row. `MOJOLEARN_KNN_DIRECT_DISTANCE` no longer routes there: row-major direct tile only, host twin unchanged |
+| `MOJOLEARN_C29_TILE` | kNN stream top-k tile knob | integration/switches-20261007 @ 608a7cf4a | none | - | DROPPED (deleted, guard refuses) | forbidden serial shape; incumbent parallel. Loop knob of the deleted C29 kernel only |

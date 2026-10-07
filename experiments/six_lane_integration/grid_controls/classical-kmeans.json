@@ -153,7 +153,7 @@
    "binding": "_mojolearn",
    "bits_change": true,
    "status": "split_from:C30_DIRECT_DISTANCE",
-   "note": "neighbors/impl/detail/knn_brute_force.mojo, classical_stream_topk.mojo, ball_cover/common.mojo, core/knn_host_predict.mojo (host twin); reaches every caller of the kNN primitive (KNN, RBC, HDBSCAN/UMAP/Spectral kNN graphs, DBSCAN RBC eps)"
+   "note": "neighbors/impl/detail/knn_brute_force.mojo (row-major direct tile only; certified MMA and transposed-layout routes closed under it; it no longer routes to the deleted C29 stream kernel, lane serial-cleanup 2026-10-07: changed device route, owes a fresh A/B and ID check), ball_cover/common.mojo, core/knn_host_predict.mojo (host twin); reaches every caller of the kNN primitive (KNN, RBC, HDBSCAN/UMAP/Spectral kNN graphs, DBSCAN RBC eps)"
   },
   "kde_direct": {
    "define": "MOJOLEARN_KDE_DIRECT_DISTANCE",
