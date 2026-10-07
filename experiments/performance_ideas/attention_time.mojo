@@ -18,7 +18,7 @@ def main() raises:
     var kept=ctx.enqueue_create_buffer[DType.float32](1);var kept_cells=0;var ran=-1
     ctx.enqueue_memset(q,Float32(.03125));ctx.enqueue_memset(k,Float32(-.0625));ctx.enqueue_memset(v,Float32(.125));ctx.enqueue_memset(dy,Float32(.015625));ctx.synchronize()
     var arm=fused_attention_arm_parse(String("stash_tiled_fgrid_r32_qres_pf"))
-    comptime if is_defined["MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE"]():
+    comptime if is_defined["MOJOLEARN_IDN_ATTN_HEAD_SHARE"]():
         arm=fused_attention_arm_parse(String("stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"))
     # Isolate I06's forward GQA reuse: both variants must keep the same
     # existing backward kvgrid schedule. The original driver changed both.

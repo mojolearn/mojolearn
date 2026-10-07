@@ -99,7 +99,7 @@ from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys import llvm_intrinsic
 from std.sys._assembly import inlined_assembly
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from std.sys.info import is_amd_gpu
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -7084,7 +7084,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     comment above. Instantiated at HD 64 with TQ 64 or 32 only, QRES only
     at TQ 32 (`fused_attention_fwd_rows`); 256 threads per block, grid
     `B * nh * ceil(L / TQ)`; one shared page of `_fwd_r2_page_bytes`."""
-    comptime assert HEAD_SHARE==1 or ((HEAD_SHARE==2 or HEAD_SHARE==4) and TQ==64 and QRES and PF and not SABN and not SWZ), "attention head reuse: unsupported shared layout"
+    comptime assert HEAD_SHARE==1 or (HEAD_SHARE==4 and TQ==64 and QRES and PF and not SABN and not SWZ), "attention head reuse: unsupported shared layout"
     _attn_mode_enter()
     comptime RPT = TQ // 16
     comptime CPT = HD // 16
@@ -9378,45 +9378,21 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
     return g[].bufs[at].create_sub_buffer[DType.float32](0, cells)
 
 
-# I06 remains default off; corrected isolated-toggle measurement is pending.
-# I06 NVIDIA L40S 2026-10-06 confounded bundle WIN: candidate1.567/3.263 ms
-# versus baseline1.860/3.549 ms, length1024/1536, heads12,kvheads4.
-# Original driver also changes backward kvgrid schedule with the reuse flag.
-# One warmup/score; isolated-toggle and full-workload qualification pending.
-# Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
-# I06 AMD MI325X cbcc8dcd3303 bundle ratios0.1164/0.1157 on the same
-# length1024/1536, heads12/kv4/hd64 fixtures. The driver also selected
-# kvgrid_r32 only for the candidate: this conflates GQA reuse with the
-# backward schedule. Retain both vendors' raw component timings as bundled
-# measurements, not isolated toggle evidence. Measurement repair must hold
-# the schedule constant. Existing identity reused; default remains OFF.
-# Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I06.
-# Corrected I06 sourcee80a1d0 (2026-10-06), fixed kvgrid schedule, ratio2:
-# scoped LOSER on MI325X1.211/1.212 and L40S1.147/1.108 (candidate/base).
-# Length1024/1536, B1,heads8,kv4,hd64: AMD2.947/4.342 vs2.434/3.581ms;
-# NVIDIA1.311/2.506 vs1.143/2.262ms. Both report schedule word50182.
-# The even-ratio source guard admits reuse at8/4; no dedicated runtime reuse
-# counter is exported. One same-process warmup/score, identity evidence reused.
-# Earlier e80 ratio12/4=3 refused reuse and is NO_DISTINCT_RUNTIME_ARM;
-# earlier cbcc bundled schedule measurements above remain separate history.
-# Representative forward/backward scope only; keep GQA reuse default OFF.
+# ONE head-share switch (NN17 + NI19 merged, 2026-10-07):
+# -D MOJOLEARN_IDN_ATTN_HEAD_SHARE=4 stages one K/V page for four query heads
+# at a fixed 64 logical rows (16 positions/head). Legal set {4}; only GQA
+# groups with (n_heads / n_kv) % 4 == 0 enter (a structural rule, never a
+# benchmark shape or name). OFF; compilation/identity/quality/timing unrun.
+# The two-head arm (I06/NI19, MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE) was DELETED
+# as a measured loser on both voting vendors (docs/apple-fast/EXPERIMENTS.md):
+# corrected source e80a1d0, fixed kvgrid schedule, ratio 2, length 1024/1536,
+# B1, heads8, kv4, hd64: MI325X 1.211/1.212 (2.947/4.342 vs 2.434/3.581 ms),
+# L40S 1.147/1.108 (1.311/2.506 vs 1.143/2.262 ms), candidate/base.
 # Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurements, I06.
-comptime ATTN_GQA_HEAD_REUSE = (
-    GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL
-    # The original bundled timing does not qualify this switch.
-    and is_defined["MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    and lib_smem_page_fits_for[TARGET_COLUMN,_fwd_r2_page_bytes(64,True)]()
-)
-
-# NN17 extends the rejected I06 two-head schedule by using four query heads
-# per K/V staging group at a fixed 64 logical rows: 16 positions/head. This
-# reduces per-head register residency while reusing the same K/V page four
-# times. Only compatible GQA groups enter, never a benchmark shape/name.
-# OFF; all compilation/identity/quality/full-workload timings are unrun.
+comptime ATTN_HEAD_SHARE = get_defined_int["MOJOLEARN_IDN_ATTN_HEAD_SHARE", 1]()
 comptime NN17_GQA_FOUR_HEADS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN17_GQA_FOUR_HEADS"]()
+    and ATTN_HEAD_SHARE == 4
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and lib_smem_page_fits_for[TARGET_COLUMN, _fwd_r2_page_bytes(64, True)]()
 )
@@ -9434,15 +9410,6 @@ def _try_launch_shared_heads[HD: Int,TQ: Int,QRES: Bool,PF: Bool,SABN: Bool,SWZ:
             ctx.enqueue_function[fused_attn_forward_r2_kernel[64,64,True,True,False,False,4]](
                 ctxv.unsafe_ptr(),amax.unsafe_ptr(),denom.unsafe_ptr(),corner.unsafe_ptr(),sstash.unsafe_ptr(),q_rope.unsafe_ptr(),k_cache.unsafe_ptr(),v_cache.unsafe_ptr(),Int32(b),Int32(l),Int32(nh),Int32(nkv),Int32(s),Int32(pos0),Int32(key_lo),Int32(window),scale,
                 grid_dim=(b*(nh//4)*((l+15)//16),1,1),block_dim=(FUSED_THREADS,1,1))
-            return True
-    comptime if ATTN_GQA_HEAD_REUSE and HD==64 and TQ==32 and QRES and PF and not SABN and not SWZ:
-        # Two adjacent query heads share one KV head. Logical rows interleave
-        # heads while each keeps the original32query tile and all row folds.
-        if nkv>0 and nh%nkv==0 and (nh//nkv)%2==0:
-            step_count_launch()
-            ctx.enqueue_function[fused_attn_forward_r2_kernel[64,64,True,True,False,False,2]](
-                ctxv.unsafe_ptr(),amax.unsafe_ptr(),denom.unsafe_ptr(),corner.unsafe_ptr(),sstash.unsafe_ptr(),q_rope.unsafe_ptr(),k_cache.unsafe_ptr(),v_cache.unsafe_ptr(),Int32(b),Int32(l),Int32(nh),Int32(nkv),Int32(s),Int32(pos0),Int32(key_lo),Int32(window),scale,
-                grid_dim=(b*(nh//2)*((l+31)//32),1,1),block_dim=(FUSED_THREADS,1,1))
             return True
     return False
 
