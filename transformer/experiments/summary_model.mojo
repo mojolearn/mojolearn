@@ -19,6 +19,11 @@ from transformer.experiments.attention_summary_tree import (
 
 
 from transformer.impl.llama.fused_attention import device_absmax
+from transformer.experiments.attention_summary_contract import NN20_KEY_LEAF
+from transformer.experiments.attention_summary_split import (
+    IDN_NN20_SPLIT_KV, enqueue_nn20_split_forward, nn20_split_scratch_floats,
+    nn20_merge_scratch_floats,
+)
 from transformer.experiments.summary_model_contract import (_require_model_shape, _require_summary_regime, _require_summary_gradient_regime, _token_cell, _mask_row, _materialize_cell)
 
 
@@ -105,6 +110,31 @@ def _pack(ctx:DeviceContext,mut work:SummaryModelBuffers,mut q:DeviceBuffer[DTyp
     ctx.enqueue_function[summary_masks_kernel](work.lo.unsafe_ptr(),work.hi.unsafe_ptr(),work.status.unsafe_ptr(),Int32(rows),Int32(l),Int32(s),Int32(pos0),Int32(key_lo),Int32(window),grid_dim=((rows+255)//256,1,1),block_dim=(256,1,1))
 
 
+def _nn20_split_forward(ctx:DeviceContext,mut work:SummaryModelBuffers,
+    mut k:DeviceBuffer[DType.float32],mut v:DeviceBuffer[DType.float32],
+    mut maxes:DeviceBuffer[DType.float32],mut denoms:DeviceBuffer[DType.float32],
+    rows:Int,s:Int,hd:Int,qpg:Int,key_lo:Int,scale:Float32) raises:
+    """The split arm's two launches. It owns its scratch and waits before
+    releasing it (one extra completion wait, counted, in the ON arm only)."""
+    var tiles = (key_lo + s + NN20_KEY_LEAF - 1) // NN20_KEY_LEAF
+    step_count_device_alloc()
+    var blocks = ctx.enqueue_create_buffer[DType.float32](nn20_split_scratch_floats(rows, tiles, hd))
+    step_count_device_alloc()
+    var merge = ctx.enqueue_create_buffer[DType.float32](nn20_merge_scratch_floats(rows, tiles, hd))
+    step_count_launch()
+    step_count_launch()
+    try:
+        enqueue_nn20_split_forward(ctx, work.q, k, v, work.lo, work.hi, work.output, maxes, denoms,
+            work.status, blocks, merge, rows, s, hd, qpg, key_lo, scale)
+    except error:
+        ctx.synchronize()
+        raise error
+    step_count_sync()
+    ctx.synchronize()
+    _ = blocks^
+    _ = merge^
+
+
 def model_summary_forward(ctx:DeviceContext,mut output:DeviceBuffer[DType.float32],
     mut maxes:DeviceBuffer[DType.float32],mut denoms:DeviceBuffer[DType.float32],
     mut scores:DeviceBuffer[DType.float32],mut masked:DeviceBuffer[DType.float32],
@@ -117,8 +147,15 @@ def model_summary_forward(ctx:DeviceContext,mut output:DeviceBuffer[DType.float3
     _require_summary_regime(device_absmax(ctx,q,rows*hd),device_absmax(ctx,k,b*nkv*s*hd),device_absmax(ctx,v,b*nkv*s*hd),hd,s)
     var work=SummaryModelBuffers(ctx,rows,s,hd,key_lo)
     _pack(ctx,work,q,b,l,nh,hd,s,pos0,key_lo,window)
-    step_count_launch()
-    ctx.enqueue_function[summary_model_forward_kernel](work.q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),work.lo.unsafe_ptr(),work.hi.unsafe_ptr(),work.output.unsafe_ptr(),maxes.unsafe_ptr(),denoms.unsafe_ptr(),work.scratch.unsafe_ptr(),work.status.unsafe_ptr(),Int32(rows),Int32(s),Int32(hd),Int32(qpg),Int32(key_lo),scale,grid_dim=((rows+63)//64,1,1),block_dim=(64,1,1))
+    # lane/neural-fusions (L13): MOJOLEARN_IDN_NN20_SPLIT_KV splits each
+    # row's key leaves into aligned power-of-two groups and merges the group
+    # summaries with NN20's own counter (attention_summary_split.mojo). Same
+    # merges, same operands, same bits.
+    comptime if IDN_NN20_SPLIT_KV:
+        _nn20_split_forward(ctx, work, k, v, maxes, denoms, rows, s, hd, qpg, key_lo, scale)
+    else:
+        step_count_launch()
+        ctx.enqueue_function[summary_model_forward_kernel](work.q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),work.lo.unsafe_ptr(),work.hi.unsafe_ptr(),work.output.unsafe_ptr(),maxes.unsafe_ptr(),denoms.unsafe_ptr(),work.scratch.unsafe_ptr(),work.status.unsafe_ptr(),Int32(rows),Int32(s),Int32(hd),Int32(qpg),Int32(key_lo),scale,grid_dim=((rows+63)//64,1,1),block_dim=(64,1,1))
     step_count_launch()
     ctx.enqueue_function[summary_pack_kernel[False]](output.unsafe_ptr(),work.output.unsafe_ptr(),Int32(rows*hd),Int32(l),Int32(nh),Int32(hd),grid_dim=((rows*hd+255)//256,1,1),block_dim=(256,1,1))
     if materialize:
