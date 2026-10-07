@@ -46,7 +46,9 @@ the same dual-branch flush every histogram kernel in this package uses.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
+from std.gpu.primitives import warp
+from std.gpu.primitives.warp import vote
 from std.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -56,6 +58,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_dither,
     hist2_quantize,
 )
+from gbdt.trees_hist_switches import HIST_PACKED_GH, HIST_WARP_AGG
 from checks.kernel_matrix import (
     APPLE_HIST2_SHARED_I32_BLOCK_CAP,
     COLUMN_APPLE,
@@ -93,6 +96,22 @@ comptime H8_POINTS = H8_UNROLL * H8_LOAD
 comptime H8_MIN_DOCS = H8_LANE * H8_UNROLL * H8_LOAD * (H8_BLOCK // H8_LANE)
 
 
+# ======================= lane trees-hist-ideas (2026-10-07) =======================
+# Two default-off IDENTICAL switches on this kernel (`gbdt/trees_hist_switches.mojo`).
+# Neither changes an addend; both change only how many atomics carry it, so the
+# cells keep their bits. Apple (no 64-bit atomics; Metal wave vote unprobed) keeps
+# the incumbent arithmetic under either define: same bits, other code.
+# NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
+comptime H8_PACKED = HIST_PACKED_GH and TARGET_COLUMN != COLUMN_APPLE
+comptime H8_WAVE_AGG = HIST_WARP_AGG and TARGET_COLUMN != COLUMN_APPLE
+#: the 64-bit atomic needs the (stat 0, stat 1) pair 8-byte aligned; cells are
+#: `(bin << 3) + (f << 1) + stat`, so the pair starts on an even cell and the
+#: slice bases are multiples of 2048. Default alignment is Int32's own.
+comptime H8_SMEM_ALIGN = 8 if H8_PACKED else 4
+#: the vote mask is one bit per hardware lane (32 on NVIDIA, 64 on CDNA).
+comptime H8_MASK_DT = DType.uint32 if WARP_SIZE <= 32 else DType.uint64
+
+
 def h8_slice_base(tid: Int) -> Int:
     """One 2048-cell slice per warp QUAD: four warps' atomics share it."""
     return H8_SLICE * (tid // 128)
@@ -120,6 +139,46 @@ def h8_add_point(
         var f = (tid + i) & 3
         var bin = Int((ci >> UInt32(24 - 8 * f)) & UInt32(255))
         var cell = slice_base + (bin << 3) + (f << 1)
+        h8_add_pair(cell, q1, q2, smem)
+
+
+@always_inline
+def h8_add_pair(
+    cell: Int,
+    q1: Int32,
+    q2: Int32,
+    smem: UnsafePointer[
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+        origin=MutUntrackedOrigin,
+    ],
+):
+    """Both stats of one (feature, bin) cell pair: two Int32 atomics, or
+    under `MOJOLEARN_TREES_HIST_PACKED_GH` (NVIDIA/AMD) ONE Int64 atomic.
+
+    PACKED RANGE PROOF (idea 1, lane trees-hist-ideas). The addend is
+    `q2 * 2^32 + q1` as an Int64 (q1 sign-extends; no carry trick). After any
+    set of such adds the 64-bit word is S = A * 2^32 + B, with A and B the
+    TRUE integer sums of q2 and q1 over the rows this slice received. Both
+    are partial sums over a subset of rows, so `checks/fixed_point.mojo`'s
+    `choose_scale` bound gives |A|, |B| <= 2^28 - 1 + rows < 2^31 (see
+    `histogram_utils.hist2_smem_add`'s DEVIATION BLOCK), and |S| < 2^63:
+    nothing wraps. Little-endian, the low word is B mod 2^32 = B, exactly the
+    Int32 the incumbent's stat-0 atomic leaves in `cell`. The high word is
+    floor(S / 2^32) = A + floor(B / 2^32), i.e. A - 1 when B < 0, so
+    `h8_unpack_pairs` adds 1 to the high word where the low word is negative
+    before the slices fold. Then every cell holds the incumbent's Int32,
+    bit for bit. Fewer, wider atomics; no addend changes.
+
+    2x16 in one Int32 is NOT offered: a cell's partial sum is bounded by
+    2^28 + rows, not 2^15, so a 16-bit half overflows with no flush point
+    the kernel could prove; rescaling to fit would change every addend."""
+    comptime if H8_PACKED:
+        var packed = (Int64(q2) << 32) + Int64(q1)
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+            smem.unsafe_offset(cell).unsafe_bitcast[Int64](), packed
+        )
+    else:
         # DEVIATION 1898: the reference's atomicAdd is relaxed; the non-Apple Mojo
         # default is seq_cst.
         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
@@ -128,6 +187,81 @@ def h8_add_point(
         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             smem.unsafe_offset(cell + 1), q2
         )
+
+
+@always_inline
+def h8_add_point_wave(
+    ci: UInt32,
+    q1: Int32,
+    q2: Int32,
+    active: Bool,
+    slice_base: Int,
+    smem: UnsafePointer[
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+        origin=MutUntrackedOrigin,
+    ],
+):
+    """Idea 2, `MOJOLEARN_TREES_HIST_WARP_AGG` (NVIDIA/AMD): wave-aggregated
+    atomics on the body loop. MUST be called by every lane of the wave
+    (convergent): the body loop's trip count is block-uniform and an
+    inactive lane passes `active=False` with q1 = q2 = 0.
+
+    All lanes take feature `i` together (the incumbent rotates the feature
+    by lane to spread banks; here the point is to make lanes collide). For
+    each feature the wave tests, with one broadcast and one ballot, whether
+    every lane holds the SAME bin. If so, one shuffle-tree sum per stat and
+    ONE lane's atomic replace WARP_SIZE atomics on one address (the worst
+    case of the incumbent: all lanes serialized on one cell -- constant,
+    missing-value or low-cardinality columns, sorted data). Otherwise every
+    active lane adds its own point, as the incumbent does. The test is
+    wave-uniform (all lanes see the same ballot), so the branch never
+    diverges.
+
+    Bits: the wave sum is an Int32 sum of the same addends, bounded like any
+    partial sum (|sum| <= 2^28 + rows < 2^31), so the cell receives the same
+    integer total. Inactive lanes contribute 0.
+
+    PARTIAL GROUPS ARE NOT AGGREGATED. A general `match_any` grouping needs a
+    reduce over an ARBITRARY lane subset: on NVIDIA that is `redux.sync` with
+    a member mask (sm_80+), which Mojo's `warp` module does not expose, and
+    AMD has no such instruction (Mojo's `match_any` itself builds for gfx942,
+    probed 2026-10-07 before the no-compile rule). Recorded as a Modular ask
+    in docs/MODULAR_ASKS.md; no workaround here."""
+    comptime full = ~Scalar[H8_MASK_DT](0)
+
+    comptime for f in range(4):
+        var bin = Int((ci >> UInt32(24 - 8 * f)) & UInt32(255))
+        var key = Int32(bin)
+        var lead = warp.broadcast(key)
+        var same = vote[H8_MASK_DT](key == lead)
+        var cell = slice_base + (bin << 3) + (f << 1)
+        if same == full:
+            var s1 = warp.sum(q1)
+            var s2 = warp.sum(q2)
+            if lane_id() == 0:
+                h8_add_pair(cell, s1, s2, smem)
+        elif active:
+            h8_add_pair(cell, q1, q2, smem)
+
+
+@always_inline
+def h8_unpack_pairs(
+    tid: Int,
+    smem: UnsafePointer[
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+        origin=MutUntrackedOrigin,
+    ],
+):
+    """PACKED only: the high-word correction of `h8_add_pair`'s proof, on
+    every slice, before the fold. Caller holds a barrier before and after."""
+    comptime if H8_PACKED:
+        var p = tid
+        while p < H8_SMEM // 2:
+            if smem[2 * p] < Int32(0):
+                smem[2 * p + 1] = smem[2 * p + 1] + Int32(1)
+            p += H8_BLOCK
 
 
 def h8_reduce_and_flush(
@@ -155,6 +289,9 @@ def h8_reduce_and_flush(
     every copy of it before writing it), then one thread per FOLD writes
     both stats through the dual-branch flush."""
     barrier()
+    comptime if H8_PACKED:
+        h8_unpack_pairs(tid, smem)
+        barrier()
     var start = tid
     while start < H8_SLICE:
         var acc = smem[start]
@@ -280,6 +417,7 @@ def hist2_8bit_kernel[
     var smem = stack_allocation[
         H8_SMEM,
         Scalar[DType.int32],
+        alignment = H8_SMEM_ALIGN,
         address_space = AddressSpace.SHARED,
     ]()
     var z = tid
@@ -408,11 +546,18 @@ def hist2_8bit_kernel[
                             v2[e], fixed_scale, u
                         )
 
-        if active:
+        comptime if H8_WAVE_AGG:
+            # convergent: every lane of the wave calls, inactive with zeros
+            comptime for k in range(H8_POINTS):
+                h8_add_point_wave(
+                    lb[k], lq1[k], lq2[k], active, slice_base, smem
+                )
+        else:
+            if active:
 
-            @parameter
-            for k in range(H8_POINTS):
-                h8_add_point(lb[k], lq1[k], lq2[k], tid, slice_base, smem)
+                @parameter
+                for k in range(H8_POINTS):
+                    h8_add_point(lb[k], lq1[k], lq2[k], tid, slice_base, smem)
         b_ptr += stripe_size
         s1_ptr += stripe_size
         s2_ptr += stripe_size
@@ -505,6 +650,7 @@ def hist2_8bit_gather_kernel[
     var smem = stack_allocation[
         H8_SMEM,
         Scalar[DType.int32],
+        alignment = H8_SMEM_ALIGN,
         address_space = AddressSpace.SHARED,
     ]()
     var z = tid
@@ -666,11 +812,18 @@ def hist2_8bit_gather_kernel[
                         v2[e], fixed_scale, u
                     )
 
-        if active:
+        comptime if H8_WAVE_AGG:
+            # convergent: every lane of the wave calls, inactive with zeros
+            comptime for k in range(H8_POINTS):
+                h8_add_point_wave(
+                    lb[k], lq1[k], lq2[k], active, slice_base, smem
+                )
+        else:
+            if active:
 
-            @parameter
-            for k in range(H8_POINTS):
-                h8_add_point(lb[k], lq1[k], lq2[k], tid, slice_base, smem)
+                @parameter
+                for k in range(H8_POINTS):
+                    h8_add_point(lb[k], lq1[k], lq2[k], tid, slice_base, smem)
         i_ptr += stripe_size
         s1_ptr += stripe_size
         s2_ptr += stripe_size

@@ -15,6 +15,11 @@ from max.gpu.host.device_attribute import DeviceAttribute
 
 from checks.fixed_point import choose_scale
 from gbdt.trees_identical_switches import T21_STREAMS
+from gbdt.trees_hist_switches import HIST_MULTISTAT, HIST_SYM_FEATURE_PARALLEL
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit_wide import (
+    hist2_8bit_wide_kernel,
+    wide_columns_for,
+)
 
 from gbdt.gpu_lib.gpu_manager import TCudaManager
 from gbdt.methods.kernel_add_model_value import (
@@ -2542,6 +2547,68 @@ def launch_hist2_8bit[ridx_stats: Bool = False](
             )
 
 
+def launch_hist2_8bit_wide[ns: Int, fg: Int, ridx_stats: Bool = False](
+    ctx: DeviceContext,
+    mut blk: DeviceBlock,
+    depth: Int,
+    n_live: Int,
+    n_rows: Int,
+    stat_count: Int,
+    max_leaves: Int,
+    sm_count: Int,
+    line: Int,
+    base: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut ids: DeviceBuffer[DType.uint32],
+    mut acc_i32: DeviceBuffer[DType.int32],
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
+) raises:
+    """Lane trees-hist-ideas (default off): the wide fixed-point 8-bit arm,
+    `kernel/hist_2_one_byte_8bit_wide.mojo`. `ns` stat planes and `fg`
+    compressed-index columns per block, one walk; grid z covers the planes
+    in groups of `ns`. Writes the same `acc_i32` cells the fused and PASS
+    arms write, with the same addends (see the kernel's BITS note).
+    Replication: `replication_for` over the widened column groups and the
+    z extent, the same formula every one-byte launcher uses.
+    NOT COMPILED -- NOT TESTED -- NOT MEASURED."""
+    var columns = (Int(blk.n_features) + 3) // 4
+    var col_groups = (columns + fg - 1) // fg
+    var gz = (stat_count + ns - 1) // ns
+    var replicas = replication_for(
+        col_groups, n_live, gz, sm_count, gather=(depth > 0)
+    )
+    if depth == 0:
+        ctx.enqueue_function[hist2_8bit_wide_kernel[ns, fg, False, False]](
+            blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+            blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+            Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+            Int32(base), row_index.unsafe_ptr(), stats.unsafe_ptr(),
+            Int32(n_rows), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+            ids.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+            Int32(max_leaves), Int32(stat_count),
+            grid_dim=(col_groups * replicas, n_live, gz),
+            block_dim=(H8_BLOCK, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[
+            hist2_8bit_wide_kernel[ns, fg, True, ridx_stats]
+        ](
+            blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+            blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+            Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+            Int32(base), row_index.unsafe_ptr(), stats.unsafe_ptr(),
+            Int32(n_rows), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+            ids.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+            Int32(max_leaves), Int32(stat_count),
+            grid_dim=(col_groups * replicas, n_live, gz),
+            block_dim=(H8_BLOCK, 1, 1),
+        )
+
+
 def launch_one_byte[
     bits: Int, smem_mode: Int = HIST2_SMEM_MODE, ridx_stats: Bool = False
 ](
@@ -3051,6 +3118,11 @@ def launch_histograms_for_blocks[
     width_plans: List[OneByteWidthPlan] = List[OneByteWidthPlan](),
     replicas_override: Int = 0,
     nonsymmetric_work: Bool = False,
+    # lane trees-hist-ideas: True only from the SymmetricTree level paths
+    # (`run_tree_layout_traced`, `TSynchronizedSymmetricLevelState`); read
+    # only by MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL. Default keeps every
+    # other caller (depthwise, lossguide, shards) on the incumbent.
+    symmetric_policy: Bool = False,
 ) raises:
     """One histogram launch per policy present, dispatching on the block.
 
@@ -3483,7 +3555,36 @@ def launch_histograms_for_blocks[
 
                     @parameter
                     if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
-                        if stat_count == 2:
+                        # lane trees-hist-ideas idea 4 (default off):
+                        # SymmetricTree two-stat blocks may take FG cindex
+                        # columns per block by `wide_columns_for`'s cost
+                        # rule; FG = 1 is the fused arm below, unchanged.
+                        var took_wide = False
+                        comptime if HIST_SYM_FEATURE_PARALLEL:
+                            if stat_count == 2 and symmetric_policy:
+                                var sym_fg = wide_columns_for(
+                                    (Int(blk.n_features) + 3) // 4,
+                                    n_live, sm_count,
+                                )
+                                if sym_fg == 4:
+                                    launch_hist2_8bit_wide[2, 4, ridx_stats](
+                                        ctx, blk, depth, n_live, n_rows,
+                                        stat_count, max_leaves, sm_count,
+                                        line, base, cindex, row_index, stats,
+                                        p_off, p_sz, ids, acc_i32, fixed_scale,
+                                    )
+                                    took_wide = True
+                                elif sym_fg == 2:
+                                    launch_hist2_8bit_wide[2, 2, ridx_stats](
+                                        ctx, blk, depth, n_live, n_rows,
+                                        stat_count, max_leaves, sm_count,
+                                        line, base, cindex, row_index, stats,
+                                        p_off, p_sz, ids, acc_i32, fixed_scale,
+                                    )
+                                    took_wide = True
+                        if took_wide:
+                            pass
+                        elif stat_count == 2:
                             # the fused two-stat 8-bit arm: one walk over the
                             # cindex where PASS(8) makes stat_count of them
                             # (its DEVIATION BLOCK carries the shared-memory
@@ -3496,21 +3597,37 @@ def launch_histograms_for_blocks[
                                 block_hist, acc_i32, fixed_scale,
                             )
                         else:
-                            # MultiClass carries 1 + (K-1) stat planes and the
-                            # fused arm is two-stat by construction. When it
-                            # landed (8010b2f) every caller WAS two-stat;
-                            # MultiClass arrived later in another lane, and the
-                            # first 254-border multiclass fit hit the fused
-                            # arm's guard instead of a histogram. Multi-stat
-                            # shapes take the PASS route, whose shared-Int32
-                            # arm walks stat pairs on the z axis exactly as
-                            # their ladder does.
-                            launch_one_byte[8, hist2_smem_mode, ridx_stats](
-                                ctx, blk, depth, n_live, n_rows, stat_count,
-                                max_leaves, sm_count, line, base, cindex,
-                                row_index, stats, p_off, p_sz, ids,
-                                block_hist, acc_i32, fixed_scale,
-                            )
+                            comptime if HIST_MULTISTAT > 0:
+                                # lane trees-hist-ideas idea 3 (default off): one
+                                # walk per HIST_MULTISTAT planes instead of one
+                                # per plane; same addends, same cells.
+                                comptime assert (
+                                    HIST_MULTISTAT == 4 or HIST_MULTISTAT == 8
+                                ), "MOJOLEARN_TREES_HIST_MULTISTAT is 4 or 8"
+                                launch_hist2_8bit_wide[
+                                    HIST_MULTISTAT, 1, ridx_stats
+                                ](
+                                    ctx, blk, depth, n_live, n_rows, stat_count,
+                                    max_leaves, sm_count, line, base, cindex,
+                                    row_index, stats, p_off, p_sz, ids,
+                                    acc_i32, fixed_scale,
+                                )
+                            else:
+                                # MultiClass carries 1 + (K-1) stat planes and the
+                                # fused arm is two-stat by construction. When it
+                                # landed (8010b2f) every caller WAS two-stat;
+                                # MultiClass arrived later in another lane, and the
+                                # first 254-border multiclass fit hit the fused
+                                # arm's guard instead of a histogram. Multi-stat
+                                # shapes take the PASS route, whose shared-Int32
+                                # arm walks stat pairs on the z axis exactly as
+                                # their ladder does.
+                                launch_one_byte[8, hist2_smem_mode, ridx_stats](
+                                    ctx, blk, depth, n_live, n_rows, stat_count,
+                                    max_leaves, sm_count, line, base, cindex,
+                                    row_index, stats, p_off, p_sz, ids,
+                                    block_hist, acc_i32, fixed_scale,
+                                )
                     else:
                         launch_one_byte[8, hist2_smem_mode, ridx_stats](
                             ctx, blk, depth, n_live, n_rows, stat_count,
@@ -4893,6 +5010,7 @@ struct TSynchronizedSymmetricLevelState(Movable):
                 workspace.ids_compute, workspace.dense_ids, workspace.hist,
                 workspace.acc_i32, workspace.block_hist,
                 self.layout.hist_cells,
+                symmetric_policy=True,
             )
         else:
             launch_histograms_for_blocks[
@@ -4905,6 +5023,7 @@ struct TSynchronizedSymmetricLevelState(Movable):
                 workspace.zero_ids, workspace.dense_ids, workspace.hist,
                 workspace.acc_i32, workspace.block_hist,
                 self.layout.hist_cells,
+                symmetric_policy=True,
             )
         var level_ids = workspace.zero_ids.unsafe_ptr()
         if planned:
@@ -5902,6 +6021,7 @@ def run_tree_layout_traced[
                         active_cindex, row_index, stats, p_off, p_sz,
                         ids_compute, dense_ids,
                         hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        symmetric_policy=True,
                         qstats=Optional(qstats.copy()), width_plans=width_plans,
                     )
                 else:
@@ -5914,6 +6034,7 @@ def run_tree_layout_traced[
                         active_cindex, row_index, stats, p_off, p_sz,
                         ids_compute, dense_ids,
                         hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        symmetric_policy=True,
                         qstats=Optional(qstats.copy()), width_plans=width_plans,
                     )
             else:
@@ -5932,6 +6053,7 @@ def run_tree_layout_traced[
                         active_cindex, row_index, stats, p_off, p_sz, zero_ids,
                         dense_ids,
                         hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        symmetric_policy=True,
                         qstats=Optional(qstats.copy()), width_plans=width_plans,
                     )
                 else:
@@ -5944,6 +6066,7 @@ def run_tree_layout_traced[
                         active_cindex, row_index, stats, p_off, p_sz, zero_ids,
                         dense_ids,
                         hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        symmetric_policy=True,
                         qstats=Optional(qstats.copy()), width_plans=width_plans,
                     )
         else:
@@ -5957,6 +6080,7 @@ def run_tree_layout_traced[
                         active_cindex, row_index, stats, p_off, p_sz, ids_compute,
                         dense_ids,
                         hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        symmetric_policy=True,
                     )
                 else:
                     launch_histograms_for_blocks[
@@ -5967,6 +6091,7 @@ def run_tree_layout_traced[
                         active_cindex, row_index, stats, p_off, p_sz, ids_compute,
                         dense_ids,
                         hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        symmetric_policy=True,
                     )
             else:
                 if use_ridx:
@@ -5978,6 +6103,7 @@ def run_tree_layout_traced[
                         active_cindex, row_index, stats, p_off, p_sz, zero_ids,
                         dense_ids,
                         hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        symmetric_policy=True,
                     )
                 else:
                     launch_histograms_for_blocks[
@@ -5988,6 +6114,7 @@ def run_tree_layout_traced[
                         active_cindex, row_index, stats, p_off, p_sz, zero_ids,
                         dense_ids,
                         hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        symmetric_policy=True,
                     )
         mgr.stream_kernel()
 
