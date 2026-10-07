@@ -1448,3 +1448,9 @@ both NVIDIA and AMD results, no material vendor regression, same-version
 identity on Apple and the host column, and end-to-end quality/performance
 on taxi + Istella or enwik8 + Pile GitHub as appropriate. No default flips
 are authorized by the synthetic screen alone.
+
+## Classical IDENTICAL drops (lane classical-nbda, 2026-10-07)
+
+| define | algorithm / dataset | branch @ sha | evidence | before -> after (candidate/baseline) | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_CLASSICAL_C55_CLASS_GROUP` | GaussianNB, LDA, QDA, Multinomial/Bernoulli/Complement NB, feature-selection class stats / taxi, istella | main @ 8be4d20d4 (measured source 6fe3cfce38fd); deleted on lane/classical-nbda | experiments/six_lane_integration/measurements/20261006/BOARD.md rows T.C55.only; ~/mojolearn-evidence/board-review-20261007/review_classical.md C55 | NV sm90 gaussian-nb taxi/istella 3.76x/1.68x, lda-clf taxi/istella 2.39x/1.28x; AMD gfx942 7.30x/3.23x, 3.47x/1.69x | DROPPED (code deleted) | one thread per (class group, column) walking all n rows twice with a plain f32 running sum: serial, slower on both vendors, and quality failed (gaussian-nb taxi, lda-clf istella). Replaced by C61 (blocked single-pass, Chan merge, compensated) |
