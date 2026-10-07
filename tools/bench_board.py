@@ -1852,7 +1852,9 @@ def classical_cells(ctx, race, r):
                     median_ms=float(statistics.median(ms)) if ms else None,
                     min_ms=min(ms) if ms else None, max_ms=max(ms) if ms else None,
                     rounds=len(ms), status=_status(ms, refused, rounds),
-                    quality=q, hash=(a.get("digests") or [None])[-1],
+                    # the last round digest; a race whose rounds carry none (the neural training
+                    # lanes) falls back to its saved-outputs digest (bench_board_neural.outputs_digest)
+                    quality=q, hash=(a.get("digests") or [None])[-1] or a.get("outputs_digest"),
                     hash_stable=a.get("digest_stable"), shape=shape,
                     state_receipts=a.get("state_receipts", []), operations=a.get("operations", []),
                     device=info.get("device", cell["device"]),
