@@ -49,11 +49,17 @@ and the optimizer entry also wait before they return (their own contracts).
 None of those is a PCIe transfer of an activation or a gradient; every such
 transfer is gone.
 
-HOST WORK THAT REMAINS is arm B's own and is Mojo: the targets range walk and
-the ignore-index count (`ce_refuse_targets`, `ce_count`) over the caller's
-int32 targets before any device work, as `samba_head_loss_host` does.
+THE TARGETS ARE ADMITTED ON THE DEVICE. Arm B walks the host targets for the
+range refusal and the ignore-index count (`ce_refuse_targets`, `ce_count` in
+`samba_head_loss_host`). Here `samba_targets_scan_kernel` reads the uploaded
+targets once, in parallel: the count of rows whose target is not the ignore
+index is an integer sum (exact and order-free, so integer atomics are the
+whole fold) and the first out-of-range row is an integer minimum; two words
+come back, and a hit is spelled with `ce_refuse_targets`'s own message.
 """
 
+from std.atomic import Atomic
+from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -89,10 +95,8 @@ from training.checks.loss_contract import (
     CeConfig,
     IGNORE_INDEX_DEFAULT,
     REDUCTION_SUM,
-    ce_count,
     ce_nonfinite_message,
     ce_refuse_shape,
-    ce_refuse_targets,
 )
 from training.estimator import (
     identical_ce_admit_call,
@@ -149,6 +153,71 @@ def _lean_stages(hd: Int) -> Bool:
     if not fused_forward_supported_head_dim(hd):
         return False
     return attention_path_choice(PLANT_AT_NONE) != ATTN_PATH_EAGER
+
+
+def samba_targets_scan_kernel(
+    count: MutPointer[Int32, MutAnyOrigin],
+    first_bad: MutPointer[Int32, MutAnyOrigin],
+    targets: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    vocab: Int32,
+    ignore: Int32,
+):
+    """One thread per target row: `count += 1` for a row whose target is not
+    `ignore`, and `first_bad = min(first_bad, row)` for one that is also
+    outside `[0, vocab)`. Both are integer folds, exact in any order."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var t = targets.unsafe_load(i)
+    if t == ignore:
+        return
+    _ = Atomic[DType.int32].fetch_add(count, Int32(1))
+    if t < Int32(0) or t >= vocab:
+        _ = Atomic[DType.int32].min(first_bad, Int32(i))
+
+
+def _admit_targets_device(
+    ctx: DeviceContext,
+    mut targets: DeviceBuffer[DType.int32],
+    m: Int,
+    vocab: Int,
+    ignore: Int,
+) raises -> Int:
+    """`ce_refuse_targets` and `ce_count` over the uploaded targets: one
+    launch, two words back, one wait. Returns `count`; raises the oracle's
+    message, with the offending value read back, on an out-of-range row."""
+    var count = ctx.enqueue_create_buffer[DType.int32](1)
+    var first_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    count.enqueue_fill(Int32(0))
+    first_bad.enqueue_fill(Int32(m))
+    ctx.enqueue_function[samba_targets_scan_kernel](
+        count.unsafe_ptr(), first_bad.unsafe_ptr(), targets.unsafe_ptr(),
+        Int32(m), Int32(vocab), Int32(ignore),
+        grid_dim=(_grid(m), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
+    )
+    var host = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=count)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr() + 1, src_buf=first_bad)
+    ctx.synchronize()
+    var n_count = Int(host.unsafe_ptr().unsafe_load(0))
+    var bad = Int(host.unsafe_ptr().unsafe_load(1))
+    _ = count^
+    _ = first_bad^
+    _ = host^
+    if bad < m:
+        var one = ctx.enqueue_create_host_buffer[DType.int32](1)
+        var cell = targets.create_sub_buffer[DType.int32](bad, 1)
+        ctx.enqueue_copy(dst_ptr=one.unsafe_ptr(), src_buf=cell)
+        ctx.synchronize()
+        var t = Int(one.unsafe_ptr().unsafe_load(0))
+        _ = cell^
+        _ = one^
+        raise Error(
+            String("ce: target ") + String(t) + " at row " + String(bad)
+            + " is neither ignore_index nor in [0, vocab) REFUSED"
+        )
+    return n_count
 
 
 def _d2d(
@@ -749,19 +818,7 @@ def samba_resident_train_step(
     for j in range(n_tensors + 1):  # small-loop(n_tensors + 1: registry offsets): compares offsets, not data
         if Int(offsets_ptr.unsafe_load(j)) != s.offsets[j]:
             raise Error("mojolearn samba resident: optimizer offsets[" + String(j) + "] is not the stack's registry")
-    # ---- the targets: arm B's own host walk (`ce_refuse_targets`,
-    # `ce_count`), before any device work; `count` is the divisor
-    var h_targets = List[Int32](capacity=m)
-    for i in range(m):
-        h_targets.append(targets_ptr.unsafe_load(i))
-    var refuse_cfg = CeConfig(s.vocab, IGNORE_INDEX_DEFAULT, REDUCTION_SUM, Float32(0.0), 0)
-    ce_refuse_targets(h_targets, refuse_cfg)
-    var count = ce_count(h_targets, IGNORE_INDEX_DEFAULT)
-    _ = h_targets^
     identical_ce_admit_call(REDUCTION_SUM, 1, m)
-    var cfg = CeConfig(s.vocab, IGNORE_INDEX_DEFAULT, REDUCTION_SUM, Float32(0.0), count)
-    ce_refuse_shape(m, m * s.vocab, cfg)
-
     _ensure_shape(s, b, l)
     var dm = s.dm
     var v = s.vocab
@@ -769,6 +826,12 @@ def samba_resident_train_step(
     s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
     _upload_tokens(s, ids_ptr)
     s.ctx.enqueue_copy(dst_buf=s.targets, src_ptr=targets_ptr)
+    # ---- the targets' range refusal and the ignore-index count, on the
+    # device (`ce_refuse_targets` / `ce_count` in arm B); `count` is the
+    # loss divisor (`num_items = count`, as `loss_and_grads` passes it)
+    var count = _admit_targets_device(s.ctx, s.targets, m, v, IGNORE_INDEX_DEFAULT)
+    var cfg = CeConfig(v, IGNORE_INDEX_DEFAULT, REDUCTION_SUM, Float32(0.0), count)
+    ce_refuse_shape(m, m * v, cfg)
     _admit_registry(s)
 
     # ---- forward

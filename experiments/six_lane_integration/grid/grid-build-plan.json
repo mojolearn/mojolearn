@@ -4640,7 +4640,7 @@
    ],
    "key": "0257842f6ae9b72bb37d",
    "mode": "identical",
-   "pack": "P156",
+   "pack": "P169",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -4660,7 +4660,7 @@
    ],
    "key": "02b82696df54bd0a496e",
    "mode": "identical",
-   "pack": "P170",
+   "pack": "P155",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -4701,7 +4701,7 @@
    ],
    "key": "08ded171904163c56d66",
    "mode": "identical",
-   "pack": "P161",
+   "pack": "P174",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -4754,7 +4754,7 @@
    ],
    "key": "15c1dd5a0c7ceade700e",
    "mode": "identical",
-   "pack": "P157",
+   "pack": "P170",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -4774,7 +4774,7 @@
    ],
    "key": "17de8d0ad24dc30e5f2e",
    "mode": "identical",
-   "pack": "P163",
+   "pack": "P148",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5000,7 +5000,7 @@
    ],
    "key": "49cabd078cd5d6462b27",
    "mode": "identical",
-   "pack": "P169",
+   "pack": "P154",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5040,7 +5040,7 @@
    ],
    "key": "52cd5f6622bac4934842",
    "mode": "identical",
-   "pack": "P173",
+   "pack": "P158",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5086,7 +5086,7 @@
    ],
    "key": "5a51e45919b56ccdff1f",
    "mode": "identical",
-   "pack": "P164",
+   "pack": "P149",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5134,7 +5134,7 @@
    ],
    "key": "656e0108b7bbce9fad74",
    "mode": "identical",
-   "pack": "P167",
+   "pack": "P152",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5337,6 +5337,58 @@
     },
     {
      "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
+    },
+    {
+     "arm": "B",
      "configuration": "G.neural:samba-train-step.neural_gemm_schedule=stream"
     },
     {
@@ -5394,58 +5446,6 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.gemm_leaf=neural128"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
     },
     {
      "arm": "B",
@@ -5650,7 +5650,7 @@
    ],
    "key": "98d1f782a7cf33345009",
    "mode": "identical",
-   "pack": "P165",
+   "pack": "P150",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5671,7 +5671,7 @@
    ],
    "key": "a42559b7a3126bb99169",
    "mode": "identical",
-   "pack": "P160",
+   "pack": "P173",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5712,7 +5712,7 @@
    ],
    "key": "b7b64e58bccb67c39d1e",
    "mode": "identical",
-   "pack": "P175",
+   "pack": "P160",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5733,7 +5733,7 @@
    ],
    "key": "b8fbc68e71d9e50856b3",
    "mode": "identical",
-   "pack": "P159",
+   "pack": "P172",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5795,7 +5795,7 @@
    ],
    "key": "c392500253b4e9433fb4",
    "mode": "identical",
-   "pack": "P168",
+   "pack": "P153",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5816,7 +5816,7 @@
    ],
    "key": "c64c58b577680e310e45",
    "mode": "identical",
-   "pack": "P158",
+   "pack": "P171",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5836,7 +5836,7 @@
    ],
    "key": "d5e0f5c89f82e6d72ad0",
    "mode": "identical",
-   "pack": "P171",
+   "pack": "P156",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5857,7 +5857,7 @@
    ],
    "key": "dc9ae6bf1932f0c4071f",
    "mode": "identical",
-   "pack": "P174",
+   "pack": "P159",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -5909,7 +5909,7 @@
    ],
    "key": "e2575d1717b4e017939d",
    "mode": "identical",
-   "pack": "P172",
+   "pack": "P157",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -6036,7 +6036,7 @@
    ],
    "key": "ff4b4dda25c4654db58e",
    "mode": "identical",
-   "pack": "P166",
+   "pack": "P151",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7585,7 +7585,27 @@
    ],
    "key": "0c769b59e0bd250b88c6",
    "mode": "identical",
-   "pack": "P158",
+   "pack": "P171",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=5"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "199d3a4662a1fb16008c",
+   "mode": "identical",
+   "pack": "P177",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7609,7 +7629,47 @@
    ],
    "key": "1c68c39a362048a39df8",
    "mode": "identical",
-   "pack": "P154",
+   "pack": "P167",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=4"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "1e46bab8f3d5ebf48aff",
+   "mode": "identical",
+   "pack": "P176",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=2",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "221bcd39f532a4d923df",
+   "mode": "identical",
+   "pack": "P149",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7640,6 +7700,26 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_ATTN_FWD_TQ_RULE=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "3db9f633b7b38807074e",
+   "mode": "identical",
+   "pack": "P156",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.neural:samba-train-step.neural_gemm_schedule=pages"
     },
     {
@@ -7653,7 +7733,7 @@
    ],
    "key": "406fd6738dbf601d181a",
    "mode": "identical",
-   "pack": "P152",
+   "pack": "P165",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7677,7 +7757,50 @@
    ],
    "key": "40c007644e56edd6b722",
    "mode": "identical",
+   "pack": "P164",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=2",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "45702581149986ed367c",
+   "mode": "identical",
    "pack": "P151",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "4655caa0e7022aa49b02",
+   "mode": "identical",
+   "pack": "P150",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7701,7 +7824,7 @@
    ],
    "key": "4c6587c889c47125f235",
    "mode": "identical",
-   "pack": "P148",
+   "pack": "P161",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7725,7 +7848,7 @@
    ],
    "key": "502217b31176ebc71080",
    "mode": "identical",
-   "pack": "P149",
+   "pack": "P162",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7750,7 +7873,7 @@
    ],
    "key": "566d3772bd5b7c2a3229",
    "mode": "identical",
-   "pack": "P156",
+   "pack": "P169",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7774,7 +7897,29 @@
    ],
    "key": "6716dcb140fbedca8bc2",
    "mode": "identical",
-   "pack": "P155",
+   "pack": "P168",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=8",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "6be83f4c7f742a66fa11",
+   "mode": "identical",
+   "pack": "P152",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7798,7 +7943,27 @@
    ],
    "key": "855b41f780381b38d36f",
    "mode": "identical",
-   "pack": "P150",
+   "pack": "P163",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_TILE_ORDER=2",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "85e1c2c18bc92903dee1",
+   "mode": "identical",
+   "pack": "P155",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7823,7 +7988,47 @@
    ],
    "key": "8646585052068bd29c1a",
    "mode": "identical",
+   "pack": "P170",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NI07_GROUPED_PROJECTIONS=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "9c2003c71eae5f8e61d4",
+   "mode": "identical",
    "pack": "P157",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "a4c54439c75af151d58c",
+   "mode": "identical",
+   "pack": "P148",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7848,7 +8053,48 @@
    ],
    "key": "b96c7e0cbabca57597f6",
    "mode": "identical",
+   "pack": "P172",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32=1",
+    "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "bcb28e860a6868c603dd",
+   "mode": "identical",
    "pack": "P159",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_TILE_ORDER=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "bd66d1978e91079735f3",
+   "mode": "identical",
+   "pack": "P154",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7873,7 +8119,27 @@
    ],
    "key": "c2c4fed8c1a6eef2fb45",
    "mode": "identical",
-   "pack": "P161",
+   "pack": "P174",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "ce876102dc35a317b738",
+   "mode": "identical",
+   "pack": "P158",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7897,7 +8163,27 @@
    ],
    "key": "d3a24fd16cddb293ad03",
    "mode": "identical",
-   "pack": "P162",
+   "pack": "P175",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=6"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=6",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "d70eb6a621bad45a9ec9",
+   "mode": "identical",
+   "pack": "P178",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -7927,8 +8213,81 @@
    "binding": "bindings/_mojolearn_training.mojo",
    "configurations": [
     {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_M3_ANGLE_BLOCK_128=1",
+    "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "e931de46f1e3bc708cdb",
+   "mode": "identical",
+   "pack": "P160",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.ce_denom_rowfold=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
     },
     {
      "arm": "B",
@@ -7989,6 +8348,18 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.gemm_leaf=neural128"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=4"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=5"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=6"
     },
     {
      "arm": "B",
@@ -8084,6 +8455,28 @@
    ],
    "key": "f4226679f7c2a6b71493",
    "mode": "identical",
+   "pack": "P166",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=16",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "f6eb43c34562d3ccefb7",
+   "mode": "identical",
    "pack": "P153",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
@@ -8109,7 +8502,7 @@
    ],
    "key": "f9e066f8854a2f97658b",
    "mode": "identical",
-   "pack": "P160",
+   "pack": "P173",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8135,7 +8528,7 @@
    ],
    "key": "094d4faa9883cf5475b7",
    "mode": "identical",
-   "pack": "P168",
+   "pack": "P153",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8159,7 +8552,7 @@
    ],
    "key": "1a080a6b9e829fbd4746",
    "mode": "identical",
-   "pack": "P151",
+   "pack": "P164",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8183,7 +8576,7 @@
    ],
    "key": "24c84eefa87d0f7bf987",
    "mode": "identical",
-   "pack": "P153",
+   "pack": "P166",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8227,7 +8620,7 @@
    ],
    "key": "26b50fc12c3536b94b4d",
    "mode": "identical",
-   "pack": "P155",
+   "pack": "P168",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8239,6 +8632,58 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.ce_denom_rowfold=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
     },
     {
      "arm": "B",
@@ -8299,58 +8744,6 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.gemm_leaf=neural128"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
     },
     {
      "arm": "B",
@@ -8458,7 +8851,7 @@
    ],
    "key": "270c821bb6ffa40f1922",
    "mode": "identical",
-   "pack": "P164",
+   "pack": "P149",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8482,7 +8875,7 @@
    ],
    "key": "2864c1efd1366e2fa3ed",
    "mode": "identical",
-   "pack": "P150",
+   "pack": "P163",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8507,7 +8900,7 @@
    ],
    "key": "297ac6183664fcea6ac8",
    "mode": "identical",
-   "pack": "P165",
+   "pack": "P150",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8533,7 +8926,7 @@
    ],
    "key": "2a8db3c8ebd5742dc9b2",
    "mode": "identical",
-   "pack": "P166",
+   "pack": "P151",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8554,7 +8947,7 @@
    ],
    "key": "2c6377d65555571d8dcb",
    "mode": "identical",
-   "pack": "P157",
+   "pack": "P170",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8575,7 +8968,7 @@
    ],
    "key": "35c61fa1919d4f719e5f",
    "mode": "identical",
-   "pack": "P159",
+   "pack": "P172",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8599,7 +8992,7 @@
    ],
    "key": "4bfb60216fcb479cd303",
    "mode": "identical",
-   "pack": "P148",
+   "pack": "P161",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8620,7 +9013,7 @@
    ],
    "key": "52af37d0fd30ef22a1b0",
    "mode": "identical",
-   "pack": "P175",
+   "pack": "P160",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8660,7 +9053,7 @@
    ],
    "key": "6911d797166a47117aa9",
    "mode": "identical",
-   "pack": "P171",
+   "pack": "P156",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8701,7 +9094,7 @@
    ],
    "key": "72dbcab5dc49cf249cd5",
    "mode": "identical",
-   "pack": "P158",
+   "pack": "P171",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8725,7 +9118,7 @@
    ],
    "key": "72e54a6a392cdc5a9309",
    "mode": "identical",
-   "pack": "P149",
+   "pack": "P162",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8746,7 +9139,7 @@
    ],
    "key": "84a82e8bbe0cc2168654",
    "mode": "identical",
-   "pack": "P174",
+   "pack": "P159",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8767,7 +9160,7 @@
    ],
    "key": "860527c6796fb4d36bf6",
    "mode": "identical",
-   "pack": "P161",
+   "pack": "P174",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8787,7 +9180,7 @@
    ],
    "key": "86d0ab1ec329666f976d",
    "mode": "identical",
-   "pack": "P173",
+   "pack": "P158",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8831,7 +9224,7 @@
    ],
    "key": "8bd201e608f97c9c3157",
    "mode": "identical",
-   "pack": "P152",
+   "pack": "P165",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8855,7 +9248,7 @@
    ],
    "key": "9215af483ad1fbe9cbd2",
    "mode": "identical",
-   "pack": "P154",
+   "pack": "P167",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8879,7 +9272,7 @@
    ],
    "key": "9ad1221e3bba96955eb3",
    "mode": "identical",
-   "pack": "P163",
+   "pack": "P148",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8903,7 +9296,7 @@
    ],
    "key": "a52260adb6c25de1a30f",
    "mode": "identical",
-   "pack": "P162",
+   "pack": "P175",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8949,7 +9342,7 @@
    ],
    "key": "b63e556448e72006678b",
    "mode": "identical",
-   "pack": "P167",
+   "pack": "P152",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8969,7 +9362,7 @@
    ],
    "key": "cf443f908d41f953c118",
    "mode": "identical",
-   "pack": "P170",
+   "pack": "P155",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -8989,7 +9382,7 @@
    ],
    "key": "d7e79af7d9d6f457ecd8",
    "mode": "identical",
-   "pack": "P172",
+   "pack": "P157",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9010,7 +9403,7 @@
    ],
    "key": "e527ce252fe68c9e1171",
    "mode": "identical",
-   "pack": "P160",
+   "pack": "P173",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9030,7 +9423,7 @@
    ],
    "key": "eef950d6695a732c2f43",
    "mode": "identical",
-   "pack": "P169",
+   "pack": "P154",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -9051,7 +9444,7 @@
    ],
    "key": "fbc755d2b52eda60c392",
    "mode": "identical",
-   "pack": "P156",
+   "pack": "P169",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -16593,7 +16986,7 @@
    ],
    "key": "043200812172c256e582",
    "mode": "identical",
-   "pack": "P164",
+   "pack": "P149",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -16613,7 +17006,7 @@
    ],
    "key": "0fb8f020515a84e3343a",
    "mode": "identical",
-   "pack": "P170",
+   "pack": "P155",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -16678,7 +17071,7 @@
    ],
    "key": "1e3060e27b7ba7312d2a",
    "mode": "identical",
-   "pack": "P158",
+   "pack": "P171",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -16727,7 +17120,7 @@
    ],
    "key": "214074c0b37566e679b7",
    "mode": "identical",
-   "pack": "P156",
+   "pack": "P169",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -16771,7 +17164,7 @@
    ],
    "key": "338620aef9c8b0c93a58",
    "mode": "identical",
-   "pack": "P169",
+   "pack": "P154",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -16864,7 +17257,7 @@
    ],
    "key": "414332eaddbae4838b70",
    "mode": "identical",
-   "pack": "P157",
+   "pack": "P170",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -16886,7 +17279,7 @@
    ],
    "key": "41485d18462873c0de15",
    "mode": "identical",
-   "pack": "P167",
+   "pack": "P152",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -16930,7 +17323,7 @@
    ],
    "key": "683de6962f18ed6a4547",
    "mode": "identical",
-   "pack": "P171",
+   "pack": "P156",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17079,7 +17472,7 @@
    ],
    "key": "85aa61710da017dcbdfb",
    "mode": "identical",
-   "pack": "P165",
+   "pack": "P150",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17182,7 +17575,7 @@
    ],
    "key": "936211cb273cd512336d",
    "mode": "identical",
-   "pack": "P161",
+   "pack": "P174",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17204,7 +17597,7 @@
    ],
    "key": "97b5bb86883383c0ba71",
    "mode": "identical",
-   "pack": "P168",
+   "pack": "P153",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17328,7 +17721,7 @@
    ],
    "key": "a3a2591657e0b018cc3c",
    "mode": "identical",
-   "pack": "P160",
+   "pack": "P173",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17349,7 +17742,7 @@
    ],
    "key": "a6a9804ce480e5469871",
    "mode": "identical",
-   "pack": "P174",
+   "pack": "P159",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17369,7 +17762,7 @@
    ],
    "key": "a7064cf12a66e61afc5d",
    "mode": "identical",
-   "pack": "P172",
+   "pack": "P157",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17391,7 +17784,7 @@
    ],
    "key": "a98ce47f813da847853f",
    "mode": "identical",
-   "pack": "P166",
+   "pack": "P151",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17459,7 +17852,7 @@
    ],
    "key": "b79f3d957a3529b0955c",
    "mode": "identical",
-   "pack": "P173",
+   "pack": "P158",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17662,6 +18055,58 @@
     },
     {
      "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
+    },
+    {
+     "arm": "B",
      "configuration": "G.neural:samba-train-step.neural_gemm_schedule=stream"
     },
     {
@@ -17719,58 +18164,6 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.gemm_leaf=neural128"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
     },
     {
      "arm": "B",
@@ -17921,7 +18314,7 @@
    ],
    "key": "ebfbf6106b2488dd9a1e",
    "mode": "identical",
-   "pack": "P159",
+   "pack": "P172",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17942,7 +18335,7 @@
    ],
    "key": "ee25693068af61eea28c",
    "mode": "identical",
-   "pack": "P175",
+   "pack": "P160",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -17962,7 +18355,7 @@
    ],
    "key": "f4b7ab25776bc4b76343",
    "mode": "identical",
-   "pack": "P163",
+   "pack": "P148",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19517,6 +19910,26 @@
    "configurations": [
     {
      "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=2",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "05cdddded17a2258309d",
+   "mode": "identical",
+   "pack": "P149",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
      "configuration": "G.neural:samba-train-step.neural_gemm_schedule=pages"
     },
     {
@@ -19530,7 +19943,27 @@
    ],
    "key": "08c61262c8c9f5d2df79",
    "mode": "identical",
-   "pack": "P152",
+   "pack": "P165",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_TILE_ORDER=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "195e15be7c583835453d",
+   "mode": "identical",
+   "pack": "P154",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19555,7 +19988,71 @@
    ],
    "key": "21c96fab71b5d63162d5",
    "mode": "identical",
-   "pack": "P156",
+   "pack": "P169",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=16",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "232e522c818103bae81d",
+   "mode": "identical",
+   "pack": "P153",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=4"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=4",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "299c24f9ebe5892a43bc",
+   "mode": "identical",
+   "pack": "P176",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=2",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "2bf7ad2ee83f69dcb1f4",
+   "mode": "identical",
+   "pack": "P151",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19579,7 +20076,7 @@
    ],
    "key": "32f91341472216d0b755",
    "mode": "identical",
-   "pack": "P149",
+   "pack": "P162",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19603,7 +20100,28 @@
    ],
    "key": "3ffb74f07b4db25102db",
    "mode": "identical",
-   "pack": "P151",
+   "pack": "P164",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32=1",
+    "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "45d316d8f0d027f57d77",
+   "mode": "identical",
+   "pack": "P159",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19628,7 +20146,7 @@
    ],
    "key": "4c9fddba7768f0f13c91",
    "mode": "identical",
-   "pack": "P157",
+   "pack": "P170",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19652,7 +20170,7 @@
    ],
    "key": "4d3676c84b4505a53333",
    "mode": "identical",
-   "pack": "P155",
+   "pack": "P168",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19677,7 +20195,7 @@
    ],
    "key": "4d8f9360dfe8afc14591",
    "mode": "identical",
-   "pack": "P159",
+   "pack": "P172",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19701,7 +20219,88 @@
    ],
    "key": "50f22aa01d4f63e36d30",
    "mode": "identical",
-   "pack": "P153",
+   "pack": "P166",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "5c2ee20252e43514473d",
+   "mode": "identical",
+   "pack": "P158",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "5e15ad3a1445ff4322d3",
+   "mode": "identical",
+   "pack": "P148",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "817032c1e71b71effe8d",
+   "mode": "identical",
+   "pack": "P150",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=5"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=5",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "87267fc772a6a189e99d",
+   "mode": "identical",
+   "pack": "P177",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19726,7 +20325,7 @@
    ],
    "key": "889e7ec54783d0209148",
    "mode": "identical",
-   "pack": "P160",
+   "pack": "P173",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19750,7 +20349,27 @@
    ],
    "key": "88b7170ec3e45a7f796d",
    "mode": "identical",
-   "pack": "P154",
+   "pack": "P167",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_TILE_ORDER=2",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "98dd3bd9dff2bce2e15e",
+   "mode": "identical",
+   "pack": "P155",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19775,7 +20394,7 @@
    ],
    "key": "a1dc20df3aeb122612e8",
    "mode": "identical",
-   "pack": "P161",
+   "pack": "P174",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19799,7 +20418,27 @@
    ],
    "key": "a610eb1bae6d40a8c49d",
    "mode": "identical",
-   "pack": "P162",
+   "pack": "P175",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=6"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES=6",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "a852ed8029fec2a5eea2",
+   "mode": "identical",
+   "pack": "P178",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19843,7 +20482,50 @@
    ],
    "key": "b5040bc59eecce64d5d1",
    "mode": "identical",
-   "pack": "P148",
+   "pack": "P161",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_M3_ANGLE_BLOCK_128=1",
+    "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "b527350fdddb1bec70bf",
+   "mode": "identical",
+   "pack": "P160",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_SOFTMAX=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV=1",
+    "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES=8",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "c73c5a60583e97b2c1c3",
+   "mode": "identical",
+   "pack": "P152",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19867,7 +20549,27 @@
    ],
    "key": "c98a54ba44287047dd99",
    "mode": "identical",
-   "pack": "P150",
+   "pack": "P163",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_ATTN_FWD_TQ_RULE=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "de26cd9a778e9c34a7f1",
+   "mode": "identical",
+   "pack": "P156",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19892,7 +20594,7 @@
    ],
    "key": "ee459e3de6b3eb2fd978",
    "mode": "identical",
-   "pack": "P158",
+   "pack": "P171",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -19904,6 +20606,58 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.ce_denom_rowfold=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
     },
     {
      "arm": "B",
@@ -19964,6 +20718,18 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.gemm_leaf=neural128"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=4"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=5"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.neural_gemm_ozaki_slices=6"
     },
     {
      "arm": "B",
@@ -20042,6 +20808,26 @@
    "vendor": "nvidia"
   },
   {
+   "binding": "bindings/_mojolearn_training.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NI07_GROUPED_PROJECTIONS=1",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+   ],
+   "key": "fbf1009c95e82028d876",
+   "mode": "identical",
+   "pack": "P157",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
    "binding": "bindings/_mojolearn_transformer.mojo",
    "configurations": [
     {
@@ -20055,7 +20841,7 @@
    ],
    "key": "00ace7ad412035c8e12b",
    "mode": "identical",
-   "pack": "P173",
+   "pack": "P158",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20076,7 +20862,7 @@
    ],
    "key": "02636773a429662a23d2",
    "mode": "identical",
-   "pack": "P156",
+   "pack": "P169",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20096,7 +20882,7 @@
    ],
    "key": "0e188157b468c6ee0886",
    "mode": "identical",
-   "pack": "P170",
+   "pack": "P155",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20120,7 +20906,7 @@
    ],
    "key": "0f4ca01ec9540e4b81f1",
    "mode": "identical",
-   "pack": "P151",
+   "pack": "P164",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20184,7 +20970,7 @@
    ],
    "key": "2357008ec0e50165b10b",
    "mode": "identical",
-   "pack": "P154",
+   "pack": "P167",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20210,7 +20996,7 @@
    ],
    "key": "36f9429199d0de15aff3",
    "mode": "identical",
-   "pack": "P168",
+   "pack": "P153",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20222,6 +21008,58 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.ce_denom_rowfold=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
+    },
+    {
+     "arm": "B",
+     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
     },
     {
      "arm": "B",
@@ -20282,58 +21120,6 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.gemm_leaf=neural128"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=online_tile32"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=2"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=8"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_softmax=summary_tree+nn20_split_kv=on+nn20_split_kv_leaves=16"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_tile_order=asc"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_tile_order=zdot_asc"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.attn_fwd_tq_rule=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.grouped_projections_v2=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=32"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:samba-forward.m3_angle_parallel=on+m3_angle_block=128"
     },
     {
      "arm": "B",
@@ -20443,7 +21229,7 @@
    ],
    "key": "484dd9b41bf477da7e88",
    "mode": "identical",
-   "pack": "P167",
+   "pack": "P152",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20464,7 +21250,7 @@
    ],
    "key": "4eebcad2a6db0a5abd62",
    "mode": "identical",
-   "pack": "P158",
+   "pack": "P171",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20484,7 +21270,7 @@
    ],
    "key": "4f4ebfaffd3e8119d02d",
    "mode": "identical",
-   "pack": "P171",
+   "pack": "P156",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20505,7 +21291,7 @@
    ],
    "key": "53143b9f960ef42fde27",
    "mode": "identical",
-   "pack": "P160",
+   "pack": "P173",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20526,7 +21312,7 @@
    ],
    "key": "6d5f46d198dc188bb47a",
    "mode": "identical",
-   "pack": "P161",
+   "pack": "P174",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20550,7 +21336,7 @@
    ],
    "key": "75f906b3dcf63ae7a3e9",
    "mode": "identical",
-   "pack": "P162",
+   "pack": "P175",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20570,7 +21356,7 @@
    ],
    "key": "84a00931598e015423db",
    "mode": "identical",
-   "pack": "P169",
+   "pack": "P154",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20591,7 +21377,7 @@
    ],
    "key": "8a21da86bd91439ef790",
    "mode": "identical",
-   "pack": "P175",
+   "pack": "P160",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20615,7 +21401,7 @@
    ],
    "key": "935afb8a6733696faade",
    "mode": "identical",
-   "pack": "P149",
+   "pack": "P162",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20639,7 +21425,7 @@
    ],
    "key": "9d447a14e96be89db8b1",
    "mode": "identical",
-   "pack": "P152",
+   "pack": "P165",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20663,7 +21449,7 @@
    ],
    "key": "a4111e5959d45d0e7d46",
    "mode": "identical",
-   "pack": "P148",
+   "pack": "P161",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20703,7 +21489,7 @@
    ],
    "key": "a9a2ae359d316b5405fc",
    "mode": "identical",
-   "pack": "P172",
+   "pack": "P157",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20727,7 +21513,7 @@
    ],
    "key": "af9eaa2a6abbe9ff0256",
    "mode": "identical",
-   "pack": "P155",
+   "pack": "P168",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20753,7 +21539,7 @@
    ],
    "key": "b0fc1bc0e37ad05cea59",
    "mode": "identical",
-   "pack": "P166",
+   "pack": "P151",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20777,7 +21563,7 @@
    ],
    "key": "b9e3cabb4f7843d44b8f",
    "mode": "identical",
-   "pack": "P164",
+   "pack": "P149",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20818,7 +21604,7 @@
    ],
    "key": "cacc7db7d34793d7da91",
    "mode": "identical",
-   "pack": "P174",
+   "pack": "P159",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20843,7 +21629,7 @@
    ],
    "key": "d89e0c44659d25d4ed64",
    "mode": "identical",
-   "pack": "P165",
+   "pack": "P150",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20867,7 +21653,7 @@
    ],
    "key": "df0746271180abe6ac79",
    "mode": "identical",
-   "pack": "P150",
+   "pack": "P163",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20891,7 +21677,7 @@
    ],
    "key": "e53dd47f97218a3cb4a5",
    "mode": "identical",
-   "pack": "P163",
+   "pack": "P148",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20915,7 +21701,7 @@
    ],
    "key": "e60a4c421a09623b4562",
    "mode": "identical",
-   "pack": "P153",
+   "pack": "P166",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20936,7 +21722,7 @@
    ],
    "key": "e7e15126d7c5df5cd575",
    "mode": "identical",
-   "pack": "P157",
+   "pack": "P170",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -20957,7 +21743,7 @@
    ],
    "key": "e8a1a69da40f288e3231",
    "mode": "identical",
-   "pack": "P159",
+   "pack": "P172",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
