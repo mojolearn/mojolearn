@@ -68,19 +68,11 @@ comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
 # required before timing or promoting this candidate. The owner forbids those
 # runs in this worktree; none were attempted. A faster broken arm is a loser.
 comptime SEQ_LSTM_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_SEQ_LSTM_SCAN"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-# NI49 independent conservative repair candidate, default OFF: one logical
-# row is one executor item. It executes the existing host scan body on GPU,
-# serial over units and timesteps, with no within-kernel inter-thread state
-# reads, barriers or gate regrouping. This is an ordinary scheduling algorithm,
-# not a toolchain modification. The standard packed Args executor transports it.
-# It removes T launches but reduces parallelism; neither quality recovery nor
-# speed is established. The earlier cooperative SCAN failures remain above.
-comptime SEQ_LSTM_ROW_SERIAL_SCAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime SEQ_LSTM_SCAN = (_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()) or SEQ_LSTM_SCAN_IDN or SEQ_LSTM_ROW_SERIAL_SCAN
+# NI49's row-serial arm (MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN: one GPU thread
+# per batch row, serial over units and timesteps) was deleted by L11
+# (2026-10-07): a per-row serial executor breaks the IDENTICAL GPU rule
+# (parallel only). NN41 and NI49 are now the one switch above.
+comptime SEQ_LSTM_SCAN = (_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()) or SEQ_LSTM_SCAN_IDN
 comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()
 comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()
 #: SEQ_FAST_LSTM_SCAN_WIDE (with SCAN; lane apple-fast-s-seq, 2026-10-05,
@@ -114,9 +106,6 @@ comptime SCAN_SMEM = 4096
 
 def scan_applies(H: Int, G: Int) -> Bool:
     """The scan kernels' shape bound: one lane per unit, the staged row fits."""
-    comptime if SEQ_LSTM_ROW_SERIAL_SCAN:
-        # One scalar executor item owns the row; no H-wide launch/shared page.
-        return H >= 1
     return H >= 1 and H <= SCAN_MAX_H and G * H <= SCAN_SMEM
 
 

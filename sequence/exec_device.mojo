@@ -50,7 +50,7 @@ from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
 from sequence.ets_team import ETS_TEAM, ets_team
 from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
 from sequence.ops import OP_ETS, OP_GARCH
-from sequence.recurrent_scan import SEQ_LSTM_ROW_SERIAL_SCAN, OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_bwd_scan_kernel, cell_fwd_scan_kernel, scan_block
+from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_bwd_scan_kernel, cell_fwd_scan_kernel, scan_block
 from x_linear.ops import IP
 from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
@@ -656,14 +656,14 @@ struct DeviceExec(Exec):
             return
         # lane apple-fast-gap-lstm (sequence/recurrent_scan.mojo): the whole
         # recurrence of a layer, one block per batch row (n = B rows)
-        comptime if OP == OP_CELL_FWD_SCAN and not SEQ_LSTM_ROW_SERIAL_SCAN:
+        comptime if OP == OP_CELL_FWD_SCAN:
             self.ctx.enqueue_function[cell_fwd_scan_kernel](
                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
                 Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
                 grid_dim=(n, 1, 1), block_dim=(scan_block(a.i0, a.i2), 1, 1),
             )
             return
-        comptime if OP == OP_CELL_BWD_SCAN and not SEQ_LSTM_ROW_SERIAL_SCAN:
+        comptime if OP == OP_CELL_BWD_SCAN:
             self.ctx.enqueue_function[cell_bwd_scan_kernel](
                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
                 Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
@@ -876,7 +876,7 @@ struct DeviceExec(Exec):
                     block_dim=(GT_TPB, 1, 1),
                 )
                 return
-        comptime if SEQ_LSTM_ROW_SERIAL_SCAN or (OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN):
+        comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:
             comptime GROUP = 4 if C58_FORECAST4 and (OP == OP_THETA or OP == OP_ETS or OP == OP_GARCH) else 1
             var tasks = (n + GROUP - 1) // GROUP
             self.ctx.enqueue_function[seq_kernel[OP]](

@@ -24,11 +24,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # NN44: deterministic ascending-pair grouping; OFF and unmeasured. Each
 # expert scans the pairs once, replacing contended atomic scatter cursors.
 # O(E*P) comparisons is a real cost; measure skew and full MoE operations.
-comptime NN44_STABLE_GROUP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN44_STABLE_GROUP"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# L11 (2026-10-07): NN44's grouping and NI53 launched the same stable kernel;
+# one switch, MOJOLEARN_IDN_MOE_STABLE_PACK (the NN44_STABLE_GROUP define is
+# retired). NN44_EXPERT_BISECT (sequence/moe_tiled.mojo) stays independent.
+comptime NN44_STABLE_GROUP = False
 
 from sequence.ops import FP
 from sequence.moe_tiled import TILE_P
