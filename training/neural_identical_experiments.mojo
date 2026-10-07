@@ -47,6 +47,14 @@ comptime IDN_LM_OWNED_TOKENS = _ENABLED and IDN_LM_RESIDENT_TOKENS_ARM >= 1
 # NN52 (retired MOJOLEARN_NN52_CE_WEIGHT_GRAD) launched the same fused kernel
 # in identical_ce_backward_into; one switch (L11, 2026-10-07).
 comptime IDN_CE_GRAD_FUSED = _ENABLED and is_defined["MOJOLEARN_IDN_CE_GRAD_FUSED"]()
+# R6 (lane/neural-ce-denom, 2026-10-07): the CE softmax denominator (loss L4,
+# and L9 under smoothing) computed by one block per row that walks the GEMM
+# contract's own leaf chains and fold tree (training/checks/loss.mojo
+# ce_denom_rowfold_kernel) instead of the routed n=1 ones-GEMV. Execution plan
+# only: same bits on every column. Refused together with the neural GEMM
+# profile (MOJOLEARN_IDN_GEMM_LEAF=1|2, MOJOLEARN_IDN_NEURAL_CHAINS), whose
+# chain spelling the row fold does not reproduce.
+comptime IDN_CE_DENOM_ROWFOLD = _ENABLED and is_defined["MOJOLEARN_IDN_CE_DENOM_ROWFOLD"]()
 # NI36 narrow sub-arm: dA and dW GEMMs run serially on the same queue, so
 # their disjoint scratch lifetimes can share one allocation. No tape alias.
 # L11 (2026-10-07): NI36 (now only this scratch sharing; its tape half is

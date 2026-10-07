@@ -95,7 +95,7 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
-from training.neural_identical_experiments import IDN_CE_GRAD_FUSED, IDN_LOSS_TOKEN_TREE_V2
+from training.neural_identical_experiments import IDN_CE_DENOM_ROWFOLD, IDN_CE_GRAD_FUSED, IDN_LOSS_TOKEN_TREE_V2
 from training.loss_reduction_v2 import (
     LOSS_TOKEN_TREE_V2_LEAF, loss_token_tree_v2_leaf_count,
     loss_token_tree_v2_leaf, loss_token_tree_v2_add,
@@ -138,7 +138,11 @@ from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.contract import OP_NN
+from gemm.contract import OP_NN, contract_leaf_size, contract_leaf_count
+# R6: the tuned kernel's per-step seam (ftz(fma_rn(a, b, acc)) in the column's
+# own spelling) and the neural-profile flag the row fold refuses.
+from gemm.checks.gemm_identical import _tuned_step
+from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 from core.device_scan import (
     device_classify_nonfinite,
     device_first_nonfinite,
@@ -1268,6 +1272,230 @@ def ce_serial_fold_kernel(
 
 
 # ===========================================================================
+# L4 / L9 BY ROW (MOJOLEARN_IDN_CE_DENOM_ROWFOLD, lane/neural-ce-denom, 2026-10-07)
+# ===========================================================================
+# The softmax denominator is `denom[i] = sum_p expo[i, p]`, routed as the
+# `(n_rows, 1, vocab)` product `expo . ones` (`identical_gemm_into`, L4; the
+# same call at the same shape for `logp . ones`, L9). WHAT THE ROUTE COSTS:
+# `choose_gemm_plan_untuned` gives any output of <= 4096 cells with P >= 4
+# leaves PLAN_SPLITK, and `choose_gemm_plan_tiles` turns that into
+# PLAN_SPLIT_16_1X1 (gemm_identical.mojo: `if base == PLAN_SPLITK: return
+# PLAN_SPLIT_16_1X1`): a 16 x 16 output tile launched over `(ceil(rows/16), P)`
+# blocks of 256 threads, each thread owning one cell. With n == 1 fifteen of
+# every sixteen tile columns do not exist, so 15/16 of the threads in every
+# block are idle while the block still stages its A tile and walks its leaf;
+# the partials go to a `rows x P` workspace plane and a second launch
+# (`identical_gemm_fold_kernel`, one block per cell) folds them. The waste
+# is structural to every n == 1 product of any size (any rows, any vocab):
+# the tile is sized for an output that is not there. The matrix-core plan
+# does not take it either (`gemm_mfma16_waves` needs a wide n).
+#
+# WHAT THIS DOES INSTEAD: one block per row, one thread per leaf, the fold in
+# shared memory, one launch, no workspace. EXECUTION PLAN ONLY: it computes
+# `gemm_oracle` for the cell (i, 0) of `expo[rows x vocab] . ones[vocab x 1]`,
+# which is what every plan computes (gemm contract 6.1, 7; the launch
+# invariance check is why the plans are interchangeable). The step-by-step
+# mapping onto the contract, read against `IDENTICAL_FP32_CONTRACT.md` and
+# `gemm/contract.mojo`:
+#
+#   partition   `(L, P) = (contract_leaf_size(k), contract_leaf_count(k))`,
+#               the two functions `contract_partition(k)` wraps and the only
+#               producers of a leaf boundary (contract 6). `k = vocab`. Leaf t
+#               covers `[t*L, min((t+1)*L, k))`: only the last leaf is short,
+#               none is empty (6.2, 8).
+#   operands    `A_eff[i, p] = expo[i*k + p]` (OP_NN, `a_si = k`, `a_sp = 1`),
+#               `B_eff[p, 0] = ones[p] = 1.0` exactly: the caller fills the
+#               ones vector with `Float32(1.0)` (`identical_ce_ones_floats`)
+#               and contract 12's EXACT-ANALYTIC arm fails if it is anything
+#               else. `ftz(1.0) == 1.0`, so seam 5b is the constant `one`,
+#               passed as a kernel ARGUMENT (the MFMA plan's own device: the
+#               compiler cannot fold the product away). Seam 5a: `ftz(a)` as
+#               loaded.
+#   leaf chain  7.1: `acc = +0.0; for p ascending in the leaf:
+#               acc = ftz(fma(ftz(a), one, acc))`; the leaf partial is
+#               `ftz(acc)` (5c, 5d). The step is `_tuned_step`, the SAME
+#               function the tuned/split kernel calls per step, so the per
+#               column spelling (NVIDIA fma.rn + mul.rn.ftz, AMD class flush,
+#               Apple rtf repair) is the same word for word. One thread walks
+#               one whole leaf: no sub-partition (7.1's forbidden tree).
+#               Elements masked at the ragged tail are never loaded into the
+#               chain (8: no padding at either level).
+#   fold tree   7.2 / 7.2.2 level by level in shared memory, leaf partials at
+#               level 0 in ascending leaf order: `N_d = ceil(N_{d-1} / 2)`;
+#               node q of level d is `ftz(ftz(cur[2q]) + ftz(cur[2q+1]))`
+#               when `2q+1 < N_{d-1}` (5e, 5f) and the bit copy of `cur[2q]`
+#               when `2q+1 == N_{d-1}` (CARRY, no arithmetic, no +0.0). The
+#               register stack `_fold_push`/`_fold_drain` the GEMM plans use
+#               is a different ADDRESSING of this same tree (contract: "a
+#               physical block may calculate any node in any order once its
+#               dependencies are complete, and the bits do not move").
+#   output      `ftz(node(D, 0))` (5g). `P == 1`: no fold addition, the leaf
+#               partial reaches the store through 5g alone (7.3). `P == 0`
+#               (`k == 0`): `+0.0` is WRITTEN (8).
+#
+# Same bits on NVIDIA, AMD and the host column (the host computes the same
+# oracle through `gemm_nt_rows`), so no host change rides with this switch.
+# ID check: `lq add nv|amd ID lane/neural-ce-denom lm-train-step,samba-train-step`.
+#
+# SCHEDULING (none of it can reach a bit): the block's threads stage the
+# row's leaves KS elements per leaf at a time through shared memory with
+# coalesced loads (element e of the pass is `(leaf e // KS, offset e % KS)`,
+# so consecutive threads read consecutive words of one leaf), padded to
+# `KS + 1` so the chain phase's reads `tile[t * (KS+1) + j]` hit distinct
+# banks across t. KS = 16 is one 64-byte segment per leaf per pass, and at
+# BLOCK = CE_TPB = 256 the staged page is 17 KB: under every column's
+# threadgroup limit, Apple's 32 KB included (KS = 32 would be 34 KB). The block
+# is launched at `P` rounded up to 64 (the widest wavefront of any target;
+# a narrower launch would leave a partial wave either way), capped at
+# `CE_TPB`; threads past `P` only help stage. A shape with more leaves than
+# `CE_TPB` threads (k > CE_TPB * L, i.e. a vocabulary past 32768 words at
+# leaf 128) keeps the routed GEMM, which computes the same bits; that bound
+# is the block width, not a model size.
+
+#: Elements per leaf staged per pass: one 64-byte segment per leaf.
+comptime CE_DENOM_ROWFOLD_KS = 16
+
+
+def ce_denom_rowfold_kernel[
+    BLOCK: Int, KS: Int
+](
+    out_buf: MutPointer[Float32, MutAnyOrigin],
+    values: MutPointer[Float32, MutAnyOrigin],
+    one: Float32,
+    k_in: Int32,
+    leaf_in: Int32,
+    p_in: Int32,
+):
+    """`out_buf[row] = gemm_oracle cell (row, 0) of values[rows x k] . ones`,
+    one block per row (`block_idx.x`), one thread per leaf, the contract's
+    fold tree in shared memory. The block comment above maps every step onto
+    the contract. `one` is `1.0`; `p_in <= BLOCK` by dispatch."""
+    var row = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var nthreads = Int(block_dim.x)
+    var k = Int(k_in)
+    var leaf = Int(leaf_in)
+    var p_count = Int(p_in)
+    var base = row * k
+    var tile = stack_allocation[
+        BLOCK * (KS + 1),
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var nodes = stack_allocation[
+        BLOCK,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    if p_count <= 0:
+        # Contract 8: `k == 0` WRITES `+0.0`. Uniform across the block, so
+        # no barrier below is skipped by a subset of threads.
+        if tid == 0:
+            out_buf.unsafe_store(row, Float32(0.0))
+        return
+    # ---- 7.1: the leaf chain, seeded +0.0, ascending p, one thread per leaf.
+    var acc = Float32(0.0)
+    var my_begin = tid * leaf
+    var my_end = my_begin + leaf
+    if my_end > k:
+        my_end = k
+    var passes = (leaf + KS - 1) // KS
+    var stage_total = p_count * KS
+    for s in range(passes):
+        var e = tid
+        while e < stage_total:
+            var t = e // KS
+            var j = e - t * KS
+            var off = s * KS + j
+            var p = t * leaf + off
+            var v = Float32(0.0)
+            if off < leaf and p < k:
+                v = values.unsafe_load(base + p)
+            # Masked slots are written and never read: the chain bounds
+            # below exclude them (8: no padding enters the arithmetic).
+            tile[t * (KS + 1) + j] = v
+            e += nthreads
+        barrier()
+        if tid < p_count:
+            var lo = my_begin + s * KS
+            var hi = lo + KS
+            if hi > my_end:
+                hi = my_end
+            var slot = tid * (KS + 1)
+            for p in range(lo, hi):
+                # 5a as loaded, then the tuned kernel's own step (4, 5c).
+                var av = ftz(tile[slot + (p - lo)])
+                acc = _tuned_step(av, one, acc)
+        barrier()
+    # ---- 5d: the leaf partial, level 0 of the tree in ascending leaf order.
+    if tid < p_count:
+        nodes[tid] = ftz(acc)
+    barrier()
+    # ---- 7.2 / 7.2.2: N_d = ceil(N_{d-1} / 2); arithmetic node or CARRY.
+    var width = p_count
+    while width > 1:
+        var next_width = (width + 1) // 2
+        var v = Float32(0.0)
+        if tid < next_width:
+            if 2 * tid + 1 < width:
+                v = ftz(ftz(nodes[2 * tid]) + ftz(nodes[2 * tid + 1]))
+            else:
+                # The odd tail: node(d-1, 2q) bit for bit, no arithmetic.
+                v = nodes[2 * tid]
+        barrier()
+        if tid < next_width:
+            nodes[tid] = v
+        barrier()
+        width = next_width
+    # ---- 5g. At P == 1 this is ftz(partial) with no fold addition (7.3).
+    if tid == 0:
+        out_buf.unsafe_store(row, ftz(nodes[0]))
+
+
+def _ce_denom_rowfold_into(
+    ctx: DeviceContext,
+    mut out_buf: DeviceBuffer[DType.float32],
+    mut values: DeviceBuffer[DType.float32],
+    mut ones: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    vocab: Int,
+) raises:
+    """L4 / L9 under `IDN_CE_DENOM_ROWFOLD`: the row-fold kernel where the
+    leaf count fits one block, else the routed GEMM (same bits either way).
+    Enqueued; nothing waits. `ones` and `ws` serve only the routed arm."""
+    comptime assert not (IDN_CE_DENOM_ROWFOLD and NEURAL_PROFILE_CHANGED), "MOJOLEARN_IDN_CE_DENOM_ROWFOLD reproduces the v1 GEMM contract chain and fold; refused together with MOJOLEARN_IDN_GEMM_LEAF=1|2 and MOJOLEARN_IDN_NEURAL_CHAINS (the neural GEMM profile)"
+    if n_rows <= 0:
+        return
+    var leaf = contract_leaf_size(vocab)
+    var p_count = contract_leaf_count(vocab)
+    if p_count > CE_TPB:
+        identical_gemm_into(
+            ctx, out_buf, values, ones, ws, n_rows, 1, vocab, OP_NN
+        )
+        return
+    # P rounded up to the widest wavefront of any target, capped at the
+    # block the shared arrays are sized for (BLOCK = CE_TPB).
+    var tpb = ((p_count + 63) // 64) * 64
+    if tpb > CE_TPB:
+        tpb = CE_TPB
+    if tpb < 64:
+        tpb = 64
+    comptime kern = ce_denom_rowfold_kernel[CE_TPB, CE_DENOM_ROWFOLD_KS]
+    step_count_launch()
+    ctx.enqueue_function[kern](
+        out_buf.unsafe_ptr(),
+        values.unsafe_ptr(),
+        Float32(1.0),
+        Int32(vocab),
+        Int32(leaf),
+        Int32(p_count),
+        grid_dim=(n_rows, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+
+
+# ===========================================================================
 # SIZING (contract 5.3, and `identical_gemm_into`'s own hazard)
 # ===========================================================================
 
@@ -1601,6 +1829,10 @@ def identical_ce_forward_into(
             grid_dim=(_grid_for(n_rows), 1, 1),
             block_dim=(CE_TPB, 1, 1),
         )
+    elif IDN_CE_DENOM_ROWFOLD:
+        # R6: one block per row on the contract's own chains and tree; the
+        # block comment at `ce_denom_rowfold_kernel` maps every step.
+        _ce_denom_rowfold_into(ctx, denom, expo, ones, ws, n_rows, vocab)
     else:
         identical_gemm_into(
             ctx, denom, expo, ones, ws, n_rows, 1, vocab, OP_NN
@@ -1650,10 +1882,16 @@ def identical_ce_forward_into(
             grid_dim=(_grid_for(cells), 1, 1),
             block_dim=(CE_TPB, 1, 1),
         )
-        # ---- L9. ROUTED, the same call at the same shape as L4.
-        identical_gemm_into(
-            ctx, logp_sum, logp, ones, ws, n_rows, 1, vocab, OP_NN
-        )
+        # ---- L9. ROUTED, the same call at the same shape as L4 (and the
+        # same R6 row fold where L4 takes it).
+        comptime if IDN_CE_DENOM_ROWFOLD:
+            _ce_denom_rowfold_into(
+                ctx, logp_sum, logp, ones, ws, n_rows, vocab
+            )
+        else:
+            identical_gemm_into(
+                ctx, logp_sum, logp, ones, ws, n_rows, 1, vocab, OP_NN
+            )
         # ---- L10. `tv[1]` is `T_OTHER`, which is `eps / V` -- the SABOTAGE
         # arm's folded constant, passed here and unused on the clean path.
         step_count_launch()

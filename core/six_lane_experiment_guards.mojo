@@ -55,6 +55,7 @@ def _check_configuration() -> Bool:
     comptime CH = get_defined_int["MOJOLEARN_IDN_NEURAL_CHAINS",1]()
     comptime assert CH == 1 or CH == 2 or CH == 4, "invalid neural CHAINS configuration"
     comptime assert not (S == 1 and (LEAF == 1 or LEAF == 2 or is_defined["MOJOLEARN_IDN_NEURAL_CHAINS"]())), "schedule 1 (geometry) runs incumbent geometries; it excludes the neural leaf/chains profile"
+    comptime assert not (is_defined["MOJOLEARN_IDN_CE_DENOM_ROWFOLD"]() and (LEAF == 1 or LEAF == 2 or is_defined["MOJOLEARN_IDN_NEURAL_CHAINS"]())), "MOJOLEARN_IDN_CE_DENOM_ROWFOLD reproduces the v1 GEMM contract chain and fold; it excludes the neural leaf/chains profile"
     comptime EPI = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE",0]()
     comptime assert EPI >= 0 and EPI <= 3, "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE is a mask: 1 mlp, 2 cnn"
     comptime HS = get_defined_int["MOJOLEARN_IDN_ATTN_HEAD_SHARE",1]()
