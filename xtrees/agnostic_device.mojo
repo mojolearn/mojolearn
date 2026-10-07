@@ -71,6 +71,32 @@ comptime AGN_IDN_DEVICE_MODEL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (is_defined["MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
+#: lane apple-fast-round2 (2026-10-07), FAST experiments, default off, one
+#: define per explainer so the A/B grid can separate them:
+#: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL  KernelExplainer on the FAST tier takes
+#:   the device-model route above (`model_load` + `kshap_solve_model`) for
+#:   this library's flat forests instead of KSHAP_FAST_BATCH's synthetic
+#:   matrix download + the model's own predict per chunk.
+#: MOJOLEARN_PSHAP_FAST_DEVICE_MODEL  the same for PermutationExplainer
+#:   (`pshap_values_model`), ahead of PSHAP_DELTA's compacted download.
+#: Cost reasoning: a FAST chunk downloads R m nb d float32 synthetic words
+#: (m coalitions x nb background rows x d features per explained row; for
+#: thousands of coalitions, a hundred background rows and a few hundred
+#: features that is ~10^8 bytes per row), the model re-uploads them and the
+#: outputs come back. Shared Metal memory read from the CPU streams at well
+#: under PCIe rates, and KSHAP_FAST_OVERLAP (hiding the download) lost, so
+#: removing the copy is the lever: the forest walk reads x or a background
+#: row per node and no synthetic matrix exists. The model on the CPU inside
+#: a GPU explain is also host-route debt this removes. Quality: the same
+#: model and the same coalitions; the device walk is the strict
+#: increasing-tree sum, which may differ from a FAST forest's own predict
+#: fold order (FAST has no bits requirement; rel_error vs exact must hold).
+#: Never touches the IDENTICAL build (GLOBAL_NUMERIC_MODE gate).
+comptime KSHAP_FAST_DEVICE_MODEL = _AGN_FAST_APPLE and is_defined["MOJOLEARN_KSHAP_FAST_DEVICE_MODEL"]()
+comptime PSHAP_FAST_DEVICE_MODEL = _AGN_FAST_APPLE and is_defined["MOJOLEARN_PSHAP_FAST_DEVICE_MODEL"]()
+#: Any build that compiles the device-model route (IDENTICAL default, or a
+#: FAST experiment above).
+comptime AGN_ANY_DEVICE_MODEL = AGN_IDN_DEVICE_MODEL or KSHAP_FAST_DEVICE_MODEL or PSHAP_FAST_DEVICE_MODEL
 #: Default FAST + Apple; MOJOLEARN_PSHAP_DELTA_OFF restores full synthesis.
 #: M3 w2-pdelta-pshap-istella: 28,222.8 -> 14,788.6 ms (-47.6%).
 #: w2-pdelta-quality: linear/tanh/two-output phi byte-identical, identical
