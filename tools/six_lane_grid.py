@@ -44,7 +44,7 @@ VENDORS = {
 }
 STANDARD_BLOCKER = ('Full dataset/version/hash, dimensions, settings, cap audit and accepted artifacts must be '
                     'supplied from the frozen saved recipe.')
-DEFER_LIST_LIMIT = 256
+DEFER_LIST_LIMIT = 32  # deferred crosses are reproducible from (members, rule); list a sample + exact count
 
 # ---------------------------------------------------------------- reach rules
 # Control-level exclusions read from the authored notes/tags. Each match is quoted
@@ -862,7 +862,8 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP):
                           pack=c.get('pack'), bindings=c.get('bindings'), packed_extra_defines=c.get('packed_extra_defines', []),
                           global_reach=c['global_reach'], vendor_default_equivalent=c['vendor_default_equivalent'],
                           queued=not c.get('unmapped')) for c in p['configs']],
-            deferred=p['deferred'], deferred_groups=p['deferred_groups'], invalid=p['invalid'], notes=model[aid]['notes'])
+            deferred=p['deferred'], deferred_groups=p['deferred_groups'], invalid=summarize_invalid(p['invalid']),
+            notes=model[aid]['notes'])
             for aid, p in plans.items()},
         unmapped=unmapped, excluded=sorted(excluded_all.values(), key=lambda e: (e['file'], e['control'])),
         removed_per_file=removed,
@@ -874,6 +875,19 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP):
     return plan, matrix, build_plan
 
 
+def summarize_invalid(invalid, examples=3):
+    """Guard-refused combinations, grouped by the first refusal (counts + a few examples)."""
+    groups = {}
+    for item in invalid:
+        g = groups.setdefault(item['problems'][0], dict(problem=item['problems'][0], count=0, tiers=[], examples=[]))
+        g['count'] += 1
+        if item['tier'] not in g['tiers']:
+            g['tiers'].append(item['tier'])
+        if len(g['examples']) < examples:
+            g['examples'].append(item['assignment'])
+    return sorted(groups.values(), key=lambda g: -g['count'])
+
+
 def owed_special(controls, owed_misc):
     out = []
     for item in owed_misc:
@@ -881,7 +895,8 @@ def owed_special(controls, owed_misc):
                         vendors=item.get('vendors'), shapes=item.get('shapes'), effect=item.get('effect'), status=item.get('status')))
     for key, c in sorted(controls.items()):
         if c.get('owed_removal'):
-            out.append(dict(define=c['define'], file=c['file'], control=key, source=c.get('source'),
+            vendors = [v for v, tok in (('nvidia', '_NV_'), ('amd', '_AMD_'), ('apple', '_APPLE_')) if tok in c['define'] + '_']
+            out.append(dict(define=c['define'], file=c['file'], control=key, source=c.get('source'), vendors=vendors or ['nvidia', 'amd'],
                             A='main (rule removed / define absent)', B=[d for ds in c['arms'].values() for d in ds],
                             reason=c['owed_removal'].get('reason'), ab=c['owed_removal'].get('ab'),
                             status='RUN OWED: neighboring shapes + one non-board dataset; not expressible as a grid cell'))
@@ -965,7 +980,8 @@ def render_md(plan):
           '| define | file | vendors | B | shapes / plan | status |', '|---|---|---|---|---|---|']
     for o in plan['owed_special_ab']:
         B = o['B'] if isinstance(o['B'], str) else ', '.join(o['B'] or [])
-        L.append('| `%s` | %s | %s | %s | %s | %s |' % (o['define'], o['file'], ', '.join(o.get('vendors') or ['nvidia', 'amd'] if 'APPLE' not in o['define'] else ['apple (bits only; Apple does not vote)']),
+        vend = ', '.join(v if v != 'apple' else 'apple (Apple does not vote on IDENTICAL)' for v in (o.get('vendors') or ['nvidia', 'amd']))
+        L.append('| `%s` | %s | %s | %s | %s | %s |' % (o['define'], o['file'], vend,
                                                     B, (o.get('shapes') or o.get('ab') or '') + ((' Reason: ' + o['reason']) if o.get('reason') else ''), o.get('status') or ''))
     L += ['', '## How to queue (not run by this lane)', '',
           'Files: `grid-matrix.json.gz` (configurations + cells, `mojolearn.six-lane-matrix/1`), `grid-build-plan.json`',
