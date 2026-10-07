@@ -5,6 +5,7 @@ IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 A enables only its named define; B omits it and retains all incumbent controls.
 """
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -14,8 +15,17 @@ comptime C02_STATS_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICA
 comptime C03_FINITE_EXTREMA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA"]()
 comptime C04_LOAD_CENTER = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C04_LOAD_CENTER"]()
 comptime C05_PHASE_SCRATCH = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH"]()
-comptime C06_ROWS2 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C06_ROWS2"]()
-comptime C06_ROWS4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C06_ROWS4"]()
+# C06 (lane classical-kmeans, 2026-10-07): ONE control with arms, replacing
+# ROWS2/ROWS4 (two defines where ROWS4 silently won). Rows per norm block,
+# legal set 2|4; absent = the incumbent one-row block.
+comptime C06_NORM_ROWS = get_defined_int["MOJOLEARN_CLASSICAL_C06_NORM_ROWS", 1]() if CLASSICAL_IDENTICAL else 1
+comptime C06_ROWS_ON = C06_NORM_ROWS > 1
+# C06 small-d arm: one thread per row while d <= C06_THREAD_MAX_D (a cost
+# rule: a NORM_TPB-lane block per row leaves more than 75% of its lanes idle
+# there). The thread replays the incumbent halving tree in registers, so the
+# bits are the incumbent's. Independent of C06_NORM_ROWS (which keeps d above
+# the bound).
+comptime C06_SMALL_D_THREAD = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"]()
 comptime C07_DIGIT4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C07_DIGIT4"]()
 comptime C07_DIGIT6 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C07_DIGIT6"]()
 comptime C07_KEYS1024 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C07_KEYS1024"]()

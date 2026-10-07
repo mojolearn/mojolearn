@@ -63,7 +63,7 @@ Their `DistanceEpilogue` template, the bitmap/bitset filters at `:229-256`,
 the sparse and non-expanded metrics, `haversine_knn`, and the multi-index
 merge (`knn_merge_parts`). See `neighbors/NOT_IMPLEMENTED.tsv`.
 """
-from experiments.classical_identical_ideas.shared_controls import C06_ROWS2, C06_ROWS4
+from experiments.classical_identical_ideas.shared_controls import C06_ROWS_ON
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -655,7 +655,7 @@ def compute_norms_for_metric(
     if not metric_uses_norms(metric):
         return
     if metric_norm_takes_sqrt(metric):
-        comptime if C06_ROWS2 or C06_ROWS4:
+        comptime if C06_ROWS_ON:
             enqueue_row_norms(ctx, a_norm, a, n_rows, n_features, 1)
             return
         ctx.enqueue_function[cosine_row_norm_kernel](

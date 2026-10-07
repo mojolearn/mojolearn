@@ -115,6 +115,7 @@ from cluster.checks.scalable_init import (
 from core.row_norms import NORM_TPB, row_norm_kernel, enqueue_row_norms
 from cluster.impl.detail.kmeans_common import (
     check_convergence,
+    metric_is_sqrt,
 )
 from core.identity_trace import IdentityTrace
 from checks.fixed_point import choose_scale

@@ -65,7 +65,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.row_norms import enqueue_row_norms, NORM_TPB, row_norm_kernel
-from experiments.classical_identical_ideas.shared_controls import C06_ROWS2, C06_ROWS4
+from experiments.classical_identical_ideas.shared_controls import C06_ROWS_ON
 from kde.impl.distance.distance_ops import (
     DIST_COSINE_EXPANDED,
     DIST_L1,
@@ -194,7 +194,7 @@ def pairwise_distance(
         # C06 batches independent norm rows; the shared norm now uses the
         # same portable sqrt as cosine, with the same logical halving tree.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        comptime if C06_ROWS2 or C06_ROWS4:
+        comptime if C06_ROWS_ON:
             comptime assert NORM_TPB == COSINE_NORM_TPB
             enqueue_row_norms(ctx, xn, x, m, k, 1)
             enqueue_row_norms(ctx, yn, y, n, k, 1)
