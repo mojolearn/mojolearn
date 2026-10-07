@@ -3794,6 +3794,14 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
         wcap = max(wcap, rff_blocks(na) + rff_blocks(rff_mcols(d, 1) * nbw) + rff_blocks(d + 1)
                    + rff_blocks(rff_stats(d, 1) * nbw) + rff_blocks(rff_stats(d, 1)) + na + _xg_blocks(nt_max * na)
                    + _xg_blocks(kbm) + _xg_blocks(na * kbm) + _xg_blocks(na))
+    # C13 fold cache fill. This block MUST sit under C13_FOLD_STATS: eeda2f55b
+    # (RIDGECV_FF_BLOCKED, 2026-10-07) inserted its wcap lines above it and
+    # captured it under the default-off FF_BLOCKED branch, so the default
+    # IDENTICAL build allocated dcache and never wrote it; the combine kernel
+    # below then read uninitialized device memory (fresh allocation on the
+    # first fit, recycled memory on the next: NVIDIA round0 212af61b9c4418de,
+    # round1 d7ee935c9f08d72d on taxi rows-small, lane/idn-warm-cold).
+    comptime if C13_FOLD_STATS:
         var prep_wit = Witness(ctx, _xg_blocks(k * (d + 1)) + _xg_blocks(k * (d + 1) * (d + 1)))
         var attempt = 0
         while True:
