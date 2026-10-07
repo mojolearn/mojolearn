@@ -21,8 +21,22 @@ comptime T07 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEAR
 comptime T08 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T08"]()
 comptime T08_LAYOUT = get_defined_int["MOJOLEARN_TREES_T08_LAYOUT", 1]()
 comptime T08_BITS = get_defined_int["MOJOLEARN_TREES_T08_BITS", 8]()
+# T09 now names the ExtraTrees bootstrap-locality sort only (split from the
+# RF arms below on 2026-10-07 so RF and ET effects stay separable).
 comptime T09 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T09"]()
-comptime T10 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T10"]()
+# RF bootstrap sample route: ONE switch with three arms (trees-cleanup
+# 2026-10-07; replaces RF T09 and T10, which silently disabled each other).
+#   -D MOJOLEARN_TREES_RF_SAMPLE=0  drawn order, two launches (sample, gather)
+#   -D MOJOLEARN_TREES_RF_SAMPLE=1  sorted bootstrap rows at every width (old RF T09)
+#   -D MOJOLEARN_TREES_RF_SAMPLE=2  fused sample + label gather (old T10)
+# Absent: the per-vendor incumbent, stated explicitly: NVIDIA = 2 (fused,
+# shipped from the H100 Taxi/Istella trials), AMD = 0 (a small MI325X Taxi
+# regression kept the two-launch route), Apple = its ROWS_SORTED_MIN_COLS
+# rule. Every arm draws the same multiset; only row order and launch count move.
+comptime RF_SAMPLE_SET = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_RF_SAMPLE"]()
+comptime RF_SAMPLE_ARM = get_defined_int["MOJOLEARN_TREES_RF_SAMPLE", -1]()
+comptime RF_SAMPLE_SORTED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 1
+comptime RF_SAMPLE_FUSED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 2
 comptime T11 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T11"]()
 comptime T11_LEVELS = get_defined_int["MOJOLEARN_TREES_T11_LEVELS", 8]()
 comptime T12 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T12"]()
