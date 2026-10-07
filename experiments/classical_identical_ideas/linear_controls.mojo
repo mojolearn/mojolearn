@@ -66,7 +66,7 @@ comptime C18_RESIDUAL_NEXT = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C
 # per-sample updates are unchanged; only the launch/witness granularity moves.
 # Legal set enforced in core/six_lane_experiment_guards.mojo.
 comptime C19_SGD_CHUNK = get_defined_int["MOJOLEARN_CLASSICAL_C19_SGD_CHUNK", 2048]() if CLASSICAL_IDN else 2048
-comptime C20_ROW_CACHE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_ROW_CACHE"]()
+# C20_ROW_CACHE deleted 2026-10-07 (serial per-row host loop); refused in core/six_lane_experiment_guards.mojo.
 comptime C20_PAIR_LOAD = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"]()
 comptime C21_EXTREMA = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"]()
 comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"]()

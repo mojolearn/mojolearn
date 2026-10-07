@@ -35,8 +35,8 @@ because it is symmetric -- and the full tile is `[nnz x batch]` with
 `[batch x nnz]` column-major tile read the other way.
 """
 
-from experiments.classical_identical_ideas.linear_controls import C20_ROW_CACHE, C20_PAIR_LOAD
-from svm.impl.classical_kernel_device import classical_cache_row_kernel, classical_cache_publish_kernel, classical_cache_gather_kernel, classical_gather_rows_norms_kernel
+from experiments.classical_identical_ideas.linear_controls import C20_PAIR_LOAD
+from svm.impl.classical_kernel_device import classical_gather_rows_norms_kernel
 from std.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import ftz
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -158,9 +158,6 @@ struct KernelCache(Movable):
     var matrix_l2: DeviceBuffer[DType.float32]
     var matrix_l2_ws: DeviceBuffer[DType.float32]
     var gemm_ws: DeviceBuffer[DType.float32]
-    var classical_cache: DeviceBuffer[DType.float32]
-    var classical_keys: DeviceBuffer[DType.int32]
-    var classical_slots: Int
 
     def __init__(
         out self,
@@ -188,13 +185,6 @@ struct KernelCache(Movable):
         if cache_size != 0.0:
             raise Error("svm KernelCache: cache_size must be 0 in rung 1")
         self.n_rows = n_rows
-        # C20 16MiB byte budget, direct row-ID placement and deterministic
-        # eviction. The allocation belongs to this immutable fitted kernel.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        self.classical_slots = min(n_ws, (16 * 1024 * 1024) // max(4 * n_rows, 1)) if C20_ROW_CACHE else 0
-        self.classical_cache = ctx.enqueue_create_buffer[DType.float32](max(self.classical_slots * n_rows, 1))
-        self.classical_keys = ctx.enqueue_create_buffer[DType.int32](max(self.classical_slots, 1))
-        ctx.enqueue_memset(self.classical_keys, Int32(-1))
         self.n_cols = n_cols
         self.n_ws = n_ws
         self.svm_type = svm_type
@@ -319,31 +309,9 @@ struct KernelCache(Movable):
         if self.cache_state == CACHE_BATCHING_INITIALIZED:
             raise Error("svm KernelCache: Previous batching step incomplete!")
         var n_ws = self.n_ws
-        comptime if C20_ROW_CACHE:
-            if self.classical_slots > 0 and self.kp.kernel != KERNEL_PRECOMPUTED:
-                # Requests execute in working-set order. A colliding slot is
-                # gathered before the next row can evict it; no atomics or
-                # arithmetic-dependent cache decisions reach the solver.
-                for q in range(n_ws):
-                    ctx.enqueue_function[classical_cache_row_kernel](
-                        x.unsafe_ptr(), self.matrix_l2.unsafe_ptr(), self.ws_idx_mod.unsafe_ptr(), Int32(q),
-                        self.classical_cache.unsafe_ptr(), self.classical_keys.unsafe_ptr(),
-                        Int32(self.n_rows), Int32(self.n_cols), Int32(self.classical_slots), Int32(self.kp.kernel),
-                        Float32(self.kp.gamma), Float32(self.kp.coef0), Int32(self.kp.degree),
-                        grid_dim=_grid(self.n_rows), block_dim=SEL_TPB,
-                    )
-                    ctx.enqueue_function[classical_cache_publish_kernel](
-                        self.ws_idx_mod.unsafe_ptr(), Int32(q), self.classical_keys.unsafe_ptr(), Int32(self.classical_slots),
-                        grid_dim=1, block_dim=1,
-                    )
-                    # Both index arguments are read-only views of the same live working set.
-                    var ws_ptr = rebind[MutPointer[Int32, MutAnyOrigin]](self.ws_idx_mod.unsafe_ptr())
-                    ctx.enqueue_function[classical_cache_gather_kernel](
-                        self.classical_cache.unsafe_ptr(), ws_ptr, Int32(q), ws_ptr,
-                        self.kernel_tile.unsafe_ptr(), Int32(self.n_rows), Int32(n_ws), Int32(self.classical_slots),
-                        grid_dim=_grid(n_ws), block_dim=SEL_TPB,
-                    )
-                return
+        # C20_ROW_CACHE (a host loop of 3 launches per working-set row, one of
+        # them 1x1) was deleted 2026-10-07: forbidden serial shape, incumbent
+        # parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.
         comptime if C20_PAIR_LOAD:
             ctx.enqueue_function[classical_gather_rows_norms_kernel](
                 self.x_ws_dense.unsafe_ptr(), self.matrix_l2_ws.unsafe_ptr(), x.unsafe_ptr(), self.matrix_l2.unsafe_ptr(),
