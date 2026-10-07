@@ -9,8 +9,8 @@ export MOJOLEARN_ATTN_RESOURCES=0 MOJOLEARN_ATTN_WARMUPS=3 MOJOLEARN_ATTN_ROUNDS
 mkdir -p /root/jobs/packed-estash
 for profile in estash packed recompute; do
   defs='-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_ATTN_ARM_TRIAL=1'
-  if [[ "$profile" == packed ]]; then defs="$defs -D MOJOLEARN_ATTN_V1_PACKED_ESTASH=1"; fi
-  if [[ "$profile" == recompute ]]; then defs="$defs -D MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"; fi
+  if [[ "$profile" == packed ]]; then defs="$defs -D MOJOLEARN_IDN_ATTN_STASH=2"; fi
+  if [[ "$profile" == recompute ]]; then defs="$defs -D MOJOLEARN_IDN_ATTN_STASH=1"; fi
   pixi run mojo build -j 2 $defs -I . bench/attention_step_price_main.mojo -o "/root/jobs/packed-estash/$profile"
   "/root/jobs/packed-estash/$profile" > "/root/jobs/packed-estash/$profile.log" 2>&1
 done

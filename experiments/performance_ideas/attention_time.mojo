@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Actual production fused attention forward/backward timing, no identity replay."""
 from std.time import perf_counter_ns
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from max.gpu.host import DeviceContext
 from gemm.checks.gemm_step_arms import gemm_step_env_int
 from transformer.impl.llama.fused_attention import FUSED_RAN,fused_attention_arm_parse,fused_forward_launch_estash_ran,fused_backward_launch_estash_ran
@@ -39,7 +39,7 @@ def main() raises:
         # Execution admission only: refuse a timing whose intended lifetime
         # did not run. No numerical comparison or identity check is performed.
         comptime if is_defined["MOJOLEARN_MEASURE_I07_LIFETIME"]():
-            comptime if is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]():
+            comptime if get_defined_int["MOJOLEARN_IDN_ATTN_STASH", 0]() == 1:
                 if kept_cells!=0:raise Error("I07 recompute timing retained unexpected exp storage")
             else:
                 if kept_cells!=h*l*l:raise Error("I07 retained timing did not retain its declared exp storage")

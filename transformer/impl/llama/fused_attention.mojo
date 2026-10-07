@@ -1404,16 +1404,25 @@ of the trial tree (the sabotage copies stay trial-only, like
 # tradeoff qualification remain required. Preserve defaults and old exclusions.
 # Evidence: overnight-ab-20261006/amd/normalized-measurements.json and
 # overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json, I07.
+# ONE attention stash switch (NN19 + NI21 merged, 2026-10-07; formerly three
+# defines that silently overrode each other, recompute > packed > alias-y):
+# -D MOJOLEARN_IDN_ATTN_STASH=<arm>, absent = the shipped profile below.
+#   1  recompute  no exponent stash; backward recomputes (I07, NN19's compile arm)
+#   2  packed     visible causal exponents only (NI21)
+#   3  alias_y    full layout, consumed cells overwritten with y
+# NN19/NN18's ATTN_ARM_TRIAL runtime arms stay a runtime sweep inside a trial
+# build. The build scripts map MOJOLEARN_ATTENTION_MEMORY_PROFILE onto it.
+comptime ATTN_STASH_ARM = get_defined_int["MOJOLEARN_IDN_ATTN_STASH", 0]()
 comptime ATTN_V1_RECOMPUTE_BACKWARD = (
-    is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
+    ATTN_STASH_ARM == 1
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime ATTN_V1_PACKED_ESTASH = (
-    is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
+    ATTN_STASH_ARM == 2
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime ATTN_V1_ALIAS_Y_ESTASH = (
-    is_defined["MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH"]()
+    ATTN_STASH_ARM == 3
     or (
         TARGET_COLUMN == COLUMN_NVIDIA
         and ATTN_SHIPPED_BWD_ESTASH
@@ -10134,7 +10143,7 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     its column default carries the estash bits (DEVIATION 2657,
     `ATTN_SHIPPED_BWD_ESTASH`)."""
     comptime assert not (ATTN_V1_ALIAS_Y_ESTASH and ATTN_V1_PACKED_ESTASH), (
-        "MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH currently requires the full estash layout"
+        "MOJOLEARN_IDN_ATTN_STASH=3 (alias_y) currently requires the full estash layout"
     )
     var cells = b * nh * l * s
     var y_cells = cells
