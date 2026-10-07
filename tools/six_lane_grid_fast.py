@@ -81,6 +81,23 @@ LANE_BINDING = {
     'x_neighbors', 'sparse-pca': 'x_decomp', 'sparse-rp': 'x_neighbors', 'stacking-clf': 'x_trees', 'stacking-reg': 
     'x_trees', 'stl': 'x_sequence', 'svgp': 'x_neighbors', 'theta': 'x_sequence', 'tsne': 'x_ann', 'var': 
     'x_sequence', }
+# Lane -> the bindings its Python estimator module imports (python/mojolearn, 2026-10-07), used only to
+# pick among card bindings that all import the card's source. Evidence per entry is the module named.
+_TREES_PY = ('x_trees', 'rf', 'estimators')  # _expansion_trees.py
+LANE_PY_BINDINGS = {
+    'knn-clf': ('base',), 'knn-reg': ('base',),                        # neighbors.py _BINDING = "_mojolearn"
+    'umap': ('metrics',),                                              # _umap_impl.py
+    'spectral': ('metrics', 'x_decomp'), 'spectral-embedding': ('metrics', 'x_decomp'),  # _spectral_impl.py
+    'agglomerative': ('solver', 'x_neighbors', 'estimators'),          # _hierarchy_impl.py
+    'ridge': ('estimators',), 'ols': ('estimators',),                  # linear_model.py
+    'pca': ('x_decomp', 'estimators'),                                 # decomposition.py
+    'nmf': ('x_decomp',), 'factor-analysis': ('x_decomp',), 'pls': ('x_decomp',), 'pls-canonical': ('x_decomp',),
+    'cca': ('x_decomp',), 'als': ('x_decomp',), 'randomized-svd': ('x_decomp',),  # _expansion_decomp.py
+    'qr': ('linalg',), 'svd': ('linalg',),                             # _linalg_impl.py (bench lane linalg.qr / linalg.svd)
+    'tree-shap': _TREES_PY, 'dart': _TREES_PY, 'dart-reg': _TREES_PY, 'random-trees-embedding': _TREES_PY,
+    'decision-tree-clf': _TREES_PY, 'decision-tree-reg': _TREES_PY, 'bagging-clf': _TREES_PY, 'bagging-reg': _TREES_PY,
+    'adaboost-clf': _TREES_PY, 'adaboost-reg': _TREES_PY,
+}
 AFT_BINDINGS = ('base', 'rf', 'gbdt', 'trees', 'svm')  # what tools/aft_ab.sh builds
 AFC_FAMILY = {'algos': 'algos', 'classical2': 'classical2', 'classical': 'classical', 'trees': 'trees'}
 # Workloads the source says cannot be timed at all.
@@ -351,3 +368,94 @@ def load_untried(directory=CONTROLS_DIR):
         for e in doc.get('excluded') or []:
             excluded.append(dict(e, file=name))
     return controls, algos, excluded, files
+
+
+# ------------------------------------------------------------------ model
+def resolve_binding(c, lane):
+    """-> (binding, why) or (None, reason). Lane binding first; a card binding when the lane's own does not import it."""
+    lb = LANE_BINDING.get(lane)
+    lb = binding_name(lb) if lb else None
+    if c['env']:
+        b = c['bindings'][0] if c['bindings'] else lb
+        return b, 'run-time env switch (no build); binding of the lane route, used for its main build and A/A'
+    src = ', '.join(c['paths']) or '-'
+    if lb and binding_file(lb).exists() and reaches(lb, c['paths']):
+        return lb, 'lane binding ' + lb + ' imports ' + src
+    reached = [b for b in c['bindings'] if binding_file(b).exists() and reaches(b, c['paths'])]
+    py = [b for b in reached if b in LANE_PY_BINDINGS.get(lane, ())]
+    if len(reached) > 1 and len(py) == 1:
+        return py[0], ('card binding ' + py[0] + ' imports ' + src + ' and is the one of ' + ', '.join(reached)
+                       + ' the lane\'s Python module loads (LANE_PY_BINDINGS)')
+    if len(reached) == 1:
+        return reached[0], 'card binding ' + reached[0] + ' imports ' + src + ('' if not lb else ' (lane binding ' + lb + ' does not)')
+    if not reached:
+        return None, 'unreached by import scan: no binding of ' + ', '.join(c['bindings'] or ['-']) + ((' or lane binding ' + lb) if lb else '') + ' imports ' + src
+    return None, ('ambiguous binding: ' + ', '.join(reached) + ' each import ' + src + '; lane binding ' + (lb or 'unknown')
+                  + '; the Apple A/B scripts build one binding per line (add the lane to LANE_BINDING with its source to resolve)')
+
+
+def build_fast_model(controls, global_groups, untried_groups, board):
+    fams_of = {}
+    for fam, lane in board:
+        fams_of.setdefault(lane, []).append(fam)
+    algos, unmapped, excluded, binding_excluded = {}, [], {}, []
+    for key, c in controls.items():
+        if c['exclusion']:
+            excluded[key] = dict(control=key, define=c['define'], file=c['file'], algorithms=[], reasons=[c['exclusion'][0] + ': ' + c['exclusion'][1]])
+            continue
+        for r in c.get('unsupported_recipes') or []:
+            unmapped.append(dict(control=key, lane=r, reason='recipe adapter has no Apple A/B script (experiments/apple_fast_classical_20261006/run_pair.py PublicProgram only)'))
+        if not c['lanes']:
+            excluded[key] = dict(control=key, define=c['define'], file=c['file'], algorithms=[], reasons=['no board lane recipe the Apple A/B scripts can race'])
+            continue
+        placed = False
+        for fam, lane in c['lanes']:
+            note = None
+            if (fam, lane) not in board:
+                fams = fams_of.get(lane, [])
+                if len(fams) != 1:
+                    unmapped.append(dict(control=key, lane=fam + ':' + lane, reason='no M3 FAST board row for this lane' if not fams else 'lane name on several board families: ' + ', '.join(fams)))
+                    continue
+                note = fam + ':' + lane + ' is board family ' + fams[0]
+                fam = fams[0]
+            aid = algo_id(fam, lane)
+            b, why = resolve_binding(c, lane)
+            if b is None:
+                binding_excluded.append(dict(control=key, define=c['define'], algorithm=aid, reason=why))
+                continue
+            a = algos.setdefault(aid, dict(id=aid, family=fam, lane=lane, controls=[], binding_of={}, binding_why={}, groups=[],
+                                           not_reached=[], arm_restrict={}, notes=[], datasets=board[(fam, lane)]))
+            if key not in a['controls']:
+                a['controls'].append(key)
+                a['binding_of'][key] = b
+                a['binding_why'][key] = why
+                if note:
+                    a['notes'].append(note)
+            placed = True
+        if not placed and key not in excluded:
+            excluded[key] = dict(control=key, define=c['define'], file=c['file'], algorithms=[],
+                                 reasons=['no mapped board lane with a resolvable binding (see unmapped / binding exclusions)'])
+    for aid, a in algos.items():
+        for g in global_groups + untried_groups.get(aid, []):
+            members = [k for k in g if k in a['controls']]
+            if len(members) >= 2 and members not in a['groups']:
+                a['groups'].append(members)
+        a['workloads'] = [workload_id(aid, ds) for ds in a['datasets'] if workload_id(aid, ds) not in WORKLOAD_EXCLUSIONS]
+        a['excluded_workloads'] = [dict(workload_id=workload_id(aid, ds), reason=WORKLOAD_EXCLUSIONS[workload_id(aid, ds)])
+                                   for ds in a['datasets'] if workload_id(aid, ds) in WORKLOAD_EXCLUSIONS]
+    return dict(sorted(algos.items())), unmapped, excluded, binding_excluded
+
+
+def load_all(controls_dir=CONTROLS_DIR):
+    aft, aft_groups, f1 = load_aft()
+    afcl, afcl_groups, f2 = load_afcl()
+    untried, untried_groups, untried_excluded, f3 = load_untried(controls_dir)
+    controls = {}
+    for part in (aft, afcl, untried):
+        for k, c in part.items():
+            if k in controls:
+                raise ValueError('Duplicate FAST control ' + k)
+            controls[k] = c
+    files = dict(f1, **f2, **f3)
+    files['board'] = dict(path=_rel(BOARD_MD), sha256=G.file_sha(BOARD_MD))
+    return controls, aft_groups + afcl_groups, untried_groups, untried_excluded, files
