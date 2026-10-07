@@ -5,6 +5,7 @@ A enables one named candidate; B omits it, preserving all incumbent switches.
 These controls must never select a FAST or neural runtime path.
 """
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -18,8 +19,14 @@ comptime C53_CENTER4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_CENTER4
 comptime C53_BGMM_STATS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_BGMM_STATS"]()
 # C54: reuse within kernel construction; fitted factors remain caller-owned.
 comptime C54_PREDICT_TILES = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C54_PREDICT_TILES"]()
-# C56: adjacent independent projection outputs share each centered load.
-comptime C56_QDA_PROJECT4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C56_QDA_PROJECT4"]()
+# C56_QDA_PROJECT (lane classical-nbda, 2026-10-07; was MOJOLEARN_C56_QDA_PROJECT4):
+# one switch with arms, QDA `qda_dec` only (predict / predict_proba scoring):
+# each unit computes W adjacent projection columns per pass over the centred
+# row, so the row's centred word is formed once per W columns instead of once
+# per column. Register width, a hardware choice, not a data shape.
+# -D MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2|4|8 (absent: off). Each projection
+# keeps ascending c and the norm keeps ascending r: same words as off.
+comptime C56_QDA_PROJECT = get_defined_int["MOJOLEARN_CLASSICAL_C56_QDA_PROJECT", 0]() if CLASSICAL_IDENTICAL else 0
 # C57: retain each robust candidate's mean for its covariance computation.
 comptime C57_CANDIDATE_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C57_CANDIDATE_STATE"]()
 # C58/59: only independent classical series/trials, no neural sequence callers.

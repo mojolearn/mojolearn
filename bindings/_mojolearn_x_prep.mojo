@@ -1,7 +1,7 @@
 """THE PREP LANE'S GPU BINDING (preprocessing additions, naive Bayes and
 discriminant analysis). One entry runs a program of units on the device
 (x_prep/common.mojo); the host binding runs the same units on the CPU."""
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C55_CLASS_GROUP, C04_LDA, C56_LDA_INPUT
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT, C61_NB_ARM, C61_DA
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -321,8 +321,13 @@ def c08_routes_binding() raises -> PythonObject:
 
 
 def classical_shared_binding() raises -> PythonObject:
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    return PythonObject(Int(C08_DICTIONARY) | (Int(C55_CLASS_GROUP) << 1) | (Int(C04_LDA) << 2) | (Int(C56_LDA_INPUT) << 3))
+    """Bits read by python/mojolearn/_expansion_prep.py `_classical_shared`:
+    1 C08_DICTIONARY, 2 retired (C55, deleted 2026-10-07), 4 C04_LDA,
+    8 C56_LDA_INPUT, 16-48 C61_NB_ARM << 4, 64 C61_DA."""
+    return PythonObject(
+        Int(C08_DICTIONARY) | (Int(C04_LDA) << 2) | (Int(C56_LDA_INPUT) << 3)
+        | ((C61_NB_ARM & 3) << 4) | (Int(C61_DA) << 6)
+    )
 
 
 def idn_fam_binding() raises -> PythonObject:

@@ -13,7 +13,7 @@ before the next stage. Which thread runs a unit never changes what the unit
 computes, so the bits are the serial walk's at every task count
 (MOJOLEARN_CPU_THREADS = 1, 3 or the default; `core/host_predict_threads.mojo`
 holds the one count policy). THIS IS NOT A NUMERIC ROW."""
-from experiments.classical_identical_ideas.shared_controls import C08_GROUPED_OUTPUT, C55_CLASS_GROUP
+from experiments.classical_identical_ideas.shared_controls import C08_GROUPED_OUTPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -93,8 +93,6 @@ def _groups[K: Int](total: Int, q: IP) -> Int:
     elif K == OP_MATMUL:
         return matmul_host_groups(total, q)
     elif K == OP_CLASS_STATS:
-        comptime if C55_CLASS_GROUP:
-            return 0
         return class_stats_host_groups(total, q)
     elif K == OP_QDA_COV:
         return qda_cov_host_groups(total, q)

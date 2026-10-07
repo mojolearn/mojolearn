@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The op table: op id -> unit. python/mojolearn/_expansion_prep.py `_OPS` carries
 the same ids; the binding refuses an id outside the table."""
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_GROUPED_OUTPUT, C04_LDA
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_GROUPED_OUTPUT, C04_LDA, C61_OPS
 from x_prep.common import FP, IP, p
 from x_prep.prims import (
     sort_cols_unit, col_stats_unit, quantile_unit, affine_unit, scale_params_unit,
@@ -45,6 +45,7 @@ from x_prep.blocked import (
     IDN_NB_ONEPASS, csb1_part_unit, csb1_neg_unit,
     IDN_NB_CSR_DENSE, csr_dense_unit,
     IDN_CLASS_ONEPASS, csb1_ss_unit,
+    csbm_part_unit, csbm_fold_unit, csbm_pool_unit,
 )
 from x_prep.select_blocked import (
     IDN_SELECT_BLOCKED, fcb_part_unit, fcb_fin_unit, frb_part1_unit, frb_mean_unit, frb_part2_unit, frb_fin_unit,
@@ -76,7 +77,10 @@ comptime IDN_INT_OPS = IDN_LABEL or IDN_NB_ONEPASS or IDN_NB_CSR_DENSE
 #: 166-171 (IDN_SELECT_BLOCKED, x_prep/select_blocked.mojo), IDENTICAL only, every vendor and the
 #: host column; ops 172-176 (IDN_PT_BLOCKED, x_prep/pt_blocked.mojo) likewise.
 comptime IDN_FAM_OPS = IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED
-comptime N_OPS = 179 if C04_LDA else 178 if C08_DICTIONARY else (177 if IDN_FAM_OPS else (165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))))
+#: lane classical-nbda: ops 190-192 (C61 single-pass class statistics, x_prep/blocked.mojo
+#: csbm_part / csbm_fold / csbm_pool) only under C61_NB_ARM or C61_DA (IDENTICAL, every vendor
+#: and the host column); op 178 (centered_matmul) is LDA transform's C04_LDA.
+comptime N_OPS = 193 if C61_OPS else 179 if C04_LDA else 178 if C08_DICTIONARY else (177 if IDN_FAM_OPS else (165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))))
 #: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist only under
 #: CAT_CLS2_PACK (FAST + Apple default, -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF off)
 
@@ -459,3 +463,11 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
 
     comptime if OP == 178:
         centered_matmul_unit(t, f, q)
+
+    comptime if C61_OPS:
+        comptime if OP == 190:
+            csbm_part_unit(t, f, q)
+        comptime if OP == 191:
+            csbm_fold_unit(t, f, q)
+        comptime if OP == 192:
+            csbm_pool_unit(t, f, q)

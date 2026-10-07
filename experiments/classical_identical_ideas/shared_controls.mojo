@@ -26,6 +26,12 @@ comptime C03_FINITE_EXTREMA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLAS
 # C04 is split (lane classical-decomp, 2026-10-07): its PCA use is the =4 arm of
 # MOJOLEARN_CLASSICAL_PCA_COV (linear_controls.mojo); C04_LDA is the x_prep
 # `centered_matmul` op (LDA transform, solver != eigen), behavior unchanged.
+# C04_LDA (lane classical-nbda, 2026-10-07): C04's LDA half, split from
+# C04_LOAD_CENTER (whose PCA half lane L2 owns). LDA `transform` (solver
+# 'svd') stages `centered_matmul` (x_prep/prims.mojo, one unit per output
+# cell, centring in the load) instead of center_rows -> matmul. Same words.
+# Reach: LDA transform only; the board's lda-clf times fit + predict/proba,
+# not transform. Bit 2 (value 4) of `x_prep_classical_shared`.
 comptime C04_LDA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C04_LDA"]()
 comptime C05_PHASE_SCRATCH = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH"]()
 # C06 (lane classical-kmeans, 2026-10-07): ONE control with arms, replacing
@@ -71,16 +77,6 @@ comptime C09_REG_BUNDLE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICA
 comptime C10_RANK_REUSE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C10_RANK_REUSE"]()
 comptime C11_DRAW_GATHER = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C11_DRAW_GATHER"]()
 comptime C12_SPARSE_COUNTS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS"]()
-# T.C55.only, measured source 6fe3cfce38fd (2026-10-07): remain opt-in/off.
-# Full GaussianNB Taxi/Istella, LDA Taxi/Istella; candidate/baseline time ratios
-# NVIDIA sm90: 3.7583/1.6769/2.3931/1.2764; AMD gfx942:
-# 7.2976/3.2273/3.4697/1.6871. GaussianNB Taxi and LDA Istella fail quality
-# on both vendors; matching cross-vendor bits do not excuse those failures.
-# One excluded warmup + one scored sample per arm. NV/AMD same-arm outputs and
-# complete declared model state match; Apple/host/PTX identity remains pending.
-# Evidence: experiments/six_lane_integration/measurements/20261006/retained-pairs.json
-# and BOARD.md. Other affected estimators/combinations remain unqualified.
-comptime C55_CLASS_GROUP = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C55_CLASS_GROUP"]()
 # C08 independent grouped one-hot emission; immutable dictionary is unchanged.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 comptime C08_GROUPED_OUTPUT = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT"]()
@@ -93,3 +89,32 @@ comptime C56_LDA_INPUT = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL
 # C05 independent invocation-owned OLS covariance/inverse phase storage.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 comptime C05_OLS_PHASE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C05_OLS_PHASE"]()
+
+# C61 (lane classical-nbda, 2026-10-07): single-pass blocked class statistics.
+# The incumbent IDENTICAL class statistics read X twice per fit: csb1_part
+# (block sums) + csb_fold, then csb1_ss (block squared deviations from the
+# folded class mean) + csb_var. C61 reads X ONCE: one unit per (XB-row block,
+# column) keeps, for every class, the block's sum (csb1_part's chain, same
+# words), count and a Welford mean / M2; one unit per (class, column) folds the
+# blocks ascending (sum and count exactly as csb_fold, so means are unchanged)
+# and merges M2 with Chan's pairwise rule in a fixed ascending block order,
+# the M2 terms summed with a compensated (two-sum) accumulator. No serial
+# chain longer than one block. Variances take a new order (bits change on
+# every vendor and the host column together).
+# Split per estimator family (Python routes by caller):
+#   C61_NB_ARM (naive Bayes; GaussianNB is the only NB fit that reads a class
+#     variance, Multinomial/Complement/Bernoulli/Categorical read sums or
+#     counts that are already one pass, so they are not reached):
+#     -D MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1  single-pass class stats
+#     -D MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2  also GaussianNB's epsilon
+#        column variance from the merged class M2 (Chan across classes), so
+#        the unweighted fit reads X once instead of four times
+#     (arms need the value; legal set {1, 2}). Bits 4-5 (arm << 4).
+#   C61_DA (discriminants): -D MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS: LDA/QDA
+#     class stats with a variance (shrinkage routes) single-pass, and LDA
+#     'svd' takes its within-class std from the pooled class M2 instead of
+#     materialising X - mean[y] and running two column-stat passes over it.
+#     Bit 6 (value 64).
+comptime C61_NB_ARM = get_defined_int["MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS", 0]() if CLASSICAL_IDENTICAL else 0
+comptime C61_DA = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS"]()
+comptime C61_OPS = C61_NB_ARM != 0 or C61_DA

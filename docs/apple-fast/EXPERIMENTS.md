@@ -1507,3 +1507,9 @@ Old code is recoverable at main 8be4d20d4.
 | `MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS` (PCA) | pca taxi | main @ 8be4d20d4 | six-lane all-on 20261006 | pca taxi x3.0 NV / x3.7 AMD (all-on, with C01) | DROPPED-slower | d*d = 121 threads each over all rows; replaced by `MOJOLEARN_CLASSICAL_PCA_COV=23` (one blocked pass, per-leaf centering, Chan merge) |
 | `MOJOLEARN_CLASSICAL_C04_LOAD_CENTER` (PCA) | pca istella | main @ 8be4d20d4 | none (shadowed by C23 in all-on) | - | DROPPED-serial | per-cell serial kernel, never reached at d <= 128 (split-K took precedence); replaced by `MOJOLEARN_CLASSICAL_PCA_COV=4` (same cell values, row-parallel, every width); LDA use renamed `MOJOLEARN_CLASSICAL_C04_LDA` |
 | `MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS` (MCD) | min-cov-det, elliptic-envelope | main @ 8be4d20d4 | not measured alone | - | REWRITTEN | split to `MOJOLEARN_CLASSICAL_C23_MCD`; same panel-256 cell values computed row-parallel |
+
+## Classical IDENTICAL drops (lane classical-nbda, 2026-10-07)
+
+| define | algorithm / dataset | branch @ sha | evidence | before -> after (candidate/baseline) | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_CLASSICAL_C55_CLASS_GROUP` | GaussianNB, LDA, QDA, Multinomial/Bernoulli/Complement NB, feature-selection class stats / taxi, istella | main @ 8be4d20d4 (measured source 6fe3cfce38fd); deleted on lane/classical-nbda | experiments/six_lane_integration/measurements/20261006/BOARD.md rows T.C55.only; ~/mojolearn-evidence/board-review-20261007/review_classical.md C55 | NV sm90 gaussian-nb taxi/istella 3.76x/1.68x, lda-clf taxi/istella 2.39x/1.28x; AMD gfx942 7.30x/3.23x, 3.47x/1.69x | DROPPED (code deleted) | one thread per (class group, column) walking all n rows twice with a plain f32 running sum: serial, slower on both vendors, and quality failed (gaussian-nb taxi, lda-clf istella). Replaced by C61 (blocked single-pass, Chan merge, compensated) |

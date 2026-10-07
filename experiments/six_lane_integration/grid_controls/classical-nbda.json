@@ -1,0 +1,213 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "classical-nbda",
+ "branch": "lane/classical-nbda",
+ "head": "0034d93b4b98",
+ "head_note": "head is the commit before this file was added; see git log for the final sha",
+ "controls": {
+  "c61_nb": {
+   "define": "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "1": [
+     "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1"
+    ],
+    "2": [
+     "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=2"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/shared_controls.mojo:74",
+    "x_prep/blocked.mojo:706",
+    "x_prep/blocked.mojo:772",
+    "x_prep/blocked.mojo:825",
+    "x_prep/units.mojo:83",
+    "python/mojolearn/_expansion_prep.py:2632",
+    "python/mojolearn/_expansion_prep.py:2660"
+   ],
+   "binding": "_mojolearn_x_prep",
+   "bits_change": true,
+   "status": "new",
+   "note": "arm 1: GaussianNB class stats single blocked pass (Welford per block, Chan merge, compensated M2); arm 2: also epsilon's column variance from the class M2, so unweighted fit walks X once (incumbent: 4 walks). Class means/counts/sums keep incumbent words; variances change."
+  },
+  "c61_da": {
+   "define": "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/shared_controls.mojo:75",
+    "python/mojolearn/_expansion_prep.py:3398",
+    "python/mojolearn/_expansion_prep.py:2632",
+    "x_prep/blocked.mojo:706"
+   ],
+   "binding": "_mojolearn_x_prep",
+   "bits_change": true,
+   "status": "new",
+   "note": "LDA svd fit: within-class std from pooled class M2 (csbm_pool) instead of materialising X - mean[y] (n*d) and two column-stat passes; LDA lsqr/eigen and QDA with shrinkage: single-pass class variance. Board qda (reg_param, no shrinkage) reads no class variance: not reached."
+  },
+  "c04_lda": {
+   "define": "MOJOLEARN_CLASSICAL_C04_LDA",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_C04_LDA"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/shared_controls.mojo:23",
+    "x_prep/prims.mojo centered_matmul_unit",
+    "python/mojolearn/_expansion_prep.py:3567"
+   ],
+   "binding": "_mojolearn_x_prep",
+   "bits_change": false,
+   "status": "split_from:MOJOLEARN_CLASSICAL_C04_LOAD_CENTER",
+   "note": "LDA transform only; not on the board lda-clf route (fit + predict/proba). PCA half stays C04_LOAD_CENTER (lane L2 renames it C04_PCA)."
+  },
+  "c56_lda_input": {
+   "define": "MOJOLEARN_CLASSICAL_C56_LDA_INPUT",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_CLASSICAL_C56_LDA_INPUT"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/shared_controls.mojo:43",
+    "python/mojolearn/_expansion_prep.py:3527"
+   ],
+   "binding": "_mojolearn_x_prep",
+   "bits_change": false,
+   "status": "kept",
+   "note": "binary decision_function only (skips the discarded K-score program); not on the board lda-clf route."
+  },
+  "c56_qda_project": {
+   "define": "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT",
+   "kind": "arms",
+   "arms": {
+    "off": [],
+    "2": [
+     "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=2"
+    ],
+    "4": [
+     "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4"
+    ],
+    "8": [
+     "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=8"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "experiments/classical_identical_ideas/stats_controls.mojo:29",
+    "naive_bayes/da.mojo:238"
+   ],
+   "binding": "_mojolearn_x_prep",
+   "bits_change": false,
+   "status": "rewritten",
+   "note": "was MOJOLEARN_C56_QDA_PROJECT4 (fixed 4); now width arms. qda_dec = QDA predict/predict_proba (board inference column)."
+  }
+ },
+ "algorithms": {
+  "expanded:gaussian-nb": {
+   "binding": "_mojolearn_x_prep",
+   "route": "fit: _gnb_stats -> (_col_stats + gnb_eps) + _class_stats[csb1_part, csb_fold, csb1_ss, csb_var] | C61_NB: csbm_part, csbm_fold (+ csbm_pool, gnb_eps on arm 2) -> gnb_params; predict: gnb_jll",
+   "controls": [
+    "c61_nb"
+   ],
+   "interaction_groups": [],
+   "not_reached": [
+    "MOJOLEARN_CLASSICAL_C02_STATS_PAIR (StandardScaler only)",
+    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (OLS/Ridge centering)",
+    "MOJOLEARN_CLASSICAL_C04_* (PCA / LDA transform)",
+    "MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS (classification-report counts, untimed)"
+   ]
+  },
+  "expanded:multinomial-nb": {
+   "binding": "_mojolearn_x_prep",
+   "route": "fit: _nb_counts (csb1_part + csb_fold, already one pass, sums only) -> mnb_params",
+   "controls": [],
+   "interaction_groups": [],
+   "not_reached": [
+    "c61_nb (no class variance read)"
+   ]
+  },
+  "expanded:complement-nb": {
+   "binding": "_mojolearn_x_prep",
+   "route": "fit: _nb_counts (csb1_part + csb_fold) -> cnb_params",
+   "controls": [],
+   "interaction_groups": [],
+   "not_reached": [
+    "c61_nb"
+   ]
+  },
+  "expanded:bernoulli-nb": {
+   "binding": "_mojolearn_x_prep",
+   "route": "fit: _nb_counts with binarize threshold (csb1_part + csb_fold) -> bnb_params",
+   "controls": [],
+   "interaction_groups": [],
+   "not_reached": [
+    "c61_nb"
+   ]
+  },
+  "expanded:categorical-nb": {
+   "binding": "_mojolearn_x_prep",
+   "route": "fit: cat_hpart / cat_hfold histogram counts -> cat_params",
+   "controls": [],
+   "interaction_groups": [],
+   "not_reached": [
+    "c61_nb",
+    "MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS (report counts only)"
+   ]
+  },
+  "expanded:lda-clf": {
+   "binding": "_mojolearn_x_prep",
+   "route": "fit(svd): _cls[csb1_part, csb_fold] -> lda_prep -> center_rows(z) -> _cs(z) -> lda_w | C61_DA: csbm_part, csbm_fold, csbm_pool -> lda_w; then center_rows(z2) -> _gram -> eigh -> lda_stage2 -> eigh -> lda_stage3; predict/proba: matmul jll",
+   "controls": [
+    "c61_da"
+   ],
+   "interaction_groups": [],
+   "not_reached": [
+    "c04_lda (transform only)",
+    "c56_lda_input (binary decision_function only)",
+    "MOJOLEARN_CLASSICAL_C01_LEAF* (x_metrics leaf, untimed)"
+   ],
+   "note": "NV istella 1.83x (T.combined.minus-C55) is preparation_seconds 5.22 vs 2.15 s; fit 1.412 vs 1.428 s, inference equal: no define cause (~/mojolearn-evidence/classical-nbda-lda-istella-1.83x.txt)"
+  },
+  "expanded:qda": {
+   "binding": "_mojolearn_x_prep",
+   "route": "fit: _cls[csb1_part, csb_fold] (means only) -> lda_prep -> _qda_cov -> eigh -> qda_prep; predict/proba: qda_dec",
+   "controls": [
+    "c56_qda_project"
+   ],
+   "interaction_groups": [],
+   "not_reached": [
+    "c61_da (no shrinkage: no class variance)"
+   ]
+  }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP",
+   "reason": "measured loser: serial (class-group, column) walk of all n rows twice, plain f32 sums; gaussian-nb taxi 3.76x NV / 7.30x AMD and quality failed (gaussian-nb taxi, lda-clf istella). Code deleted; row in docs/apple-fast/EXPERIMENTS.md"
+  },
+  {
+   "define": "MOJOLEARN_C56_QDA_PROJECT4",
+   "reason": "renamed into the arms switch MOJOLEARN_CLASSICAL_C56_QDA_PROJECT=4"
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C04_LOAD_CENTER (LDA half)",
+   "reason": "LDA use split to MOJOLEARN_CLASSICAL_C04_LDA; C04_LOAD_CENTER now only reaches PCA"
+  }
+ ]
+}
