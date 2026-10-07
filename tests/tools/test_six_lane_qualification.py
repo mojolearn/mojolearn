@@ -47,6 +47,10 @@ class QualificationFactsTest(unittest.TestCase):
         self.assertEqual(result['nvidia_amd_same_arm_output_and_state'], {'MATCH': 2})
         self.assertEqual(result['missing_identity_columns']['apple'], 1)
         self.assertFalse(result['full_identity_qualified'])
+        identity['cases'].append(dict(nvidia_amd={}))
+        result = summarize(self.review, identity)
+        self.assertEqual(result['identity_cases'], 2)
+        self.assertEqual(result['cases_without_nvidia_amd_comparison'], 1)
 
     def test_unknown_metrics_do_not_claim_baseline_nonregression(self):
         review = copy.deepcopy(self.review)

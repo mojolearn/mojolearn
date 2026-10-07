@@ -204,7 +204,7 @@ This summary covers the named continuation across its recorded vendors. Pending 
 | Candidate versus incumbent task quality | {'SAME': 140, 'WORSE': 36, 'BETTER': 32} |
 | Independent full-workload reference coverage | {'ROSTER_NOT_RECORDED': 208} |
 | NVIDIA/AMD same-arm outputs and complete declared model state | {'MATCH': 200} comparisons |
-| Existing full-identity report | RECORDED; qualified: False |
+| Existing full-identity report | RECORDED; 108 cases; 8 without a NVIDIA/AMD comparison; qualified: False |
 | Missing columns in the existing identity report | {'apple': 100, 'host': 100, 'nvidia-ptx': 100} cases |
 | Durable local and R2 retention by vendor | {'nvidia': True, 'amd': True} (true means complete for this run) |
 | Original qualification verdicts | {'PENDING': 172, 'QUALITY_FAILED': 36}; retained unchanged |

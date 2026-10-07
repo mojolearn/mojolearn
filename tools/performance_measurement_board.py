@@ -352,7 +352,7 @@ def write(board, out):
                       '| Candidate versus incumbent task quality | '+escape(q['baseline_quality'])+' |',
                       '| Independent full-workload reference coverage | '+escape(q['independent_references'])+' |',
                       '| NVIDIA/AMD same-arm outputs and complete declared model state | '+escape(q['nvidia_amd_same_arm_output_and_state'])+' comparisons |',
-                      '| Existing full-identity report | '+escape(q['identity_report_status'])+'; qualified: '+escape(q['full_identity_qualified'])+' |',
+                      '| Existing full-identity report | '+escape(q['identity_report_status'])+'; '+str(q['identity_cases'])+' cases; '+str(q['cases_without_nvidia_amd_comparison'])+' without a NVIDIA/AMD comparison; qualified: '+escape(q['full_identity_qualified'])+' |',
                       '| Missing columns in the existing identity report | '+escape(q['missing_identity_columns'])+' cases |',
                       '| Durable local and R2 retention by vendor | '+escape(q['preservation_by_vendor'])+' (true means complete for this run) |',
                       '| Original qualification verdicts | '+escape(q['raw_quality_counts'])+'; retained unchanged |',

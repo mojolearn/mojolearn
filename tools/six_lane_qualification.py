@@ -66,6 +66,8 @@ def summarize(review, identity=None, preservation=None):
         baseline_quality=dict(baseline), independent_references=dict(references),
         nvidia_amd_same_arm_output_and_state=dict(same_arm), missing_identity_columns=dict(missing),
         identity_report_status='RECORDED' if identity is not None else 'NOT_RECORDED',
+        identity_cases=len(identity.get('cases', [])) if identity is not None else 0,
+        cases_without_nvidia_amd_comparison=sum(not c.get('nvidia_amd') for c in identity.get('cases', [])) if identity is not None else 0,
         full_identity_qualified=full, preservation_by_vendor=retained,
         promotion_authorized=False, rows=current,
         scope='Current saved review facts, not additional measurements or new acceptance requirements. '

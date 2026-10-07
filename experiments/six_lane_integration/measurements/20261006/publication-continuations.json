@@ -17,22 +17,22 @@
         },
         {
           "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
-          "sha256": "dece165bf798c1778e5be69bf3111f520c12cac336ef3f414f3547452622e9a9",
-          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/dece165bf798c1778e5be69bf3111f520c12cac336ef3f414f3547452622e9a9/targeted-quality.json",
+          "sha256": "6313f7b2bb43c3a6ea272dfba7b8ab2972d54220097099c5e5ca3ce846b14a02",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/6313f7b2bb43c3a6ea272dfba7b8ab2972d54220097099c5e5ca3ce846b14a02/targeted-quality.json",
           "kind": "quality_review",
           "status": "RETAINED"
         },
         {
           "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
-          "sha256": "dece165bf798c1778e5be69bf3111f520c12cac336ef3f414f3547452622e9a9",
-          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/dece165bf798c1778e5be69bf3111f520c12cac336ef3f414f3547452622e9a9/targeted-quality.json",
+          "sha256": "6313f7b2bb43c3a6ea272dfba7b8ab2972d54220097099c5e5ca3ce846b14a02",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/6313f7b2bb43c3a6ea272dfba7b8ab2972d54220097099c5e5ca3ce846b14a02/targeted-quality.json",
           "kind": "quality",
           "status": "RETAINED"
         },
         {
           "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-identity.json",
-          "sha256": "8bbd91f5d37f868f300c0f084b8162955a96b229b55f420fe55a98788b97671f",
-          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8bbd91f5d37f868f300c0f084b8162955a96b229b55f420fe55a98788b97671f/targeted-identity.json",
+          "sha256": "d28c10e5b016f884f650819ccb108ae358b66cdd00da0507f9b155175c64ef38",
+          "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/d28c10e5b016f884f650819ccb108ae358b66cdd00da0507f9b155175c64ef38/targeted-identity.json",
           "kind": "identity",
           "status": "RETAINED"
         },
@@ -93,6 +93,8 @@
           "nvidia-ptx": 100
         },
         "identity_report_status": "RECORDED",
+        "identity_cases": 108,
+        "cases_without_nvidia_amd_comparison": 8,
         "full_identity_qualified": false,
         "preservation_by_vendor": {
           "nvidia": true,
@@ -4473,15 +4475,15 @@
         "evidence": {
           "quality": {
             "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-quality.json",
-            "sha256": "dece165bf798c1778e5be69bf3111f520c12cac336ef3f414f3547452622e9a9",
-            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/dece165bf798c1778e5be69bf3111f520c12cac336ef3f414f3547452622e9a9/targeted-quality.json",
+            "sha256": "6313f7b2bb43c3a6ea272dfba7b8ab2972d54220097099c5e5ca3ce846b14a02",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/6313f7b2bb43c3a6ea272dfba7b8ab2972d54220097099c5e5ca3ce846b14a02/targeted-quality.json",
             "kind": "quality",
             "status": "RETAINED"
           },
           "identity": {
             "source": "/Users/andrewhendel/mojolearn-evidence/targeted-ab-20261007/quality-review/targeted-identity.json",
-            "sha256": "8bbd91f5d37f868f300c0f084b8162955a96b229b55f420fe55a98788b97671f",
-            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/8bbd91f5d37f868f300c0f084b8162955a96b229b55f420fe55a98788b97671f/targeted-identity.json",
+            "sha256": "d28c10e5b016f884f650819ccb108ae358b66cdd00da0507f9b155175c64ef38",
+            "snapshot": "experiments/six_lane_integration/measurements/20261006/publication-inputs/d28c10e5b016f884f650819ccb108ae358b66cdd00da0507f9b155175c64ef38/targeted-identity.json",
             "kind": "identity",
             "status": "RETAINED"
           },
