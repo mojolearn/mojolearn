@@ -2182,34 +2182,34 @@ def gmm_m_step(
     # lane classical-te-gmm (2026-10-07): the symmetric covariance cover (mixture/cov_sym.mojo),
     # on the plain per-component path only; sym_h = 0 leaves the incumbent launches
     var sym_h = 0
-    var sym_bufs = List[DeviceBuffer[DType.float32]]()
     comptime if GMM_COV_SYM:
         sym_h = gmm_cov_sym_split(d)
         if sabotage != 0 or fast_gram or paired:
             sym_h = 0
-        if sym_h > 0:
-            var sw = d - sym_h
-            # 0 scaled[:, :h] (n x h), 1 scaled[:, h:] (n x (d-h)), 2 diff[:, h:] (n x (d-h)) after denom,
-            # 3 raw rows [0, h) (h x d), 4 raw's (d-h) x (d-h) block from h*d on
-            sym_bufs.append(scratch.create_sub_buffer[DType.float32](n * d, n * sym_h))
-            sym_bufs.append(scratch.create_sub_buffer[DType.float32](n * d + n * sym_h, n * sw))
-            sym_bufs.append(scratch.create_sub_buffer[DType.float32](2 * n * d + raw_max + 1, n * sw))
-            sym_bufs.append(scratch.create_sub_buffer[DType.float32](2 * n * d, sym_h * d))
-            sym_bufs.append(scratch.create_sub_buffer[DType.float32](2 * n * d + sym_h * d, sw * sw))
     for kc in range(ncomp_loop):
         comptime if GMM_COV_SYM:
             if sym_h > 0:
+                # Views of `scratch` as fresh locals (the incumbent's pattern on the paired path below): two
+                # reads of one List inside a single call alias for the compiler; separate locals do not.
+                var sym_sw = d - sym_h
+                # scaled[:, :h] (n x h), scaled[:, h:] (n x (d-h)), diff[:, h:] (n x (d-h)) after denom,
+                # raw rows [0, h) (h x d), raw's (d-h) x (d-h) block from h*d on
+                var sym_scaled_lo = scratch.create_sub_buffer[DType.float32](n * d, n * sym_h)
+                var sym_scaled_hi = scratch.create_sub_buffer[DType.float32](n * d + n * sym_h, n * sym_sw)
+                var sym_diff_hi = scratch.create_sub_buffer[DType.float32](2 * n * d + raw_max + 1, n * sym_sw)
+                var sym_raw_rows = scratch.create_sub_buffer[DType.float32](2 * n * d, sym_h * d)
+                var sym_raw_block = scratch.create_sub_buffer[DType.float32](2 * n * d + sym_h * d, sym_sw * sym_sw)
                 ctx.enqueue_function[center_scale_sym_kernel](
                     x.unsafe_ptr(), means.unsafe_ptr(), resp.unsafe_ptr(), diff.unsafe_ptr(), scaled.unsafe_ptr(),
-                    sym_bufs[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    sym_diff_hi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
                     Int32(n), Int32(d), Int32(sym_h), Int32(kc), Int32(ncomp),
                     grid_dim=(grid_nd, 1, 1),
                     block_dim=(elem_tpb, 1, 1),
                 )
                 # rows [0, h) of `scaled^T . diff`, every column: h x d over n (OP_TN, the incumbent's words)
-                identical_gemm_into(ctx, sym_bufs[3], sym_bufs[0], diff, gws, sym_h, d, n, OP_TN)
+                identical_gemm_into(ctx, sym_raw_rows, sym_scaled_lo, diff, gws, sym_h, d, n, OP_TN)
                 # the (d-h) x (d-h) block: `scaled[:, h:]^T . diff[:, h:]`
-                identical_gemm_into(ctx, sym_bufs[4], sym_bufs[1], sym_bufs[2], gws, d - sym_h, d - sym_h, n, OP_TN)
+                identical_gemm_into(ctx, sym_raw_block, sym_scaled_hi, sym_diff_hi, gws, d - sym_h, d - sym_h, n, OP_TN)
                 ctx.enqueue_function[cov_finish_sym_kernel](
                     raw.unsafe_ptr(), nk.unsafe_ptr(), cov.unsafe_ptr(), Int32(d), Int32(sym_h), Int32(kc), reg_covar,
                     divide_after,
