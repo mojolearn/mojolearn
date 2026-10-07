@@ -3549,8 +3549,9 @@ def main(argv=None):
     except (OSError, ValueError) as exc:
         raise SystemExit("bench_board: artifact guard: " + str(exc))
     guarded_smoke_override = validate_guarded_smoke_override(args, artifact_identity)
-    if artifact_identity and (vendor != "nvidia" or modes != ["identical"]):
-        raise SystemExit("bench_board: guarded path comparison requires NVIDIA IDENTICAL only")
+    if artifact_identity and (modes != ["identical"] or
+            {"nvidia": "cuda", "amd": "hip"}.get(vendor) != artifact_identity.get("vendor", "cuda")):
+        raise SystemExit("bench_board: guarded board vendor/mode must match its explicit IDENTICAL artifact identity")
     gate = None
     if full:
         gate = "overridden (--no-smoke-gate)" if args.no_smoke_gate else None
@@ -3607,10 +3608,8 @@ def main(argv=None):
     box = box_fingerprint(ctx)
     if artifact_identity:
         box["artifact_identity"] = artifact_identity
-        box["artifact_hardware"] = capture(["nvidia-smi", "--query-gpu=uuid,name,compute_cap,driver_version",
-                                             "--format=csv,noheader,nounits"], timeout=30).strip()
-        if not box["artifact_hardware"] or "\n" in box["artifact_hardware"]:
-            raise SystemExit("bench_board: guarded run requires exactly one physical NVIDIA GPU")
+        box["artifact_hardware"] = _load_tool("bench_board_provenance").hardware_receipt(
+            "cuda" if vendor == "nvidia" else "hip")
         ctx["artifact_hardware"] = box["artifact_hardware"]
     ctx["box"] = box
     ctx["retime"] = args.retime_opponents
