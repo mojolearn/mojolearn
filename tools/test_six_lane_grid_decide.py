@@ -102,5 +102,63 @@ class DecideTests(unittest.TestCase):
             self.assertIn('on for classical:a1; off for classical:a3', md)
 
 
+def acase(config, wid, verdict, ratio, nv_verdict=None):
+    """An M3 FAST case: apple is the one voter; a stray nvidia row must not count."""
+    vendors = {'apple': dict(candidate_over_baseline=dict(scored=ratio), verdict=verdict, evidence='m3')}
+    if nv_verdict:
+        vendors['nvidia'] = dict(candidate_over_baseline=dict(scored=0.01), verdict=nv_verdict, evidence='nv')
+    return dict(configuration=config, workload_id=wid, verdict=nv_verdict or verdict, vendors=vendors)
+
+
+class FastDecideTests(unittest.TestCase):
+    def setUp(self):
+        A1, A2 = 'algos:a1', 'trees:a2'
+        self.configs = [cfg(A1, {'x': 'on'}, 'single'), cfg(A2, {'x': 'on'}, 'single'),
+                        cfg(A1, {'q': 'on'}, 'single'), cfg(A1, {'s': 'on'}, 'single'), cfg(A1, {'n': 'on'}, 'single')]
+        t, q = [], []
+
+        def measure(cid, verdicts, ratios, quality='SAME', nv=None):
+            c = [x for x in self.configs if x['id'] == cid][0]
+            for wid, v, r in zip(c['workloads'], verdicts, ratios):
+                t.append(acase(cid, wid, v, r, nv))
+                lane, ds = wid.split('@dataset=')
+                q.append(dict(configuration=cid, lane=lane.split(':')[1], dataset=ds, vendor='apple',
+                              candidate_vs_baseline=dict(verdict=quality)))
+
+        measure('G.algos:a1.x=on', ['FASTER', 'NO_VERDICT'], [0.6, 1.0], nv='SLOWER')   # nvidia SLOWER must not vote
+        measure('G.trees:a2.x=on', ['FASTER', 'FASTER'], [0.5, 0.7])
+        measure('G.algos:a1.q=on', ['FASTER', 'FASTER'], [0.5, 0.5], quality='WORSE')
+        measure('G.algos:a1.s=on', ['SLOWER', 'NO_VERDICT'], [1.3, 1.0])
+        measure('G.algos:a1.n=on', ['NO_VERDICT', 'NO_VERDICT'], [1.0, 1.0])
+        self.matrix = dict(schema='m', mode='fast', configurations=self.configs)
+        self.dec = D.decide(self.matrix, D.timing_index([dict(cases=t)], voters=D.FAST_VOTERS), {},
+                            D.quality_index([dict(rows=q)]), mode='fast')
+
+    def test_no_identity_needed(self):
+        c = self.dec['controls']
+        self.assertEqual(c['x']['recommendation'], 'PROMOTE')        # promoted with no identity evidence at all
+        rows = self.dec['configurations']['G.algos:a1.x=on']['rows']
+        self.assertEqual({r['identity'] for r in rows}, {'NOT_REQUIRED'})
+        self.assertEqual(rows[0]['ratios'], {'apple': 0.6})          # one voter: only the M3 ratio counts
+        self.assertTrue(self.dec['rule']['identity'].startswith('NOT_REQUIRED'))
+
+    def test_quality_gate_and_losers(self):
+        c = self.dec['controls']
+        self.assertEqual(c['q']['recommendation'], 'HOLD_QUALITY')
+        self.assertEqual(c['s']['recommendation'], 'DELETE')
+        self.assertEqual(c['n']['recommendation'], 'DELETE')         # noise is a loser
+        self.assertNotIn('HOLD_IDENTITY', {v['recommendation'] for v in c.values()})
+
+    def test_identical_mode_still_requires_identity(self):
+        dec = D.decide(self.matrix, D.timing_index([dict(cases=[acase('G.trees:a2.x=on', w, 'FASTER', 0.5) for w in self.configs[1]['workloads']])]),
+                       {}, {}, mode='identical')
+        self.assertEqual(dec['configurations']['G.trees:a2.x=on']['verdict'], 'IDENTITY_INCOMPLETE')
+
+    def test_fast_markdown(self):
+        md = D.render_md(self.dec)
+        self.assertIn('# FAST switch grid decisions (Apple M3)', md)
+        self.assertIn('| x | PROMOTE |', md)
+
+
 if __name__ == '__main__':
     unittest.main()
