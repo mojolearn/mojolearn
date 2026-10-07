@@ -31,6 +31,9 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1"]() or is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2"]() or is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_4"]() or is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_16"]() or is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_32"]()), "retired: use -D MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1|2|4|8|16|32"
     comptime KCC = get_defined_int["MOJOLEARN_IDN_KMEANS_CONV_CHUNK",8]()
     comptime assert KCC == 1 or KCC == 2 or KCC == 4 or KCC == 8 or KCC == 16 or KCC == 32, "invalid MOJOLEARN_IDN_KMEANS_CONV_CHUNK (1|2|4|8|16|32)"
+    # Lane grid-prune (2026-10-07): c06_norms is ONE control with arms {rows2, rows4, small_d}; small_d returns before
+    # norm_rows when d <= 32 (core/row_norms.mojo:220-232), so the pair is never a distinct configuration.
+    comptime assert not (is_defined["MOJOLEARN_CLASSICAL_C06_NORM_ROWS"]() and is_defined["MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"]()), "c06_norms takes one arm: MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2|4 or MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD, not both"
     comptime assert get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 0 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 1024 or get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",0]() == 4096, "invalid MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS (1024|4096)"
     comptime assert not is_defined["MOJOLEARN_C58_TEAM64"](), "retired: use -D MOJOLEARN_C58_TEAM_MIB=64|256"
     comptime assert get_defined_int["MOJOLEARN_C58_TEAM_MIB",256]() == 64 or get_defined_int["MOJOLEARN_C58_TEAM_MIB",256]() == 256, "invalid MOJOLEARN_C58_TEAM_MIB (64|256)"

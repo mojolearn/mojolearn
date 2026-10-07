@@ -9,15 +9,8 @@
    "kind": "arms",
    "arms": {
     "tiled": [],
-    "rows2": [
-     "MOJOLEARN_KMEANS_ROW_ASSIGN=2"
-    ],
     "rows4": [
      "MOJOLEARN_KMEANS_ROW_ASSIGN=4"
-    ],
-    "direct2": [
-     "MOJOLEARN_KMEANS_ROW_ASSIGN=2",
-     "MOJOLEARN_KMEANS_DIRECT_DISTANCE"
     ],
     "direct4": [
      "MOJOLEARN_KMEANS_ROW_ASSIGN=4",
@@ -36,7 +29,8 @@
    "binding": "_mojolearn",
    "bits_change": "rows2/rows4: false (incumbent chain); direct2/direct4: true (host column kmeans_oracle follows KMEANS_DIRECT_DISTANCE)",
    "status": "split_from:C30_DIRECT_DISTANCE+C36_CENTROID_TILES (C30_ROWS_4/C36_ROWS_4 merged)",
-   "note": "expanded row arms only while k*d <= 512 (cost rule), else the tiled kernel; direct arms at every size and also in k-means++, k-means|| and transform, and skip the X/candidate norms they never read. MOJOLEARN_KMEANS_DIRECT_DISTANCE alone is a compile error."
+   "note": "expanded row arms only while k*d <= 512 (cost rule), else the tiled kernel; direct arms at every size and also in k-means++, k-means|| and transform, and skip the X/candidate norms they never read. MOJOLEARN_KMEANS_DIRECT_DISTANCE alone is a compile error.",
+   "prune_note": "R=4 reuses each centroid load 4x vs 2x; at millions of rows both R saturate the GPU (classical_assignment.mojo:14-49). direct4 is the probable istella loser (ungated row kernel at k*d=1760, min_cluster_distance_compute.mojo:104)."
   },
   "c37_fused_accumulate": {
    "define": "MOJOLEARN_C37_FUSED_ACCUMULATE",
@@ -63,9 +57,6 @@
    "kind": "int_sweep",
    "arms": {
     "256": [],
-    "512": [
-     "MOJOLEARN_C37_FUSED_ROWS=512"
-    ],
     "1024": [
      "MOJOLEARN_C37_FUSED_ROWS=1024"
     ]
@@ -227,73 +218,44 @@
    "status": "split_from:C30_DIRECT_DISTANCE",
    "note": "ivf identical_ivf_scan, ivf_balanced_tasks, ivf_flat_search tile, ivf_host twin"
   },
-  "c06_norm_rows": {
-   "define": "MOJOLEARN_CLASSICAL_C06_NORM_ROWS",
+  "c06_norms": {
+   "define": "MOJOLEARN_CLASSICAL_C06_NORM_ROWS / MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD",
    "kind": "arms",
    "arms": {
     "off": [],
-    "2": [
+    "rows2": [
      "MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2"
     ],
-    "4": [
+    "rows4": [
      "MOJOLEARN_CLASSICAL_C06_NORM_ROWS=4"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/shared_controls.mojo:21",
-    "core/row_norms.mojo:228"
-   ],
-   "binding": "_mojolearn",
-   "bits_change": "unverified (old C06 batched tree adds ftz)",
-   "status": "rewritten (was C06_ROWS2/C06_ROWS4)"
-  },
-  "c06_small_d_thread": {
-   "define": "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
+    ],
+    "small_d": [
      "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"
     ]
    },
    "default": "off",
    "source": [
+    "experiments/classical_identical_ideas/shared_controls.mojo:21",
+    "core/row_norms.mojo:228",
     "experiments/classical_identical_ideas/shared_controls.mojo:28",
     "core/row_norms.mojo:139,220"
    ],
    "binding": "_mojolearn",
-   "bits_change": false,
-   "status": "new",
-   "note": "one thread per row while d <= 32, replays the incumbent halving tree"
+   "bits_change": true,
+   "status": "merged",
+   "merged_from": [
+    "c06_norm_rows",
+    "c06_small_d_thread",
+    "MOJOLEARN_CLASSICAL_C06_NORM_ROWS",
+    "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"
+   ],
+   "note": "One control, one arm per run: small_d returns before norm_rows when d<=32 (row_norms.mojo:220-232), so every cross of the two old controls equals a single on each workload. The two defines are refused together in core/six_lane_experiment_guards.mojo. Not on classical:kmeans (X norms once per fit, kmeans.mojo:1590-1594)."
   }
  },
  "algorithms": {
   "classical:kmeans": {
    "binding": "_mojolearn (host twin _mojolearn_core_host)",
    "route": "fit: cluster.estimator kmeans_fit -> k-means|| / k-means++ (min_cluster_and_distance_compute, gemm_nt or direct trial) -> Lloyd loop (fused C37 pass, or min_cluster_and_distance_compute[_gated] + launch_accumulate_*_blocked + fold) -> finalize; predict: min_cluster_and_distance_compute",
-   "controls": [
-    "kmeans_assign",
-    "c37_fused_accumulate",
-    "c37_fused_rows",
-    "c06_norm_rows",
-    "c06_small_d_thread"
-   ],
-   "interaction_groups": [
-    [
-     "kmeans_assign",
-     "c37_fused_accumulate",
-     "c37_fused_rows"
-    ],
-    [
-     "c06_norm_rows",
-     "c06_small_d_thread"
-    ]
-   ]
-  },
-  "more:gmm": {
-   "binding": "_mojolearn_mixture",
-   "route": "fit: mixture/estimator.mojo:80 init_params=kmeans -> cluster.estimator.kmeans_fit (same as classical:kmeans)",
    "controls": [
     "kmeans_assign",
     "c37_fused_accumulate",
@@ -306,6 +268,13 @@
      "c37_fused_rows"
     ]
    ]
+  },
+  "more:gmm": {
+   "binding": "_mojolearn_mixture",
+   "route": "fit: mixture/estimator.mojo:80 init_params=kmeans -> cluster.estimator.kmeans_fit (same as classical:kmeans)",
+   "controls": [],
+   "interaction_groups": [],
+   "notes": "kmeans_conv_chunk, kmeans_assign, c37_fused_accumulate and c37_fused_rows are decided on classical:kmeans only (GMM runs kmeans_fit only as init, mixture/estimator.mojo:711); phase 2 adds one confirm config here with the kmeans winner."
   },
   "expanded:minibatch-kmeans": {
    "binding": "_mojolearn_x_cluster",
@@ -331,24 +300,17 @@
    "binding": "_mojolearn_ivf",
    "route": "build: coarse kmeans (cluster kmeans_fit); search: ivf_flat_search pinned tile + identical_ivf_scan",
    "controls": [
-    "ivf_direct",
-    "kmeans_assign",
-    "c37_fused_accumulate"
+    "ivf_direct"
    ],
-   "interaction_groups": [
-    [
-     "kmeans_assign",
-     "c37_fused_accumulate"
-    ]
-   ]
+   "interaction_groups": [],
+   "notes": "kmeans_conv_chunk, kmeans_assign and c37_fused_accumulate are decided on classical:kmeans only (ivf/estimator.mojo:93 runs kmeans_fit); phase 2 adds one confirm config here with the kmeans winner."
   },
   "classical:knn": {
    "binding": "_mojolearn",
    "route": "knn_brute_force (pinned tile / stream top-k) ; host twin knn_host_predict",
    "controls": [
     "knn_direct",
-    "c06_norm_rows",
-    "c06_small_d_thread"
+    "c06_norms"
    ],
    "interaction_groups": []
   },
@@ -357,9 +319,10 @@
    "route": "density.py:844 -> _mojolearn_estimators kde_score_samples(_resident) -> kernel_density + kde/impl/distance",
    "controls": [
     "kde_direct",
-    "c06_norm_rows"
+    "c06_norms"
    ],
-   "interaction_groups": []
+   "interaction_groups": [],
+   "notes": "Only c06_norms=rows2 c06_norms=rows4 reach this lane."
   },
   "classical:dbscan": {
    "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
