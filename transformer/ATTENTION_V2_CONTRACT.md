@@ -50,7 +50,7 @@ python -m unittest tools.tests.test_attention_v2_oracle -v
 
 ## NI20 selectable model profile, source delivery 2026-10-06
 
-`MOJOLEARN_IDN_ATTENTION_V2=1` selects the new
+`MOJOLEARN_IDN_ATTN_SOFTMAX=2=1` selects the new
 `attention-online-tile32.fp32.v2` model profile in IDENTICAL builds only;
 `MOJOLEARN_IDN_ALL_OFF` suppresses it. The default remains V1. This source has
 not been compiled, executed, tested, timed or verified. Prior standalone
