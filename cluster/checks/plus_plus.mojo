@@ -19,7 +19,7 @@ two candidates tie to the last bit, a different order picks a different
 centroid and the whole fit diverges. Ties at that precision are not expected
 and are not impossible.
 """
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -84,7 +84,7 @@ def candidate_cost_kernel(
                 ftz(ftz(x_norm.unsafe_load(i)) + ftz(cn)),
             )
         )
-        comptime if C30_DIRECT_DISTANCE:
+        comptime if KMEANS_DIRECT_DISTANCE:
             d = z.unsafe_load(i * n_trials + trial)
         if d <= Float32(0.0):
             d = Float32(0.0)
@@ -133,7 +133,7 @@ def adopt_candidate_min_kernel(
                 ftz(ftz(x_norm.unsafe_load(i)) + ftz(cn)),
             )
         )
-        comptime if C30_DIRECT_DISTANCE:
+        comptime if KMEANS_DIRECT_DISTANCE:
             d = z.unsafe_load(i * n_trials + trial)
         if d <= Float32(0.0):
             d = Float32(0.0)

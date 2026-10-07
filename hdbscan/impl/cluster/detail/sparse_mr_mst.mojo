@@ -42,7 +42,7 @@ NON-FINITE WEIGHTS. Round 1 searches every point against every other, so
 every edge weight is computed at least once; a NaN or infinite weight is
 reported by its point and refused by name (DEVIATION 1607's rule).
 """
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
 from core.classical_distance import direct_distance_step
 from checks.numerics import identical_sqrt
 from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
@@ -91,7 +91,7 @@ comptime SMR_KEY_MIN: Int32 = -0x7FFFFFFF - 1
 
 @always_inline
 def _c30_mr_edge_weight(acc: Float32, na: Float32, nb: Float32, ca: Float32, cb: Float32, inv_alpha: Float32, sabotage: Int32) -> Float32:
-    comptime if C30_DIRECT_DISTANCE:
+    comptime if GRAPH_DIRECT_DISTANCE:
         var d = Float32(0) if acc <= Float32(0) else acc
         return mr_max3(ca,cb,mr_scale(inv_alpha,ftz(identical_sqrt(d))),sabotage)
     else:
@@ -147,7 +147,7 @@ def sparse_mr_search_kernel(
             continue
         var acc = Float32(0.0)
         for f in range(d):
-            comptime if C30_DIRECT_DISTANCE:
+            comptime if GRAPH_DIRECT_DISTANCE:
                 acc = direct_distance_step[1](acc,xt[f*m+i],x[j*d+f])
             else:
                 acc = ftz(identical_mul_add(ftz(xt[f * m + i]), ftz(x[j * d + f]), acc))
@@ -338,7 +338,7 @@ def sparse_mr_search_tiled_kernel(
                     bv[c] = b_s[unsafe_offset = kk * SMR_TJ + tx + c * SMR_TX]
                 comptime for r in range(SMR_RI):
                     comptime for c in range(SMR_RJ):
-                        comptime if C30_DIRECT_DISTANCE:
+                        comptime if GRAPH_DIRECT_DISTANCE:
                             acc[r*SMR_RJ+c] = direct_distance_step[1](acc[r*SMR_RJ+c],av[r],bv[c])
                         else:
                             acc[r * SMR_RJ + c] = ftz(

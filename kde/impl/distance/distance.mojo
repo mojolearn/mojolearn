@@ -56,7 +56,7 @@ row-major only (cuML hands KDE C-contiguous arrays, `kernel_density.py:
 norm workspace is allocated here.
 """
 
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
 from core.classical_distance import direct_squared_distance
 from checks.numerics import ftz, identical_sqrt
 from std.gpu import block_idx, block_dim, thread_idx
@@ -65,7 +65,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.row_norms import enqueue_row_norms, NORM_TPB, row_norm_kernel
-from experiments.classical_identical_ideas.shared_controls import C06_ROWS2, C06_ROWS4
+from experiments.classical_identical_ideas.shared_controls import C06_ROWS_ON
 from kde.impl.distance.distance_ops import (
     DIST_COSINE_EXPANDED,
     DIST_L1,
@@ -79,6 +79,7 @@ from kde.impl.distance.distance_ops import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.checks.pinned_distance_tile import (
     pinned_distance_tile_kernel,
+    pinned_distance_tile_direct_kernel,
 )
 from neighbors.impl.distance.detail.distance_ops import (
     COSINE_NORM_TPB,
@@ -142,7 +143,7 @@ def pairwise_distance(
     var cells = m * n
     var grid = (cells + elem_tpb - 1) // elem_tpb
 
-    comptime if C30_DIRECT_DISTANCE:
+    comptime if KDE_DIRECT_DISTANCE:
         if metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_UNEXPANDED:
             ctx.enqueue_function[kde_direct_distance_kernel](dist.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(),
                 Int32(m), Int32(n), Int32(k), Int32(1 if metric == DIST_L2_SQRT_UNEXPANDED else 0),
@@ -193,7 +194,7 @@ def pairwise_distance(
         # C06 batches independent norm rows; the shared norm now uses the
         # same portable sqrt as cosine, with the same logical halving tree.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        comptime if C06_ROWS2 or C06_ROWS4:
+        comptime if C06_ROWS_ON:
             comptime assert NORM_TPB == COSINE_NORM_TPB
             enqueue_row_norms(ctx, xn, x, m, k, 1)
             enqueue_row_norms(ctx, yn, y, n, k, 1)
@@ -268,7 +269,7 @@ def pairwise_distance(
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         # IDENTITY_PATHS row 24: the product and the epilogue as ONE kernel
         # with the feature axis in one thread; the k-NN lane's tile, called.
-        ctx.enqueue_function[pinned_distance_tile_kernel](
+        ctx.enqueue_function[pinned_distance_tile_direct_kernel[KDE_DIRECT_DISTANCE]](
             dist.unsafe_ptr(),
             x.unsafe_ptr(),
             y.unsafe_ptr(),

@@ -106,7 +106,7 @@ from std.memory import bitcast
 from std.sys.info import has_apple_gpu_accelerator
 
 from experiments.classical_identical_ideas.stats_controls import C52_PAIR, C52_ROWS
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
 from core.classical_distance import direct_distance_step
 from kde.pair_lse import pair_parts, pair_row
 from std.gpu import block_dim, block_idx, thread_idx
@@ -1836,7 +1836,7 @@ def kde_tiled_logk_kernel(
                         )
                         var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
                         var diff = ftz_simd[KDE_TILED_CELL](qv - row)
-                        acc = (direct_distance_step[KDE_TILED_CELL](acc, diff, SIMD[DType.float32, KDE_TILED_CELL](0)) if C30_DIRECT_DISTANCE else ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc)))
+                        acc = (direct_distance_step[KDE_TILED_CELL](acc, diff, SIMD[DType.float32, KDE_TILED_CELL](0)) if KDE_DIRECT_DISTANCE else ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc)))
                 elif metric == DIST_L1:
                     for feat in range(feats):
                         var qv = SIMD[DType.float32, KDE_TILED_CELL](
@@ -3642,7 +3642,7 @@ def kde_chunk_lse_kernel(
                         )
                         var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
                         var diff = ftz_simd[KDE_TILED_CELL](qv - row)
-                        acc = (direct_distance_step[KDE_TILED_CELL](acc, diff, SIMD[DType.float32, KDE_TILED_CELL](0)) if C30_DIRECT_DISTANCE else ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc)))
+                        acc = (direct_distance_step[KDE_TILED_CELL](acc, diff, SIMD[DType.float32, KDE_TILED_CELL](0)) if KDE_DIRECT_DISTANCE else ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc)))
                 elif metric == DIST_L1:
                     for feat in range(feats):
                         var qv = SIMD[DType.float32, KDE_TILED_CELL](

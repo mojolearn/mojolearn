@@ -22,7 +22,7 @@ the same order:
     which lane saw a candidate or in what probe order.
 """
 from core.classical_distance import direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
 
 
 from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
@@ -97,8 +97,8 @@ def identical_ivf_scan_kernel[KM: Int](
             var row = list_data + pos * dim
             var acc = Float32(0.0)
             for f in range(dim):
-                acc = direct_distance_step[1](acc,(qv[f] if staged_dim > 0 else ftz(queries[q * dim + f])),ftz(row[f])) if C30_DIRECT_DISTANCE else ftz(identical_mul_add((qv[f] if staged_dim > 0 else ftz(queries[q * dim + f])), ftz(row[f]), acc))
-            var d = acc if C30_DIRECT_DISTANCE else ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(list_norm[pos]))))
+                acc = direct_distance_step[1](acc,(qv[f] if staged_dim > 0 else ftz(queries[q * dim + f])),ftz(row[f])) if IVF_DIRECT_DISTANCE else ftz(identical_mul_add((qv[f] if staged_dim > 0 else ftz(queries[q * dim + f])), ftz(row[f]), acc))
+            var d = acc if IVF_DIRECT_DISTANCE else ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(list_norm[pos]))))
             if d <= Float32(0.0):
                 d = Float32(0.0)
             var key = _key(d)
@@ -263,10 +263,10 @@ def identical_ivf_scan_staged_kernel[KM: Int](
             if mine:
                 var trow = tile + lane * IIVF_CHP
                 for f in range(cnt):
-                    acc = direct_distance_step[1](acc,(qv[c0 + f] if staged_dim > 0 else ftz(queries[q * dim + c0 + f])),ftz(trow[f])) if C30_DIRECT_DISTANCE else ftz(identical_mul_add((qv[c0 + f] if staged_dim > 0 else ftz(queries[q * dim + c0 + f])), ftz(trow[f]), acc))
+                    acc = direct_distance_step[1](acc,(qv[c0 + f] if staged_dim > 0 else ftz(queries[q * dim + c0 + f])),ftz(trow[f])) if IVF_DIRECT_DISTANCE else ftz(identical_mul_add((qv[c0 + f] if staged_dim > 0 else ftz(queries[q * dim + c0 + f])), ftz(trow[f]), acc))
             barrier()
         if mine:
-            var d = acc if C30_DIRECT_DISTANCE else ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(list_norm[pos]))))
+            var d = acc if IVF_DIRECT_DISTANCE else ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(list_norm[pos]))))
             if d <= Float32(0.0):
                 d = Float32(0.0)
             var key = _key(d)
@@ -420,10 +420,10 @@ def identical_ivf_scan_grouped_kernel[KM: Int](
             if mine:
                 var trow = tile + lane * IIVF_CHP
                 for f in range(cnt):
-                    acc = direct_distance_step[1](acc,(qv[c0 + f] if staged_dim > 0 else ftz(queries[q * dim + c0 + f])),ftz(trow[f])) if C30_DIRECT_DISTANCE else ftz(identical_mul_add((qv[c0 + f] if staged_dim > 0 else ftz(queries[q * dim + c0 + f])), ftz(trow[f]), acc))
+                    acc = direct_distance_step[1](acc,(qv[c0 + f] if staged_dim > 0 else ftz(queries[q * dim + c0 + f])),ftz(trow[f])) if IVF_DIRECT_DISTANCE else ftz(identical_mul_add((qv[c0 + f] if staged_dim > 0 else ftz(queries[q * dim + c0 + f])), ftz(trow[f]), acc))
             barrier()
         if mine:
-            var d = acc if C30_DIRECT_DISTANCE else ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(list_norm[pos]))))
+            var d = acc if IVF_DIRECT_DISTANCE else ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(list_norm[pos]))))
             if d <= Float32(0.0):
                 d = Float32(0.0)
             var key = _key(d)

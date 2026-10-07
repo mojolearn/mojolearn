@@ -148,10 +148,8 @@ of its own.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the kmeans lane is the measurement.
 """
-from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS
-from core.classical_centroid import classical_centroid_cell
 from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
@@ -563,7 +561,7 @@ def host_assign(
         var val = FUSED_MAX
         var key = UInt32(0xFFFFFFFF)
         var xn = xnp.unsafe_load(row)
-        comptime if C30_DIRECT_DISTANCE:
+        comptime if KMEANS_DIRECT_DISTANCE:
             # The shared helper only reads these arrays. Its raw-pointer ABI
             # needs an explicit origin; the enclosing Lists retain the storage.
             var raw_x = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(xp))
@@ -825,7 +823,7 @@ def _candidate_distance(
 ) -> Float32:
     """The clamped expanded distance of `candidate_cost_kernel` and
     `adopt_candidate_min_kernel` (`plus_plus.mojo:50, 93`)."""
-    comptime if C30_DIRECT_DISTANCE:
+    comptime if KMEANS_DIRECT_DISTANCE:
         return z[i*n_trials+trial]
     var dd = ftz(
         identical_mul_add(
@@ -876,7 +874,7 @@ def host_kmeans_plus_plus(
                 candidates[t * d + p] = x[sel * d + p]
         var cand_norm = host_row_norms(candidates, n_trials, d, False)
         var z = host_gemm_nt(x, candidates, n, n_trials, d)
-        comptime if C30_DIRECT_DISTANCE:
+        comptime if KMEANS_DIRECT_DISTANCE:
             for row in range(n):
                 for trial in range(n_trials):
                     z[row*n_trials+trial] = direct_squared_distance((host_list_ptr(x)+row*d).unsafe_origin_cast[MutAnyOrigin](),(host_list_ptr(candidates)+trial*d).unsafe_origin_cast[MutAnyOrigin](),d)
@@ -1318,17 +1316,8 @@ def host_fit_main[with_init: Bool = True](
                 else:
                     var s = ftz(Float32(sums_i32[idx]) / sum_scale)
                     new_c[idx] = ftz(s / w)
-            comptime if C37_ROW_PANELS:
-                # Read-only views for the shared raw-pointer helper. These
-                # Lists remain owned here throughout the synchronous fold.
-                var raw_x = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
-                var raw_labels = MutPointer[UInt32, MutAnyOrigin](unsafe_from_address=Int(labels.unsafe_ptr()))
-                var raw_weights = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(weights.unsafe_ptr()))
-                for idx in range(cd):
-                    new_c[idx] = classical_centroid_cell(raw_x,raw_labels,raw_weights,cur[idx],n,d,idx//d,idx%d)
-            comptime if not C37_ROW_PANELS:
-                trace.record_i32(it_tag + "sums_i32", sums_i32)
-                trace.record_i32(it_tag + "weight_i32", weight_i32)
+            trace.record_i32(it_tag + "sums_i32", sums_i32)
+            trace.record_i32(it_tag + "weight_i32", weight_i32)
             trace.record_f32(it_tag + "new_centroids", new_c)
             var shift = host_sum_device(cur, new_c, cd, SUM_MODE_SQDIFF)
             for j in range(cd):
@@ -1642,7 +1631,7 @@ def host_kmeans_transform(
         for col in range(k):
             var acc = host_cell_dot(xp, row, d, ctp, k, col)
             var dist = _assign_dist(acc, xn, cnp.unsafe_load(col))
-            comptime if C30_DIRECT_DISTANCE:
+            comptime if KMEANS_DIRECT_DISTANCE:
                 dist = direct_squared_distance((xp+row*d).unsafe_origin_cast[MutAnyOrigin](),(ctp+col).unsafe_origin_cast[MutAnyOrigin](),d,1,k)
             if is_sqrt:
                 dist = identical_sqrt(dist)

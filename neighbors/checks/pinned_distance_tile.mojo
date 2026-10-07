@@ -46,7 +46,6 @@ THE FAST ARM'S BITS DO NOT MOVE. Nothing here is reachable unless
 calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 """
 from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -81,6 +80,23 @@ def pinned_distance_tile_kernel(
     n_features_in: Int32,
     is_sqrt_in: Int32,
 ):
+    """The expanded-L2 tile: `pinned_distance_tile_direct_kernel[False]`."""
+    pinned_distance_tile_direct_kernel[False](
+        z, q, y, q_norm, y_norm, n_rows_in, n_cols_in, n_features_in, is_sqrt_in
+    )
+
+
+def pinned_distance_tile_direct_kernel[direct: Bool](
+    z: MutPointer[Float32, MutAnyOrigin],
+    q: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    q_norm: MutPointer[Float32, MutAnyOrigin],
+    y_norm: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_cols_in: Int32,
+    n_features_in: Int32,
+    is_sqrt_in: Int32,
+):
     """`z[i][j] = ||q_i||^2 + ||y_j||^2 - 2 q_i . y_j`, clamped at zero.
 
     The dot product is accumulated in ONE thread over the whole feature
@@ -103,7 +119,9 @@ def pinned_distance_tile_kernel(
     var row = idx // n_cols
     var col = idx % n_cols
 
-    comptime if C30_DIRECT_DISTANCE:
+    # `direct`: the calling family's direct-distance switch (KNN, KDE, IVF,
+    # GRAPH in graph_controls.mojo); each host twin follows the same switch.
+    comptime if direct:
         var distance=direct_squared_distance(q+row*d,y+col*d,d)
         z[idx]=ftz(identical_sqrt(distance)) if is_sqrt_in!=0 else distance
         return

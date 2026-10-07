@@ -52,10 +52,13 @@ about restarts is inherently serial, and they are the most obviously
 parallel thing in k-means, so this is the first place to look when the
 control plane becomes the cost. Copied as-is because it is theirs.
 """
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import KMEANS_DIRECT_DISTANCE, C37_FUSED_ACCUMULATE
 from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS, C38_REUSE_NEAREST, C38_DEVICE_POTENTIAL
-from cluster.impl.detail.classical_centroid import classical_centroid_kernel
+from cluster.impl.detail.kmeans_fused_accumulate import (
+    kmeans_fused_fits,
+    kmeans_fused_table_cells,
+    launch_kmeans_fused_accumulate,
+)
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -112,6 +115,7 @@ from cluster.checks.scalable_init import (
 from core.row_norms import NORM_TPB, row_norm_kernel, enqueue_row_norms
 from cluster.impl.detail.kmeans_common import (
     check_convergence,
+    metric_is_sqrt,
 )
 from core.identity_trace import IdentityTrace
 from checks.fixed_point import choose_scale
@@ -408,7 +412,7 @@ def init_random(
 #: coarse quantizer: ~3,000 syncs; IVF-PQ's 55 codebooks: ~42,000). The same
 #: draws and the same first-strict-minimum pick on the device.
 #: -D MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY=1 restores the Apple-only gate.
-comptime KMEANS_FAST_PP_NOSYNC = C38_DEVICE_POTENTIAL or (
+comptime KMEANS_FAST_PP_NOSYNC = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     and (
         has_apple_gpu_accelerator()
@@ -465,7 +469,7 @@ def pp_adopt_dev_kernel(
                 ftz(ftz(x_norm[i]) + ftz(cn)),
             )
         )
-        comptime if C30_DIRECT_DISTANCE:
+        comptime if KMEANS_DIRECT_DISTANCE:
             d = z.unsafe_load(i * n_trials + trial)
         if d <= Float32(0.0):
             d = Float32(0.0)
@@ -485,7 +489,7 @@ def pp_copy_best_kernel(
         dst[j] = candidates[Int(best[0]) * nf + j]
 
 
-def _c30_trial_distance(z: MutPointer[Float32,MutAnyOrigin], x: MutPointer[Float32,MutAnyOrigin], c: MutPointer[Float32,MutAnyOrigin], n: Int32, nt: Int32, d: Int32):
+def _direct_trial_distance(z: MutPointer[Float32,MutAnyOrigin], x: MutPointer[Float32,MutAnyOrigin], c: MutPointer[Float32,MutAnyOrigin], n: Int32, nt: Int32, d: Int32):
     var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if cell<Int(n)*Int(nt):
         var row=cell//Int(nt)
@@ -634,9 +638,10 @@ def kmeans_plus_plus(
                     sel_index.unsafe_ptr(), Int32(n_features),
                     grid_dim=(n_trials, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
                 )
-                enqueue_row_norms(ctx, candidate_norm, candidates, n_trials, n_features)
-                comptime if C30_DIRECT_DISTANCE:
-                    ctx.enqueue_function[_c30_trial_distance](candidate_z.unsafe_ptr(),x.unsafe_ptr(),candidates.unsafe_ptr(),Int32(n_samples),Int32(n_trials),Int32(n_features),grid_dim=((n_samples*n_trials+127)//128,1,1),block_dim=128)
+                comptime if not KMEANS_DIRECT_DISTANCE:  # the direct arm never reads them
+                    enqueue_row_norms(ctx, candidate_norm, candidates, n_trials, n_features)
+                comptime if KMEANS_DIRECT_DISTANCE:
+                    ctx.enqueue_function[_direct_trial_distance](candidate_z.unsafe_ptr(),x.unsafe_ptr(),candidates.unsafe_ptr(),Int32(n_samples),Int32(n_trials),Int32(n_features),grid_dim=((n_samples*n_trials+127)//128,1,1),block_dim=128)
                 else:
                     gemm_nt(
                         ctx, candidate_z, x, candidates, n_samples, n_trials,
@@ -721,9 +726,10 @@ def kmeans_plus_plus(
             block_dim=(PLUS_PLUS_TPB, 1, 1),
         )
 
-        enqueue_row_norms(ctx, candidate_norm, candidates, n_trials, n_features)
-        comptime if C30_DIRECT_DISTANCE:
-            ctx.enqueue_function[_c30_trial_distance](candidate_z.unsafe_ptr(),x.unsafe_ptr(),candidates.unsafe_ptr(),Int32(n_samples),Int32(n_trials),Int32(n_features),grid_dim=((n_samples*n_trials+127)//128,1,1),block_dim=128)
+        comptime if not KMEANS_DIRECT_DISTANCE:  # the direct arm never reads them
+            enqueue_row_norms(ctx, candidate_norm, candidates, n_trials, n_features)
+        comptime if KMEANS_DIRECT_DISTANCE:
+            ctx.enqueue_function[_direct_trial_distance](candidate_z.unsafe_ptr(),x.unsafe_ptr(),candidates.unsafe_ptr(),Int32(n_samples),Int32(n_trials),Int32(n_features),grid_dim=((n_samples*n_trials+127)//128,1,1),block_dim=128)
         else:
             gemm_nt(
                 ctx,
@@ -850,7 +856,7 @@ def _assign_to_candidates(
 #: index), so no bit moves; the eight rounds plus step 7 stop paying
 #: `n * |C so far| * d` each. `-D MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF=1`
 #: reassigns in full there.
-comptime IDN_KMEANS_INCR_INIT = C38_REUSE_NEAREST or (
+comptime IDN_KMEANS_INCR_INIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not (
@@ -881,7 +887,7 @@ comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
 #: (one of the round's drains; the selected COUNT still comes back, because
 #: it sizes the next allocation). Same Float32 psi, so the same flags.
 #: `-D MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF=1` restores the readback.
-comptime IDN_KMEANS_INIT_PSI_DEVICE = C38_DEVICE_POTENTIAL or (
+comptime IDN_KMEANS_INIT_PSI_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
         is_defined["MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF"]()
@@ -1299,7 +1305,8 @@ def init_scalable_kmeans_plus_plus(
         ctx.synchronize()
 
         _km_stage(ctx, km_on, km_t, "init.step7")
-        enqueue_row_norms(ctx, cand_norm_rows, cand_buf, cand_count, d)
+        comptime if not KMEANS_DIRECT_DISTANCE:  # the direct arm never reads them
+            enqueue_row_norms(ctx, cand_norm_rows, cand_buf, cand_count, d)
         ctx.synchronize()
         kmeans_plus_plus(
             ctx,
@@ -1536,6 +1543,25 @@ def kmeans_fit_main_traced(
             n_samples, n_features, n_clusters
         )
         acc_table_w_cells = blocked_acc_table_cells(n_samples, 1, n_clusters)
+    # C37 (rewritten): the fused assignment + accumulation pass, one device,
+    # while its shared tables fit (kmeans_fused_accumulate.mojo). Same bits as
+    # the incumbent kernels, so it may take any iteration it fits.
+    var fused = False
+    comptime if C37_FUSED_ACCUMULATE:
+        fused = (
+            kmeans_fused_fits(n_clusters, n_features)
+            and assignment_device_count() == 1
+        )
+        if fused:
+            acc_table_cells = max(
+                acc_table_cells,
+                kmeans_fused_table_cells(n_samples, n_features, n_clusters),
+            )
+            acc_table_w_cells = max(
+                acc_table_w_cells,
+                kmeans_fused_table_cells(n_samples, 1, n_clusters),
+            )
+    var is_sqrt_metric = metric_is_sqrt(params.metric)
     var acc_table = ctx.enqueue_create_buffer[DType.int32](acc_table_cells)
     var acc_table_w = ctx.enqueue_create_buffer[DType.int32](acc_table_w_cells)
     var cur_centroids = ctx.enqueue_create_buffer[DType.float32](cd)
@@ -1566,7 +1592,13 @@ def kmeans_fit_main_traced(
     # X's norms, ONCE for the whole fit (`:394-399`). This is the single
     # biggest reason the assignment step is cheap: the sample side of the
     # expanded identity never has to be recomputed, only the centroid side.
-    if params.needs_row_norms():
+    # The KMEANS_ASSIGN direct arms never read X's norms (assignment,
+    # k-means++ and k-means|| all take the direct chain), so they are not
+    # computed there; the identity trace still records them.
+    var x_norm_live = params.needs_row_norms()
+    comptime if KMEANS_DIRECT_DISTANCE:
+        x_norm_live = x_norm_live and trace.enabled
+    if x_norm_live:
         enqueue_row_norms(ctx, x_norm, x, n_samples, n_features)
         ctx.synchronize()
         if trace.enabled:
@@ -1686,18 +1718,20 @@ def kmeans_fit_main_traced(
                             ctx, cur_centroids, centroid_norm, n_clusters,
                             n_features, params.metric,
                         )
-                        min_cluster_and_distance_compute_gated(
-                            ctx, d_conv, x, x_norm, cur_centroids,
-                            centroid_norm, labels, min_dist, n_samples,
-                            n_features, n_clusters, params.metric,
-                        )
-                        comptime if C37_ROW_PANELS:
-                            ctx.enqueue_function[classical_centroid_kernel[True]](
-                                d_conv.unsafe_ptr(), new_centroids.unsafe_ptr(), cur_centroids.unsafe_ptr(),
-                                x.unsafe_ptr(), labels.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_samples), Int32(n_clusters), Int32(n_features),
-                                grid_dim=((cd+127)//128,1,1), block_dim=(128,1,1),
+                        if fused:
+                            launch_kmeans_fused_accumulate[True, IDN_KMEANS_FOLD_STORE](
+                                ctx, d_conv, labels, min_dist, sums_i32,
+                                weight_i32, acc_table, acc_table_w, x,
+                                cur_centroids, x_norm, centroid_norm, weights,
+                                n_samples, n_features, n_clusters,
+                                is_sqrt_metric, sum_scale, weight_scale,
                             )
                         else:
+                            min_cluster_and_distance_compute_gated(
+                                ctx, d_conv, x, x_norm, cur_centroids,
+                                centroid_norm, labels, min_dist, n_samples,
+                                n_features, n_clusters, params.metric,
+                            )
                             launch_accumulate_centroid_sums_blocked_gated[
                                 KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
                             ](
@@ -1711,18 +1745,18 @@ def kmeans_fit_main_traced(
                                 ctx, d_conv, weight_i32, acc_table_w, labels,
                                 weights, n_samples, n_clusters, weight_scale,
                             )
-                            ctx.enqueue_function[finalize_centroids_kernel](
-                                new_centroids.unsafe_ptr(),
-                                cur_centroids.unsafe_ptr(),
-                                sums_i32.unsafe_ptr(),
-                                weight_i32.unsafe_ptr(),
-                                Int32(n_clusters),
-                                Int32(n_features),
-                                sum_scale,
-                                weight_scale,
-                                grid_dim=((cd + 255) // 256, 1, 1),
-                                block_dim=(256, 1, 1),
-                            )
+                        ctx.enqueue_function[finalize_centroids_kernel](
+                            new_centroids.unsafe_ptr(),
+                            cur_centroids.unsafe_ptr(),
+                            sums_i32.unsafe_ptr(),
+                            weight_i32.unsafe_ptr(),
+                            Int32(n_clusters),
+                            Int32(n_features),
+                            sum_scale,
+                            weight_scale,
+                            grid_dim=((cd + 255) // 256, 1, 1),
+                            block_dim=(256, 1, 1),
+                        )
                         _sum_device(
                             ctx, cur_centroids, new_centroids, partials,
                             d_shift, cd, SUM_MODE_SQDIFF,
@@ -1781,22 +1815,32 @@ def kmeans_fit_main_traced(
                 n_features,
                 params.metric,
             )
-            min_cluster_and_distance_compute(
-                ctx,
-                x,
-                x_norm,
-                cur_centroids,
-                centroid_norm,
-                dist_buf,
-                labels,
-                min_dist,
-                n_samples,
-                n_features,
-                n_clusters,
-                params.metric,
-                params.batch_samples,
-                params.batch_centroids,
-            )
+            if fused:
+                # Assignment AND the row-block tables plus their folds; the
+                # accumulation below is skipped for this iteration.
+                launch_kmeans_fused_accumulate[False, IDN_KMEANS_FOLD_STORE](
+                    ctx, d_conv, labels, min_dist, sums_i32, weight_i32,
+                    acc_table, acc_table_w, x, cur_centroids, x_norm,
+                    centroid_norm, weights, n_samples, n_features,
+                    n_clusters, is_sqrt_metric, sum_scale, weight_scale,
+                )
+            else:
+                min_cluster_and_distance_compute(
+                    ctx,
+                    x,
+                    x_norm,
+                    cur_centroids,
+                    centroid_norm,
+                    dist_buf,
+                    labels,
+                    min_dist,
+                    n_samples,
+                    n_features,
+                    n_clusters,
+                    params.metric,
+                    params.batch_samples,
+                    params.batch_centroids,
+                )
 
             if trace.enabled:
                 var it_tag = restart_tag + "iter" + _pad2(it) + "."
@@ -1814,13 +1858,7 @@ def kmeans_fit_main_traced(
             # grids (from the hardware matrix, replacing a magic 1024-block
             # cap that lived here) and the bit-identity argument between the
             # arms all live in `cluster/checks/reduce_by_key.mojo`.
-            comptime if C37_ROW_PANELS:
-                ctx.enqueue_function[classical_centroid_kernel[False]](
-                    sums_i32.unsafe_ptr(), new_centroids.unsafe_ptr(), cur_centroids.unsafe_ptr(),
-                    x.unsafe_ptr(), labels.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_samples), Int32(n_clusters), Int32(n_features),
-                    grid_dim=((cd+127)//128,1,1), block_dim=(128,1,1),
-                )
-            else:
+            if not fused:
                 comptime if KMEANS_BLOCK_ACC:
                     # DEVIATION 3080: row-block tables, no atomics. The Int32
                     # totals are the atomic arms' totals (associative adds of
@@ -1859,18 +1897,18 @@ def kmeans_fit_main_traced(
                         weight_scale,
                     )
 
-                ctx.enqueue_function[finalize_centroids_kernel](
-                    new_centroids.unsafe_ptr(),
-                    cur_centroids.unsafe_ptr(),
-                    sums_i32.unsafe_ptr(),
-                    weight_i32.unsafe_ptr(),
-                    Int32(n_clusters),
-                    Int32(n_features),
-                    sum_scale,
-                    weight_scale,
-                    grid_dim=((cd + 255) // 256, 1, 1),
-                    block_dim=(256, 1, 1),
-                )
+            ctx.enqueue_function[finalize_centroids_kernel](
+                new_centroids.unsafe_ptr(),
+                cur_centroids.unsafe_ptr(),
+                sums_i32.unsafe_ptr(),
+                weight_i32.unsafe_ptr(),
+                Int32(n_clusters),
+                Int32(n_features),
+                sum_scale,
+                weight_scale,
+                grid_dim=((cd + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
 
             if trace.enabled:
                 var acc_tag = restart_tag + "iter" + _pad2(it) + "."
@@ -1878,11 +1916,10 @@ def kmeans_fit_main_traced(
                 # become: an Int32 sum is the thing IDENTICAL guarantees is
                 # order independent, so a divergence HERE and a divergence
                 # one kernel later mean different things.
-                comptime if not C37_ROW_PANELS:
-                    trace.record_device(ctx, acc_tag + "sums_i32", sums_i32, cd)
-                    trace.record_device(
-                        ctx, acc_tag + "weight_i32", weight_i32, n_clusters
-                    )
+                trace.record_device(ctx, acc_tag + "sums_i32", sums_i32, cd)
+                trace.record_device(
+                    ctx, acc_tag + "weight_i32", weight_i32, n_clusters
+                )
                 trace.record_device(
                     ctx, acc_tag + "new_centroids", new_centroids, cd
                 )

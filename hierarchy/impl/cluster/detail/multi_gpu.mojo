@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pinned pairwise rows; root diagonal policy and Boruvka order stay intact."""
+from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.os import getenv
 from std.sys.compile import is_defined
 from core.multi_gpu import peer_clone
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from neighbors.checks.pinned_distance_tile import pinned_distance_tile_kernel
+from neighbors.checks.pinned_distance_tile import pinned_distance_tile_kernel, pinned_distance_tile_direct_kernel
 
 
 def hierarchy_device_count(rows: Int, sabotage: Int32) raises -> Int:
@@ -47,7 +48,7 @@ def pairwise_rows(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
         qnorms.append(peer_clone(ctx, devices[rank], nv))
         rnorms.append(peer_clone(ctx, devices[rank], norms))
         outputs.append(devices[rank].enqueue_create_buffer[DType.float32](rows*m))
-        devices[rank].enqueue_function[pinned_distance_tile_kernel](
+        devices[rank].enqueue_function[pinned_distance_tile_direct_kernel[GRAPH_DIRECT_DISTANCE]](
             outputs[rank].unsafe_ptr(), queries[rank].unsafe_ptr(), references[rank].unsafe_ptr(),
             qnorms[rank].unsafe_ptr(), rnorms[rank].unsafe_ptr(),
             Int32(rows), Int32(m), Int32(d), is_sqrt,

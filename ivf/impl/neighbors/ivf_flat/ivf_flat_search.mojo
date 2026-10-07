@@ -73,6 +73,7 @@ which is why `n_probe == n_lists` reduces to brute force exactly rather
 than approximately. Read `ivf/checks/list_layout.mojo`'s header before
 changing anything about that order.
 """
+from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
 from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -163,6 +164,7 @@ from checks.numerics import (
 from neighbors.checks.pinned_distance_tile import (
     PINNED_TILE_TPB,
     pinned_distance_tile_kernel,
+    pinned_distance_tile_direct_kernel,
 )
 from neighbors.checks.select_radix_identical import (
     radix_topk_identical_kernel,
@@ -358,7 +360,7 @@ def _expanded_distances(
     """
     var cells = m * n
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        ctx.enqueue_function[pinned_distance_tile_kernel](
+        ctx.enqueue_function[pinned_distance_tile_direct_kernel[IVF_DIRECT_DISTANCE]](
             z.unsafe_ptr(),
             q.unsafe_ptr().unsafe_offset(q_row_offset * d),
             y.unsafe_ptr(),

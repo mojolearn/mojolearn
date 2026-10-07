@@ -52,7 +52,7 @@ THE SABOTAGE. `-D MOJOLEARN_HOST_SABOTAGE=1` reads the core distance one
 slot early (the (k - 1)-th neighbor instead of the k-th), so every core
 distance, and with it the whole graph, differs.
 """
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import GRAPH_DIRECT_DISTANCE
 from core.classical_distance import direct_distance_step
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -612,7 +612,7 @@ def hdbh_mutual_reachability(
                 for f in range(n):
                     var qv = ftz(xp.unsafe_load(row * n + f))
                     var yv = ftz(xp.unsafe_load(col * n + f))
-                    comptime if C30_DIRECT_DISTANCE:
+                    comptime if GRAPH_DIRECT_DISTANCE:
                         acc = direct_distance_step[1](acc,qv,yv)
                     else:
                         acc = ftz(identical_mul_add(qv, yv, acc))
@@ -620,7 +620,7 @@ def hdbh_mutual_reachability(
                     Float32(-2.0), acc,
                     ftz(ftz(np.unsafe_load(row)) + ftz(np.unsafe_load(col))),
                 ))
-                comptime if C30_DIRECT_DISTANCE:
+                comptime if GRAPH_DIRECT_DISTANCE:
                     d = acc
                 if d <= Float32(0.0):
                     d = Float32(0.0)

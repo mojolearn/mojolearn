@@ -120,12 +120,60 @@ def row_norm_kernel(
 
 
 # C06 schedules independent rows in one block. Each row retains NORM_TPB
-# logical lanes and the incumbent halving fold. 2/4 rows are independent
-# arms: 2/4 times the shared storage, fewer blocks, no shape-specific route.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-from experiments.classical_identical_ideas.shared_controls import C06_ROWS2, C06_ROWS4
+# logical lanes and the incumbent halving fold. One control,
+# MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2|4 (shared_controls.mojo); no
+# shape-specific route. NOT MEASURED.
+# C06 small-d arm (MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD): one thread per row
+# while d <= C06_THREAD_MAX_D, replaying the incumbent tree (see the kernel).
+from experiments.classical_identical_ideas.shared_controls import C06_NORM_ROWS, C06_ROWS_ON, C06_SMALL_D_THREAD
 from max.gpu.host import DeviceContext, DeviceBuffer
-comptime CLASSICAL_NORM_ROWS = 4 if C06_ROWS4 else (2 if C06_ROWS2 else 1)
+comptime CLASSICAL_NORM_ROWS = C06_NORM_ROWS
+#: Cost bound of the small-d arm: one thread per row costs d fma + 31 adds;
+#: past 32 columns a NORM_TPB-lane block per row keeps a quarter of its lanes
+#: busy and the block form is kept. Not a board shape (the bound is the
+#: register replay's width, 2 x 16 tree lanes).
+comptime C06_THREAD_MAX_D = 32
+comptime C06_THREAD_TPB = 128
+
+
+def thread_row_norm_kernel(
+    out_norm: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin], n_rows_in: Int32,
+    n_cols_in: Int32, take_sqrt_in: Int32,
+):
+    """`row_norm_kernel`'s value for one row, in one thread, for
+    `n_cols <= C06_THREAD_MAX_D`. The incumbent gives lane j the single term
+    `ftz(fma(v_j, v_j, 0))` (lanes past d hold 0) and folds with
+    `two_phase_halving_sum[NORM_TPB]`: phase 1 adds lanes t + 16j for j < G in
+    a halving tree; with only lanes < 32 nonzero that tree's last step is
+    `lane t + lane t + 16`, every other add being `x + 0 = x` (terms are >= +0).
+    Phase 2 is the 16-lane halving tree. Replayed here term for term, so the
+    bits are the incumbent's under IDENTICAL."""
+    comptime assert NORM_TPB >= 32 and (NORM_TPB & (NORM_TPB - 1)) == 0, (
+        "the replay needs NORM_TPB a power of two >= 32"
+    )
+    var row = Int(block_idx.x) * C06_THREAD_TPB + Int(thread_idx.x)
+    if row >= Int(n_rows_in):
+        return
+    var d = Int(n_cols_in)
+    var lanes = InlineArray[Float32, 32](fill=Float32(0.0))
+    comptime for j in range(32):
+        if j < d:
+            var v = ftz(a.unsafe_load(row * d + j))
+            lanes[j] = ftz(identical_mul_add(v, v, Float32(0.0)))
+    var w = InlineArray[Float32, 16](fill=Float32(0.0))
+    comptime for t in range(16):
+        w[t] = lanes[t] + lanes[t + 16]
+    comptime for k in range(4):
+        comptime S = 8 >> k
+        comptime for t in range(S):
+            w[t] = w[t] + w[t + S]
+    var total = ftz(w[0])
+    if take_sqrt_in != 0:
+        if total <= Float32(0):
+            total = Float32(0)
+        total = ftz(identical_sqrt(total))
+    out_norm.unsafe_store(row, total)
 
 
 def batched_row_norm_kernel[rows_per_block: Int](
@@ -169,7 +217,18 @@ def enqueue_row_norms(
 ) raises:
     if rows <= 0:
         return
-    comptime if C06_ROWS2 or C06_ROWS4:
+    comptime if C06_SMALL_D_THREAD:
+        if cols <= C06_THREAD_MAX_D:
+            ctx.enqueue_function[thread_row_norm_kernel](
+                output.unsafe_ptr(), values.unsafe_ptr(), Int32(rows), Int32(cols), Int32(take_sqrt),
+                grid_dim=(rows + C06_THREAD_TPB - 1) // C06_THREAD_TPB,
+                block_dim=C06_THREAD_TPB,
+            )
+            return
+    comptime if C06_ROWS_ON:
+        comptime assert CLASSICAL_NORM_ROWS == 2 or CLASSICAL_NORM_ROWS == 4, (
+            "MOJOLEARN_CLASSICAL_C06_NORM_ROWS takes 2 or 4"
+        )
         ctx.enqueue_function[batched_row_norm_kernel[CLASSICAL_NORM_ROWS]](
             output.unsafe_ptr(), values.unsafe_ptr(), Int32(rows), Int32(cols), Int32(take_sqrt),
             grid_dim=(rows + CLASSICAL_NORM_ROWS - 1) // CLASSICAL_NORM_ROWS,

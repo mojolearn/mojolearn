@@ -11,7 +11,7 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
 
   `host_eps_dist_sq`       `eps_dist_sq`, `neighbors/impl/ball_cover/
                            common.mojo:88`: `diff = ftz(ftz(a) - ftz(b))`,
-                           `acc = direct_distance_step[1](acc,diff,Float32(0)) if C30_DIRECT_DISTANCE else ftz(identical_mul_add(diff,diff,acc))`,
+                           `acc = direct_distance_step[1](acc,diff,Float32(0)) if DBSCAN_DIRECT_DISTANCE else ftz(identical_mul_add(diff,diff,acc))`,
                            dims ascending. The ball cover's one distance
                            (`rbc_cmp_dist` at L2SqrtUnexpanded, the DBSCAN
                            metric the index admits).
@@ -120,7 +120,7 @@ The restatement is a prediction until measured. The CPU identity gate
 --require-columns 4`) is the measurement.
 """
 from core.classical_distance import direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import DBSCAN_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
@@ -175,7 +175,7 @@ def host_eps_dist_sq(
     var sum_sq = Float32(0.0)
     for i in range(n_dims):
         var diff = ftz(ftz(a[a_off + i]) - ftz(b[b_off + i]))
-        sum_sq = direct_distance_step[1](sum_sq,diff,Float32(0)) if C30_DIRECT_DISTANCE else ftz(identical_mul_add(diff,diff,sum_sq))
+        sum_sq = direct_distance_step[1](sum_sq,diff,Float32(0)) if DBSCAN_DIRECT_DISTANCE else ftz(identical_mul_add(diff,diff,sum_sq))
     return sum_sq
 
 
@@ -187,7 +187,7 @@ def _eps_dists8(xt: HostF32Ptr, mp: Int, q: HostF32Ptr, d: Int, pos0: Int) -> SI
     var acc = SIMD[DType.float32, EPS_W](0)
     for f in range(d):
         var diff = ftz_v[EPS_W](SIMD[DType.float32, EPS_W](q.unsafe_load(f)) - (xt + f * mp + pos0).load[width=EPS_W]())
-        acc = direct_distance_step[EPS_W](acc,diff,SIMD[DType.float32,EPS_W](0)) if C30_DIRECT_DISTANCE else ftz_v[EPS_W](mul_add_v[EPS_W](diff,diff,acc))
+        acc = direct_distance_step[EPS_W](acc,diff,SIMD[DType.float32,EPS_W](0)) if DBSCAN_DIRECT_DISTANCE else ftz_v[EPS_W](mul_add_v[EPS_W](diff,diff,acc))
     return acc
 
 
@@ -429,7 +429,7 @@ def host_brute_eps_row(
                 if metric == DBSCAN_METRIC_L1:
                     acc = ftz_v[EPS_W](acc + abs(diff))
                 else:
-                    acc = direct_distance_step[EPS_W](acc,diff,SIMD[DType.float32,EPS_W](0)) if C30_DIRECT_DISTANCE else ftz_v[EPS_W](mul_add_v[EPS_W](diff,diff,acc))
+                    acc = direct_distance_step[EPS_W](acc,diff,SIMD[DType.float32,EPS_W](0)) if DBSCAN_DIRECT_DISTANCE else ftz_v[EPS_W](mul_add_v[EPS_W](diff,diff,acc))
             for l in range(EPS_W):
                 if j0 + l < n_rows and acc[l] <= thresh:
                     out.append(Int32(j0 + l))
@@ -443,7 +443,7 @@ def host_brute_eps_row(
             if metric == DBSCAN_METRIC_L1:
                 acc = ftz(acc + abs(diff))
             else:
-                acc = direct_distance_step[1](acc,diff,Float32(0)) if C30_DIRECT_DISTANCE else ftz(identical_mul_add(diff,diff,acc))
+                acc = direct_distance_step[1](acc,diff,Float32(0)) if DBSCAN_DIRECT_DISTANCE else ftz(identical_mul_add(diff,diff,acc))
         if acc <= thresh:
             out.append(Int32(j))
     return out^
