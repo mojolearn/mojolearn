@@ -1,6 +1,6 @@
 {
   "campaign": "six-lane-full-ab-20261006",
-  "identity_policy": "NVIDIA/AMD same-arm IDENTICAL admission requires matching source/runtime provenance and complete typed fitted-state evidence. AMD measurements are arriving; NVIDIA PTX artifacts remain pending. Apple FAST is evaluated by task quality; bits may differ.",
+  "identity_policy": "NVIDIA/AMD same-arm IDENTICAL admission requires matching source/runtime provenance and complete typed fitted-state evidence. See the coverage table for completed and pending work; NVIDIA PTX artifacts remain pending. Apple FAST is evaluated by task quality; bits may differ.",
   "evidence_policy": "Complete full-workload executions are retained separately from quality and identity admission. Failed attempts preserved at controller-qualified paths; no default promotion. Hash receipts alone do not establish retained array/model bytes; see artifact-retention.json.",
   "candidates": [
     {

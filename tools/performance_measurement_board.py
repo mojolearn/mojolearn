@@ -82,7 +82,9 @@ def build(inventory, index):
             'evidence_policy': inventory.get('evidence_policy', 'One excluded warmup and one scored sample. Identity and compilation are reused; no separate retests.'),
             'promotion': False, 'machines': index.get('machines', []),
             'cards': list(cards.values()), 'notes': index.get('notes', []),
-            'decisions': index.get('decisions', [])}
+            'decisions': index.get('decisions', []),
+            'coverage': index.get('coverage', []),
+            'pending_work': index.get('pending_work', [])}
 
 
 def escape(value):
@@ -115,6 +117,16 @@ def write(board, out):
                             c.get('warmups') == 1 and c.get('scored_samples') == 1)
                            for c in card['cells'])
             lines.append(f"| {card['id']} | {card['mode']} | {escape(card['status'])} | {measured} |")
+        if data.get('coverage'):
+            lines += ['', '## Full-workload coverage', '',
+                      'Counts are retained complete A/B pairs, not individually decided experiment switches. Execution completion does not establish quality or identity admission.', '',
+                      '| Vendor / mode | Complete pairs | Original failed attempts | Quality-rejected pairs | Remaining scope |',
+                      '|---|---:|---:|---:|---|']
+            for row in data['coverage']:
+                if name != 'BOARD' and row['vendor'] != name:
+                    continue
+                lines.append('| ' + ' | '.join(escape(row.get(k, '')) for k in
+                    ('label', 'complete_pairs', 'failed_attempts', 'quality_failed', 'remaining_scope')) + ' |')
         lines += ['', '## Captured evidence', '',
                   'Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.', '',
                   '| Candidate | Vendor / route | Case | Scope | Status | Admitted A/B | Observed A/B | Evidence |',
@@ -132,6 +144,14 @@ def write(board, out):
             lines += ['', '## Recorded source decisions', '', '| Candidate / arm | Decision | Source commit | Evidence |', '|---|---|---|---|']
             for decision in data['decisions']:
                 lines.append('| ' + ' | '.join(escape(decision.get(k, '')) for k in ['candidate', 'decision', 'commit', 'evidence']) + ' |')
+        if data.get('pending_work'):
+            lines += ['', '## Unrun or blocked scope', '',
+                      'These are not completed measurements and have no inferred timing. This summary does not imply every individual catalog experiment has been run.', '',
+                      '| Scope | Status / reason | Evidence |', '|---|---|---|']
+            for row in data['pending_work']:
+                if name != 'BOARD' and row.get('vendor') not in (name, 'all'):
+                    continue
+                lines.append('| ' + ' | '.join(escape(row.get(k, '')) for k in ('scope', 'reason', 'evidence')) + ' |')
         failures = [(card, cell) for card in data['cards'] for cell in card['cells']
                     if cell['status'] in ('QUALITY_FAILED', 'FAILED_OR_INCOMPLETE', 'FAILED', 'REJECTED')]
         lines += ['', '## Failed or quality-rejected attempts', '',

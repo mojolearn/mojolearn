@@ -1,0 +1,762 @@
+[
+  {
+    "key": [
+      "expanded:multinomial-nb@dataset=istella@input=classification-full-v1",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempts/attempt-0001/receipt.json",
+        "sha256": "98f738946159b47c384049b6f1942f0597883f96709b954138247c0e2852a29b",
+        "status": "MEASURED_FULL",
+        "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/0b3c7c320df28a0e9e81/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:multinomial-nb@dataset=taxi@input=classification-full-v1",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/544180a6a68f814041d1/attempts/attempt-0001/receipt.json",
+        "sha256": "7363e32e37b5702c8a6da4bab2e8feb5d8d782d5a469f9856ba9fff7521c9188",
+        "status": "MEASURED_FULL",
+        "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/544180a6a68f814041d1/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/544180a6a68f814041d1/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/544180a6a68f814041d1/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/544180a6a68f814041d1/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:complement-nb@dataset=istella@input=classification-full-v1",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/7eea2881505888665bbc/attempts/attempt-0001/receipt.json",
+        "sha256": "fe128a44c788620e1cd532c81eb8bce167e2012ddfd32aeb38998b996868ba61",
+        "status": "MEASURED_FULL",
+        "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/7eea2881505888665bbc/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/7eea2881505888665bbc/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/7eea2881505888665bbc/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/7eea2881505888665bbc/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:complement-nb@dataset=taxi@input=classification-full-v1",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/a130a015c2dd50764eec/attempts/attempt-0001/receipt.json",
+        "sha256": "c472436a80708d19af9c886c43076db7f25cca1082ab725d93cb5756043eea87",
+        "status": "MEASURED_FULL",
+        "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/a130a015c2dd50764eec/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/a130a015c2dd50764eec/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/a130a015c2dd50764eec/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-classification-full-v1/a130a015c2dd50764eec/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "more:gmm@dataset=istella",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-gmm-istella/f579c55ac28cfd6fb99a/attempts/attempt-0001/receipt.json",
+        "sha256": "7bca88b715434fe751631ff9d351a24ac70b142b999f526ce34bf124be3daa93",
+        "status": "MEASURED_FULL",
+        "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-gmm-istella/f579c55ac28cfd6fb99a/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-gmm-istella/f579c55ac28cfd6fb99a/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-gmm-istella/f579c55ac28cfd6fb99a/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-gmm-istella/f579c55ac28cfd6fb99a/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:cross-val-score@dataset=taxi",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv/3f0bb433239eba4eb84a/attempts/attempt-0001/receipt.json",
+        "sha256": "88bda032f3613526e4aebdd5c58c1f39eb2dab855dd4381d81fe7bcf67ebc75d",
+        "status": "MEASURED_FULL",
+        "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/3f0bb433239eba4eb84a/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/3f0bb433239eba4eb84a/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/3f0bb433239eba4eb84a/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/3f0bb433239eba4eb84a/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:isotonic@dataset=taxi",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempts/attempt-0001/receipt.json",
+        "sha256": "f235aea787a111db6876de44f55917c7fc5712664a67a9e6618e1425bc91a3fb",
+        "status": "MEASURED_FULL",
+        "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/7eb0bf96e711bcc766b2/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:isotonic@dataset=istella",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv/8098b815ba2f70d2d83e/attempts/attempt-0001/receipt.json",
+        "sha256": "5c870ccaef592e9e37eadbce018c8e2b6af0523accd5e701650f5807bf63be12",
+        "status": "MEASURED_FULL",
+        "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/8098b815ba2f70d2d83e/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/8098b815ba2f70d2d83e/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/8098b815ba2f70d2d83e/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/8098b815ba2f70d2d83e/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:cross-val-score@dataset=istella",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/receipt.json",
+        "sha256": "112346621e451240a3708bd58812355710c7748c0015bb2d0021217269f346a2",
+        "status": "MEASURED_FULL",
+        "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-isotonic-cv/ac705e553ce95e6d7c85/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:mlp-clf@dataset=taxi@input=mlp-full-v1",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-mlp-full-v1/1ba37c58e15aeeb3e578/attempts/attempt-0001/receipt.json",
+        "sha256": "b134c9006f7a8a90dcfbbc950efda97c9e0b4edf33912e20f1d7523bcb38c47e",
+        "status": "MEASURED_FULL",
+        "source_sha": "fa6009933a8fbaae18d98c3cbc79609ddc1bb508",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/1ba37c58e15aeeb3e578/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/1ba37c58e15aeeb3e578/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/1ba37c58e15aeeb3e578/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/1ba37c58e15aeeb3e578/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:mlp-clf@dataset=istella@input=mlp-full-v1",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-mlp-full-v1/5db8117591bd18566130/attempts/attempt-0001/receipt.json",
+        "sha256": "3dfec38c69209b687561cb0fd5ea07251ada42f1171f095fe005f5ccdb4e4fa9",
+        "status": "MEASURED_FULL",
+        "source_sha": "fa6009933a8fbaae18d98c3cbc79609ddc1bb508",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/5db8117591bd18566130/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/5db8117591bd18566130/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/5db8117591bd18566130/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/5db8117591bd18566130/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:mlp-reg@dataset=istella@input=mlp-full-v1",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-mlp-full-v1/b4c0c2f107efa97a3834/attempts/attempt-0001/receipt.json",
+        "sha256": "adb9a992ce89c2d206452b5171e9177dae7f5ebb55371ae489e527b1e6b4e0ad",
+        "status": "MEASURED_FULL",
+        "source_sha": "fa6009933a8fbaae18d98c3cbc79609ddc1bb508",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/b4c0c2f107efa97a3834/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/b4c0c2f107efa97a3834/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/b4c0c2f107efa97a3834/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/b4c0c2f107efa97a3834/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:mlp-reg@dataset=taxi@input=mlp-full-v1",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-mlp-full-v1/e47dbe9078881fe5518f/attempts/attempt-0001/receipt.json",
+        "sha256": "778b07153b61498df47fa93f89a93549000c6516ccd6760103f9d593c837a74b",
+        "status": "MEASURED_FULL",
+        "source_sha": "fa6009933a8fbaae18d98c3cbc79609ddc1bb508",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/e47dbe9078881fe5518f/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/e47dbe9078881fe5518f/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/e47dbe9078881fe5518f/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-mlp-full-v1/e47dbe9078881fe5518f/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "more:gmm@dataset=taxi",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/03f523ab5951d08a295b/attempts/attempt-0001/receipt.json",
+        "sha256": "57d7802a66d37c98835a454ff0bcbaa4bf22660382302d41e123514f205618f8",
+        "status": "MEASUREMENT_FAILED",
+        "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 1,
+            "excluded": true,
+            "error": "Workload failed or did not write result JSON",
+            "log": "/root/campaign-results/measurements-next-reg/03f523ab5951d08a295b/attempts/attempt-0001/warmup-A.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:pls@dataset=istella",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-pls/2f8b608f6ae23ccbef94/attempts/attempt-0001/receipt.json",
+        "sha256": "878a9416296322fa82b8886f27f1e2ffce277726d30e945ef5370c33d21ff3e4",
+        "status": "MEASURED_FULL",
+        "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-pls/2f8b608f6ae23ccbef94/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-pls/2f8b608f6ae23ccbef94/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-pls/2f8b608f6ae23ccbef94/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-pls/2f8b608f6ae23ccbef94/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": [
+      "expanded:pls@dataset=taxi",
+      "I.X.complete-proposed",
+      "identical"
+    ],
+    "receipts": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-pls/53a58fdcb7a34a48e102/attempts/attempt-0001/receipt.json",
+        "sha256": "08efeb3d22daa5ed675ef4ef30b5ff5c92fccb72b4009345169ef6519aded13e",
+        "status": "MEASURED_FULL",
+        "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-pls/53a58fdcb7a34a48e102/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-pls/53a58fdcb7a34a48e102/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-pls/53a58fdcb7a34a48e102/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-pls/53a58fdcb7a34a48e102/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  }
+]

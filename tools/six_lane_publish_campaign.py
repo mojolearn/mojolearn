@@ -118,7 +118,7 @@ def main():
                 detail['quality_reason']=row['quality_reason']
             if row.get('resource_limitations'):detail['resource_limitations']=row['resource_limitations']
             cells.append(row);summary.append(detail)
-    inventory=dict(campaign='six-lane-full-ab-20261006',identity_policy='NVIDIA/AMD same-arm IDENTICAL admission requires matching source/runtime provenance and complete typed fitted-state evidence. AMD measurements are arriving; NVIDIA PTX artifacts remain pending. Apple FAST is evaluated by task quality; bits may differ.',evidence_policy='Complete full-workload executions are retained separately from quality and identity admission. Failed attempts preserved at controller-qualified paths; no default promotion. Hash receipts alone do not establish retained array/model bytes; see artifact-retention.json.',candidates=[
+    inventory=dict(campaign='six-lane-full-ab-20261006',identity_policy='NVIDIA/AMD same-arm IDENTICAL admission requires matching source/runtime provenance and complete typed fitted-state evidence. See the coverage table for completed and pending work; NVIDIA PTX artifacts remain pending. Apple FAST is evaluated by task quality; bits may differ.',evidence_policy='Complete full-workload executions are retained separately from quality and identity admission. Failed attempts preserved at controller-qualified paths; no default promotion. Hash receipts alone do not establish retained array/model bytes; see artifact-retention.json.',candidates=[
         dict(id='AF.X.complete-proposed',title='Apple FAST complete proposed configuration',mode='fast',vendors=['apple']),
         dict(id='I.X.complete-proposed',title='IDENTICAL complete proposed configuration',mode='identical',vendors=['nvidia','amd','apple','host'])])
     notes=['A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.',
@@ -194,7 +194,40 @@ def main():
                     commit=c['source_sha'],evidence=c['evidence'],
                     default_changed=False,individual_constituents='Not decided by this combined-configuration result')
                for c in cells if c['status']=='QUALITY_FAILED']
-    write(OUT/'inventory.json',inventory);write(OUT/'index.json',dict(cells=cells,notes=notes,decisions=decisions))
+    remaining={
+        'nvidia': 'Native combined configurations measured; PTX, individual controls and other full-workload recipe gaps remain pending.',
+        'amd': 'Selected retained-artifact pairs measured; GMM and other missing paired-artifact/recipe scopes remain pending.',
+        'apple': 'See unrun scope for additional FAST pairs; earlier array-preservation and quality limitations remain.'}
+    coverage=[]
+    for vendor, label in [('nvidia','NVIDIA native / IDENTICAL'),('amd','AMD GPU / IDENTICAL'),('apple','Apple / FAST')]:
+        rows=[c for c in cells if c['vendor']==vendor]
+        coverage.append(dict(vendor=vendor,label=label,
+            complete_pairs=sum(c.get('execution_status')=='MEASURED_FULL' for c in rows),
+            failed_attempts=sum(c['status']=='FAILED_OR_INCOMPLETE' for c in rows),
+            quality_failed=sum(c['status']=='QUALITY_FAILED' for c in rows),remaining_scope=remaining[vendor]))
+    evidence_inputs={}
+    for label,relative in [('apple_pending','apple/restart-readiness/status.json'),
+                           ('amd_capture','amd/terminal-preservation-audit/status.json'),
+                           ('amd_release','amd/release/termination-proof.json'),
+                           ('nvidia_release','nvidia-native/owner-attempt-02/termination-proof.json')]:
+        source=ROOT/relative
+        if source.exists():
+            raw=source.read_bytes()
+            evidence_inputs[label]=dict(source=str(source),sha256=hashlib.sha256(raw).hexdigest(),record=json.loads(raw))
+    apple_pending=evidence_inputs.get('apple_pending',{}).get('record',{})
+    pending_work=[
+        dict(vendor='nvidia',scope='NVIDIA PTX/default full A/B',reason='Compatible retained full-workload artifacts unavailable; no timing worker or compilation substituted.',evidence=str(ROOT/'nvidia-ptx/status.json')),
+        dict(vendor='amd',scope='AMD GMM full-workload pair',reason='Paired retained mixture binaries unavailable; excluded from the completed queue.',evidence=str(ROOT/'amd/next-reg/continuation-status.json')),
+        dict(vendor='all',scope='Individual candidates, alternative arms and other affected workloads',reason='This campaign measured complete-proposed combinations, not every individual catalog entry. Missing recipes, incompatible artifacts and untested interactions remain pending; do not infer constituent winners.',evidence='experiments/six_lane_integration/catalog.json')]
+    if apple_pending.get('completed',0)<apple_pending.get('expected_pairs',4):
+        pending_work.insert(1,dict(vendor='apple',scope='Apple FAST LogReg/LinearSVC × Taxi/Istella',
+            reason=str(apple_pending.get('completed',0))+'/'+str(apple_pending.get('expected_pairs',4))+
+                ' pairs completed; '+apple_pending.get('status','STATUS_UNAVAILABLE')+
+                '; freeze '+apple_pending.get('harness_freeze','UNKNOWN')+'. Original launch-tag error and released-host evidence are retained.',
+            evidence='campaign-coverage.json: apple_pending'))
+    write(OUT/'campaign-coverage.json',dict(coverage=coverage,pending_work=pending_work,evidence_inputs=evidence_inputs,
+          latest_combined_defaults_promoted=False,all_experiments_complete=False))
+    write(OUT/'inventory.json',inventory);write(OUT/'index.json',dict(cells=cells,notes=notes,decisions=decisions,coverage=coverage,pending_work=pending_work))
     write(OUT/'retained-pairs.json',dict(updated_at=time.time(),pairs=summary))
     with (ROOT/'board-publication.log').open('a') as log:
         p=subprocess.run(['python3',str(REPO/'tools/performance_measurement_board.py'),

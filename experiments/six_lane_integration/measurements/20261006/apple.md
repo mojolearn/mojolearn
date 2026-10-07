@@ -8,6 +8,14 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | AF.X.complete-proposed | fast | FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED | 86 |
 | I.X.complete-proposed | identical | PENDING_MEASUREMENT | 0 |
 
+## Full-workload coverage
+
+Counts are retained complete A/B pairs, not individually decided experiment switches. Execution completion does not establish quality or identity admission.
+
+| Vendor / mode | Complete pairs | Original failed attempts | Quality-rejected pairs | Remaining scope |
+|---|---:|---:|---:|---|
+| Apple / FAST | 86 | 3 | 5 | See unrun scope for additional FAST pairs; earlier array-preservation and quality limitations remain. |
+
 ## Captured evidence
 
 Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.
@@ -122,7 +130,7 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 - Apple source-only review retains QR combined-configuration quality failures; no concrete implementation defect or isolated L09 regression was established. Resampling A and B have equal saved quality and both fail the opponent quality requirement; this does not establish a new P10 regression. Original evidence and missing-array limitations remain explicit. See apple-qr-resample-source-diagnosis.json.
 - Full Taxi GMM refused both candidate and incumbent before scoring. Source-only review found no established implementation or harness defect; retain the incomplete pair and original failures, with zero scored samples and no candidate win/loss decision. See nvidia-gmm-taxi-source-diagnosis.json.
 - LassoCV and ElasticNetCV Taxi retain combined-configuration quality failures on NVIDIA and AMD. Source-only review does not establish an implementation defect or isolate a control; saved quality failures cannot promote these defaults. See cv-taxi-source-diagnosis.json.
-- Saved same-arm AMD/NVIDIA output comparison: 73 matched workloads; primary counts {"AGREE": 144, "INCOMPLETE": 2}, repeated counts {"AGREE": 144}. Full identity counts {"INCOMPLETE": 73, "MATCH": 0, "MISMATCH": 0, "NOT_REQUIRED": 0}. These are saved-signature comparisons, not new model runs or default admission; unmatched and failed arms are retained in same-arm-output-comparison.json and its snapshot.
+- Saved same-arm AMD/NVIDIA output comparison: 84 matched workloads; primary counts {"AGREE": 168}, repeated counts {"AGREE": 168}. Full identity counts {"INCOMPLETE": 84, "MATCH": 0, "MISMATCH": 0, "NOT_REQUIRED": 0}. These are saved-signature comparisons, not new model runs or default admission; unmatched and failed arms are retained in same-arm-output-comparison.json and its snapshot.
 
 ## Recorded source decisions
 
@@ -141,6 +149,15 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 | I.X.complete-proposed/expanded:enet-cv@dataset=taxi/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | cf442daed63f8d2c9d99947c3a7a4e50fb442319 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-expanded-reg/f3260b9ad432706adba9/attempt-0001/receipt.json |
 | I.X.complete-proposed/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 137caf2704fe0139c6a08a39e63869f74a827a8b | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classification-full-v1/659b9236920edb90c199/attempt-0001/receipt.json |
 | I.X.complete-proposed/expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 137caf2704fe0139c6a08a39e63869f74a827a8b | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classification-full-v1/896a91284fe76be2f130/attempt-0001/receipt.json |
+
+## Unrun or blocked scope
+
+These are not completed measurements and have no inferred timing. This summary does not imply every individual catalog experiment has been run.
+
+| Scope | Status / reason | Evidence |
+|---|---|---|
+| Apple FAST LogReg/LinearSVC × Taxi/Istella | 0/4 pairs completed; BLOCKED_ALLOCATE_HOSTS_UNCONDITIONAL_SCP_DENY; freeze 779cd5453425139e00229fb99cfa4ec852d7677c. Original launch-tag error and released-host evidence are retained. | campaign-coverage.json: apple_pending |
+| Individual candidates, alternative arms and other affected workloads | This campaign measured complete-proposed combinations, not every individual catalog entry. Missing recipes, incompatible artifacts and untested interactions remain pending; do not infer constituent winners. | experiments/six_lane_integration/catalog.json |
 
 ## Failed or quality-rejected attempts
 

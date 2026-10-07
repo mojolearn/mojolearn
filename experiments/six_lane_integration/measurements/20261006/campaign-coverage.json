@@ -1,0 +1,236 @@
+{
+  "coverage": [
+    {
+      "vendor": "nvidia",
+      "label": "NVIDIA native / IDENTICAL",
+      "complete_pairs": 99,
+      "failed_attempts": 2,
+      "quality_failed": 4,
+      "remaining_scope": "Native combined configurations measured; PTX, individual controls and other full-workload recipe gaps remain pending."
+    },
+    {
+      "vendor": "amd",
+      "label": "AMD GPU / IDENTICAL",
+      "complete_pairs": 84,
+      "failed_attempts": 1,
+      "quality_failed": 4,
+      "remaining_scope": "Selected retained-artifact pairs measured; GMM and other missing paired-artifact/recipe scopes remain pending."
+    },
+    {
+      "vendor": "apple",
+      "label": "Apple / FAST",
+      "complete_pairs": 86,
+      "failed_attempts": 3,
+      "quality_failed": 5,
+      "remaining_scope": "See unrun scope for additional FAST pairs; earlier array-preservation and quality limitations remain."
+    }
+  ],
+  "pending_work": [
+    {
+      "vendor": "nvidia",
+      "scope": "NVIDIA PTX/default full A/B",
+      "reason": "Compatible retained full-workload artifacts unavailable; no timing worker or compilation substituted.",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-ptx/status.json"
+    },
+    {
+      "vendor": "apple",
+      "scope": "Apple FAST LogReg/LinearSVC \u00d7 Taxi/Istella",
+      "reason": "0/4 pairs completed; BLOCKED_ALLOCATE_HOSTS_UNCONDITIONAL_SCP_DENY; freeze 779cd5453425139e00229fb99cfa4ec852d7677c. Original launch-tag error and released-host evidence are retained.",
+      "evidence": "campaign-coverage.json: apple_pending"
+    },
+    {
+      "vendor": "amd",
+      "scope": "AMD GMM full-workload pair",
+      "reason": "Paired retained mixture binaries unavailable; excluded from the completed queue.",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/next-reg/continuation-status.json"
+    },
+    {
+      "vendor": "all",
+      "scope": "Individual candidates, alternative arms and other affected workloads",
+      "reason": "This campaign measured complete-proposed combinations, not every individual catalog entry. Missing recipes, incompatible artifacts and untested interactions remain pending; do not infer constituent winners.",
+      "evidence": "experiments/six_lane_integration/catalog.json"
+    }
+  ],
+  "evidence_inputs": {
+    "apple_pending": {
+      "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/status.json",
+      "sha256": "0f00502fc0f411386da42c82b681a6c0b69a32dc6407149bb8812e627204bb3d",
+      "record": {
+        "status": "BLOCKED_ALLOCATE_HOSTS_UNCONDITIONAL_SCP_DENY",
+        "updated_at": 1791323867.659505,
+        "candidate_workloads": [
+          "classical2/logreg@dataset=taxi@input=classification-full-v1",
+          "classical2/logreg@dataset=istella@input=classification-full-v1",
+          "classical2/linearsvc@dataset=taxi@input=classification-full-v1",
+          "classical2/linearsvc@dataset=istella@input=classification-full-v1"
+        ],
+        "expected_pairs": 4,
+        "completed": 0,
+        "source_freeze": "4fc63c9d5486261f27fdd55eb31d1900e2cc0e8f",
+        "harness_freeze": "779cd5453425139e00229fb99cfa4ec852d7677c",
+        "compilation": "NOT_AUTHORIZED_NOT_RUN",
+        "cloud_instance": null,
+        "old_campaign_completed_pairs": 86,
+        "old_campaign_blocked_nb": 4,
+        "preservation_limitation": "Old internal-SSD array payload loss remains separately disclosed; this new queue will retain actual bytes durably before release",
+        "recipes_ready": 4,
+        "placement_attempt": {
+          "operation": "ec2:AllocateHosts",
+          "returncode": 254,
+          "error": "UnauthorizedOperation",
+          "reason": "Explicit organization service control policy deny",
+          "policy": "arn:aws:organizations::732983470537:policy/o-38cg2hxkrv/service_control_policy/p-e4y3ng11",
+          "request": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/allocate-host-request.json",
+          "complete_error": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/allocate-host-error.log"
+        },
+        "no_new_rental": true,
+        "artifacts": {
+          "math_sha256": "dd2de3c7d480f888ee7d633284349995ec8826bb71e1c6a1d5d2c93d856647d8",
+          "paired_source_freeze": "4fc63c9d5486261f27fdd55eb31d1900e2cc0e8f",
+          "complete_original_pairs_retained": true
+        },
+        "unresolved": [
+          "Allowed cloud Apple placement; no bypass of organization policy",
+          "Boot/runtime dependency deployment then real warmup+scored execution",
+          "Actual durable volume mapping and full typed-byte capture before any termination"
+        ],
+        "old_release_watcher": "Unchanged; exact old M3 pending scrub, release-only watcher remains armed",
+        "continuation_pid": 10545,
+        "host": "h-04545dd0c2d7a2870",
+        "no_new_host_allocation": true,
+        "billing": "AWS host billing paused while pending scrub; resumes when available. Existing24h minimum elapsed. Fresh EBS separately billed.",
+        "release_guard_paused_reason": "Parent authorized existing-host reuse after new allocation SCP denial",
+        "launch_request_sha256": "dc8e8414c7a535e6f2cb503e6332c2ed526802847ecba3ebeeadcf9afcf1a4c4",
+        "host_state": "released",
+        "error": "No owned available capacity remains. New-host allocation is unconditionally denied by SCP p-e4y3ng11. Prior RunInstances denial was a distinct lane-tag mismatch, not a blanket launch ban.",
+        "continuation_stopped": true,
+        "measurements_started": false,
+        "denial_evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/reuse-api-logs/1791322902382074000.err.log",
+        "token_instances": 0,
+        "host_released": true,
+        "release_evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/release-host-response.json",
+        "ready_full_cells": 4,
+        "retained_volumes": [
+          "vol-0ef50c4f586f92fd8",
+          "vol-0ae371d3208853a26"
+        ],
+        "retention_limitation": "Old workspace was instance-local; original incident correction remains authoritative. Release does not prove missing old bytes retained.",
+        "resource_status": "OWNED_HOST_RELEASED",
+        "release_controller_state": "RETIRED_RELEASE_COMPLETED",
+        "reuse_controller_state": "STOPPED_SCP_DENIAL",
+        "current_blocker": {
+          "operation": "ec2:AllocateHosts",
+          "sid": "DenyAllocatingDedicatedHosts",
+          "policy_id": "p-e4y3ng11",
+          "conditions": null,
+          "tag_exception_exists": false
+        },
+        "prior_launch_failure": {
+          "operation": "ec2:RunInstances",
+          "sid": "DenyMacLaunchOutsideBoard",
+          "cause": "Request lane tag mismatch",
+          "actual_lane": "six-lane-apple-restart",
+          "required_lane": "mojolearn-board-resume",
+          "blanket_runinstances_ban": false,
+          "original_request_sha256": "dc8e8414c7a535e6f2cb503e6332c2ed526802847ecba3ebeeadcf9afcf1a4c4",
+          "original_token": "mojolearn-qn4-existing-host-779cd545-20261006"
+        },
+        "reports": {
+          "allocation": {
+            "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-apple-allocation-denial/DIAGNOSIS.json",
+            "copy": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/peer-allocation-DIAGNOSIS.json",
+            "sha256": "c970b04b81d34766950dd1f71be0305448219ec6fa494fb55bc6b682bf0f9755"
+          },
+          "launch": {
+            "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-apple-runinstances-denial/DIAGNOSIS.json",
+            "copy": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/peer-launch-DIAGNOSIS.json",
+            "sha256": "f17ac13c2bc95910457f1236070c1f5a9df706bcfbcbda8371b97d40d7ecece8"
+          },
+          "admin_note": {
+            "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-apple-allocation-denial/IAM_ADMIN_NOTE.txt",
+            "copy": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/peer-admin_note-IAM_ADMIN_NOTE.txt",
+            "sha256": "b9253022ee9f46f82c827c523e89a417a53547f75e576104f92427fdcc1f094f"
+          }
+        },
+        "future_placement_plan": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/restart-readiness/future-placement-plan.json"
+      }
+    },
+    "amd_capture": {
+      "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/terminal-preservation-audit/status.json",
+      "sha256": "e3fb881d7fcc6428b70ada9183ebe1c2df8014f331b2f428c558c8c6ffeb0797",
+      "record": {
+        "status": "ALL_PERSISTED_RESULT_BYTES_HASH_VERIFIED",
+        "at": 1791322455.017783,
+        "pid": 51687,
+        "remote_files": 2163,
+        "remote_bytes": 16850225355,
+        "hash_verified_files": 2163,
+        "hash_verified_bytes": 16850225355,
+        "remaining_files": 0,
+        "remaining_expected_bytes": 0,
+        "status_counts": {
+          "HASH_MATCH": 2163
+        },
+        "receipt_files": 85,
+        "verified_receipt_files": 85,
+        "remote_hash_inventory": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/terminal-preservation-audit/remote-hash-inventory.json",
+        "local_hash_inventory": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/terminal-preservation-audit/local-byte-inventory.json",
+        "model_scope_limitations": "This proves all persisted file bytes, not model state never saved by the frozen workers; historical8 checkpoint losses and unsupported fitted-state scopes remain explicit.",
+        "automatic_release": false,
+        "compilation": false,
+        "model_runs": 0,
+        "saved_comparison": {
+          "returncode": 0,
+          "at": 1791322455.832535,
+          "log": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/terminal-preservation-audit/final-comparison.log",
+          "driver_sha256": "1bdd199662c57b684c0028a52a8a7ff7322ee6bfad672132d9cdfd85bd26cee7",
+          "snapshot": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z",
+          "summary": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/summary.json"
+        }
+      }
+    },
+    "amd_release": {
+      "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/release/termination-proof.json",
+      "sha256": "7d64be901bb6cc6cb4e8fbc913aa9555384e55155a34cffae13f19c9545ae667",
+      "record": {
+        "status": "TERMINATED_VERIFIED",
+        "provider_id": 606718390,
+        "owner_id": "six-lane-full-ab-20261006-amd",
+        "at": 1791323382.7456589,
+        "delete_http_status": 204,
+        "observations": [
+          {
+            "at": 1791323371.7023659,
+            "get_status": 200,
+            "list_status": 200,
+            "present_in_listing": false
+          },
+          {
+            "at": 1791323377.138262,
+            "get_status": 200,
+            "list_status": 200,
+            "present_in_listing": false
+          },
+          {
+            "at": 1791323382.7456498,
+            "get_status": 404,
+            "list_status": 200,
+            "present_in_listing": false
+          }
+        ],
+        "preservation_proof": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/release/preservation-before-delete.json"
+      }
+    },
+    "nvidia_release": {
+      "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/owner-attempt-02/termination-proof.json",
+      "sha256": "cfb05b9172a4b7e86ad01fedf5143cc17d484fcdb89cba6734bf5ecde9785878",
+      "record": {
+        "pod_id": "lgi6jabjbpat1c",
+        "status": "TERMINATED_VERIFIED",
+        "verified_at": 1791321814.101747
+      }
+    }
+  },
+  "latest_combined_defaults_promoted": false,
+  "all_experiments_complete": false
+}

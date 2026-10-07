@@ -1,0 +1,1587 @@
+{
+  "schema": "mojolearn.saved-same-arm-output-comparison/1",
+  "snapshot_at": 1791322455.74892,
+  "metadata_only": true,
+  "array_payloads_opened": false,
+  "model_runs": 0,
+  "builds": 0,
+  "comparator_path": "/Users/andrewhendel/CascadeProjects/mojolearn/tools/six_lane_compare_results.py",
+  "comparator_sha256": "6766da83eec6678ededbfc07a810ee9910813150980c099ea687d746b7c94586",
+  "comparator_source_sha": "09acaa629c7520fb723865e80c713262c0b74e11",
+  "candidate_case_count": 84,
+  "matched_vendor_receipts": 168,
+  "matched_phase_exit_counts": [
+    {
+      "phase": "warmup",
+      "returncode": 0,
+      "excluded": true,
+      "count": 336
+    },
+    {
+      "phase": "scored",
+      "returncode": 0,
+      "excluded": false,
+      "count": 336
+    }
+  ],
+  "supplemental_failed_arm_receipts": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/native-next-reg/gmm-baseline-followup/receipt.json",
+      "sha256": "9b54631f566a58ddf7a85f4e075c6245d7dec70bd6ae29e9ec731314bb3da59c",
+      "status": "BASELINE_REFUSED",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "runs": [
+        {
+          "phase": "warmup",
+          "arm": "B",
+          "returncode": 1,
+          "excluded": null,
+          "error": "Exception(\"GaussianMixture: fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the number of components, increase reg_covar, or scale the input data. FAILED AT EM iteration 1, COMPONENT 4, LAPACK info=11 (the leading minor of order 11 of that component's covariance is not positive definite). reg_covar was 0x358637bd. THE COMPONENT IS NOT RESET AND THE FIT IS NOT CONTINUED (DEVIATION 1723): the pivot decision is pinned in both halves by cholesky/checks/potrf.mojo's DEVIATION 1634, so this refusal is identical on every vendor -- and a silent reset would turn a decision that is identical into a value that is not, which is the worst outcome this lane can produce\")",
+          "log": "/root/campaign-results/native-next-reg/gmm-baseline-followup/warmup-B.log"
+        }
+      ],
+      "workload_id": "more:gmm@dataset=taxi",
+      "purpose": "Previously unrun baseline; candidate failure preserved, no candidate retry or setting change",
+      "pair_status": "INCOMPLETE_CANDIDATE_FAILED",
+      "qualified_identity": false
+    }
+  ],
+  "observed_primary_counts": {
+    "AGREE": 168
+  },
+  "observed_repeated_counts": {
+    "AGREE": 168
+  },
+  "full_identity_counts": {
+    "MATCH": 0,
+    "MISMATCH": 0,
+    "INCOMPLETE": 84,
+    "NOT_REQUIRED": 0
+  },
+  "qualified_full_identity": false,
+  "accepted": false,
+  "promoted": false,
+  "unmatched_native_case_count": 16,
+  "receipt_read_errors": [],
+  "cases": [
+    {
+      "id": "5e804a724c9a74603c02",
+      "workload_id": "classical:kmeans@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/5e804a724c9a74603c02.json",
+      "receipt_sha256": {
+        "amd": "a51c008b5485fa8d162494bd174822f81f0ec3af492b3322845e169edc2cd17f",
+        "nvidia-native": "0e6afe69ba4f04c41f1060c3509e2b9a90b8f700b24786a73c87840291289ebf"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "75bfc93a6d141404e2b7",
+      "workload_id": "classical:kmeans@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/75bfc93a6d141404e2b7.json",
+      "receipt_sha256": {
+        "amd": "b4528d73adfc4fc0f631a35506497876d2abfe2f7bffa94e46c10704dc8a113a",
+        "nvidia-native": "042a2e7b8368aa935b1fe93171d733143111a143fcb216f7da2be7178fecaaf9"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "1da65df0be8099cd5252",
+      "workload_id": "classical:ols@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/1da65df0be8099cd5252.json",
+      "receipt_sha256": {
+        "amd": "f72bbf8c8ddb5b7ea590c14fdb4f2c3e0b23ef980874908c419a79e6489bb338",
+        "nvidia-native": "ea78f4faba47ebcc5621e56f14829a8ab47c627e511315b3e28355911f3a53a6"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "96b8b5ee7ddf14de5cba",
+      "workload_id": "classical:ols@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/96b8b5ee7ddf14de5cba.json",
+      "receipt_sha256": {
+        "amd": "ce4f7e02f93e798b69312bd5c217bc008e088bec48ae5c641d05567084189821",
+        "nvidia-native": "1b44f0a036f5da9a7f7f4a8369341ee475791e509fe55a6deb9989fbaa37dd90"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "dc859e15212839618267",
+      "workload_id": "classical:pca@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/dc859e15212839618267.json",
+      "receipt_sha256": {
+        "amd": "320fa673c597fb5f7e3998c65425f166750a7a1b4a4f65e833047ec110f4d42e",
+        "nvidia-native": "b7f9fc2b6cedd145ea5cbaafe538515849445ee06ef8f5e599908b25ecbafd61"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "f30c23852b06c79b8790",
+      "workload_id": "classical:pca@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/f30c23852b06c79b8790.json",
+      "receipt_sha256": {
+        "amd": "6ed1253afb24f2690960eaf53d61b7868dcb5315f70bd0f4cbcb65e18cae9a29",
+        "nvidia-native": "e251aed785d8d4afafa1a8a65eec06eecc49ed55c858274f3f7b5d6f201bb993"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "d41b9fe3b0fe2c7d2361",
+      "workload_id": "expanded:bayesian-ridge@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/d41b9fe3b0fe2c7d2361.json",
+      "receipt_sha256": {
+        "amd": "5b292a2b996f8fd1ab860531d311590f15167e127544064c67dd1453f918e7c6",
+        "nvidia-native": "5219971b255be9cc715d8c18bac47c395ff79f5aa49ba6c2576b7dc94791d646"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "6975f83960c37a95ad6a",
+      "workload_id": "expanded:bayesian-ridge@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/6975f83960c37a95ad6a.json",
+      "receipt_sha256": {
+        "amd": "c9e54aa14fa9100641da8951bc5075ca1fc0c4525ee6fcd66896ba6c4f5fcf1d",
+        "nvidia-native": "afba4dda2e45a7f9bc536b253113581948b43b2b756a7b391aa26210d44d29e8"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "e1fd9a8db0384e1c9ab1",
+      "workload_id": "expanded:categorical-nb@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/e1fd9a8db0384e1c9ab1.json",
+      "receipt_sha256": {
+        "amd": "93655ca15ab3e0a6f675d0a6d358ee307568e124ad9defefb3344eefd79c75c8",
+        "nvidia-native": "59a49310b783120b7cd45bb97c3595b021140af5d22e5498f26eeca7002a3726"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "f80b2508b965518451b6",
+      "workload_id": "expanded:categorical-nb@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/f80b2508b965518451b6.json",
+      "receipt_sha256": {
+        "amd": "6476be9b9581e8166536912e9d04b224d6fb552cbad8e98b5363517140d3c4c7",
+        "nvidia-native": "9088b118a79aa1044eda84408ebabd45d63b8fdee7a67ca960481446a74681a6"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "e49c23163db2f7002a4f",
+      "workload_id": "expanded:cca@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/e49c23163db2f7002a4f.json",
+      "receipt_sha256": {
+        "amd": "80c30868a21d4f95ffbd2c07e8e926ed316db88fc2e2c16a119aa1e5a14cb972",
+        "nvidia-native": "35f8d8d44b49bbbe509e4a1a397ccc352d6daff2c3360523c03645e581a0eba3"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "663d1d4ab5889643cb3f",
+      "workload_id": "expanded:cca@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/663d1d4ab5889643cb3f.json",
+      "receipt_sha256": {
+        "amd": "d0ce60ed86981a3742cc2af2ff5ee55cbcf45c4579e22262f69c0cbee916e6fe",
+        "nvidia-native": "0696e83f28f6bf9ae3cc4a319a92b7ef168c5033a1e5a1e33b1869ec0db39590"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "ef0371c6e962169c3568",
+      "workload_id": "expanded:enet-cv@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/ef0371c6e962169c3568.json",
+      "receipt_sha256": {
+        "amd": "157c077f53296bd0608ac1e1125c57a4136c64fa3fc64651da2568610ac5e0b0",
+        "nvidia-native": "537174f8810c8a46e26214105e3dce17c230a217338d562e969805ae4463ae04"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "ab6019905f8f5a3cb736",
+      "workload_id": "expanded:enet-cv@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/ab6019905f8f5a3cb736.json",
+      "receipt_sha256": {
+        "amd": "0e392fcf2a93f517b976cd927c6c0dfb11bb6cbbfb5e32abe9150beb1bbfc324",
+        "nvidia-native": "9fc87489464b142ab9cd356046f588738393c45dca8793fe30236f3b4899c770"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "1a47390d9add3e8a3039",
+      "workload_id": "expanded:factor-analysis@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/1a47390d9add3e8a3039.json",
+      "receipt_sha256": {
+        "amd": "969c621aafdaa6f88bb849b180886463cba623619b5be4b185cae19f55542af1",
+        "nvidia-native": "82a1e5630b4348e54ca5805c594c6d5ed38ce7e5ae9898135656491388f8758f"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "97b5b3fc42ceb348e658",
+      "workload_id": "expanded:factor-analysis@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/97b5b3fc42ceb348e658.json",
+      "receipt_sha256": {
+        "amd": "e793273f8104500b7be857cf8054d59b0a78ba3e9da6eceb7ae38c1684743428",
+        "nvidia-native": "59228062b1811110c590dd8f436d07f4dbc30932b4680b4c58c47d32bcbdf850"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "2361ffdcc8574c89c864",
+      "workload_id": "expanded:fastica@dataset=istella@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/2361ffdcc8574c89c864.json",
+      "receipt_sha256": {
+        "amd": "96ccd70aed1c37ac9545f389db9cb19e600756ed5898efb9a749230368665df7",
+        "nvidia-native": "0b84b6a5efcf9f83a181048bfe8afea02509095d4261164ff46085a27c5aaec4"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "e1b898779ec2f69256cb",
+      "workload_id": "expanded:fastica@dataset=taxi@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/e1b898779ec2f69256cb.json",
+      "receipt_sha256": {
+        "amd": "2047dd5774f163d01dbd524c0d8b0af1c5562ff97f3961aa1df4e4e6f215f0ec",
+        "nvidia-native": "d983c275385f8c33787038126830600d06a16338a4b9b280980eb883dc989dc5"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "526d2b9c9b98dd31d842",
+      "workload_id": "expanded:gamma@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/526d2b9c9b98dd31d842.json",
+      "receipt_sha256": {
+        "amd": "71847858a9267336e212af61eb92393b14e637e3c21a817a2a53c1e013a650cb",
+        "nvidia-native": "447c91425bfb4531af037e28077a4225571a24ae38349104bd3698fc057aaedf"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "3ff754e3deaaaf72d8a8",
+      "workload_id": "expanded:gamma@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/3ff754e3deaaaf72d8a8.json",
+      "receipt_sha256": {
+        "amd": "d73e42b4bc1a21abb09014b7c02413d26e38bc4d0c602c25204604439bcd3393",
+        "nvidia-native": "03074c4f3e322ecbf5330702084efd802ec4749fd827367c511ccc10149827f1"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "f1cb1e7fb82555a384fb",
+      "workload_id": "expanded:gaussian-nb@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/f1cb1e7fb82555a384fb.json",
+      "receipt_sha256": {
+        "amd": "9476c94794fca21f5afc7a25f22c4f02b4b45e7392565c5b45a2ce5c5e9dd0d3",
+        "nvidia-native": "49b1d5bc8ddff6e21f9bcc63c070856fffcbb4adaf0084ed85a218389070430c"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "0979c39569231fcb93de",
+      "workload_id": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/0979c39569231fcb93de.json",
+      "receipt_sha256": {
+        "amd": "8c02b68aa945da71256a8b9577939e66590a447b00b35e470fa62d3541ccac6d",
+        "nvidia-native": "6123620f0c5280ce4e77e0b5d28a1b9b02eb361ca927365433d860e78a10b5c7"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "75b97ff11f72a26aa6b6",
+      "workload_id": "expanded:gaussian-rp@dataset=istella@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/75b97ff11f72a26aa6b6.json",
+      "receipt_sha256": {
+        "amd": "6168058929c6b6d9cb4b9dfc0f52e37f641ba2306cb9a6d9e6cae2d97996c593",
+        "nvidia-native": "c341076412fd7f6c6da883ea842cf7d1068c93c760ce08aadba811e0b71d398e"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "fbc8875381459241e37e",
+      "workload_id": "expanded:gaussian-rp@dataset=taxi@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/fbc8875381459241e37e.json",
+      "receipt_sha256": {
+        "amd": "817a8cafad8c62e29d82030c7307253c78bca5a14f4a9301939fe7c2a1a233ea",
+        "nvidia-native": "8c8a5cefffca15945fe97a39cb3c3a0dd559716d3464df649cdc9e997267ae9e"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "9bdfce02e5bc1df55751",
+      "workload_id": "expanded:incremental-pca@dataset=istella@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/9bdfce02e5bc1df55751.json",
+      "receipt_sha256": {
+        "amd": "4d5a8da08ccffe4bbb2ca2875dbafda1bbbadf56e1a84e4f90603690aaa8dd37",
+        "nvidia-native": "43d43b891968f3bc0df084b9b8e313a544bfa32539809607ce5edc1a245ab8ee"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "1e1d9279be09bb2fb882",
+      "workload_id": "expanded:incremental-pca@dataset=taxi@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/1e1d9279be09bb2fb882.json",
+      "receipt_sha256": {
+        "amd": "1322aea47ea599f636353e5a92be17c226d438bc2141981efbeae5487ad3f345",
+        "nvidia-native": "c04b13ca9f19e35d266030e256d9e88d08b58382a792032abcd608f662f8a6ae"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "b99284f45564c4a1d0d4",
+      "workload_id": "expanded:lasso-cv@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/b99284f45564c4a1d0d4.json",
+      "receipt_sha256": {
+        "amd": "59a912c0a59067aba3809193d2806d14e64dc59cb218501d0267e5e25e6c85aa",
+        "nvidia-native": "62f123c1d09fb5b6ae34f0ccc87199d7d726cdb770607fefa02fa96005e59968"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "ed497f13284054687514",
+      "workload_id": "expanded:lasso-cv@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/ed497f13284054687514.json",
+      "receipt_sha256": {
+        "amd": "e7dfb10d2af67d1a1480b05eb7ae2e95d17e62bc26abab8734482536a0d7c50e",
+        "nvidia-native": "82bd778ed89a56ac2b0dc0686a0508fd45c0e0d578c42b96a6dceddb5de799ff"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "18a4c523ee3e65a45e17",
+      "workload_id": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/18a4c523ee3e65a45e17.json",
+      "receipt_sha256": {
+        "amd": "54c937c185862ec8044be0a4c200861c5b7db9dd3dc2cb81ea302fd2a1ca4426",
+        "nvidia-native": "46a7e514084b1230b2dfe157c9c0e5ea06ed8d96f3110d645c22144885fdaee9"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "e9de221517c39d945878",
+      "workload_id": "expanded:lda-clf@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/e9de221517c39d945878.json",
+      "receipt_sha256": {
+        "amd": "a0bb2193fa372d1a4bb3518fa419de625f7c952f6abadeaa1857d5930980f741",
+        "nvidia-native": "055367af93814db459a602745d0fd15a0a27a4bebedcc47f83271b8c6b6f8ac6"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "7ddf4a1c2c1f680398d7",
+      "workload_id": "expanded:maxabs-scaler@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/7ddf4a1c2c1f680398d7.json",
+      "receipt_sha256": {
+        "amd": "9845e0176562855055b97aa04d62205a34f065cbf38dea83fea13dc54301d43e",
+        "nvidia-native": "9ee6625392507af192b473a071666f882c63118bb81f24270738cbdfa9ea6adb"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "9c65baeb2e47ba89b327",
+      "workload_id": "expanded:maxabs-scaler@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/9c65baeb2e47ba89b327.json",
+      "receipt_sha256": {
+        "amd": "03372f397c9fbf7e5849b56fb4f06c9bae8679f051426de1d6852e2422b3f9f5",
+        "nvidia-native": "340a9c2a017f7a1bc1d94e42c5ddd76ab44443f15b24254acc6a0ebcec02c800"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "7ca5b29b7d645c802c77",
+      "workload_id": "expanded:minibatch-kmeans@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/7ca5b29b7d645c802c77.json",
+      "receipt_sha256": {
+        "amd": "e4e399b608c4a55b082b1ce2a5e7e69bcf8e16821a1b6e5a24b92668e002cdbc",
+        "nvidia-native": "837ba5dc8477b39686811027b716cfc6e8dca264fabd43e460655d633f91430b"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "96ee601e1c0b8c8b1f8d",
+      "workload_id": "expanded:minibatch-kmeans@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/96ee601e1c0b8c8b1f8d.json",
+      "receipt_sha256": {
+        "amd": "348b047e775e9afac726d3cb993cd5127c7894c02ce0c3aabbb248f67f5401e9",
+        "nvidia-native": "fb949305c68f2d803041475b6f550568d50092c27eb04bb458e18a02b0f6b474"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "8cc02044eea6c67b0f1c",
+      "workload_id": "expanded:minmax-scaler@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/8cc02044eea6c67b0f1c.json",
+      "receipt_sha256": {
+        "amd": "6b9f5ab5c000dd1d09038d3f39c0935569e31dfb47cda0ecd9906571dc248606",
+        "nvidia-native": "2058eda1b41cd5d390fcd60ff8e9cf00b723522909030fe757e20b8875c7c8d7"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "b2f07c796bee9ade082b",
+      "workload_id": "expanded:minmax-scaler@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/b2f07c796bee9ade082b.json",
+      "receipt_sha256": {
+        "amd": "bc621250270a00fce43c6a9f8e2b241a6b94bac33b7a91ef4458cc1ffaa166d7",
+        "nvidia-native": "4a6c7b5c3f083249a9b250cf72e97f655836377d38b9b4bdf5774c4ced974c8d"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "6fa435bc217bd3f599c3",
+      "workload_id": "expanded:nmf@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/6fa435bc217bd3f599c3.json",
+      "receipt_sha256": {
+        "amd": "05f93faea7c7be6b377ade1d51d537115ca6ee4593c87315f448ad205218532a",
+        "nvidia-native": "558397aac5856db27e753e3c56b2f14dd10d48451694eab1074b2e6890f0489a"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "9df03fdaee32d70aef12",
+      "workload_id": "expanded:nmf@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/9df03fdaee32d70aef12.json",
+      "receipt_sha256": {
+        "amd": "c708e72ad0dcbf621c243708642d77b3adb09f5769c9b5f91af57891fe6f7ad5",
+        "nvidia-native": "f16c0777c7f91751a2bdde54eb7755d1194ace1520c8dcacd5cbb615028b3a1a"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "3c2e30c66a37c811469b",
+      "workload_id": "expanded:pa-clf@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/3c2e30c66a37c811469b.json",
+      "receipt_sha256": {
+        "amd": "958943913ed9adc7923eedd2f50e2c8262cc29ed788c936d41fa2ed9ddbc7761",
+        "nvidia-native": "f757adbc0b9ee4762e2df133754f3680a2d57470d423bf2aeab8ababcd2f78c4"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "2b5a674deff7ff6e8ef0",
+      "workload_id": "expanded:pa-clf@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/2b5a674deff7ff6e8ef0.json",
+      "receipt_sha256": {
+        "amd": "3eb03fb8a8b0e664be88db2d6f91ff036b2dbf0323a18fb2e8e0567d4b0ef4e5",
+        "nvidia-native": "94a5c3e39ae799c6cde049ec6b4e4b639d09f0c49d5f88c6d5861201bf96dcf1"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "a7ec2c45cd1086d7718e",
+      "workload_id": "expanded:pa-reg@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/a7ec2c45cd1086d7718e.json",
+      "receipt_sha256": {
+        "amd": "f2d9ad01fe99bb2d104e1b6333728cfa033b713bba725082f6bcaf416ca771fd",
+        "nvidia-native": "362b070dec38ea6addeef38d10254b2856c3c95e269668b1a6cb9741de0200b5"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "9a3ba7d7918ac5678d68",
+      "workload_id": "expanded:pa-reg@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/9a3ba7d7918ac5678d68.json",
+      "receipt_sha256": {
+        "amd": "73235d76b9ed5a8509d9b237acb9141787f558991f211d33e354b7d2959b5d5e",
+        "nvidia-native": "6d335c4f3c76fcc54e162f2dfb5505a1003563f12191cfecf80a321d74b64b72"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "58058d60b3f901cf02ab",
+      "workload_id": "expanded:perceptron@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/58058d60b3f901cf02ab.json",
+      "receipt_sha256": {
+        "amd": "13b87673bddf5ad2358c8634ba1d59a5e0604615582cdb1ebe837e9585f862b5",
+        "nvidia-native": "a964de79e9edef0b5765ba263942d9497ce34aab65c9b6addd1770b9fabae7f1"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "c0f7a83d7e5da07928ef",
+      "workload_id": "expanded:perceptron@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/c0f7a83d7e5da07928ef.json",
+      "receipt_sha256": {
+        "amd": "ecfe8ea8cb615b5abe75b2055f8de77564036f05373efbf48ff49043a3af7f69",
+        "nvidia-native": "64f7090abf6e1eeff81a164137b99015938e81a8356698a08db9b541f1ab833d"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "dc6b9dd1517a48ebe8ce",
+      "workload_id": "expanded:pls-canonical@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/dc6b9dd1517a48ebe8ce.json",
+      "receipt_sha256": {
+        "amd": "c09f0a07ce892d3b40645d46494c758f795a18f482ba6adf7389f07379db7831",
+        "nvidia-native": "9801a32c62cdb4635b8912d4f9e2b9600472aad9ae3dfaae75009f336f2f258e"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "03d09345763b5edafe21",
+      "workload_id": "expanded:pls-canonical@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/03d09345763b5edafe21.json",
+      "receipt_sha256": {
+        "amd": "d28ff0124e9aa06fd3faada09c53fa143f21eec6b324f77ad5b4cc9842d22681",
+        "nvidia-native": "85fdc93abd9c04e7022c94bd7b3e334ece1cb1197d0979fac50a52e93fc665b2"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "a74c35d24cd54d36db9c",
+      "workload_id": "expanded:poisson@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/a74c35d24cd54d36db9c.json",
+      "receipt_sha256": {
+        "amd": "0111819d667a1ccc89fdea0b4ed6f101087e9b8d90929eb9217c8b0f28000e11",
+        "nvidia-native": "7bcc427eb43790d3813a51ef6dda90cde0c31c9bf2688d1d29945b5b4c83a2e4"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "436e71bd073537cb13cf",
+      "workload_id": "expanded:poisson@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/436e71bd073537cb13cf.json",
+      "receipt_sha256": {
+        "amd": "76c2c43ada55dc86ee34277cf421a2eeded3fb667ce9cb5715f6f12b19fcae00",
+        "nvidia-native": "f93fe6eab636a35f450de5fc37cb2e91326c13e8170afbf7106e5df232f38961"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "d97f1167c9e4f5f8486d",
+      "workload_id": "expanded:qda@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/d97f1167c9e4f5f8486d.json",
+      "receipt_sha256": {
+        "amd": "0b4f9e0d06e8680d0cb7090282ad8f6c8617376b66efd9db33cb1765158dfc4a",
+        "nvidia-native": "c6e8e19474fc4295991d0ed5e4f5b4f34953b6fdeb213c9df56cbcb0ab15a73f"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "8c478ce30573cec311f7",
+      "workload_id": "expanded:qda@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/8c478ce30573cec311f7.json",
+      "receipt_sha256": {
+        "amd": "16ef6c088a4b298ec8fda4ecc6621f2775aacfd6a846c469f9501f0486f85a1d",
+        "nvidia-native": "3610ca060d6af39de752c3fa2fb5a5bce2b51cc90111cb10c5dc45413863b529"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "269fa719c5881c3d01ec",
+      "workload_id": "expanded:randomized-svd@dataset=istella@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/269fa719c5881c3d01ec.json",
+      "receipt_sha256": {
+        "amd": "1fc58c2312c6a7a60949abbeccf2defa93396359157b4d5ba8138bfee80d8a72",
+        "nvidia-native": "5def4d2c4a56c5ad3b6da6edc09fd868456db081a8cb263d6368a97b13f5581f"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "fe191fbb355f314f8726",
+      "workload_id": "expanded:randomized-svd@dataset=taxi@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/fe191fbb355f314f8726.json",
+      "receipt_sha256": {
+        "amd": "ff6d706e421dcefd9532bf39875aec1d11f3c592174eb0fd87ba2034a177e09d",
+        "nvidia-native": "7d7ed3cc71b5db5646eb07dcf172275febce4e6ac2fa7aebac811cd437f138e3"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "c00287df00fa64760e75",
+      "workload_id": "expanded:ridge-clf@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/c00287df00fa64760e75.json",
+      "receipt_sha256": {
+        "amd": "ece0f978652f30a6ee836514484a2547ddf5bff4c4f8fc4764108cf1cd5a49f2",
+        "nvidia-native": "e3f8c8b9497bd8c515cc4a09f26c1428d83e7f5d870881c42a80cb4088b6dfd8"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "55eda84e4dc2571a50a5",
+      "workload_id": "expanded:ridge-clf@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/55eda84e4dc2571a50a5.json",
+      "receipt_sha256": {
+        "amd": "edc914b433071230b7f50daf27ea3b653237b390d719055bb47a7ef82a2a09af",
+        "nvidia-native": "d74a55d2e879de460b1edc0d30543b2099e139a14210921f9e657bde40a1918b"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "a3cffdf3cbb61ca58365",
+      "workload_id": "expanded:ridge-cv@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/a3cffdf3cbb61ca58365.json",
+      "receipt_sha256": {
+        "amd": "cba2680b855e11aed982de276cb2807fe2818817b6bd2bbd393e94250dc6c961",
+        "nvidia-native": "00d534db22dba05316bbae852b55455602b7e61d1853add5ed4417ab80af7b26"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "c815d7908f8d05736fed",
+      "workload_id": "expanded:ridge-cv@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/c815d7908f8d05736fed.json",
+      "receipt_sha256": {
+        "amd": "71eba9c6f99e68ee5a7663cb8623cca7518cafb5e40859c56b858683d200aa16",
+        "nvidia-native": "cc4121371d0733cbdb0a95a0f7b3082ed65296ae719b5b3d840de52b2ca3de68"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "844ad2d535c1bd6e0b67",
+      "workload_id": "expanded:sgd-clf@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/844ad2d535c1bd6e0b67.json",
+      "receipt_sha256": {
+        "amd": "669cdfcc29805a0a0420539513bada95aa04decb562aa29806dae8532621cb8a",
+        "nvidia-native": "8437062e141f34c9ded8514212ad4730ffc1e1574845e7f83693e3251f7ff8ef"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "6f69d33ee268152edd65",
+      "workload_id": "expanded:sgd-clf@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/6f69d33ee268152edd65.json",
+      "receipt_sha256": {
+        "amd": "4e62584af0e728e7977ab201ef123b825b066a783659304a426e09aa5dc73381",
+        "nvidia-native": "0c67b7bb02f9f0ac0a6639dbb4b84f23ce82a7ad6b8aa11fda7688ded9b89def"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "e7d2bedc38a2d158176e",
+      "workload_id": "expanded:sgd-ocsvm@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/e7d2bedc38a2d158176e.json",
+      "receipt_sha256": {
+        "amd": "fdf373e847a765a741cea13fc83c71107bccdfdce6d449f2df8015fd10c5bc18",
+        "nvidia-native": "1fb585bb6b6e26491f134822fab30e8edb7dca868ff85275fd239067bce5ac84"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "16eb4aed742ac338fb45",
+      "workload_id": "expanded:sgd-ocsvm@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/16eb4aed742ac338fb45.json",
+      "receipt_sha256": {
+        "amd": "1f71752fb5e0001e3a11ca6600e3eaa0b8582650cb571329b15b67fd4a6ca99b",
+        "nvidia-native": "65c0d1fae4ba3e87b20a4c8e733bf8632a456f2956406ec3eb1b7b3aaa47831a"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "67670706fe0397d423c1",
+      "workload_id": "expanded:sgd-reg@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/67670706fe0397d423c1.json",
+      "receipt_sha256": {
+        "amd": "8a6b4a9d231cf4068c39430ff17962629deb6ed7a873c87049c2e05bbfaee427",
+        "nvidia-native": "df3c67afc3399d0955ba72b2702a7e297db51ecce2b7e025dd4c853f3cc8ee7c"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "c138ad0750b5c3c23464",
+      "workload_id": "expanded:sgd-reg@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/c138ad0750b5c3c23464.json",
+      "receipt_sha256": {
+        "amd": "8b11a6981f778aee900e99984eee81b2b5b051bb5ab32b4c751e61543fa3d63e",
+        "nvidia-native": "53e077308c555200fc607849083ce103a811164e3a88727fbcc29cb8739fbfbb"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "ed3328940cdd87234585",
+      "workload_id": "expanded:sparse-rp@dataset=istella@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/ed3328940cdd87234585.json",
+      "receipt_sha256": {
+        "amd": "68748c7e9462139ec16cc50ad11b0992931c1214c0f588e5c3cde6a037d5f8f0",
+        "nvidia-native": "a5f52c760deb1c54fc0f0b4f8f161b49234c9580319f5e96649b22354afdc5a1"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "06cedf31b5b79a820085",
+      "workload_id": "expanded:sparse-rp@dataset=taxi@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/06cedf31b5b79a820085.json",
+      "receipt_sha256": {
+        "amd": "c0d33f869fa38b01e5d6608e63a403309a3ba6894f189e3fcaa601f1294a62d4",
+        "nvidia-native": "07c3bad08942982c6758a0f375f989e2440754827ee22010c40b8a7a5bfa71f4"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "c79dfc95cc29eb7e1c84",
+      "workload_id": "expanded:standard-scaler@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/c79dfc95cc29eb7e1c84.json",
+      "receipt_sha256": {
+        "amd": "324a34085a98225836a5df443a4fc2a8bdddcbb78bd5e8fcf54a260101d8c1cd",
+        "nvidia-native": "40d751ed151342f337d0f9563779efdeffd73b596e729f19d24d705f59adec96"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "763ddcf1331d40fc5436",
+      "workload_id": "expanded:standard-scaler@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/763ddcf1331d40fc5436.json",
+      "receipt_sha256": {
+        "amd": "037f196a984b828a15b4b7833b928f92dfc0d0045215317b5951e3774ddd6610",
+        "nvidia-native": "34879ee186e39adf2264d05af36ff64255f511651969924f015f408db24f8cbb"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "b4e6804830086a44e622",
+      "workload_id": "expanded:target-encoder@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/b4e6804830086a44e622.json",
+      "receipt_sha256": {
+        "amd": "55c6f54d7af6b7f066a1ef73d14bc7951a65da6b9aba5f819569184ad9b21b6e",
+        "nvidia-native": "cb6df36558611c21aff31e2db80135906fcee766a568be73bd72688449ad5562"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "ba0a9339ea811c187409",
+      "workload_id": "expanded:target-encoder@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/ba0a9339ea811c187409.json",
+      "receipt_sha256": {
+        "amd": "17308b10b5c0bc84a95d11fbb249a8ed1e8092d9522a748df77430e94fa6be82",
+        "nvidia-native": "55dcb4aaf291524385fdd1946e97c484a45024e96ddf2664abfe07e48d2ad9a5"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "b7b0e1c7abe88faf44f1",
+      "workload_id": "expanded:tweedie@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/b7b0e1c7abe88faf44f1.json",
+      "receipt_sha256": {
+        "amd": "9d67d7faaca729c3255fc301b41bdfea59a52d877384cff7fe96c17f618aef49",
+        "nvidia-native": "3a622ca2f72b9781d3c8002b4bcc72960d67b0bdbc10cb97fe29968874c27f1c"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "e867c6e2d662b89c521f",
+      "workload_id": "expanded:tweedie@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/e867c6e2d662b89c521f.json",
+      "receipt_sha256": {
+        "amd": "cc30a4837c45acb37bacf93d90b738481dfa5de50816b7285aa5346ed742e323",
+        "nvidia-native": "237250a5f41c858d95d900700995b653e7d3c2fde0402e670b95e92e9a044763"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "b08d9ef06d420ea51d27",
+      "workload_id": "more:elasticnet@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/b08d9ef06d420ea51d27.json",
+      "receipt_sha256": {
+        "amd": "06694bdff90ff679e0c37255e98d6c62c585da0c3bd2bade4cedf4860608782f",
+        "nvidia-native": "e3d080542065c87c62e05809ddd176c2e1f1daffab266122ac97ab67537f348e"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "a793ffdde8ffe59fb934",
+      "workload_id": "more:elasticnet@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/a793ffdde8ffe59fb934.json",
+      "receipt_sha256": {
+        "amd": "ca797aa5249db7579331dfd66d7e7391f6a309352cf5638e2c0879810c537ffd",
+        "nvidia-native": "fbf191894b5c4a303edf219a0e47159e58d8fb7d0a703a96f0dcb8c6c0671668"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "571d36507613499deea6",
+      "workload_id": "more:lasso@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/571d36507613499deea6.json",
+      "receipt_sha256": {
+        "amd": "7e31dcd7e13e52d1f180971a8a3bcb61ff2d4e492a14509eac1a2e0c90000abb",
+        "nvidia-native": "58c6cac6d1a0e706376db7dcb57f6daa29b537c648c764e9897365deff5efc86"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "1deb2566154155d035ff",
+      "workload_id": "more:lasso@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/1deb2566154155d035ff.json",
+      "receipt_sha256": {
+        "amd": "d1987c246bcff717e0449139761bfba0d7cecce4c5908038a902a8152042e4d7",
+        "nvidia-native": "32ac494cdb2dc082aba8d18aa3f0034c36ff5cc900b7994499268a3303c52a1e"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "9f18d3947ae39551d9e6",
+      "workload_id": "more:linearsvc@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/9f18d3947ae39551d9e6.json",
+      "receipt_sha256": {
+        "amd": "c8f41d94556775e1c03c22dbc8b58d439bf23dd99fd580b121806f732a32aa60",
+        "nvidia-native": "02fc326dafa4af61096d9d57425e1f0488103831ef28f75f7a31a3a5e417feef"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "1ecb9099d266f589c90b",
+      "workload_id": "more:linearsvc@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/1ecb9099d266f589c90b.json",
+      "receipt_sha256": {
+        "amd": "b8ffe5c9a06de083f3761cc911034af82f0bf5d3a9249bd20cb062c5cdaf3dc5",
+        "nvidia-native": "d56828d3cb169111948d8834ba58035391c8576dac9b4817c468e437c7ca6d24"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "f1ac8fc4339afbc164d9",
+      "workload_id": "more:linearsvr@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/f1ac8fc4339afbc164d9.json",
+      "receipt_sha256": {
+        "amd": "bf6f8a691fd692716f93bdc51e44f5d797c3fa611217a8e33dc92bdb004180e2",
+        "nvidia-native": "aa0a63c3df4ffe5b2f386ab284a50504a69a2e2256c611a58d489dc44c972296"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "a7b048e240b683d4ce48",
+      "workload_id": "more:linearsvr@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/a7b048e240b683d4ce48.json",
+      "receipt_sha256": {
+        "amd": "76eb6b3d350a82bacb7d7b6d3fd65418a02a3e12b1764a09dbaf150b4c52118b",
+        "nvidia-native": "0fc42ce3ba28b97247caf0296d3caec109747b0bc7195df349529874e044fc12"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "22d76a7a48ab7376d07e",
+      "workload_id": "more:logreg@dataset=istella@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/22d76a7a48ab7376d07e.json",
+      "receipt_sha256": {
+        "amd": "4f60a11668ac5dd2a293bccde914f151974219256f23c7d4b95fbc68840fa51c",
+        "nvidia-native": "fc0f6b65caba1645d1b107edc056b3b2001fb79601f7b563e89efe504609be63"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "ec9054331cd932fe4a00",
+      "workload_id": "more:logreg@dataset=taxi@input=classification-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/ec9054331cd932fe4a00.json",
+      "receipt_sha256": {
+        "amd": "51cb636357157fb17ff0bf19ffbb592ee7f084ba09d12f105e24e812330c5771",
+        "nvidia-native": "9777fb477186c28b442f39823ed0d903c0260b38343de3b77ccb7d0bd5f2e79f"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "de51c172b6cb2c7118b7",
+      "workload_id": "more:ridge@dataset=istella",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/de51c172b6cb2c7118b7.json",
+      "receipt_sha256": {
+        "amd": "dde6508a9c3d4008d93daab4926271460c07041608c315428ead47e9da47e499",
+        "nvidia-native": "0ef319b7b718eace211c38e70fa505e353e508d2c93d3cd939183a07e8ffa58f"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "bed51d83fd401220ddf3",
+      "workload_id": "more:ridge@dataset=taxi",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/bed51d83fd401220ddf3.json",
+      "receipt_sha256": {
+        "amd": "32a51c67530007ea647ec95378d3bc3a524500c507266c6cdbaef9d6a8c86eb4",
+        "nvidia-native": "3fdfedcb9c1daa65b02fa6884c774fa22b0e5ec5d66fdb3dc8e72b32c37de32f"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "f0d0c165f1db81e1622c",
+      "workload_id": "more:tsvd@dataset=istella@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/f0d0c165f1db81e1622c.json",
+      "receipt_sha256": {
+        "amd": "397150b82bb53b9a99aad475f67ec64ae7b3d23066e2820a5d04f4995c691233",
+        "nvidia-native": "b13fe303e736cb81d87c19a528a18aa39eb8b93cebd1a4df0d408ab8aaa74433"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    },
+    {
+      "id": "2dd2a30fa14f942128ba",
+      "workload_id": "more:tsvd@dataset=taxi@input=tsvd-full-v1",
+      "configuration_id": "I.X.complete-proposed",
+      "mode": "identical",
+      "file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/comparisons/amd-nvidia-same-arm-20261006/snapshot-20261006T213415Z/cases/2dd2a30fa14f942128ba.json",
+      "receipt_sha256": {
+        "amd": "68fbd45889b2367045eab2b78b45983e15f2eccee4d7640a40c03c58f1d45536",
+        "nvidia-native": "63ca1fe30bca9db161fe3ad460bd0c493441c4b7d2a7dbdd12fc3cfcb95b7889"
+      },
+      "observed_outputs": {
+        "A": "AGREE",
+        "B": "AGREE"
+      },
+      "full_identity_status": "INCOMPLETE",
+      "qualified_identity": false,
+      "same_arm_only": true
+    }
+  ],
+  "limitations": [
+    "Only exact workload IDs/configuration/mode matched, including full TSVD variant suffixes; no workload aliases or capped substitutions.",
+    "Strict observed_outputs enforces data/settings/seed/boundary/configuration/full coverage/sample scope; original source/harness hashes reported without inventing freeze equivalence.",
+    "Missing model scope is not filled with fabricated expected paths; direct strict observation helper still reports compatible scored output bits.",
+    "Output agreement is separate from complete model identity, quality acceptance, five-column IDENTICAL policy and default promotion.",
+    "All original failed receipts and excluded warmup runs retained in case histories; unmatched native receipts remain explicit."
+  ]
+}

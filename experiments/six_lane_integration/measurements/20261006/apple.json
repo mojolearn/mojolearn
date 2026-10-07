@@ -1,7 +1,7 @@
 {
   "schema": "mojolearn.performance-measurement-board/1",
   "campaign": "six-lane-full-ab-20261006",
-  "identity_policy": "NVIDIA/AMD same-arm IDENTICAL admission requires matching source/runtime provenance and complete typed fitted-state evidence. AMD measurements are arriving; NVIDIA PTX artifacts remain pending. Apple FAST is evaluated by task quality; bits may differ.",
+  "identity_policy": "NVIDIA/AMD same-arm IDENTICAL admission requires matching source/runtime provenance and complete typed fitted-state evidence. See the coverage table for completed and pending work; NVIDIA PTX artifacts remain pending. Apple FAST is evaluated by task quality; bits may differ.",
   "evidence_policy": "Complete full-workload executions are retained separately from quality and identity admission. Failed attempts preserved at controller-qualified paths; no default promotion. Hash receipts alone do not establish retained array/model bytes; see artifact-retention.json.",
   "promotion": false,
   "machines": [],
@@ -7364,7 +7364,7 @@
     "Apple source-only review retains QR combined-configuration quality failures; no concrete implementation defect or isolated L09 regression was established. Resampling A and B have equal saved quality and both fail the opponent quality requirement; this does not establish a new P10 regression. Original evidence and missing-array limitations remain explicit. See apple-qr-resample-source-diagnosis.json.",
     "Full Taxi GMM refused both candidate and incumbent before scoring. Source-only review found no established implementation or harness defect; retain the incomplete pair and original failures, with zero scored samples and no candidate win/loss decision. See nvidia-gmm-taxi-source-diagnosis.json.",
     "LassoCV and ElasticNetCV Taxi retain combined-configuration quality failures on NVIDIA and AMD. Source-only review does not establish an implementation defect or isolate a control; saved quality failures cannot promote these defaults. See cv-taxi-source-diagnosis.json.",
-    "Saved same-arm AMD/NVIDIA output comparison: 73 matched workloads; primary counts {\"AGREE\": 144, \"INCOMPLETE\": 2}, repeated counts {\"AGREE\": 144}. Full identity counts {\"INCOMPLETE\": 73, \"MATCH\": 0, \"MISMATCH\": 0, \"NOT_REQUIRED\": 0}. These are saved-signature comparisons, not new model runs or default admission; unmatched and failed arms are retained in same-arm-output-comparison.json and its snapshot."
+    "Saved same-arm AMD/NVIDIA output comparison: 84 matched workloads; primary counts {\"AGREE\": 168}, repeated counts {\"AGREE\": 168}. Full identity counts {\"INCOMPLETE\": 84, \"MATCH\": 0, \"MISMATCH\": 0, \"NOT_REQUIRED\": 0}. These are saved-signature comparisons, not new model runs or default admission; unmatched and failed arms are retained in same-arm-output-comparison.json and its snapshot."
   ],
   "decisions": [
     {
@@ -7470,6 +7470,58 @@
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classification-full-v1/896a91284fe76be2f130/attempt-0001/receipt.json",
       "default_changed": false,
       "individual_constituents": "Not decided by this combined-configuration result"
+    }
+  ],
+  "coverage": [
+    {
+      "vendor": "nvidia",
+      "label": "NVIDIA native / IDENTICAL",
+      "complete_pairs": 99,
+      "failed_attempts": 2,
+      "quality_failed": 4,
+      "remaining_scope": "Native combined configurations measured; PTX, individual controls and other full-workload recipe gaps remain pending."
+    },
+    {
+      "vendor": "amd",
+      "label": "AMD GPU / IDENTICAL",
+      "complete_pairs": 84,
+      "failed_attempts": 1,
+      "quality_failed": 4,
+      "remaining_scope": "Selected retained-artifact pairs measured; GMM and other missing paired-artifact/recipe scopes remain pending."
+    },
+    {
+      "vendor": "apple",
+      "label": "Apple / FAST",
+      "complete_pairs": 86,
+      "failed_attempts": 3,
+      "quality_failed": 5,
+      "remaining_scope": "See unrun scope for additional FAST pairs; earlier array-preservation and quality limitations remain."
+    }
+  ],
+  "pending_work": [
+    {
+      "vendor": "nvidia",
+      "scope": "NVIDIA PTX/default full A/B",
+      "reason": "Compatible retained full-workload artifacts unavailable; no timing worker or compilation substituted.",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-ptx/status.json"
+    },
+    {
+      "vendor": "apple",
+      "scope": "Apple FAST LogReg/LinearSVC \u00d7 Taxi/Istella",
+      "reason": "0/4 pairs completed; BLOCKED_ALLOCATE_HOSTS_UNCONDITIONAL_SCP_DENY; freeze 779cd5453425139e00229fb99cfa4ec852d7677c. Original launch-tag error and released-host evidence are retained.",
+      "evidence": "campaign-coverage.json: apple_pending"
+    },
+    {
+      "vendor": "amd",
+      "scope": "AMD GMM full-workload pair",
+      "reason": "Paired retained mixture binaries unavailable; excluded from the completed queue.",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/next-reg/continuation-status.json"
+    },
+    {
+      "vendor": "all",
+      "scope": "Individual candidates, alternative arms and other affected workloads",
+      "reason": "This campaign measured complete-proposed combinations, not every individual catalog entry. Missing recipes, incompatible artifacts and untested interactions remain pending; do not infer constituent winners.",
+      "evidence": "experiments/six_lane_integration/catalog.json"
     }
   ]
 }

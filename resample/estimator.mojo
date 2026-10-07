@@ -2299,6 +2299,15 @@ def resample_indices_host(
 # retimed. This is an explicit promotion of the measured combined configuration,
 # not a measured speedup versus that old default. IDENTICAL is unchanged;
 # NVIDIA/AMD do not execute these Apple FAST switches or vote on this decision.
+# Later AF.X.complete-proposed full pairs (55a815e13) are a separate combined
+# experiment: Istella candidate/baseline time=0.999712, Taxi=1.020928, one
+# warmup+score/arm. Both arms have equal output hashes and task metrics;
+# Istella fails the matched-opponent mean-shift gate in BOTH arms (inherited
+# deficit), while Taxi passes. These results do not isolate or reverse F04/F19.
+# Combined decision/receipt IDs: tools/six_lane_catalog.py, beside the complete
+# configuration; retained-pairs.json and apple-qr-resample-source-diagnosis.json
+# under experiments/six_lane_integration/measurements/20261006/. Defaults below
+# retain the earlier six-pair promotion and its explicit gather-OFF limitation.
 # Historical MIXED timing, 2026-10-04, compiled 7eacaa2b2 (then default OFF):
 # resample-gpu-recovered-q-r2-20261004: exact output/draw/refusal/lifetime
 # gates PASS with actual native reach. Timing harness 0c7066aae, r2 tags:

@@ -205,6 +205,57 @@ def discover():
         members=[e['id'] for e in entries if e['lane']==lane]
         interactions.append(dict(id=lane+'.X.complete-proposed',members=members,kind='complete_proposed',selection_only=True,
             rationale='Stable catalog order chooses one compatible new implementation at each competing seam. Historical reuse and equivalent aliases remain dependencies; every excluded alternative is listed and remains independently selectable. Runtime-specific APIs retain missing-coverage cells. This is a proposal, never a default.'))
+    # Full-dataset campaign decisions, 2026-10-06: these are COMPLETE proposed
+    # configurations, not isolated tests of their constituent switches. Keep
+    # selection_only=True and existing defaults unchanged. A=candidate,
+    # B=incumbent; ratios below are scored whole-operation A/B (lower=faster),
+    # one excluded warmup + one scored sample per arm. No significance claim.
+    # Canonical evidence: experiments/six_lane_integration/measurements/20261006/
+    # retained-pairs.json and controller-qualified receipts/; source freezes
+    # below identify measured harness snapshots. Binary provenance remains
+    # in the receipts; these are not measurements of current main.
+    #
+    # I.X.complete-proposed: full Taxi CV quality FAILED on BOTH vendors:
+    #   LassoCV       NVIDIA 1.914155; AMD 1.544933.
+    #   ElasticNetCV  NVIDIA 1.941959; AMD 1.351685.
+    # Sources NVIDIA 1c773404b / AMD cf442daed; receipt IDs respectively
+    # 96ac4d3d170baa9b8709, 6e33969bb9b101021356 (LassoCV) and
+    # 3392ecb27af9675963d9, f3260b9ad432706adba9 (ElasticNetCV).
+    # I.X classification quality FAILED on BOTH vendors:
+    #   GaussianNB Taxi: NVIDIA 2.905433; AMD 5.365299.
+    #   LDA Istella:     NVIDIA 1.248757; AMD 1.589235.
+    # Sources NVIDIA db59bb955 / AMD 137caf270; receipts respectively
+    # 3643733e60c05588ed87, 659b9236920edb90c199 (NB) and
+    # da04cf28502e3d16dc99, 896a91284fe76be2f130 (LDA).
+    # Do not promote this combined configuration or declare an individual
+    # constituent rejected from these measurements. Source-only diagnoses:
+    # cv-taxi-source-diagnosis.json and nvidia-nb-lda-source-diagnosis.json
+    # beside the retained pairs; supported numerical repair remains pending.
+    #
+    # AF.X.complete-proposed: QR quality FAILED relative to baseline on both
+    # full datasets: Istella A/B=4.191708, Taxi=1.646934 (db59bb955;
+    # receipts 2268b1fe4abee7294d5e / 6df9e7692fcc24a89c0c).
+    # Huber Istella also fails the saved task-quality gate: A=2.409183s,
+    # B=2.404323s (47301d12b; receipt 4fa48ab7783acc171486). No promotion;
+    # proposed numerical repairs require their own future frozen evidence.
+    # Resample (55a815e13) Istella A/B=0.999712 has an INHERITED opponent
+    # deficit: both arms have equal output hashes and mean-shift metric
+    # 0.001946923534707672. This is not a new candidate quality regression.
+    # Taxi A/B=1.020928 passes the retained matched-opponent task gate.
+    # Receipts 047898b203cef197f8fa / 661a766183dd2fb07d65; diagnosis:
+    # apple-qr-resample-source-diagnosis.json beside retained-pairs.json.
+    # These combined outcomes do not reverse the separate F04/F19 promotion
+    # recorded at resample/estimator.mojo (0f779ed5d, earlier six full pairs).
+    #
+    # I.X MLP full-v1, NVIDIA only, fa6009933: classification Taxi/Istella
+    # A/B=0.997709/0.997946; regression Taxi=0.999468 (near-neutral timings),
+    # regression Istella=1.028224 (observed 2.82% slower, retained loser).
+    # Receipts 1ba37c58e15aeeb3e578 / 5db8117591bd18566130 /
+    # e47dbe9078881fe5518f / b4c0c2f107efa97a3834, respectively.
+    # Independent task-quality admission is pending; no matched AMD MLP pair.
+    # Saved same-arm cross-vendor output agreement elsewhere does not supply
+    # missing complete fitted-model state or qualify full identity. No new
+    # default promotion is justified by these combined measurements.
     interactions.extend([
         dict(id='AF.X.tree-preparation',members=['AF.C.AFCL-T01','AF.C.AFCL-T02','AF.T.G06','AF.T.G09'],kind='interaction',selection_only=True,rationale='Histogram row/feature grouping shares the quantization and categorical preparation boundary.'),
         dict(id='AF.X.tree-shap',members=['AF.C.AFCL-T11','AF.T.P08','AF.T.P09','AF.T.P10'],kind='interaction',selection_only=True,rationale='Query geometry, contribution scratch budget, and fold scheduling share one SHAP operation.'),
